@@ -1,0 +1,188 @@
+/* -*-Jde-*- */
+import java.util.*;
+import java.io.*;
+aspect PrettyPrintBCode {
+  public void Program.prettyPrintBCode(PrintStream p, int num) {
+    for(int i = 0; i < num; i++) {
+      getCompilationUnit(i).prettyPrintBCode(p);
+    }
+  }
+  public void CompilationUnit.prettyPrintBCode(PrintStream p) {
+    for(int i = 0; i < getNumTypeDecl(); i++) {
+      getTypeDecl(i).prettyPrintBCode(p);
+    }
+  }
+
+  public void TypeDecl.prettyPrintBCode(PrintStream p) {}
+  public void BodyDecl.prettyPrintBCode(PrintStream p) {}
+  public void InterfaceDecl.prettyPrintBCode(PrintStream p) {
+      p.println("magic, minor, major");
+      ConstantPool c = constantPool();
+      c.addClass(constantPoolName());
+      c.addClass("java.lang.Object");
+      p.println("size: " + c.getNumCPInfo());
+      for(int i = 0; i < c.getNumCPInfo(); i++) {
+          CPInfo cpInfo = c.getCPInfo(i);
+          p.println(cpInfo);
+      }
+      p.println("access flags: " + getModifiers());
+      p.println("this, super "+constantPool().addClass(constantPoolName()));
+      Collection fields = bcFields();
+      //p.print("interfaces_count: " + getNumImplements() + ", ");
+      //for(int i = 0; i < getNumImplements(); i++)
+      //  p.print(constantPool().addClass(getImplements(i).type().constantPoolName()) + " ");
+      p.println();
+      p.println("fields_count: " + fields.size());
+      for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
+          FieldDeclaration f = (FieldDeclaration) iter.next();
+          p.println("field:" + " name_index: " + c.addUtf8(f.getIdDecl().getID()) 
+                    + ", descriptor_index: " + c.addUtf8(f.type().typeDescriptor()) 
+                    + ", attribute_count: " + f.attributes().size() 
+                    + ", access_flags: " + f.getModifiers());
+          for(Iterator itera = f.attributes().iterator(); itera.hasNext(); ) {
+            Attribute a = (Attribute)itera.next();
+            if(a instanceof ConstantValueAttribute) {
+              p.println(" attribute: " + ((ConstantValueAttribute)a).toString(constantPool()));
+            }
+            else {
+              p.println(" attribute: " + itera.next());
+            }
+          }
+      }
+      Collection methods = bcMethods();
+      p.println("methods_count: " + methods.size());
+      for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
+	  Object obj = iter.next();
+	  if(obj instanceof MethodDecl) {
+	      MethodDecl m = (MethodDecl) obj;
+	      p.println("method:" + " name_index: " + c.addUtf8(m.getIdDecl().getID()) 
+			+ ", descriptor_index: " + c.addUtf8(m.descName())
+			+ ", attributes_count: " + m.attributes().size());
+	      for(Iterator itera = m.attributes().iterator(); itera.hasNext(); ) {
+		  Object o = itera.next();
+		  if(o instanceof CodeAttribute) 
+		      p.println(" " + ((CodeAttribute)o).toString(c));
+        else if(o instanceof ExceptionsAttribute)
+          p.println(" " + ((ExceptionsAttribute)o).toString(c));
+	      }
+        
+	  }
+      }
+      p.println("attributes_count, attributes");
+	    for(Iterator itera = attributes().iterator(); itera.hasNext(); ) {
+        Object o = itera.next();
+		    if(o instanceof InnerClassesAttribute) 
+		      p.println(" " + ((InnerClassesAttribute)o).toString(c));
+	    }
+      
+      p.println("Complete constant pool:");
+      for(int i = 0; i < c.getNumCPInfo(); i++) {
+          CPInfo cpInfo = c.getCPInfo(i);
+          p.println(cpInfo);
+      }
+  }
+  public void ClassDecl.prettyPrintBCode(PrintStream p) {
+      p.println("magic, minor, major");
+      ConstantPool c = constantPool();
+      c.addClass(constantPoolName());
+      if(hasSuperClass()) c.addClass(getSuperClass().constantPoolName());
+      p.println("size: " + c.getNumCPInfo());
+      for(int i = 0; i < c.getNumCPInfo(); i++) {
+          CPInfo cpInfo = c.getCPInfo(i);
+          p.println(cpInfo);
+      }
+      p.println("access flags: " + getModifiers());
+      p.println("this, super "+constantPool().addClass(constantPoolName()));
+      Collection fields = bcFields();
+      p.print("interfaces_count: " + getNumImplements() + ", ");
+      for(int i = 0; i < getNumImplements(); i++)
+        p.print(constantPool().addClass(getImplements(i).type().constantPoolName()) + " ");
+      p.println();
+      p.println("fields_count: " + fields.size());
+      for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
+          FieldDeclaration f = (FieldDeclaration) iter.next();
+          p.println("field:" + " name_index: " + c.addUtf8(f.getIdDecl().getID()) 
+                    + ", descriptor_index: " + c.addUtf8(f.type().typeDescriptor()) 
+                    + ", attribute_count: " + f.attributes().size() 
+                    + ", access_flags: " + f.getModifiers());
+          for(Iterator itera = f.attributes().iterator(); itera.hasNext(); )
+              p.println(" attribute: " + itera.next());
+      }
+      Collection methods = bcMethods();
+      p.println("methods_count: " + methods.size());
+      for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
+	  Object obj = iter.next();
+	  if(obj instanceof MethodDecl) {
+	      MethodDecl m = (MethodDecl) obj;
+	      p.println("method:" + " name_index: " + c.addUtf8(m.getIdDecl().getID()) 
+			+ ", descriptor_index: " + c.addUtf8(m.descName())
+			+ ", attributes_count: " + m.attributes().size());
+	      for(Iterator itera = m.attributes().iterator(); itera.hasNext(); ) {
+		  Object o = itera.next();
+		  if(o instanceof CodeAttribute) 
+		      p.println(" " + ((CodeAttribute)o).toString(c));
+        else if(o instanceof ExceptionsAttribute)
+          p.println(" " + ((ExceptionsAttribute)o).toString(c));
+	      }
+        
+	  }
+	  else if(obj instanceof ConstructorDecl) {
+		ConstructorDecl m = (ConstructorDecl)obj;
+	      p.println("method: <init>");
+	      p.println(" attributes_count: " + m.attributes().size());
+	      for(Iterator itera = m.attributes().iterator(); itera.hasNext(); ) {
+		  Object o = itera.next();
+		  if(o instanceof CodeAttribute) 
+		      p.println(" " + ((CodeAttribute)o).toString(c));
+        else if(o instanceof ExceptionsAttribute)
+          p.println(" " + ((ExceptionsAttribute)o).toString(c));
+	      }
+	  }
+      }
+      if(hasClinit()) {
+        p.println("method: <clinit>");
+	p.println(" attributes_count: " + clinit_attributes().size());
+	for(Iterator itera = clinit_attributes().iterator(); itera.hasNext(); ) {
+          Object o = itera.next();
+	  if(o instanceof CodeAttribute) 
+	    p.println(" " + ((CodeAttribute)o).toString(c));
+        }
+      }
+      p.println("attributes_count, attributes");
+	    for(Iterator itera = attributes().iterator(); itera.hasNext(); ) {
+        Object o = itera.next();
+		    if(o instanceof InnerClassesAttribute) 
+		      p.println(" " + ((InnerClassesAttribute)o).toString(c));
+	    }
+      p.println("Complete constant pool:");
+      for(int i = 0; i < c.getNumCPInfo(); i++) {
+          CPInfo cpInfo = c.getCPInfo(i);
+          p.println(cpInfo);
+      }
+  }
+
+  syn lazy ConstantPool TypeDecl.constantPool() = new ConstantPool(new List());
+  syn lazy Collection TypeDecl.bcFields() = new ArrayList();
+  eq ReferenceType.bcFields() {
+      ArrayList l = new ArrayList();
+      for(int i = 0; i < getNumBodyDecl(); i++) 
+          if(getBodyDecl(i) instanceof FieldDeclaration)
+              l.add(getBodyDecl(i));
+      return l;
+  }
+
+  interface BytecodeMethod {
+  }
+  MethodDecl implements BytecodeMethod;
+  ConstructorDecl implements BytecodeMethod;
+
+  syn Collection ReferenceType.bcMethods() {
+      ArrayList l = new ArrayList();
+      for(int i = 0; i < getNumBodyDecl(); i++) 
+          if(getBodyDecl(i) instanceof BytecodeMethod)
+              l.add(getBodyDecl(i));
+      return l;
+  }
+
+}
+

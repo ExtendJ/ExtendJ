@@ -1,0 +1,252 @@
+import java.io.*;
+aspect Attributes {
+     
+  class Attribute {
+    public boolean isEmpty() {
+      return false;
+    }
+    public void emit(DataOutputStream out) throws IOException {
+      throw new Error("Emit not implemented for " + getClass().getName());
+    }
+  }
+
+  class SyntheticAttribute extends Attribute {
+		int attribute_name_index;
+		int attribute_length;
+    
+    public SyntheticAttribute(ConstantPool p) {
+			attribute_name_index = p.addUtf8("Synthetic");
+      attribute_length = 0;
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeChar(attribute_name_index);
+		  out.writeInt(attribute_length);
+    }
+    public String toString() { return "Synthetic"; }
+    public String toString(ConstantPool c) {
+      return toString();
+    }
+  }
+
+  class ConstantValueAttribute extends Attribute {
+		int attribute_name_index;
+		int attribute_length;
+		int constantvalue_index;
+    public ConstantValueAttribute(ConstantPool p, FieldDeclaration f) {
+			attribute_name_index = p.addUtf8("ConstantValue");
+      attribute_length = 2;
+      constantvalue_index = f.constantIndex(p);
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeChar(attribute_name_index);
+		  out.writeInt(attribute_length);
+		  out.writeChar(constantvalue_index);
+    }
+    public String toString() { return "ConstantValue"; }
+    public String toString(ConstantPool c) {
+      StringBuffer s = new StringBuffer();
+      s.append("attribute_name_index: " + c.addUtf8("ConstantValue"));
+      s.append(", attribute_length " + attribute_length);
+      s.append(", constantvalue_index " + constantvalue_index);
+      return s.toString();
+    }
+  }
+    
+  class InnerClassesAttribute extends Attribute {
+    public static class Classes {
+      int inner_class_info_index;
+      int outer_class_info_index;
+      int inner_name_index;
+      int inner_class_access_flags;
+    }
+    int attribute_name_index;
+    int attribute_length;
+    Classes[] classes;
+    public InnerClassesAttribute(TypeDecl typeDecl) {
+      ConstantPool c = typeDecl.constantPool();
+      ArrayList list = new ArrayList();
+      typeDecl.collectInnerClasses(list, c, typeDecl);
+      classes = new Classes[list.size()];
+      for(int i = 0; i < list.size(); i++)
+        classes[i] = (Classes)list.get(i);
+      if(classes.length != 0)
+        attribute_name_index = c.addUtf8("InnerClasses");
+      attribute_length = 2 + classes.length * 8;
+    }
+
+    public boolean isEmpty() {
+      return classes.length == 0;
+    }
+
+    public void emit(DataOutputStream out) throws IOException {
+      out.writeChar(attribute_name_index);
+      out.writeInt(attribute_length);
+      out.writeChar(classes.length);
+      for(int i = 0; i < classes.length; i++) {
+        out.writeChar(classes[i].inner_class_info_index);
+        out.writeChar(classes[i].outer_class_info_index);
+        out.writeChar(classes[i].inner_name_index);
+        out.writeChar(classes[i].inner_class_access_flags);
+      }
+    }
+    public String toString() { return "InnerClasses"; }
+    public String toString(ConstantPool c) {
+      StringBuffer s = new StringBuffer();
+      s.append("attribute_name_index: " + c.addUtf8("InnerClasses"));
+      s.append(", attribute_length " + attribute_length);
+      for(int i = 0; i < classes.length; i++) {
+        s.append("  inner_class_info_index: " + classes[i].inner_class_info_index + "\n");
+        s.append("  outer_class_info_index: " + classes[i].outer_class_info_index + "\n");
+        s.append("  inner_name_index: " + classes[i].inner_name_index + "\n");
+        s.append("  inner_class_access_flags: " + Integer.toHexString(classes[i].inner_class_access_flags) + "\n");
+      }
+      return s.toString();
+    }
+  }
+
+   
+  class CodeAttribute extends Attribute {
+    int attribute_name_index;
+    int attribute_length;
+    int max_stack;
+    int max_locals;
+    int code_length;
+    byte[] code;
+    int exception_table_length = 0;
+    int attributes_size = 0;
+    Collection exceptions;
+
+    public CodeAttribute(CodeGeneration codeGen) {
+      ConstantPool c = codeGen.constantPool();
+      attribute_name_index = c.addUtf8("Code");
+      max_stack = codeGen.maxStackDepth();
+      if(codeGen.stackDepth() != 0)
+        //throw new Error("Stack depth grows in method... size: " + codeGen.stackDepth());
+        System.err.println("Stack depth grows in method... size: " + codeGen.stackDepth());
+      max_locals = codeGen.maxLocals();
+      code_length = codeGen.pos();
+      code = codeGen.toArray();
+      exceptions = codeGen.exceptions;
+      exception_table_length = exceptions.size();
+      attribute_length = 12 + code_length + exception_table_length * 8 + attributes_size;
+    }
+
+    public void emit(DataOutputStream out) throws IOException {
+      out.writeChar(attribute_name_index);
+      out.writeInt(attribute_length);
+      out.writeChar(max_stack);
+      out.writeChar(max_locals);
+      out.writeInt(code_length);
+      out.write(code, 0, code_length);
+      out.writeChar(exception_table_length); // Exception tablelength
+      for(Iterator iter = exceptions.iterator(); iter.hasNext(); ) {
+        CodeGeneration.ExceptionEntry e = (CodeGeneration.ExceptionEntry)iter.next();
+        out.writeChar(e.start_pc);
+        out.writeChar(e.end_pc);
+        out.writeChar(e.handler_pc);
+        out.writeChar(e.catch_type);
+      }
+      out.writeChar(0); // Attribute count
+    }
+    public String toString() { return "Code"; }
+    public String toString(ConstantPool c) {
+      StringBuffer s = new StringBuffer();
+      s.append("attribute_name_index: " + c.addUtf8("Code"));
+      s.append(", attribute_length " + attribute_length);
+      s.append(", max_stack " + max_stack);
+      s.append(", max_locals " + max_locals);
+      s.append(", code_length " + code_length);
+      s.append("\n");
+      Bytecode.appendBytecodes(s, code);
+      s.append("exception_table_length " + exceptions.size());
+      for(Iterator iter = exceptions.iterator(); iter.hasNext(); ) {
+        CodeGeneration.ExceptionEntry e = (CodeGeneration.ExceptionEntry)iter.next();
+        s.append("\nstart_pc " + e.start_pc);  
+        s.append(", end_pc " + e.start_pc);  
+        s.append(", handler_ps " + e.start_pc);  
+        s.append(", catch_type " + e.start_pc);  
+      }
+      return s.toString();
+    }
+  }
+
+  interface ExceptionHolder {
+    public int getNumException();
+    public Access getException(int i);
+  }
+  MethodDecl implements ExceptionHolder;
+  ConstructorDecl implements ExceptionHolder;
+    
+  class ExceptionsAttribute extends Attribute {
+    int attribute_name_index;
+    int attribute_length;
+    int number_of_exceptions;
+    int[] exception_index_table;
+
+    public ExceptionsAttribute(CodeGeneration gen, ExceptionHolder m) {
+      ConstantPool c = gen.constantPool();
+      attribute_name_index = c.addUtf8("Exceptions");
+      number_of_exceptions = m.getNumException();
+      exception_index_table = new int[number_of_exceptions];
+      for(int i = 0; i< m.getNumException(); i++) {
+        int pos = c.addClass(m.getException(i).type().constantPoolName());
+        exception_index_table[i] = pos;
+      }
+      attribute_length = 2 + number_of_exceptions * 2;
+    }
+
+    public void emit(DataOutputStream out) throws IOException {
+      out.writeChar(attribute_name_index);
+      out.writeInt(attribute_length);
+      out.writeChar(number_of_exceptions);
+      for(int i = 0; i < number_of_exceptions; i++) 
+        out.writeChar(exception_index_table[i]);  
+    }
+
+    public String toString(ConstantPool c) {
+      StringBuffer s = new StringBuffer();
+      s.append("attribute_name_index: " + c.addUtf8("Exceptions"));
+      s.append(", attribute_length " + attribute_length);
+      s.append(", number_of_exceptions " + number_of_exceptions + ": ");
+      for(int i = 0; i < number_of_exceptions; i++)
+        s.append(exception_index_table[i]);
+      return s.toString();
+    }
+  }
+
+  syn lazy Collection TypeDecl.attributes() {
+    Collection c = new ArrayList();
+    Attribute a = new InnerClassesAttribute(this);
+    if(!a.isEmpty())
+      c.add(a);
+    if(isSynthetic())
+      c.add(new SyntheticAttribute(constantPool()));
+    return c;
+  }
+  syn lazy Collection BodyDecl.attributes() = new ArrayList();
+  eq FieldDeclaration.attributes() {
+    ArrayList l = new ArrayList();
+    if(isStatic() && isFinal() && hasAbstractVarInit() && (type().isPrimitive() || type().isString()))
+      l.add(new ConstantValueAttribute(hostType().constantPool(), this));
+    return l;
+  }
+  eq MethodDecl.attributes() {
+    ArrayList l = new ArrayList();
+    if(isAbstract() || isNative()) return l;
+    l.add(new CodeAttribute(bytecodes(hostType().constantPool())));
+    l.add(new ExceptionsAttribute(bytecodes(hostType().constantPool()), this));
+    return l;
+  }
+  eq ConstructorDecl.attributes() {
+    ArrayList l = new ArrayList();
+    l.add(new CodeAttribute(bytecodes(hostType().constantPool())));
+    l.add(new ExceptionsAttribute(bytecodes(hostType().constantPool()), this));
+    return l;
+  }
+  syn lazy Collection ClassDecl.clinit_attributes() {
+    ArrayList l = new ArrayList();
+    l.add(new CodeAttribute(bytecodes(constantPool())));
+    return l;
+  }
+
+}

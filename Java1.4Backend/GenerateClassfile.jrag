@@ -1,0 +1,344 @@
+aspect GenerateClassfile {
+    
+    public void Program.generateClassfile(int length) {
+	for(int i = 0; i < length; i++)
+	    getCompilationUnit(i).generateClassfile();
+    }
+
+    public void ASTNode.generateClassfile() {
+      for(int i = 0; i < getNumChild(); i++)
+        getChild(i).generateClassfile();
+    }
+
+    public void CompilationUnit.generateClassfile() {
+	for(int i = 0; i < getNumTypeDecl(); i++)
+	    getTypeDecl(i).generateClassfile();
+    }
+    
+    public void InterfaceDecl.generateClassfile() {
+	String fileName = constantPoolName() + ".class";
+	try {
+	    ConstantPool cp = constantPool();
+
+	    // force building of symbol table
+	    cp.addClass(constantPoolName());
+	    cp.addClass("java/lang/Object");
+            for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+              cp.addClass(getSuperInterfaceId(i).type().constantPoolName());
+            }
+	    for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
+		FieldDeclaration field = (FieldDeclaration) iter.next();
+		cp.addUtf8(field.name());
+                cp.addUtf8(field.type().typeDescriptor());
+		field.attributes();
+	    }
+	    for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
+		Object obj = iter.next();
+		if(obj instanceof MethodDecl) {
+		    MethodDecl m = (MethodDecl) obj;
+		    cp.addUtf8(m.getIdDecl().getID()); // name()
+		    cp.addUtf8(m.descName());
+		    m.attributes();
+		}
+	    }
+	    attributes();
+
+	    FileOutputStream f = new FileOutputStream(fileName);
+	    DataOutputStream out = new DataOutputStream(f);
+	    out.writeInt(0xCAFEBABE);
+	    out.writeChar(0);
+	    out.writeChar(48);
+	    CPInfo last = cp.getCPInfo(cp.getNumCPInfo()-1);
+	    int size = last.pos() + last.size();
+	    out.writeChar(size);
+	    for(int i = 0; i < cp.getNumCPInfo(); i++)
+		cp.getCPInfo(i).emit(out);
+	    int flags = flags();
+	    if(isInterfaceDecl())
+		flags |= Modifiers.ACC_INTERFACE;
+	    out.writeChar(flags);
+	    out.writeChar(cp.addClass(constantPoolName()));
+	    out.writeChar(cp.addClass("java.lang.Object"));
+            if(getNumSuperInterfaceId() == 1 && getSuperInterfaceId(0).type().isObject())
+              out.writeChar(0);
+            else
+              out.writeChar(getNumSuperInterfaceId());
+	    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+              TypeDecl typeDecl = getSuperInterfaceId(i).type();
+              if(typeDecl.isInterfaceDecl())
+		out.writeChar(cp.addClass(typeDecl.constantPoolName()));
+            }
+	    Collection fields = bcFields();
+	    out.writeChar(fields.size());
+	    for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
+		FieldDeclaration field = (FieldDeclaration) iter.next();
+		out.writeChar(field.flags());
+		out.writeChar(cp.addUtf8(field.name()));
+                out.writeChar(cp.addUtf8(field.type().typeDescriptor()));
+		out.writeChar(field.attributes().size());
+		for(Iterator itera = field.attributes().iterator(); itera.hasNext();)
+		    ((Attribute)itera.next()).emit(out);
+	    }
+	    Collection methods = bcMethods();
+	    out.writeChar(methods.size());
+	    for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
+		Object obj = iter.next();
+		if(obj instanceof MethodDecl) {
+		    MethodDecl m = (MethodDecl) obj;
+		    out.writeChar(m.flags());
+		    out.writeChar(cp.addUtf8(m.getIdDecl().getID())); // name()
+		    out.writeChar(cp.addUtf8(m.descName()));
+		    out.writeChar(m.attributes().size());
+		    for(Iterator itera = m.attributes().iterator(); itera.hasNext();)
+			((Attribute)itera.next()).emit(out);
+		}
+	    }
+	    out.writeChar(attributes().size());
+	    for(Iterator itera = attributes().iterator(); itera.hasNext();)
+		((Attribute)itera.next()).emit(out);
+
+	    out.close();
+	} catch (IOException e) {
+	    e.printStackTrace();
+	}
+    }
+
+    public void ClassDecl.generateClassfile() {
+      super.generateClassfile();
+	String fileName = constantPoolName() + ".class";
+	try {
+	    ConstantPool cp = constantPool();
+            //cp.addUtf8("Synthetic");
+
+	    // force building of constant pool
+	    cp.addClass(constantPoolName());
+	    if(hasSuperClass()) {
+		cp.addClass(getSuperClass().constantPoolName());
+            }
+	    for(int i = 0; i < getNumImplements(); i++)
+		cp.addClass(getImplements(i).type().constantPoolName());
+	    for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
+		FieldDeclaration field = (FieldDeclaration) iter.next();
+		cp.addUtf8(field.name());
+                cp.addUtf8(field.type().typeDescriptor());
+		field.attributes();
+                if(field.needsAccessor()) {
+                   cp.addUtf8("access$" + field.accessorIndex());
+                   cp.addUtf8(field.accessorDescName());
+                   field.accessorAttributes();
+                }
+                if(field.needsAccessorWrite()) {
+                   cp.addUtf8("access$" + field.accessorWriteIndex());
+                   cp.addUtf8(field.accessorWriteDescName());
+                   field.accessorWriteAttributes();
+                }
+	    }
+            if(isInnerType()) {
+                TypeDecl type = enclosingType();
+                cp.addUtf8("this$0");
+                cp.addUtf8(type.typeDescriptor());
+                cp.addUtf8("Synthetic");
+	    }
+	    for(Iterator iter = enclosingVariables().iterator(); iter.hasNext(); ) {
+                Variable v = (Variable)iter.next();
+                cp.addUtf8("val$" + v.name());
+                cp.addUtf8(v.type().typeDescriptor());
+                cp.addUtf8("Synthetic");
+	    }
+	    for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
+		Object obj = iter.next();
+		if(obj instanceof MethodDecl) {
+		    MethodDecl m = (MethodDecl) obj;
+		    cp.addUtf8(m.getIdDecl().getID()); // name()
+		    cp.addUtf8(m.descName());
+		    m.attributes();
+                    if(m.needsAccessor()) {
+                       cp.addUtf8("access$" + m.accessorIndex());
+                       cp.addUtf8(m.accessorDescName());
+                       m.accessorAttributes();
+                    }
+		} else {
+		    ConstructorDecl m = (ConstructorDecl) obj;
+		    cp.addUtf8("<init>");
+		    cp.addUtf8(m.descName());
+		    m.attributes();
+                    if(m.needsAccessor()) {
+                       cp.addUtf8(m.accessorDescName());
+                       m.accessorAttributes();
+                    }
+		}
+	    }
+            if(hasClinit()) {
+              cp.addUtf8("<clinit>");
+              cp.addUtf8("()V");
+              clinit_attributes();
+            }
+	    attributes();
+
+            // Actual ClassFile generation
+	    FileOutputStream f = new FileOutputStream(fileName);
+	    DataOutputStream out = new DataOutputStream(f);
+	    out.writeInt(0xCAFEBABE);
+	    out.writeChar(0);
+	    out.writeChar(48);
+	    CPInfo last = cp.getCPInfo(cp.getNumCPInfo()-1);
+	    int size = last.pos() + last.size();
+	    out.writeChar(size);
+	    for(int i = 0; i < cp.getNumCPInfo(); i++)
+		cp.getCPInfo(i).emit(out);
+	    int flags = flags();
+	    flags |= Modifiers.ACC_SUPER;
+	    out.writeChar(flags);
+	    out.writeChar(cp.addClass(constantPoolName()));
+	    out.writeChar(hasSuperClass() ? cp.addClass(getSuperClass().constantPoolName()) : 0);
+	    out.writeChar(getNumImplements());
+	    for(int i = 0; i < getNumImplements(); i++)
+		out.writeChar(cp.addClass(getImplements(i).type().constantPoolName()));
+	    Collection fields = bcFields();
+	    out.writeChar(fields.size() + (isInnerType() ? 1 : 0) + enclosingVariables().size());
+	    for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
+		FieldDeclaration field = (FieldDeclaration) iter.next();
+		out.writeChar(field.flags());
+		out.writeChar(cp.addUtf8(field.name()));
+                out.writeChar(cp.addUtf8(field.type().typeDescriptor()));
+		out.writeChar(field.attributes().size());
+		for(Iterator itera = field.attributes().iterator(); itera.hasNext();)
+		    ((Attribute)itera.next()).emit(out);
+	    }
+            if(isInnerType()) {
+                TypeDecl type = enclosingType();
+                out.writeChar(0 /*Modifiers.ACC_PRIVATE*/);
+                out.writeChar(cp.addUtf8("this$0"));
+                out.writeChar(cp.addUtf8(type.typeDescriptor()));
+                out.writeChar(1);
+                new SyntheticAttribute(cp).emit(out);
+                
+	    }
+	    for(Iterator iter = enclosingVariables().iterator(); iter.hasNext(); ) {
+                Variable v = (Variable)iter.next();
+                out.writeChar(Modifiers.ACC_PRIVATE);
+                out.writeChar(cp.addUtf8("val$" + v.name()));
+                out.writeChar(cp.addUtf8(v.type().typeDescriptor()));
+                out.writeChar(1);
+                new SyntheticAttribute(cp).emit(out);
+	    }
+            
+	    Collection methods = bcMethods();
+	    out.writeChar(methods.size() + numAccessorMethods(methods) + (hasClinit() ? 1 : 0) + numAccessorFields(fields));
+	    for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
+		Object obj = iter.next();
+		if(obj instanceof MethodDecl) {
+		    MethodDecl m = (MethodDecl) obj;
+		    out.writeChar(m.flags());
+		    out.writeChar(cp.addUtf8(m.getIdDecl().getID())); // name()
+		    out.writeChar(cp.addUtf8(m.descName()));
+		    out.writeChar(m.attributes().size());
+		    for(Iterator itera = m.attributes().iterator(); itera.hasNext();)
+			((Attribute)itera.next()).emit(out);
+                    if(m.needsAccessor())
+                       m.emitAccessor(cp, out);
+          
+		} else {
+		    ConstructorDecl m = (ConstructorDecl) obj;
+		    out.writeChar(m.flags());
+		    out.writeChar(cp.addUtf8("<init>"));
+		    out.writeChar(cp.addUtf8(m.descName()));
+		    out.writeChar(m.attributes().size());
+		    for(Iterator itera = m.attributes().iterator(); itera.hasNext();)
+			((Attribute)itera.next()).emit(out);
+                    if(m.needsAccessor())
+                        m.emitAccessor(cp, out);
+		}
+	    }
+	    for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
+		FieldDeclaration field = (FieldDeclaration) iter.next();
+                if(field.needsAccessor())
+                  field.emitAccessor(cp, out);
+                if(field.needsAccessorWrite())
+                  field.emitAccessorWrite(cp, out);
+            }
+            if(hasClinit()) {
+              out.writeChar(Modifiers.ACC_STATIC);
+              out.writeChar(cp.addUtf8("<clinit>"));
+              out.writeChar(cp.addUtf8("()V"));
+              out.writeChar(clinit_attributes().size());
+              for(Iterator itera = clinit_attributes().iterator(); itera.hasNext();)
+                ((Attribute)itera.next()).emit(out);
+            }
+	    out.writeChar(attributes().size());
+	    for(Iterator itera = attributes().iterator(); itera.hasNext();)
+		((Attribute)itera.next()).emit(out);
+
+	    out.close();
+	} catch (IOException e) {
+	    e.printStackTrace();
+	}
+    }
+
+    public void CPInfo.emit(DataOutputStream out) throws IOException {
+	
+    }
+
+   public void ConstantClass.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Class);
+       //System.err.println("Emit: ConstantClass: " + addUtf8(getname()));
+       out.writeChar(addUtf8(getname()));
+   }
+
+   public void ConstantFieldref.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Fieldref);
+       out.writeChar(addClass(getclassname()));
+       out.writeChar(addNameAndType(getname(), gettype()));
+   }
+
+   public void ConstantMethodref.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Methodref);
+       //System.err.println("Emit: MethodRef: " + addClass(getclassname()) + ", " + addNameAndType(getname(), getdesc()));
+       out.writeChar(addClass(getclassname()));
+       out.writeChar(addNameAndType(getname(), getdesc()));
+   }
+
+   public void ConstantInterfaceMethodref.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_InterfaceMethodref);
+       out.writeChar(addClass(getclassname()));
+       out.writeChar(addNameAndType(getname(), getdesc()));
+   }
+
+   public void ConstantNameAndType.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_NameAndType);
+       //System.err.println("Emit: NameAndType: " + addUtf8(getname()) + ", " + addUtf8(gettype()));
+       out.writeChar(addUtf8(getname()));
+       out.writeChar(addUtf8(gettype()));
+   }
+
+   public void ConstantUtf8.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Utf8);
+       //System.err.println("Emit: ConstantUtf8: " + getname());
+       out.writeUTF(getname());
+   }
+
+   public void ConstantString.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_String);
+       out.writeChar(addUtf8(getval()));
+   }
+
+   public void ConstantInteger.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Integer);
+       out.writeInt(getval());
+   }
+
+   public void ConstantFloat.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Float);
+       out.writeFloat(getval());
+   }
+
+   public void ConstantLong.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Long);
+       out.writeLong(getval());
+   }
+
+   public void ConstantDouble.emit(DataOutputStream out) throws IOException {
+       out.writeByte(ConstantPool.CONSTANT_Double);
+       out.writeDouble(getval());
+   }
+}

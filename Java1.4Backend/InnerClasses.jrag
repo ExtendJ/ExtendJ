@@ -1,0 +1,258 @@
+aspect InnerClasses {
+  int TypeDecl.constantPoolNameIndex = 1;
+
+  syn lazy String TypeDecl.constantPoolName() {
+    if(!isNestedType()) {
+      String packageName = packageName();
+      if(!packageName.equals("")) {
+        packageName = packageName.replace('.', '/') + "/";
+      }
+      return packageName + name();
+    }
+    else {
+      String prefix = enclosingType().constantPoolName();
+      if(isAnonymous()) {
+        int index = topLevelType().constantPoolNameIndex++;
+        return prefix + "$" + index;
+      }
+      else if(isLocalClass()) {
+        int index = topLevelType().constantPoolNameIndex++;
+        return prefix + "$" + index + name();
+      }
+      return prefix + "$" + name();
+    }
+  }
+
+
+  syn lazy Collection TypeDecl.enclosingVariables() {
+    boolean mayHaveEnclosingVariables = false;
+    for(TypeDecl e = this; e != null; e = e.enclosingType()) {
+      if(e.isLocalClass())
+        mayHaveEnclosingVariables = true;
+    }
+    if(mayHaveEnclosingVariables) {
+      HashSet set = new HashSet();
+      collectEnclosingVariables(set, this);
+      return set;
+    }
+    else {
+      return new ArrayList(0);
+    }
+  }
+
+  public void ASTNode.collectEnclosingVariables(HashSet set, TypeDecl typeDecl) {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).collectEnclosingVariables(set, typeDecl);
+  }
+  public void VarAccess.collectEnclosingVariables(HashSet set, TypeDecl typeDecl) {
+    Variable v = decl();
+    if(!v.isInstanceVariable() && !v.isClassVariable() && v.hostType() != typeDecl) {
+      set.add(v);
+    }
+    super.collectEnclosingVariables(set, typeDecl);
+  }
+
+
+  public int TypeDecl.accessorCounter = 0;
+
+  syn boolean FieldDeclaration.needsAccessor() = accessorIndex != -1;
+  syn lazy int FieldDeclaration.accessorIndex() = accessorIndex = hostType().accessorCounter++;
+  private int FieldDeclaration.accessorIndex = -1;
+  syn boolean FieldDeclaration.needsAccessorWrite() = accessorWriteIndex != -1;
+  syn lazy int FieldDeclaration.accessorWriteIndex() = accessorWriteIndex = hostType().accessorCounter++;
+  private int FieldDeclaration.accessorWriteIndex = -1;
+
+  syn boolean MethodDecl.needsAccessor() = accessorIndex != -1;
+  syn lazy int MethodDecl.accessorIndex() = accessorIndex = hostType().accessorCounter++;
+  private int MethodDecl.accessorIndex = -1;
+
+  syn boolean ConstructorDecl.needsAccessor() = accessorIndex != -1;
+  private String ConstructorDecl.anonymousJavaName;
+
+  private boolean ConstructorDecl.accessorIndexVisited = false;
+  syn lazy int ConstructorDecl.accessorIndex() {
+    // rework treebuilding, final
+    if(accessorIndexVisited)
+      return accessorIndex;
+    accessorIndexVisited = true;
+
+    ClassDecl classDecl =
+      new ClassDecl(
+          new Modifiers(new List().add(new Modifier("synthetic"))),
+          new IdDecl("Dummy"),
+          new Opt(),
+          new List(),
+          new List()
+          );
+    getBlock().addStmt(new LocalClassDeclStmt(classDecl)); 
+    LocalClassDeclStmt stmt = (LocalClassDeclStmt)getBlock().getStmt(getBlock().getNumStmt()-1);
+    classDecl = stmt.getClassDecl();
+    classDecl.toString(new StringBuffer());
+
+    accessorIndex = hostType().accessorCounter++;
+    anonymousJavaName = classDecl.typeDescriptor();
+    classDecl.generateClassfile();
+    return accessorIndex;
+  }
+  private int ConstructorDecl.accessorIndex = -1;
+
+  public int TypeDecl.numAccessorMethods(Collection c) {
+    int num = 0;
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+      if(o instanceof MethodDecl) {
+        MethodDecl m = (MethodDecl)o;
+        if(m.needsAccessor())
+          num++;
+      }
+      else if(o instanceof ConstructorDecl) {
+        ConstructorDecl m = (ConstructorDecl)o;
+        if(m.needsAccessor())
+          num++;
+      }
+    }
+    return num;
+  }
+
+  public int TypeDecl.numAccessorFields(Collection c) {
+    int num = 0;
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+      if(o instanceof FieldDeclaration) {
+        FieldDeclaration f = (FieldDeclaration)o;
+        if(f.needsAccessor())
+          num++;
+        if(f.needsAccessorWrite())
+          num++;
+      }
+    }
+    return num;
+  }
+
+  public void FieldDeclaration.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
+    out.writeChar(Modifiers.ACC_STATIC);
+    out.writeChar(cp.addUtf8("access$" + accessorIndex()));
+    out.writeChar(cp.addUtf8(accessorDescName()));
+    out.writeChar(accessorAttributes().size());
+    for(Iterator iter = accessorAttributes().iterator(); iter.hasNext(); ) {
+      ((Attribute)iter.next()).emit(out);
+    }
+  }
+  public void FieldDeclaration.emitAccessorWrite(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
+    out.writeChar(Modifiers.ACC_STATIC);
+    out.writeChar(cp.addUtf8("access$" + accessorWriteIndex()));
+    out.writeChar(cp.addUtf8(accessorWriteDescName()));
+    out.writeChar(accessorAttributes().size());
+    for(Iterator iter = accessorWriteAttributes().iterator(); iter.hasNext(); ) {
+      ((Attribute)iter.next()).emit(out);
+    }
+  }
+
+  public ArrayList FieldDeclaration.accessorAttributes() {
+    ConstantPool cp = hostType().constantPool();
+    ArrayList list = new ArrayList();
+    CodeGeneration gen = new CodeGeneration(cp);
+    int index = 0;
+    if(!isStatic())
+      gen.emitLoadReference(index++);
+    emitLoad(gen);
+    type().emitReturn(gen);
+    CodeAttribute a = new CodeAttribute(gen);
+    list.add(a);
+    list.add(new SyntheticAttribute(cp));
+    return list;
+  }
+
+  public ArrayList FieldDeclaration.accessorWriteAttributes() {
+    ConstantPool cp = hostType().constantPool();
+    ArrayList list = new ArrayList();
+    CodeGeneration gen = new CodeGeneration(cp);
+    int index = 0;
+    if(!isStatic())
+      gen.emitLoadReference(index++);
+    type().emitLoad(gen, index);
+    emitStore(gen);
+    gen.addBytecode(Bytecode.RETURN);
+    CodeAttribute a = new CodeAttribute(gen);
+    list.add(a);
+    list.add(new SyntheticAttribute(cp));
+    return list;
+  }
+
+  public void MethodDecl.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
+    out.writeChar(Modifiers.ACC_STATIC);
+    out.writeChar(cp.addUtf8("access$" + accessorIndex()));
+    out.writeChar(cp.addUtf8(accessorDescName()));
+    out.writeChar(accessorAttributes().size());
+    for(Iterator iter = accessorAttributes().iterator(); iter.hasNext(); ) {
+      ((Attribute)iter.next()).emit(out);
+    }
+  }
+
+  public void ConstructorDecl.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
+    out.writeChar(0);
+    out.writeChar(cp.addUtf8("<init>"));
+    out.writeChar(cp.addUtf8(accessorDescName()));
+    out.writeChar(accessorAttributes().size());
+    for(Iterator iter = accessorAttributes().iterator(); iter.hasNext(); ) {
+      ((Attribute)iter.next()).emit(out);
+    }
+  }
+
+  public ArrayList MethodDecl.accessorAttributes() {
+    ConstantPool cp = hostType().constantPool();
+    ArrayList list = new ArrayList();
+    CodeGeneration gen = new CodeGeneration(cp);
+    int index = 0;
+    if(!isStatic())
+      gen.emitLoadReference(index++);
+    for(int i = 0; i < getNumParameter(); i++) {
+      getParameter(i).type().emitLoad(gen, index);
+      index += getParameter(i).type().size();
+    }
+    emitInvoke(gen);
+    type().emitReturn(gen);
+    CodeAttribute a = new CodeAttribute(gen);
+    list.add(a);
+    list.add(new SyntheticAttribute(cp));
+    return list;
+  }
+
+  public ArrayList ConstructorDecl.accessorAttributes() {
+    ConstantPool cp = hostType().constantPool();
+    ArrayList list = new ArrayList();
+    CodeGeneration gen = new CodeGeneration(cp);
+    int index = 0;
+    gen.emitLoadReference(index++);
+    for(int i = 0; i < getNumParameter(); i++) {
+      getParameter(i).type().emitLoad(gen, index);
+      index += getParameter(i).type().size();
+    }
+    emitInvoke(gen);
+    gen.addBytecode(Bytecode.RETURN);
+    CodeAttribute a = new CodeAttribute(gen);
+    list.add(a);
+    list.add(new SyntheticAttribute(cp));
+    return list;
+  }
+
+  public void ASTNode.collectInnerClasses(ArrayList list, ConstantPool c, TypeDecl typeDecl) {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).collectInnerClasses(list, c, typeDecl);
+  }
+  
+  public void TypeDecl.collectInnerClasses(ArrayList list, ConstantPool c, TypeDecl typeDecl) {
+    if(isNestedType() && (typeDecl == this || typeDecl == enclosingType())) {
+      InnerClassesAttribute.Classes classes = new InnerClassesAttribute.Classes();
+      classes.inner_class_info_index = c.addClass(constantPoolName());
+      classes.outer_class_info_index = !typeDecl.isMemberType() ? 0 : c.addClass(enclosingType().constantPoolName());
+      classes.inner_name_index = isAnonymous() ? 0 : c.addUtf8(name());
+      classes.inner_class_access_flags = flags();
+      if(isInterfaceDecl())
+        classes.inner_class_access_flags |= Modifiers.ACC_INTERFACE;
+      list.add(classes);
+    }
+    if(typeDecl == this)
+      super.collectInnerClasses(list, c, typeDecl);
+  }
+}

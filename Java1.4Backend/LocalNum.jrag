@@ -1,0 +1,78 @@
+aspect LocalNum {
+  inh int VariableDeclaration.localNum();
+  inh int Stmt.localNum();
+  inh int Parameter.localNum();
+
+  eq Program.getCompilationUnit(int index).localNum() = 0;
+
+  eq MethodDecl.getParameter(int index).localNum() {
+    if(index == 0)
+      return isStatic() ? 0 : 1;
+    return getParameter(index-1).localNum() + getParameter(index-1).type().size();
+  }
+
+  eq MethodDecl.getBlock().localNum() = getNumParameter() == 0 
+    ? isStatic() ? 0 : 1 
+    : getParameter(getNumParameter()-1).localNum() + getParameter(getNumParameter()-1).type().size();
+
+  syn lazy int ConstructorDecl.localNumOfFirstParameter() {
+    int i = 1;
+    if(hostType().isInnerType())
+      i++;
+    for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      i += v.type().size();
+    }
+    return i;
+  }
+
+  eq ConstructorDecl.getParameter(int index).localNum() {
+    if(index == 0) {
+      return localNumOfFirstParameter();
+    }
+    return getParameter(index-1).localNum() + getParameter(index-1).type().size();
+  }
+
+  eq ConstructorDecl.getBlock().localNum() {
+    if(getNumParameter() == 0) {
+      return localNumOfFirstParameter();
+    }
+    else {
+      return getParameter(getNumParameter()-1).localNum() + getParameter(getNumParameter()-1).type().size();
+    }
+  }
+
+  eq Block.getStmt(int index).localNum() {
+    if(index == 0)
+      return localNum();
+    if(getStmt(index-1) instanceof VariableDeclaration)
+      return getStmt(index-1).localNum() + ((VariableDeclaration)getStmt(index-1)).type().size();
+    return getStmt(index-1).localNum();
+  }
+
+  eq SynchronizeStmt.getBlock().localNum() = localNum() + 1;
+
+  syn lazy int ASTNode.maxLocals()
+    // +1 if virtual (this)
+    // +1 for each arg (+2 if double or long)
+    // Algorithm: max of each subscope + value for this scope
+  {
+    int maxLocals = 0;
+    for (int i=0; i<getNumChild(); i++) {
+      maxLocals += getChild(i).maxLocals();
+    }
+    return maxLocals;
+  }      
+
+  eq VariableDeclaration.maxLocals() = type().size();    
+  eq ParameterDeclaration.maxLocals() = type().size();
+  eq MethodDecl.maxLocals() = super.maxLocals() + (isStatic() ? 0 : 1);
+  eq ConstructorDecl.maxLocals() = super.maxLocals() + 1;
+
+  syn int TypeDecl.size() = 0;
+  eq ReferenceType.size() = 1;
+  eq PrimitiveType.size() = 1;
+  eq LongType.size() = 2;
+  eq DoubleType.size() = 2;
+}
+
