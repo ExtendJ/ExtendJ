@@ -1,20 +1,21 @@
 import AST.*;
 
 import java.io.*;
-import parser.JavaCompiler;
+import parser.*;
 
 class GenerateBCodefile {
 
   public static void main(String args[]) {
-    // Create a parser which reads from standard input
     Program program = new Program();
 
     long start = System.currentTimeMillis();
     program = new Program();
-    program.isFinal = true;
     for(int i = 0; i < args.length; i++) {
       try {
-        CompilationUnit unit = JavaCompiler.parse(args[i]);
+        Reader reader = new FileReader(args[i]);
+        JavaParser parser = new JavaParser();
+        JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
+        CompilationUnit unit = ((Program)parser.parse(scanner)).getCompilationUnit(0);
         program.addCompilationUnit(unit);
       } catch (FileNotFoundException e) {
         e.printStackTrace();
