@@ -1,0 +1,134 @@
+aspect StaticImports {
+  eq CompilationUnit.getImportDecl().handlesException(TypeDecl exceptionType, Expr expr) {
+    return !exceptionType.isUncheckedException();
+  }
+
+  // Expect a type name in this context
+  eq SingleStaticImportDecl.getAccess().nameType() = NameType.TYPE_NAME;
+  eq StaticImportOnDemandDecl.getAccess().nameType() = NameType.TYPE_NAME;
+
+  // PrettyPrinting
+  public void SingleStaticImportDecl.toString(StringBuffer s) {
+    s.append("import static ");
+    getAccess().toString(s);
+    s.append(".");
+    getIdUse().toString(s);
+    s.append(";\n");
+  }
+  public void StaticImportOnDemandDecl.toString(StringBuffer s) {
+    s.append("import ");
+    getAccess().toString(s);
+    s.append(".*;\n");
+  }
+
+  syn String SingleStaticImportDecl.name() = getIdUse().getID();
+  syn TypeDecl SingleStaticImportDecl.type() = getAccess().type(); 
+  syn TypeDecl StaticImportOnDemandDecl.type() = getAccess().type(); 
+
+  syn boolean ImportDecl.isOnDemand() = false;
+  eq StaticImportOnDemandDecl.isOnDemand() = true;
+
+  // Lookup Variable
+  syn boolean SingleStaticImportDecl.hasField() = !type().findVariable(name()).type().isIllegal();
+  
+  syn ArrayList ImportDecl.localLookupVariable(IdUse idUse) = new ArrayList(0);
+  syn ArrayList SingleStaticImportDecl.localLookupVariable(IdUse idUse) {
+    ArrayList list = new ArrayList(0);
+    if(!idUse.getID().equals(name()))
+      return list;
+    list.addAll(type().findVariable(idUse));
+    for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(!v.isStatic())
+        iter.remove();
+    }
+    return list;
+  }
+  syn ArrayList StaticImportOnDemandDecl.localLookupVariable(IdUse idUse) {
+    ArrayList list = new ArrayList(0);
+    list.addAll(type().findVariable(idUse));
+    for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(!v.isStatic())
+        iter.remove();
+    }
+    return list;
+  }
+
+  // Delegate variable lookup to imports
+  inh ArrayList CompilationUnit.lookupVariable(IdUse idUse);
+  eq CompilationUnit.getTypeDecl().lookupVariable(IdUse idUse) {
+    ArrayList list = new ArrayList(0);
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      if(!getImportDecl(i).isOnDemand())
+        list.addAll(getImportDecl(i).localLookupVariable(idUse));
+    }
+    if(!list.isEmpty())
+      return list;
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      if(getImportDecl(i).isOnDemand())
+        list.addAll(getImportDecl(i).localLookupVariable(idUse));
+    }
+    if(!list.isEmpty())
+      return list;
+    return lookupVariable(idUse);
+  }
+
+  // Lookup Method
+  syn boolean SingleStaticImportDecl.hasMethod() = type().hasMethod(name());
+  
+  syn MethodCollection ImportDecl.localLookupMethod(MethodAccess ma) = MethodCollection.emptyCollection();
+  syn MethodCollection SingleStaticImportDecl.localLookupMethod(MethodAccess ma) {
+    if(!ma.getIdUse().getID().equals(name()))
+      return MethodCollection.emptyCollection();
+    MethodCollection list = type().remoteLookupMethod(ma);
+    for(MethodCollection.MethodIterator iter = list.iterator(); iter.hasNext(); ) {
+      MethodDecl mDecl = (MethodDecl)iter.next();
+      if(!mDecl.isStatic())
+        list = iter.remove();
+    }
+    return list;
+  }
+  syn MethodCollection StaticImportOnDemandDecl.localLookupMethod(MethodAccess ma) {
+    MethodCollection list = type().remoteLookupMethod(ma);
+    for(MethodCollection.MethodIterator iter = list.iterator(); iter.hasNext(); ) {
+      MethodDecl mDecl = (MethodDecl)iter.next();
+      if(!mDecl.isStatic())
+        list = iter.remove();
+    }
+    return list;
+  }
+  // Delegate method lookup to imports
+  inh MethodCollection CompilationUnit.lookupMethod(MethodAccess m);
+  eq CompilationUnit.getTypeDecl().lookupMethod(MethodAccess m) {
+    MethodCollection list = MethodCollection.emptyCollection();
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      if(!getImportDecl(i).isOnDemand()) {
+        for(MethodCollection.MethodIterator iter = getImportDecl(i).localLookupMethod(m).iterator(); iter.hasNext();) {
+          MethodDecl decl = (MethodDecl)iter.next();
+          list = list.add(decl);
+        }
+      }
+    }
+    if(!list.isEmpty())
+      return list;
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      if(getImportDecl(i).isOnDemand()) {
+        for(MethodCollection.MethodIterator iter = getImportDecl(i).localLookupMethod(m).iterator(); iter.hasNext();) {
+          MethodDecl decl = (MethodDecl)iter.next();
+          list = list.add(decl);
+        }
+      }
+    }
+    if(!list.isEmpty())
+      return list;
+    return lookupMethod(m);
+  }
+
+  // Error check
+  public void SingleStaticImportDecl.nameCheck() {
+    if(!hasField() && !hasMethod()) {
+      error("Semantic Error: At least one static member named " + name() + " must be available in static imported type " + type().fullName());
+    }
+  }
+}

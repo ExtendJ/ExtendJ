@@ -1,0 +1,80 @@
+aspect EnhancedForToBytecode {
+  // Code generation
+  syn lazy int EnhancedForStmt.cond_label(CodeGeneration gen) = gen.label();
+  syn lazy int EnhancedForStmt.update_label(CodeGeneration gen) = gen.label();
+  syn lazy int EnhancedForStmt.end_label(CodeGeneration gen) = gen.label();
+
+  syn lazy int EnhancedForStmt.extraLocalIndex() = localNum();
+  eq EnhancedForStmt.getParameter().localNum() = localNum() + (getExpr().type().isArrayDecl() ? 2 : 1);
+  eq EnhancedForStmt.getStmt().localNum() = getParameter().localNum() + getParameter().type().size();
+
+  public void EnhancedForStmt.createBCode(CodeGeneration gen) {
+    if(getExpr().type().isArrayDecl()) {
+      getExpr().createBCode(gen);
+      gen.emitStoreReference(extraLocalIndex());
+      IntType.push(gen, 0);
+      gen.addBytecode(Bytecode.ISTORE).add(extraLocalIndex()+1);
+      gen.addLabel(cond_label(gen));
+      gen.addBytecode(Bytecode.ILOAD).add(extraLocalIndex()+1);
+      gen.emitLoadReference(extraLocalIndex());
+      gen.addBytecode(Bytecode.ARRAYLENGTH);
+      gen.emitCompare(Bytecode.IF_ICMPGE, end_label(gen));
+      gen.emitLoadReference(extraLocalIndex());
+      gen.addBytecode(Bytecode.ILOAD).add(extraLocalIndex()+1);
+      gen.addBytecode(getParameter().type().arrayLoad());
+      gen.emitStoreReference(getParameter().localNum());
+      getStmt().createBCode(gen);
+      gen.addLabel(update_label(gen));
+      gen.addBytecode(Bytecode.IINC).add(extraLocalIndex()+1).add(1);
+      gen.emitGoto(cond_label(gen));
+      gen.addLabel(end_label(gen));
+    }
+    else {
+      getExpr().createBCode(gen);
+      iteratorMethod().emitInvoke(gen);
+      gen.emitStoreReference(extraLocalIndex());
+      gen.addLabel(cond_label(gen));
+      gen.emitLoadReference(extraLocalIndex());
+      hasNextMethod().emitInvoke(gen);
+      gen.emitCompare(Bytecode.IFEQ, end_label(gen));
+      gen.emitLoadReference(extraLocalIndex());
+      nextMethod().emitInvoke(gen);
+      gen.emitStoreReference(getParameter().localNum());
+      getStmt().createBCode(gen);
+      gen.addLabel(update_label(gen));	
+      gen.emitGoto(cond_label(gen));
+      gen.addLabel(end_label(gen));
+    }
+  }
+
+  private MethodDecl EnhancedForStmt.iteratorMethod() {
+    TypeDecl typeDecl = lookupType("java.util", "Collection");
+		for (Iterator iter = typeDecl.methods().iterator(); iter.hasNext();) {
+			MethodDecl m = (MethodDecl)iter.next();
+			if (m.getIdDecl().getID().equals("iterator") && m.getNumParameter() == 0) {
+				return m;
+      }
+    }
+    throw new Error("Could not find java.util.Collection.iterator()");
+  }
+  private MethodDecl EnhancedForStmt.hasNextMethod() {
+    TypeDecl typeDecl = lookupType("java.util", "Iterator");
+		for (Iterator iter = typeDecl.methods().iterator(); iter.hasNext();) {
+			MethodDecl m = (MethodDecl)iter.next();
+			if (m.getIdDecl().getID().equals("hasNext") && m.getNumParameter() == 0) {
+				return m;
+      }
+    }
+    throw new Error("Could not find java.util.Collection.hasNext()");
+  }
+  private MethodDecl EnhancedForStmt.nextMethod() {
+    TypeDecl typeDecl = lookupType("java.util", "Iterator");
+		for (Iterator iter = typeDecl.methods().iterator(); iter.hasNext();) {
+			MethodDecl m = (MethodDecl)iter.next();
+			if (m.getIdDecl().getID().equals("next") && m.getNumParameter() == 0) {
+				return m;
+      }
+    }
+    throw new Error("Could not find java.util.Collection.next()");
+  }
+}

@@ -1,0 +1,98 @@
+import java.util.ArrayList;
+
+aspect EnhancedFor {
+  // type checking
+	public void EnhancedForStmt.typeCheck() {
+		if (!getExpr().type().isArrayDecl() && !getExpr().type().isIterable()) {
+			error("*** Semantic error: type " + getExpr().type().name() + 
+			      " of expression in foreach is neither array type nor java.lang.Iterable");
+		}	
+    /*
+		else if (!compatibleTypes()) {
+			error("*** Semantic error: elements in " + getExpr().type().fullName() +
+				" are not assignable to " + getParameter().getTypeAccess().type().fullName());
+		}
+    */
+	}
+  
+	/**
+	 * True if type is java.lang.Iterable or subtype
+	   As long as we use the 1.4 API we check for java.util.Collection instead.
+	 */
+	syn lazy boolean TypeDecl.isIterable() = instanceOf(lookupType("java.util", "Collection"));
+  
+	// variable lookup
+  inh ArrayList EnhancedForStmt.lookupVariable(IdUse idUse);
+	eq EnhancedForStmt.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+	eq EnhancedForStmt.getExpr().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+	eq EnhancedForStmt.getStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  
+  EnhancedForStmt implements VariableScope;
+  eq EnhancedForStmt.getParameter().outerScope() = this;
+  eq EnhancedForStmt.getExpr().outerScope() = this;
+  eq EnhancedForStmt.getStmt().outerScope() = this;
+
+	syn ArrayList EnhancedForStmt.localLookupVariable(IdUse idUse) {
+		if(getParameter().getIdDecl().getID().equals(idUse.getID())) {
+			ArrayList list = new ArrayList();
+			list.add(getParameter());
+			return list;
+    }
+ 	  return lookupVariable(idUse);
+	}
+  
+	// pretty printing
+  public void EnhancedForStmt.toString(StringBuffer s) {
+    s.append("for (");
+    getParameter().toString(s);
+    s.append(" : ");
+    getExpr().toString(s);
+    s.append(") ");
+    getStmt().toString(s);
+  }	
+  
+	// some attributes for the parameter
+	eq EnhancedForStmt.getParameter().isMethodParameter() = false;
+	eq EnhancedForStmt.getParameter().isConstructorParameter() = false;
+	eq EnhancedForStmt.getParameter().isExceptionHandlerParameter() = false;
+
+
+  // EnhancedForStmt can be both break and continue target
+  eq EnhancedForStmt.break_label(CodeGeneration gen) = end_label(gen);
+  eq EnhancedForStmt.continue_label(CodeGeneration gen) = update_label(gen);
+
+  // Used in name check for continue statement
+  eq EnhancedForStmt.isLoop() = true;
+ 
+  // Unreachable Statements
+  eq EnhancedForStmt.canCompleteNormally() = reachable();
+  eq EnhancedForStmt.getStmt().reachable() = reachable();
+
+  // Definite Assignment
+  eq EnhancedForStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
+  eq EnhancedForStmt.isDAafter(Variable v) {
+    if(!isDAbefore(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return isDAbefore(v);
+  }
+  eq EnhancedForStmt.getExpr().isDAbefore(Variable v) = isDAbefore(v);
+  eq EnhancedForStmt.getStmt().isDAbefore(Variable v) = isDAbefore(v);
+
+  eq EnhancedForStmt.checkReturnDU(Variable v) = getStmt().checkReturnDU(v);
+
+  eq EnhancedForStmt.isDUafter(Variable v) {
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    return isDUbefore(v);
+  }
+  eq EnhancedForStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
+  eq EnhancedForStmt.getStmt().isDUbefore(Variable v) = isDUbefore(v);
+}

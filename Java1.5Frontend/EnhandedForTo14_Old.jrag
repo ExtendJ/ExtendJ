@@ -1,0 +1,276 @@
+aspect EnhancedForTo14 {
+	/**
+	 * Counter to assure non-conflicting names for generated IDs in rewrites.
+	 */
+	private int TypeDecl.synVarCounter = 1;
+	
+	/**
+	 * Returns a guaranteed unique variable name. The name is illegal and therefore
+	 * cannot coincide with a user-defined name.
+	 */
+	public String TypeDecl.uniqueSynteticVariable(String name) {
+		return "#" + name + synVarCounter++;
+	}
+	
+	/**
+	 * We need access to the nearest TypeDecl in order to use uniqueSynteticVariable().
+	 */
+	inh TypeDecl EnhancedForStmt.hostType();
+	
+	/**
+	 * Moves the labels preceding a rewritten EnhancedForStmt. (This only applies to foreach 
+	 * statement traversing an array.) The labels must be moved inside the block and put around 
+	 * the for stmt. Thus
+	 * 
+	 * l1: l2: for (<type> <var> : <expr>)
+	 *     <stmt>
+	 *
+ 	 * has already been rewritten to 
+	 *
+	 * l1: l2: {
+	 *     <type>[] #a = <expr>;
+	 * 
+	 *     for (int #i = 0; #i < #a.length; #i++) {
+	 *        <type> <var> = #a[#i];
+	 *        <stmt>;
+	 *     }
+	 * }
+	 * 
+	 * After this second rewrite, the code snippet will get its final form:
+	 * 
+	 * {
+	 *     <type>[] #a = <expr>;
+	 * 
+	 *     l1: l2: for (int #i = 0; #i < #a.length; #i++) {
+	 *        <type> <var> = #a[#i];
+	 *        <stmt>;
+	 *     }
+	 * }
+ 	 */
+	rewrite LabelStmt {
+		when (!duringResolveAmbiguousNames() &&  isArrayEnhancedForLabel() && !hasLabelParent())
+		to Block {
+			// move me and all immediate child labels into the block, holding the for loop.
+
+			Stmt stmt = this;
+			LabelStmt innermostLabel = null;
+
+			while (stmt instanceof LabelStmt) {
+				innermostLabel = (LabelStmt) stmt;
+				stmt = innermostLabel.getStmt();
+			}
+			
+			Block block = (Block) stmt;
+
+			innermostLabel.setStmt(block.getStmt(1));
+			block.setStmt(this, 1);
+
+			return block;
+		}
+	}
+
+	syn boolean Stmt.isArrayEnhancedForLabel() = false;
+	eq LabelStmt.isArrayEnhancedForLabel() = getStmt().isArrayEnhancedForLabel() || getStmt().wasArrayEnhancedForStmt();
+
+	syn boolean Stmt.wasArrayEnhancedForStmt() = false;
+	eq EnhancedForBlock.wasArrayEnhancedForStmt() = true;
+
+	syn boolean Stmt.hasLabelParent() = getParent() instanceof LabelStmt;
+  inh TypeDecl EnhancedForStmt.lookupArray(TypeDecl elementType, int dimension);
+	/**
+	 * Rewrites an enhanced for statement. The enhanced for statement has the 
+	 * following form:
+	 *
+	 * for (<type> <var> : <expr>)
+	 *     <stmt>
+	 *
+	 * If <expr> is an array, the enhanced for statement is rewritten into
+	 *
+	 * {
+	 *     <type>[] #a = <expr>;
+	 * 
+	 *     for (int #i = 0; #i < #a.length; #i++) {
+	 *        <type> <var> = #a[#i];
+	 *        <stmt>;
+	 *     }
+	 * }
+	 *
+	 * Otherwise, if the type of <expr> implements java.lang.Iterable and
+	 * <type> is exactly java.lang.Object, the statement is rewritten into
+	 *
+	 * for (Iterator #itr = <expr>.iterator(); #itr.hasNext(); ) {
+	 *     <type> <var> = #itr.next();
+	 *	   <stmt>;
+	 * }
+	 *
+	 * In all other cases, the enhanced for statement will remain unmodified.
+	 */
+	rewrite EnhancedForStmt {
+		when (!duringResolveAmbiguousNames() && getExpr().type().isArrayDecl() &&
+			legalEnhancedFor()) to Block { 
+			
+			String indexID = hostType().uniqueSynteticVariable("i"); // "#i" + counter;
+			String arrayID = hostType().uniqueSynteticVariable("a"); // "#a" + counter++;
+			Block outerBlock = new EnhancedForBlock();
+			Block innerBlock = new Block();
+
+			// Fill outer block with declaration and for statement
+			outerBlock.addStmt(
+				new VariableDeclaration(
+					new Modifiers(),
+          getExpr().type().createQualifiedAccess(),
+					new IdDecl(arrayID),
+					new Opt(
+						new VarInit(
+							getExpr()
+						)
+					)
+				)
+			);
+			outerBlock.addStmt(
+				new ForStmt(
+					new List().add(
+						new VariableDeclaration(
+							new Modifiers(),
+							new TypeAccess(
+								new List(),
+								new IdUse("int")
+							),
+							new IdDecl(indexID),
+							new Opt(
+								new VarInit(
+									new IntegerLiteral("0")
+								)
+							)
+						)
+					),
+					new Opt(
+						new LTExpr(
+							new VarAccess(
+								new IdUse(indexID)
+							),
+							new FieldDot(
+								new VarAccess(
+									new IdUse(arrayID)
+								),
+								new VarAccess(
+									new IdUse("length")
+								)
+							)
+						)
+					),
+					new List().add(
+						new ExprStmt(
+							new PostIncExpr(
+								new VarAccess(
+									new IdUse(indexID)
+								)
+							)
+						)
+					),
+					innerBlock
+				)
+			);
+			
+			// Fill inner block with declaration and original statement
+			innerBlock.addStmt(
+				new VariableDeclaration(
+					getParameter().getModifiers(),
+					getParameter().getTypeAccess(),
+					getParameter().getIdDecl(),
+					new Opt(
+						new VarInit(
+							new ArrayDot(
+								new VarAccess(
+									new IdUse(arrayID)
+								),
+								new ArrayAccess(
+									new VarAccess(
+										new IdUse(indexID)
+									)
+								)
+							)
+						)
+					)
+				)
+			);
+			innerBlock.addStmt(
+				getStmt()
+			);
+
+			return outerBlock;
+		}
+
+		when (!duringResolveAmbiguousNames() && getExpr().type().isIterable() &&
+			legalEnhancedFor()) to ForStmt {
+		                         
+			String iteratorID = hostType().uniqueSynteticVariable("itr"); // "#itr" + counter++;
+			Block block = new Block();
+
+			Access iteratorAccess =
+				getExpr().type().returnTypeOfMethod("iterator").createQualifiedAccess();
+
+			// Create for statement
+			ForStmt forStmt = new ForStmt(
+				new List().add(
+					new VariableDeclaration(
+						new Modifiers(),
+						iteratorAccess,
+						new IdDecl(iteratorID),
+						new Opt(
+							new VarInit(
+								new MethodDot(
+									getExpr(),
+									new MethodAccess(
+										new List(),
+										new IdUse("iterator")
+									)
+								)
+							)
+						)
+					)
+				),
+				new Opt(
+					new MethodDot(
+						new VarAccess(
+							new IdUse(iteratorID)
+						),
+						new MethodAccess(
+							new List(),
+							new IdUse("hasNext")
+						)
+					) 
+				),
+				new List(),
+				block
+			);
+
+			// fill for block
+			block.addStmt(
+				new VariableDeclaration(
+					getParameter().getModifiers(),
+					getParameter().getTypeAccess(),
+					getParameter().getIdDecl(),
+					new Opt(
+						new VarInit(
+							new MethodDot(
+								new VarAccess(
+									new IdUse(iteratorID)
+								),
+								new MethodAccess(
+									new List(),
+									new IdUse("next")
+								)
+							)
+						)
+					)
+				)
+			);
+			block.addStmt(
+				getStmt()
+			);
+			
+			return forStmt;
+		}
+	}
+}
