@@ -5,7 +5,7 @@ public class TestIfStmt {
             {z = false;}
         else z = true;
         if (z) System.out.println("ok1");
-        
+       
         if (z) z = false;
         if (!z) System.out.println("ok2");
         
@@ -15,5 +15,6 @@ public class TestIfStmt {
         
         if(z);else;
         if (z) System.out.println("ok4");
+     
     }
 }
