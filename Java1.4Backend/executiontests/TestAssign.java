@@ -9,11 +9,11 @@ public class TestAssign {
 		stat = 1;
 		stat += 2;
 		System.out.println(stat);
-		TestAssignSimple.stat = 1;
-		TestAssignSimple.stat += 3;
-		System.out.println(TestAssignSimple.stat);
-		TestAssignSimple s = new TestAssignSimple();
-		TestAssignSimple t = new TestAssignSimple();
+		TestAssign.stat = 1;
+		TestAssign.stat += 3;
+		System.out.println(TestAssign.stat);
+		TestAssign s = new TestAssign();
+		TestAssign t = new TestAssign();
 		s.inst = 1;
 		t.inst = 1;
 		s.inst += 4;
