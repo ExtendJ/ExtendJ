@@ -1,0 +1,375 @@
+import java.util.*;
+
+aspect AccessTypes {
+  syn boolean Expr.isTypeAccess() = false;
+  eq TypeAccess.isTypeAccess() = true;
+  eq ThisAccess.isTypeAccess() = false;
+  eq SuperAccess.isTypeAccess() = false;
+  eq TypeDot.isTypeAccess() = true;
+
+  syn boolean Expr.isMethodAccess() = false;
+  eq MethodDot.isMethodAccess() = true;
+  eq MethodAccess.isMethodAccess() = true;
+
+  syn boolean Expr.isFieldAccess() = false;
+  eq FieldDot.isFieldAccess() = true;
+  eq VarAccess.isFieldAccess() = decl().isClassVariable() || decl().isInstanceVariable();
+
+  syn boolean Expr.isSuperAccess() = false;
+  eq SuperDot.isSuperAccess() = true;
+  eq SuperAccess.isSuperAccess() = true;
+  eq ParExpr.isSuperAccess() = getExpr().isSuperAccess();
+  eq CastExpr.isSuperAccess() = getExpr().isSuperAccess();
+
+  syn boolean Expr.isThisAccess() = false;
+  eq ThisDot.isThisAccess() = true;
+  eq ThisAccess.isThisAccess() = true;
+  eq ParExpr.isThisAccess() = getExpr().isThisAccess();
+  eq CastExpr.isThisAccess() = getExpr().isThisAccess();
+
+  syn boolean Expr.isPackageAccess() = false;
+  eq PackageDot.isPackageAccess() = true;
+  eq PackageAccess.isPackageAccess() = true;
+
+  syn boolean Expr.isArrayAccess() = false;
+  eq ArrayAccess.isArrayAccess() = true;
+  eq ArrayDot.isArrayAccess() = true;
+ 
+}
+
+
+aspect NameResolution {
+  class NameType {
+    private NameType() {
+      super();
+    }
+    public static NameType NO_NAME = new NameType();
+    public static NameType PACKAGE_NAME = new NameType();
+    public static NameType TYPE_NAME = new NameType();
+    public static NameType PACKAGE_OR_TYPE_NAME = new NameType();
+    public static NameType AMBIGUOUS_NAME = new NameType();
+    public static NameType METHOD_NAME = new NameType();
+    public static NameType ARRAY_TYPE_NAME = new NameType();
+    public static NameType ARRAY_READ_NAME = new NameType();
+    public static NameType EXPRESSION_NAME = new NameType();
+  }
+}
+
+// 6.5 Determining the Meaning of a Name
+aspect NameResolution {
+  
+  inh NameType Access.nameType();
+  
+  eq AbstractDot.getLeft().nameType() {
+    NameType type = nameType();
+    if(type == NameType.PACKAGE_NAME) return NameType.PACKAGE_NAME;
+    else if(type == NameType.TYPE_NAME) return NameType.PACKAGE_OR_TYPE_NAME;
+    else if(type == NameType.PACKAGE_OR_TYPE_NAME) return NameType.PACKAGE_OR_TYPE_NAME;
+    else if(type == NameType.EXPRESSION_NAME) return NameType.AMBIGUOUS_NAME;
+    else if(type == NameType.AMBIGUOUS_NAME) return NameType.AMBIGUOUS_NAME;
+    return NameType.AMBIGUOUS_NAME;
+  }
+  
+  eq ClassDot.getLeft().nameType() = NameType.TYPE_NAME;
+  eq ThisDot.getLeft().nameType() = NameType.TYPE_NAME;
+  eq SuperDot.getLeft().nameType() = NameType.TYPE_NAME;
+  
+  //eq ArrayTypeDot.getLeft().nameType() = NameType.TYPE_NAME;
+
+  //eq ParseArray.nameTypeOut() = NameType.AMBIGUOUS_NAME;
+  eq MethodDot.getLeft().nameType() = NameType.AMBIGUOUS_NAME;
+
+  eq ClassInstanceDot.getLeft().nameType() = NameType.AMBIGUOUS_NAME;
+  eq ClassInstanceExpr.getAccess().nameType() = NameType.TYPE_NAME;
+  eq ClassInstanceExpr.getTypeDecl().nameType() = NameType.TYPE_NAME;
+  eq ClassInstanceExpr.getArg().nameType() = NameType.AMBIGUOUS_NAME;
+ 
+  eq TypeDot.getLeft().nameType() = NameType.PACKAGE_OR_TYPE_NAME;
+
+  //eq PackageOrTypeAccess.nameTypeOut() = NameType.PACKAGE_OR_TYPE_NAME;
+  //eq AmbiguousAccess.nameTypeOut() = NameType.AMBIGUOUS_NAME;
+
+  eq PackageDot.getLeft().nameType() = NameType.PACKAGE_NAME;
+  
+  eq Program.getCompilationUnit().nameType() = NameType.NO_NAME;
+  
+  //eq CompilationUnit.getPackageDecl().nameType() = NameType.PACKAGE_NAME;
+  
+  eq CompilationUnit.getImportDecl().nameType() = NameType.PACKAGE_NAME;
+  eq SingleTypeImportDecl.getAccess().nameType() = NameType.TYPE_NAME;
+  eq TypeImportOnDemandDecl.getAccess().nameType() = NameType.PACKAGE_OR_TYPE_NAME;
+  
+  eq ClassDecl.getSuperClassAccess().nameType() = NameType.TYPE_NAME;
+  eq ClassDecl.getImplements().nameType() = NameType.TYPE_NAME;
+  eq InterfaceDecl.getSuperInterfaceId().nameType() = NameType.TYPE_NAME;
+
+  eq FieldDecl.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq FieldDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq MethodDecl.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq MethodDecl.getParameter().nameType() = NameType.TYPE_NAME;
+  eq ConstructorDecl.getParameter().nameType() = NameType.TYPE_NAME;
+  eq MethodDecl.getException().nameType() = NameType.TYPE_NAME;
+  eq ConstructorDecl.getException().nameType() = NameType.TYPE_NAME;
+  eq VarDeclStmt.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq VariableDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq Catch.getParameter().nameType() = NameType.TYPE_NAME;
+  eq ArrayInstanceExpr.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq CastExpr.getTypeAccess().nameType() = NameType.TYPE_NAME;
+  eq InstanceOfExpr.getTypeAccess().nameType() = NameType.TYPE_NAME;
+
+  eq Block.getStmt().nameType() = NameType.EXPRESSION_NAME; // FIXME
+  eq ConstructorDecl.getConstructorInvocation().nameType() = NameType.EXPRESSION_NAME;
+  eq Case.getStmt().nameType() = NameType.EXPRESSION_NAME; // FIXME
+  eq TypeDecl.getBodyDecl().nameType() = NameType.EXPRESSION_NAME; // FIXME
+  //eq VarInit.getExpr().nameType() = NameType.EXPRESSION_NAME; // added by Thomas and Magnus
+
+  rewrite ParseName {
+    to Access {
+      NameType type = nameType();
+      if(type == NameType.PACKAGE_NAME) {
+        return new PackageAccess(new List().add(getIdUse()));
+      }
+      else if(type == NameType.TYPE_NAME)
+        return new TypeAccess(new List(), getIdUse());
+      else if(type == NameType.PACKAGE_OR_TYPE_NAME) {
+        return new PackageOrTypeAccess(getIdUse());
+      }
+      else if(type == NameType.AMBIGUOUS_NAME)
+        return new AmbiguousAccess(getIdUse());
+      else if(type == NameType.EXPRESSION_NAME)
+        return new AmbiguousAccess(getIdUse());
+      return null;
+    }
+  }
+
+  rewrite Dot {
+    when(getRight() instanceof ArrayNameAccess)
+    to Access new ArrayNameDot(getLeftNoTransform(), getRight());
+
+
+    when(getRight() instanceof ClassAccess)
+    to Access new ClassDot(getLeftNoTransform(), getRight());
+    when(getRight() instanceof PackageAccess)
+    to Access new PackageDot(getLeftNoTransform(), getRight());
+    when(getRight() instanceof VarAccess)
+    to Access new FieldDot(getLeftNoTransform(), getRight());
+    when(getRight() instanceof MethodAccess)
+    to Access new MethodDot(getLeftNoTransform(), getRight());
+
+    when(getRight() instanceof ClassInstanceExpr)
+    to Access new ClassInstanceDot(getLeftNoTransform(), getRight());
+
+    when(getRight() instanceof SuperConstructorAccess)
+    to Access new SuperConstructorDot(getLeftNoTransform(), getRight());
+
+    when(getRight() instanceof ThisAccess)
+    to Access new ThisDot(getLeftNoTransform(), getRight());
+    when(getRight() instanceof SuperAccess)
+    to Access new SuperDot(getLeftNoTransform(), getRight());
+    when(getRight() instanceof TypeAccess)
+    to Access new TypeDot(getLeftNoTransform(), getRight());
+    when(getRight() instanceof ParseArray)
+    to Access new ArrayDot(getLeftNoTransform(), getRight());
+  }
+
+  rewrite ArrayTypeName {
+    to Access new ArrayNameAccess(getNumEmptyBracket(), false);
+  }
+  
+  rewrite ArrayNameDot {
+    // duringVariableDeclaration is used to prevent
+    // the types of variable declaration to be resolved during variable 
+    // splitting. This would cause circular evaluaton when resolving
+    // fields with types that are array types in classes with 
+    // a lot of nested types.
+    when(!duringVariableDeclaration() && getLeft() instanceof ArrayTypeDot)
+    to AbstractDot {
+      int dimension = ((ArrayNameAccess)getRight()).getDimension();
+      ArrayTypeDot dot = (ArrayTypeDot)getLeft();
+      ArrayTypeAccess type = (ArrayTypeAccess)dot.getRight();
+      type.setDimension(type.getDimension() + dimension);
+      return dot;
+    }
+    when(!duringVariableDeclaration() && getLeft() instanceof ArrayTypeAccess)
+    to AbstractDot {
+      int dimension = ((ArrayNameAccess)getRight()).getDimension();
+      ArrayTypeAccess type = (ArrayTypeAccess)getLeft();
+      type.setDimension(type.getDimension() + dimension);
+      return type;
+    }
+    when(!duringVariableDeclaration() && getLeft() instanceof TypeDot)
+    to AbstractDot {
+      int dimension = ((ArrayNameAccess)getRight()).getDimension();
+      TypeDot dot = (TypeDot)getLeft();
+      TypeAccess type = (TypeAccess)dot.getRight();
+      return new ArrayTypeDot(dot.getLeft(), new ArrayTypeAccess(type.getPackageList(), type.getIdUse(), dimension));
+    }
+    when(!duringVariableDeclaration() && getLeft() instanceof TypeAccess)
+    to AbstractDot {
+      int dimension = ((ArrayNameAccess)getRight()).getDimension();
+      TypeAccess type = (TypeAccess)getLeft();
+      return new ArrayTypeAccess(type.getPackageList(), type.getIdUse(), dimension);
+    }
+  }
+
+  rewrite ArrayTypeAccess {
+    when(getDimension() == 0)
+    to Access new TypeAccess(getPackageList(), getIdUse());
+  }
+  
+  // Split a group of Parse Array into several ArrayAccesses
+  rewrite ArrayDot {
+    when(getRight() instanceof ParseArray)
+    to ArrayDot {
+      ParseArray right = (ParseArray)getRight();
+      Expr left = getLeft();
+      for(int i = 0; i < right.getNumDims(); i++) {
+        left = new ArrayDot(left, new ArrayAccess(right.getDims(i).getExpr())); // DRAGONS: Dims may not have expr
+      }
+      return left;
+    }
+  }
+
+  rewrite ParseMethodName {
+    to Access new MethodAccess(getArgList(), getIdUse());
+  }
+
+  // Resolve Package or Type name
+  rewrite PackageOrTypeAccess {
+    when(!lookupType(getIdUse().getID()).isEmpty())
+    to Access new TypeAccess(new List(), getIdUse());
+    to Access {
+      return new PackageAccess(new List().add(getIdUse()));
+    }
+  }
+
+
+  // Resolve Ambiguous name
+  rewrite AmbiguousAccess {
+    //when(!duringHelper())
+    to Access {
+      ArrayList v = lookupVariable(getIdUse());
+      if(!v.isEmpty()) {
+        return new VarAccess(getIdUse());
+      }
+      TypeCollection c = lookupType(getIdUse().getID());
+      if(!c.isEmpty()) {
+        return new TypeAccess(new List(), getIdUse());
+      }  
+      return new PackageAccess(new List().add(getIdUse()));
+    }
+  }
+
+  // Collect all package accesses to one node
+  
+  rewrite PackageDot {
+    when(getLeft() instanceof PackageAccess)
+    to AbstractDot {
+      PackageAccess right = (PackageAccess)getRight();
+      PackageAccess left = (PackageAccess)getLeft();
+      for(int i = 0; i < right.getNumPackage(); i++)
+        left.addPackage(right.getPackage(i));
+      return left;
+    }
+  }
+        
+  // Bind package accesses to the TypeAccess
+  rewrite TypeDot {
+    when(getLeft() instanceof PackageAccess)
+    to AbstractDot {
+      TypeAccess type = (TypeAccess)getRight();
+      PackageAccess left = (PackageAccess)getLeft();
+      type.setPackageList(left.getPackageList());
+      // type.updatePackageList(left.getPackageList()); ????
+      return type;
+    }
+  }
+
+}
+
+
+aspect AccessDeclarationAndTypes {
+
+
+  eq MethodAccess.getArg().nameType() = NameType.EXPRESSION_NAME;
+  eq ParseMethodName.getArg().nameType() = NameType.EXPRESSION_NAME;
+  eq ConstructorAccess.getArg().nameType() = NameType.EXPRESSION_NAME;
+  eq ArrayAccess.getExpr().nameType() = NameType.EXPRESSION_NAME;
+  eq ParseArray.getDims().nameType() = NameType.EXPRESSION_NAME;
+
+  
+  syn String TypeAccess.name() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++)
+      s.append(getPackage(i).getID() + ".");
+    s.append(getIdUse().getID());
+    return s.toString();
+  }
+
+  syn String Expr.packageName() = "";
+  eq AbstractDot.packageName() = getLeft().packageName() + "." + getRight().packageName();
+  eq PackageAccess.packageName() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++) {
+      if(i > 0) s.append(".");
+      s.append(getPackage(i).getID());
+    }
+    return s.toString();
+  }
+  eq PackageOrTypeAccess.packageName() = getIdUse().getID();
+  eq TypeAccess.packageName() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++) {
+      if(i > 0) s.append(".");
+      s.append(getPackage(i).getID());
+    }
+    return s.toString();
+  }
+  
+  
+  /*
+	syn List TypeAccess.packageList();
+	eq RegularTypeAccess.packageList() = getPackageList();
+	eq ArrayTypeAccess.packageList() = ((TypeAccess)getTypeAccess()).packageList();
+	
+	syn IdUse TypeAccess.idUse();
+	eq RegularTypeAccess.idUse() = getIdUse();
+	eq ArrayTypeAccess.idUse() = ((TypeAccess)getTypeAccess()).idUse();	
+
+	abstract void TypeAccess.updatePackageList(List l);
+	void RegularTypeAccess.updatePackageList(List l) {
+		setPackageList(l);
+	}
+	void ArrayTypeAccess.updatePackageList(List l) {
+		((TypeAccess)getTypeAccess()).updatePackageList(l);
+	}	
+  */
+
+
+  syn String VarAccess.name() = getIdUse().getID();
+  syn String MethodAccess.name() = getIdUse().getID();
+  syn String ConstructorAccess.name() = decl().getIdDecl().getID();
+
+  syn String TypeDot.name() {
+      TypeAccess right = (TypeAccess)getRight();
+      if(getLeft() instanceof TypeAccess) {
+        return ((TypeAccess)getLeft()).name() + "." + right.name();
+      }
+      else if(getLeft() instanceof TypeDot) {
+        return ((TypeDot)getLeft()).name() + "." + right.name();
+      }
+      return "ERROR";
+  }
+
+  syn String SingleTypeImportDecl.fullName() {
+    if(getAccess() instanceof TypeDot) {
+      return ((TypeDot)getAccess()).name();
+    }
+    else if(getAccess() instanceof TypeAccess) {
+      return ((TypeAccess)getAccess()).name();
+    }
+    else {
+      return "ERROR";
+    }
+  }
+}

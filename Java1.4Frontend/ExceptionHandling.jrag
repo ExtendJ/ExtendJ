@@ -1,0 +1,343 @@
+aspect ExceptionHandling {
+
+  eq Program.getCompilationUnit().typeException() = lookupType("java.lang", "Exception");
+  inh TypeDecl TypeDecl.typeException();
+  eq Program.getCompilationUnit().typeRuntimeException() = lookupType("java.lang", "RuntimeException");
+  inh TypeDecl TypeDecl.typeRuntimeException();
+  eq Program.getCompilationUnit().typeError() = lookupType("java.lang", "Error");
+  inh TypeDecl TypeDecl.typeError();
+  eq Program.getCompilationUnit().typeNullPointerException() = lookupType("java.lang", "NullPointerException");
+  inh TypeDecl ThrowStmt.typeNullPointerException();
+  eq Program.getCompilationUnit().typeThrowable() = lookupType("java.lang", "Throwable");
+  inh TypeDecl BodyDecl.typeThrowable();
+
+  syn boolean TypeDecl.isException() = instanceOf(typeException());
+  syn boolean TypeDecl.isCheckedException() = isException() &&
+    (instanceOf(typeRuntimeException()) || instanceOf(typeError()));
+  syn boolean TypeDecl.isUncheckedException() = isException() && !isCheckedException();
+
+  inh boolean MethodAccess.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean ConstructorAccess.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean ThrowStmt.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean InstanceInitializer.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean StaticInitializer.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean FieldDeclaration.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean TryStmt.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean ConstructorDecl.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean MethodDecl.handlesException(TypeDecl exceptionType, Expr expr);
+  inh boolean ClassInstanceExpr.handlesException(TypeDecl exceptionType, Expr expr);
+
+  public void ThrowStmt.findExceptionHandler() {
+    TypeDecl typeDecl = getExpr().type();
+    if(typeDecl == typeNull()) {
+      typeDecl = typeNullPointerException();
+    }
+    handlesException(typeDecl, getExpr());
+  }
+  
+  
+  // 8.8.4 (8.4.4)
+  public void ConstructorAccess.findExceptionHandler() {
+    for(int i = 0; i < decl().getNumException(); i++) {
+      TypeDecl typeDecl = decl().getException(i).type();
+      handlesException(typeDecl, this);
+    }
+  }
+
+  public void ClassInstanceExpr.findExceptionHandler() {
+    ConstructorDecl decl = decl();
+    //System.err.println("ClassInstanceExpr.findExceptionHandler() for " + decl.hostType().fullName());
+    for(int i = 0; i < decl.getNumException(); i++) {
+      TypeDecl typeDecl = decl.getException(i).type();
+      //System.err.println("  throws exception " + typeDecl.fullName());
+      handlesException(typeDecl, this);
+    }
+  }
+  
+  public void ASTNode.exceptionHandling() {
+  }
+  
+  public void MethodAccess.findExceptionHandler() {
+    // 8.4.4
+    for(Iterator iter = exceptionCollection().iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      handlesException(typeDecl, this);
+    }
+  }
+  
+  public void MethodAccess.exceptionHandling() {
+    for(Iterator iter = exceptionCollection().iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      if(!handlesException(typeDecl, this)) {
+        error("*** Semantic Error: " + decl().hostType().fullName() + "." + this + " invoked in " + hostType().fullName() + " may throw uncaught exception " + typeDecl.fullName());
+      }
+    }
+  }
+
+  syn lazy Collection MethodAccess.exceptionCollection() {
+    Set set = new HashSet();
+    MethodCollection.MethodIterator iter = decls().iterator();
+    if(!iter.hasNext())
+      return set;
+
+    MethodDecl m = (MethodDecl)iter.next();
+    for(int i = 0; i < m.getNumException(); i++) {
+      TypeDecl typeDecl = m.getException(i).type();
+      set.add(typeDecl);
+    }
+    while(iter.hasNext()) {
+      Set first = new HashSet();
+      first.addAll(set);
+      Set second = new HashSet();
+      m = (MethodDecl)iter.next();
+      for(int i = 0; i < m.getNumException(); i++) {
+        TypeDecl typeDecl = m.getException(i).type();
+        second.add(typeDecl);
+      }
+      set = new HashSet();
+      for(Iterator i1 = first.iterator(); i1.hasNext(); ) {
+        TypeDecl firstType = (TypeDecl)i1.next(); 
+        for(Iterator i2 = second.iterator(); i2.hasNext(); ) {
+          TypeDecl secondType = (TypeDecl)i2.next();
+          if(firstType.instanceOf(secondType)) {
+            set.add(firstType);
+          }
+          else if(secondType.instanceOf(firstType)) {
+            set.add(secondType);
+          }
+        }
+      }
+    }
+    return set;
+  }
+
+  public void ConstructorAccess.exceptionHandling() {
+    for(int i = 0; i < decl().getNumException(); i++) {
+      TypeDecl typeDecl = decl().getException(i).type();
+      if(!handlesException(typeDecl, this)) {
+        error("*** Semantic Error: " + this + " may throw uncaught exception " + typeDecl.fullName());
+      }
+    }
+  }
+
+  public void ThrowStmt.exceptionHandling() {
+    //System.out.println("### throwexpr exceptionhandling");
+    TypeDecl typeDecl = getExpr().type();
+    if(typeDecl == typeNull()) {
+      typeDecl = typeNullPointerException();
+      //System.out.println("###throws null -> " + typeDecl.name());
+    }
+    // 8.4.4
+    if(!handlesException(typeDecl, getExpr())) {
+      error("*** Semantic Error: " + this + " throws uncaught exception " + typeDecl.fullName());
+    }
+    //System.out.println("### End of throwexpr exceptionhandling");
+  }
+
+  public void MethodDecl.exceptionHandling() {
+    // Thrown vs super class method
+
+    // 8.4.4
+    TypeDecl exceptionType = typeThrowable();
+    for(int i = 0; i < getNumException(); i++) {
+      TypeDecl typeDecl = getException(i).type();
+      if(!typeDecl.instanceOf(exceptionType))
+        error("*** Semantic Error: " + signature() + " throws non throwable type " + typeDecl.fullName());
+    }
+  }
+
+  public void ConstructorDecl.exceptionHandling() {
+    // Thrown vs super class constructor
+
+    // 8.8.4 (8.4.4)
+    TypeDecl exceptionType = typeThrowable();
+    for(int i = 0; i < getNumException(); i++) {
+      TypeDecl typeDecl = getException(i).type();
+      if(!typeDecl.instanceOf(exceptionType))
+        error("*** Semantic Error: " + signature() + " throws non throwable type " + typeDecl.fullName());
+    }
+    
+  }
+
+  eq CompilationUnit.getTypeDecl().handlesException(TypeDecl exceptionType, Expr expr) {
+    //System.out.println("####Equation in compilation unit");
+    return !exceptionType.isUncheckedException();
+  }
+
+  
+  eq MethodDecl.getBlock().handlesException(TypeDecl exceptionType, Expr expr) {
+    //System.out.println("###Equation in MethodDecl");
+    for(int i = 0; i < getNumException(); i++)
+      if(exceptionType.instanceOf(getException(i).type()))
+        return true;
+    //System.out.println("###End equation in MethodDecl");
+    return handlesException(exceptionType, expr);
+  }
+  
+  eq ConstructorDecl.getBlock().handlesException(TypeDecl exceptionType, Expr expr) = throwsException(exceptionType) || handlesException(exceptionType, expr);
+  eq ConstructorDecl.getConstructorInvocation().handlesException(TypeDecl exceptionType, Expr expr) = throwsException(exceptionType) || handlesException(exceptionType, expr);
+
+  syn boolean ConstructorDecl.throwsException(TypeDecl exceptionType) {
+    for(int i = 0; i < getNumException(); i++)
+      if(exceptionType.instanceOf(getException(i).type()))
+        return true;
+    return false;
+  }
+
+  eq FieldDeclaration.getAbstractVarInit().handlesException(TypeDecl exceptionType, Expr expr) {
+    if(hostType().isAnonymous())
+      return true;
+    if(!exceptionType.isUncheckedException())
+      return true;
+    TypeDecl hostType = hostType();
+    boolean ok = true;
+    for(int i = 0; i < hostType.getNumBodyDecl(); i++) {
+      if(hostType.getBodyDecl(i) instanceof ConstructorDecl) {
+        ConstructorDecl decl = (ConstructorDecl)hostType.getBodyDecl(i);
+        if(!decl.throwsException(exceptionType))
+          ok = false;
+      }
+    }
+    return ok;
+  }
+  // 8.6
+  eq InstanceInitializer.getBlock().handlesException(TypeDecl exceptionType, Expr expr) {
+    if(hostType().isAnonymous())
+      return true;
+    if(!exceptionType.isUncheckedException())
+      return true;
+    TypeDecl hostType = hostType();
+    boolean ok = true;
+    for(int i = 0; i < hostType.getNumBodyDecl(); i++) {
+      if(hostType.getBodyDecl(i) instanceof ConstructorDecl) {
+        ConstructorDecl decl = (ConstructorDecl)hostType.getBodyDecl(i);
+        if(!decl.throwsException(exceptionType))
+          ok = false;
+      }
+    }
+    return ok;
+  }
+  eq StaticInitializer.getBlock().handlesException(TypeDecl exceptionType, Expr expr) {
+    return hostType().isAnonymous() ? handlesException(exceptionType, expr) : !exceptionType.isUncheckedException();
+  }
+  
+
+
+  eq TryStmt.getCatch().handlesException(TypeDecl exceptionType, Expr expr) {
+    //System.out.println("### Searching local try for finally");
+    if(hasFinally() && !getFinally().canCompleteNormally())
+      return true;
+    return handlesException(exceptionType, expr);
+  }
+  
+  eq TryStmt.getBlock().handlesException(TypeDecl exceptionType, Expr expr) {
+    //System.out.println("### Searching enclosing try for catch");
+    boolean found = false;
+    for(int i = 0; i < getNumCatch() /*&& !found*/; i++) {
+      TypeDecl catchType = getCatch(i).getParameter().getTypeAccess().type();
+      if(catchType.instanceOf(exceptionType) || exceptionType.instanceOf(catchType)) {
+        //System.out.println("### Found catch expr " + getCatch(i));
+        getCatch(i).addThrowTarget(expr);
+        if(exceptionType.instanceOf(catchType))
+          found = true;
+      }
+    }
+    if(found)
+      return true;
+    //System.out.println("### Searching enclosing try for finally");
+    if(hasFinally() && !getFinally().canCompleteNormally())
+      return true;
+    return handlesException(exceptionType, expr);
+  }
+      
+  protected Set Catch.throwTarget = new HashSet();
+  public void Catch.addThrowTarget(Expr expr) {
+    throwTarget.add(expr);
+  }
+  public Collection Catch.throwTarget() {
+    return throwTarget;
+  }
+
+
+
+
+
+
+  inh ASTNode ThrowStmt.exceptionTarget(TypeDecl exceptionType);
+  inh ASTNode MethodAccess.exceptionTarget(TypeDecl exceptionType);
+  inh ASTNode InstanceInitializer.exceptionTarget(TypeDecl exceptionType);
+  inh ASTNode FieldDeclaration.exceptionTarget(TypeDecl exceptionType);
+  eq Program.getCompilationUnit().exceptionTarget(TypeDecl exceptionType) = null;
+  eq TypeDecl.getBodyDecl().exceptionTarget(TypeDecl exceptionType) = null;
+
+  eq InstanceInitializer.getBlock().exceptionTarget(TypeDecl exceptionType) {
+    if(hostType().isAnonymous())
+      return this;
+    if(!exceptionType.isUncheckedException())
+      return this;
+    TypeDecl hostType = hostType();
+    boolean ok = true;
+    for(int i = 0; i < hostType.getNumBodyDecl(); i++) {
+      if(hostType.getBodyDecl(i) instanceof ConstructorDecl) {
+        ConstructorDecl decl = (ConstructorDecl)hostType.getBodyDecl(i);
+        if(!decl.throwsException(exceptionType))
+          ok = false;
+      }
+    }
+    return ok ? this : exceptionTarget(exceptionType);
+  }
+  
+  eq FieldDeclaration.getAbstractVarInit().exceptionTarget(TypeDecl exceptionType) {
+    if(hostType().isAnonymous())
+      return this;
+    if(!exceptionType.isUncheckedException())
+      return this;
+    TypeDecl hostType = hostType();
+    boolean ok = true;
+    for(int i = 0; i < hostType.getNumBodyDecl(); i++) {
+      if(hostType.getBodyDecl(i) instanceof ConstructorDecl) {
+        ConstructorDecl decl = (ConstructorDecl)hostType.getBodyDecl(i);
+        if(!decl.throwsException(exceptionType))
+          ok = false;
+      }
+    }
+    return ok ? this : exceptionTarget(exceptionType);
+  }
+  
+  syn Collection FieldDeclaration.exceptions() {
+    Set set = new HashSet();
+    if(isInstanceVariable())
+      collectExceptions(set, this);
+    return set;
+  }
+
+  syn Collection InstanceInitializer.exceptions() {
+    Set set = new HashSet();
+    collectExceptions(set, this);
+    return set;
+  }
+
+  protected void ASTNode.collectExceptions(Collection c, ASTNode target) {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).collectExceptions(c, target);
+  }
+
+  protected void ThrowStmt.collectExceptions(Collection c, ASTNode target) {
+    super.collectExceptions(c, target);
+    TypeDecl exceptionType = getExpr().type();
+    if(exceptionTarget(exceptionType) == target)
+      c.add(exceptionType);
+  }
+
+  protected void MethodAccess.collectExceptions(Collection c, ASTNode target) {
+    super.collectExceptions(c, target);
+    MethodDecl decl = decl();
+    for(int i = 0; i < decl.getNumException(); i++) {
+      TypeDecl exceptionType = decl.getException(i).type();
+      //System.err.println("Collecting exception " + exceptionType.fullName() + " when invoking " + decl.signature());
+      if(exceptionTarget(exceptionType) == target)
+        c.add(exceptionType);
+    }
+  }
+ 
+}

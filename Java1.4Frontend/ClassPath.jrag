@@ -1,0 +1,188 @@
+aspect ClassPath {
+
+  class ClassFile {
+    private boolean exists;
+    private static byte[] buf;
+    private int size;
+    private boolean isSource = false;
+    private long age;
+
+    public static Object[] classPath = null;
+    public static Object[] javaPath = null;
+
+    private static HashSet packages = new HashSet();
+
+    private void initPaths() {
+      if(classPath == null || javaPath == null) {
+        String bootClassPath = System.getProperty("sun.boot.class.path");
+        if (bootClassPath == null) {
+          bootClassPath = System.getProperty("java.class.path");
+          if (bootClassPath == null) {
+            bootClassPath = ".";
+          }
+        }
+        String path = System.getProperty("env.class.path");
+        if (path == null) {
+          path = System.getProperty("java.class.path");
+          if (path == null) {
+            path = ".";
+          }
+        }
+        bootClassPath += File.pathSeparator + ".";
+        String[] classPaths = bootClassPath.split(File.pathSeparator);
+        javaPath = path.split(File.pathSeparator);
+        System.err.println("JavaPath: ");
+        for(int i = 0; i < javaPath.length; i++)
+          System.err.println("  " + javaPath[i]);
+        System.err.println("ClassPath: ");
+        classPath = new Object[classPaths.length];
+        for(int i = 0; i < classPaths.length; i++) {
+          String s = (String)classPaths[i];
+          System.err.println("  " + s);
+          File f = new File(s);
+          if(f.isFile()) {
+            try {
+              ZipFile zip = new ZipFile(f);
+              classPath[i] = zip;
+              for (Enumeration e = zip.entries() ; e.hasMoreElements() ;) {
+                ZipEntry entry = (ZipEntry)e.nextElement();
+                String pathName = new File(entry.getName()).getParent();
+                //System.out.println("Adding: " + pathName);
+                packages.add(pathName);
+              }
+            } catch (IOException e) {
+            }
+          }
+          else if(f.isDirectory()) {
+            classPath[i] = f;
+          }
+        }
+      }
+    }
+
+    static boolean isPackage(String name) {
+      name = name.replace('.', File.separatorChar);
+      if(packages.contains(name)) {
+        return true;
+      }
+      for(int i = 0; i < classPath.length; i++) {
+        Object o = classPath[i];
+        if(o instanceof File) {
+          File classFile = new File((File)o, name);
+          if(classFile.isDirectory()) {
+            packages.add(name);
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    long startTime;
+    String fullName;
+
+    public ClassFile(String name) {
+      initPaths();
+      fullName = name;
+      startTime = System.currentTimeMillis();
+      name = name.replace('.', File.separatorChar);
+      exists = false;
+      isSource = false;
+      age = 0;
+      try {
+        for(int i = 0; i < classPath.length; i++) {
+          Object o = classPath[i];
+          if(o instanceof ZipFile) {
+            ZipFile zip = (ZipFile)o;
+            ZipEntry zipEntry;
+            zipEntry = zip.getEntry(name + ".class");
+            if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
+              //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
+              size = (int)zipEntry.getSize();
+              fillBuf(zip.getInputStream(zipEntry), size);
+              exists = true;
+              isSource = false;
+              age = zipEntry.getTime();
+            }
+            zipEntry = zip.getEntry(name + ".java");
+            if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
+              //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
+              size = (int)zipEntry.getSize();
+              fillBuf(zip.getInputStream(zipEntry), size);
+              exists = true;
+              isSource = true;
+              age = zipEntry.getTime();
+            }
+          }
+          else if(o instanceof File) {
+            File classFile;
+            classFile = new File((File)o, name + ".class");
+            if(classFile.isFile() && classFile.lastModified() > age) {
+              //System.out.println("Found " + name + " in " + classFile.toString() + ", size: " + classFile.length());
+              size = (int)classFile.length();
+              InputStream is = new FileInputStream(classFile);
+              fillBuf(is, size);
+              is.close();
+              exists = true;
+              isSource = false;
+              age = classFile.lastModified();
+            }
+            classFile = new File((File)o, name + ".java");
+            if(classFile.isFile() && classFile.lastModified() > age) {
+              //System.out.println("Found " + name + " in " + classFile.toString() + ", size: " + classFile.length());
+              size = (int)classFile.length();
+              InputStream is = new FileInputStream(classFile);
+              fillBuf(is, size);
+              is.close();
+              exists = true;
+              isSource = true;
+              age = classFile.lastModified();
+            }
+          }
+        }
+      }
+      catch(IOException e) {
+      }
+    }
+
+    private void fillBuf(InputStream is, int size) {
+      try {
+        if(buf == null || buf.length < size)
+          buf = new byte[size];
+        int n = 0;
+        while (n < size)
+          n = n + is.read(buf, n, size - n);
+      }
+      catch(IOException e) {
+      }
+    }
+    public boolean exists() {
+      return exists;
+    }
+
+    public byte[] buffer() {
+      return buf;
+    }
+    public int size() {
+      return size;
+    }
+
+    public CompilationUnit getCompilationUnit() throws Exception  {
+      if(!isSource) {
+        CompilationUnit u = new bytecode.Parser(buffer(), size()).parse(null, null);
+        System.out.println("Loaded .class file: " + fullName + " in " + (System.currentTimeMillis() - startTime) + " ms");
+        return u;
+      } 
+      else {
+        InputStream is = new ByteArrayInputStream(buffer(), 0, size());
+        parser.JavaScanner scanner = new parser.JavaScanner(new parser.UnicodeEscapes(is));
+        parser.JavaParser parser = new parser.JavaParser();
+        CompilationUnit u = ((Program)parser.parse(scanner)).getCompilationUnit(0);
+        is.close();
+        System.out.println("Loaded .java file: " + fullName + " in " + (System.currentTimeMillis() - startTime) + " ms");
+        return u;
+      }
+    }
+  }
+
+}

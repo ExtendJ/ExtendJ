@@ -1,0 +1,639 @@
+
+aspect TypeCheck {
+  public void ASTNode.typeCheck() {
+  }
+
+  public void VariableDeclaration.typeCheck() {
+    if(hasAbstractVarInit()) {
+      TypeDecl right = getAbstractVarInit().type();
+      TypeDecl left = type();
+      //if(!right.assignConversionTo(left, getAbstractVarInit().isConstant())) {
+      if(!right.assignConversionTo(left, getAbstractVarInit() instanceof VarInit ? ((VarInit)getAbstractVarInit()).getExpr() : null)) { // DRAGONS
+        StringBuffer s = new StringBuffer();
+        toString(s);
+        error("    " + s + "\n" + 
+          "*** Semantic Error: The type of the right sub-expression, \"" + 
+          right.fullName() + "\", is not assignable to the variable" +
+          ", of type \"" + left.fullName() + "\".\n");
+      }
+    }
+  }
+
+  syn boolean Expr.isVariable() = false;
+  eq FieldDot.isVariable() = true;
+  eq VarAccess.isVariable() = true;
+  eq ArrayDot.isVariable() = true;
+  eq ArrayAccess.isVariable() = true;
+  eq ParExpr.isVariable() = getExpr().isVariable();
+ 
+  public void FieldDeclaration.typeCheck() {
+    if(hasAbstractVarInit()) {
+      TypeDecl source = getAbstractVarInit().type();
+      TypeDecl dest = type();
+      if(source.assignConversionTo(dest, getAbstractVarInit() instanceof VarInit ? ((VarInit)getAbstractVarInit()).getExpr() : null))
+        return;
+      StringBuffer s = new StringBuffer();
+      toString(s);
+      error("    " + s + "\n" +
+        "*** Semantic Error: The type of the right sub-expression, \"" + 
+        source.fullName() + "\", is not assignable to the field" +
+        ", of type \"" + dest.fullName() + "\".\n");
+    }
+  }
+
+  // 5.2 Assignment Conversion
+  public void AssignSimpleExpr.typeCheck() {
+    if(!getDest().isVariable())
+      error("*** Semantic Error: left hand side is not a variable");
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    if(source != illegalType() && source.assignConversionTo(dest, getSource()))
+      return;
+    StringBuffer s = new StringBuffer();
+    toString(s);
+    error("    " + s + "\n" +
+        "*** Semantic Error: The type of the right sub-expression, \"" + 
+        getSource().type().fullName() + "\", is not assignable to the variable" +
+        ", of type \"" + getDest().type().fullName() + "\".\n");
+  }
+  
+  public void AssignExpr.typeCheck() {
+    if(!getDest().isVariable())
+      error("*** Semantic Error: left hand side is not a variable");
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    if(getSource().type().isPrimitive() && getDest().type().isPrimitive())
+      return;
+//    if(source != illegalType() && getsource.narrowingConversionTo(dest))
+//      return;
+       // TODO: getSource().representableIn(dest);
+    StringBuffer s = new StringBuffer();
+    toString(s);
+    error("    " + s + "\n" +
+        "*** Semantic Error: The type of the right sub-expression, \"" + 
+        getSource().type().fullName() + "\", is not assignable to the variable" +
+        ", of type \"" + getDest().type().fullName() + "\".\n");
+  }
+
+  public void AssignMulExpr.typeCheck() {
+    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
+      error("*** Semantic Error: Operator * does not operate on boolean types");
+    }
+    super.typeCheck();
+  }
+  public void AssignDivExpr.typeCheck() {
+    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
+      error("*** Semantic Error: Operator / does not operate on boolean types");
+    }
+    super.typeCheck();
+  }
+  public void AssignModExpr.typeCheck() {
+    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
+      error("*** Semantic Error: Operator % does not operate on boolean types");
+    }
+    super.typeCheck();
+  }
+  public void AssignPlusExpr.typeCheck() {
+    if(!getDest().isVariable())
+      error("*** Semantic Error: left hand side is not a variable");
+    if(getDest().type().isString() && !(getSource().type() instanceof VoidType))
+      return;
+    if(getSource().type().isBoolean() || getDest().type().isBoolean()) {
+      error("*** Semantic Error: Operator + does not operate on boolean types");
+    }
+    if(getSource().type().isPrimitive() && getDest().type().isPrimitive())
+      return;
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    StringBuffer s = new StringBuffer();
+    toString(s);
+    error("    " + s + "\n" +
+        "*** Semantic Error: The type of the right sub-expression, \"" + 
+        getSource().type().fullName() + "\", is not assignable to the variable" +
+        ", of type \"" + getDest().type().fullName() + "\".\n");
+  }
+  public void AssignMinusExpr.typeCheck() {
+    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
+      error("*** Semantic Error: Operator - does not operate on boolean types");
+    }
+    super.typeCheck();
+  }
+  public void AssignLShiftExpr.typeCheck() {
+    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType()) {
+      error("*** Semantic Error: Operator << does only operate on integral types");
+    }
+    super.typeCheck();
+  }
+  public void AssignRShiftExpr.typeCheck() {
+    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType()) {
+      error("*** Semantic Error: Operator >> does only operate on integral types");
+    }
+    super.typeCheck();
+  }
+  public void AssignURShiftExpr.typeCheck() {
+    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType()) {
+      error("*** Semantic Error: Operator >>> does only operate on integral types");
+    }
+    super.typeCheck();
+  }
+
+  public void AssignAndExpr.typeCheck() {
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    if(source.isIntegralType() && dest.isIntegralType()) {
+      super.typeCheck();
+    }
+    else if(source.isBoolean() && dest.isBoolean()) {
+      super.typeCheck();
+    }
+    else {
+      error("*** Semantic Error: Operator & only operates on integral and boolean types");
+    }
+  }
+  public void AssignOrExpr.typeCheck() {
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    if(source.isIntegralType() && dest.isIntegralType()) {
+      super.typeCheck();
+    }
+    else if(source.isBoolean() && dest.isBoolean()) {
+      super.typeCheck();
+    }
+    else {
+      error("*** Semantic Error: Operator | only operates on integral and boolean types");
+      error("    not " + source.fullName() + " and " + dest.fullName());
+    }
+  }
+  public void AssignXorExpr.typeCheck() {
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    if(source.isIntegralType() && dest.isIntegralType()) {
+      super.typeCheck();
+    }
+    else if(source.isBoolean() && dest.isBoolean()) {
+      super.typeCheck();
+    }
+    else {
+      error("*** Semantic Error: Operator ^ only operates on integral and boolean types");
+    }
+  }
+
+  syn TypeDecl AssignExpr.sourceType() {
+    TypeDecl left = getDest().type();
+    TypeDecl right = getSource().type();
+    if(!right.isPrimitive())
+      return illegalType();
+    
+    //if(!left.isPrimitive() || !right.isPrimitive())
+    //  return illegalType();
+    return right;
+    /*
+    if(!left.isNumericType() && !left.isBoolean() || !right.isNumericType() && !right.isBoolean())
+      return illegalType();
+    if(left.instanceOf(right))
+      return right;
+    if(right.instanceOf(left))
+      return left;
+    return illegalType();*/
+  }
+  
+  eq AssignPlusExpr.sourceType() {
+    TypeDecl left = getDest().type();
+    TypeDecl right = getSource().type();
+    TypeDecl stringType = typeString();
+    TypeDecl voidType = typeVoid();
+    if(left != stringType && right != stringType)
+      return super.sourceType();
+    if(left == voidType || right == voidType)
+      return illegalType();
+    return stringType;
+  }
+  
+  syn TypeDecl AssignSimpleExpr.sourceType() = getSource().type();
+
+  // 5.3 Method Invocation Conversion
+  public void MethodAccess.typeCheck() {
+    for(int i = 0; i < decl().getNumParameter(); i++) {
+      TypeDecl exprType = getArg(i).type();
+      TypeDecl parmType = decl().getParameter(i).type();
+      if(!exprType.methodInvocationConversionTo(parmType)) {
+        error("**** Semantic Error: The type " + exprType.fullName() + " of expr " +
+            getArg(i) + " is not compatible with the method parameter " +
+            decl().getParameter(i));
+      }
+    }
+  }
+          
+
+  public void MethodDot.typeCheck() {
+    if(((MethodAccess)getRight()).decl().isAbstract() && getLeft() instanceof SuperAccess)
+      error("*** Semantic Error: may not access abstract methods in superclass");
+  }
+
+  public void ArrayAccess.typeCheck() {
+    if(!getExpr().type().instanceOf(typeInt()))
+      error("*** Semantic Error: array index may not be of type " + getExpr().type().name());
+  }
+
+  public void ArrayDot.typeCheck() {
+    if(!(getLeft().type().dimension() > 0))
+      error("*** Semantic Error: the type " + getLeft().type().name() + " of the indexed element is not an array");
+  }
+
+  public void ArrayInit.typeCheck() {
+    TypeDecl initializerType = lookupArray(declType().elementType(), declType().dimension() - 1);
+    for(int i = 0; i < getNumAbstractVarInit(); i++) {
+      //if(!getAbstractVarInit(i).type().instanceOf(initializerType))
+      if(getAbstractVarInit(i) instanceof VarInit) {
+        Expr e = ((VarInit)getAbstractVarInit(i)).getExpr();
+        if(!e.type().assignConversionTo(initializerType, e))
+          error("*** Semantic Error: the type " + e.type().name() + " of the initializer is not compatible with " + initializerType.name()); 
+      }
+    }
+  }
+  
+  public void Binary.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(!left.instanceOf(right) && !right.instanceOf(left)) {
+      StringBuffer leftString = new StringBuffer();
+      getLeftOperand().toString(leftString);
+      StringBuffer rightString = new StringBuffer();
+      getRightOperand().toString(rightString);
+      StringBuffer thisString = new StringBuffer();
+      toString(thisString);
+      error("    " + thisString + "\n" + 
+          "*** Semantic Error: The type of the left hand side, \"" + 
+          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.fullName() + "\".\n");
+    }
+  }
+
+  public void EQExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(left.isNumericType() && right.isNumericType()) {
+      return;
+    }
+    else if(left.isBoolean() && right.isBoolean()) {
+      return;
+    }
+    else if((left.isReferenceType() || left.isNull()) && (right.isReferenceType() || right.isNull())) {
+      if(left.castingConversionTo(right) || right.castingConversionTo(left))
+        return;
+    }
+      StringBuffer leftString = new StringBuffer();
+      getLeftOperand().toString(leftString);
+      StringBuffer rightString = new StringBuffer();
+      getRightOperand().toString(rightString);
+      StringBuffer thisString = new StringBuffer();
+      toString(thisString);
+      error("    " + thisString + "\n" + 
+          "*** Semantic Error: The type of the left hand side, \"" + 
+          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.fullName() + "\".\n");
+  }
+
+  public void NEExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(left.isNumericType() && right.isNumericType()) {
+      return;
+    }
+    else if(left.isBoolean() && right.isBoolean()) {
+      return;
+    }
+    else if((left.isReferenceType() || left.isNull()) && (right.isReferenceType() || right.isNull())) {
+      if(left.castingConversionTo(right) || right.castingConversionTo(left))
+        return;
+    }
+      StringBuffer leftString = new StringBuffer();
+      getLeftOperand().toString(leftString);
+      StringBuffer rightString = new StringBuffer();
+      getRightOperand().toString(rightString);
+      StringBuffer thisString = new StringBuffer();
+      toString(thisString);
+      error("    " + thisString + "\n" + 
+          "*** Semantic Error: The type of the left hand side, \"" + 
+          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.fullName() + "\".\n");
+  }
+
+
+  public void ArithmeticExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(!left.isNumericType()) {
+      error("*** Semantic Error: The type " + left.fullName() + " of the left hand side is not numeric");
+    }
+    if(!right.isNumericType()) {
+      error("*** Semantic Error: The type " + right.fullName() + " of the right hand side is not numeric");
+    }
+    if(!left.instanceOf(right) && !right.instanceOf(left)) {
+      StringBuffer leftString = new StringBuffer();
+      getLeftOperand().toString(leftString);
+      StringBuffer rightString = new StringBuffer();
+      getRightOperand().toString(rightString);
+      StringBuffer thisString = new StringBuffer();
+      toString(thisString);
+      error("    " + thisString + "\n" + 
+          "*** Semantic Error: The type of the left hand side, \"" + 
+          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.fullName() + "\".\n");
+    }
+  }
+
+  // String add implicit cast conversion
+  public void AddExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    TypeDecl stringType = typeString();
+    TypeDecl voidType = typeVoid();
+    if(left != stringType && right != stringType) {
+      super.typeCheck();
+    }
+    else if(left == voidType) {
+      error("*** Semantic Error: The type void of the left hand side is not numeric");
+    }
+    else if(right == voidType) {
+      error("*** Semantic Error: The type void of the right hand side is not numeric");
+    }
+  }     
+
+  public void InstanceOfExpr.typeCheck() {
+    TypeDecl relationalExpr = getExpr().type();
+    TypeDecl referenceType = getTypeAccess().type();
+    if(!relationalExpr.isReferenceType() && !relationalExpr.isNull())
+      error("*** Semantic Error: The relational expression in instance of must be reference or null type");
+    if(!referenceType.isReferenceType())
+      error("*** Semantic Error: The reference expression in instance of must be reference type");
+    if(!relationalExpr.castingConversionTo(referenceType))
+      error("*** Semantic Error: The type " + relationalExpr.fullName() + " of the relational expression " + 
+        getExpr() +  " can not be cast into the type " + referenceType.fullName());
+    if(getExpr().isTypeAccess())
+      error("*** Semantic Error: The relational expression " + getExpr() + " must not be a type name");
+  }
+
+  public void CastExpr.typeCheck() {
+    TypeDecl expr = getExpr().type();
+    TypeDecl type = getTypeAccess().type();
+    if(!expr.castingConversionTo(type)) {
+      StringBuffer s = new StringBuffer();
+      toString(s);
+      error("    " + s + "\n" +
+          "*** Semantic Error: An expression of type \"" + expr.fullName() + 
+          "\" cannot be cast into type \"" + type.fullName() + "\".\n");
+    }
+    if(!getTypeAccess().isTypeAccess()) {
+      error("*** Semantic Error: " + getTypeAccess() + " is not a type access in cast expression");
+    }
+  }
+
+  public void ParExpr.typeCheck() {
+    if(getExpr().isTypeAccess())
+      error("*** Semantic Error: " + getExpr() + " is a type and may not be used in parenthesized expression");
+  }
+
+  public void PlusExpr.typeCheck() {
+    if(!getOperand().type().isNumericType())
+      error("*** Semantic Error: unary plus only operates on numeric types");
+  }
+  public void MinusExpr.typeCheck() {
+    if(!getOperand().type().isNumericType())
+      error("*** Semantic Error: unary minus only operates on numeric types");
+  }
+
+  public void BitNotExpr.typeCheck() {
+    if(!getOperand().type().isIntegralType())
+      error("*** Semantic Error: unary ~ only operates on integral types");
+  }
+
+  public void LogNotExpr.typeCheck() {
+    if(!getOperand().type().isBoolean())
+      error("*** Semantic Error: unary ! only operates on boolean types");
+  }
+
+  public void PostfixExpr.typeCheck() {
+    if(!getOperand().isVariable())
+      error("*** Semantic Error: postfix expressions only work on variables");
+    if(!getOperand().type().isNumericType())
+      error("*** Semantic Error: postfix expressions only operates on numeric types");
+  }
+  public void PreIncExpr.typeCheck() {
+    if(!getOperand().isVariable())
+      error("*** Semantic Error: prefix increment expression only work on variables");
+    if(!getOperand().type().isNumericType())
+      error("*** Semantic Error: unary increment only operates on numeric types");
+  }
+  public void PreDecExpr.typeCheck() {
+    if(!getOperand().isVariable())
+      error("*** Semantic Error: prefix decrement expression only work on variables");
+    if(!getOperand().type().isNumericType())
+      error("*** Semantic Error: unary decrement only operates on numeric types");
+  }
+
+  public void IfStmt.typeCheck() {
+    TypeDecl cond = getCondition().type();
+    if(!cond.isBoolean()) {
+      error("*** Semantic Error: " + cond.name() + " " + getCondition() + 
+          " in " + this + " is not a boolean expression\n");
+    }
+  }
+
+  public void SwitchStmt.typeCheck() {
+    TypeDecl type = getExpr().type();
+    if(!type.instanceOf(typeInt()) || typeLong().instanceOf(type))
+      error("*** Semantic Error: Switch expression must be of char, byte, short, or int");
+    
+  }
+
+  public void ConstCase.typeCheck() {
+    TypeDecl switchType = switchType();
+    TypeDecl type = getValue().type();
+    if(!type.assignConversionTo(switchType, getValue()))
+      error("*** Semantic Error: Constant expression must be assignable to Expression");
+    if(!getValue().isConstant())
+      error("*** Semantic Error: Switch expression must be constant");
+  }
+
+  inh TypeDecl Case.switchType();
+  eq SwitchStmt.getCase().switchType() = getExpr().type();
+
+  
+  public void SynchronizeStmt.typeCheck() {
+    TypeDecl type = getExpr().type();
+    if(!type.isReferenceType() || type.isNull())
+      error("*** The type of the expression must be a reference");
+  }
+
+  public void Catch.typeCheck() {
+    if(!getParameter().type().instanceOf(typeThrowable()))
+      error("*** The catch variable must extend Throwable");
+  }
+
+  public void ThrowStmt.typeCheck() {
+    if(!getExpr().type().instanceOf(typeThrowable()))
+      error("*** The thrown expression must extend Throwable");
+  }
+
+
+  public void ClassInstanceDot.typeCheck() {
+    super.typeCheck();
+    if(getLeft().isTypeAccess())
+      error("*** The expression in a qualified class instance expr must not be a type name");
+    // 15.9
+    if(!type().isInnerClass() && !((ClassDecl)type()).getSuperClass().isInnerClass()) {
+      error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
+    }
+  }
+
+  inh TypeDecl SuperConstructorAccess.enclosingInstance();
+  inh TypeDecl ClassInstanceExpr.enclosingInstance();
+  inh TypeDecl TypeDecl.enclosingInstance();
+  eq SuperConstructorDot.getRight().enclosingInstance() = getLeft().type();
+  eq Program.getCompilationUnit().enclosingInstance() = null;
+  eq StaticInitializer.getBlock().enclosingInstance() = null;
+  //eq InstanceInitializer.getBlock().enclosingInstance() = null;
+  eq TypeDecl.getBodyDecl().enclosingInstance() {
+    if(getBodyDecl(childIndex) instanceof MemberType && !((MemberType)getBodyDecl(childIndex)).getTypeDecl().isInnerType())
+      return null;
+    if(getBodyDecl(childIndex) instanceof ConstructorDecl)
+      return enclosingInstance();
+    return this;
+  }
+  eq AbstractDot.getRight().enclosingInstance() = getLeft().type();
+
+  inh TypeDecl ConstructorDecl.illegalType();
+  eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = illegalType();
+  
+  public void ClassInstanceExpr.typeCheck() {
+    if(!type().isClassDecl()) {
+      error("*** Can only instantiate classes, which " + type().fullName() + " is not"); 
+    }
+    TypeDecl C = type();
+    if(C.isInnerClass()) {
+      TypeDecl enclosing = null;
+      if(C.isAnonymous()) {
+        if(inStaticContext()) {
+          enclosing = null;
+        }
+        else {
+          enclosing = hostType();
+        }
+      }
+      else if(C.isLocalClass()) {
+        TypeDecl O = C.enclosingType();
+        int n = 0;
+        for(TypeDecl nest = hostType(); nest != O; nest = nest.enclosingType())
+          n++;
+        if(C.inStaticContext()) {
+          enclosing = null;
+        }
+        else if(inStaticContext()) {
+          enclosing = illegalType();
+        }
+        else {
+          enclosing = O;
+        }
+      }
+      else if(C.isMemberType()) {
+        if(!isQualified()) {
+          if(inStaticContext()) {
+            System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.fullName() + " is in a static context when instantiated in " + this);
+            enclosing = illegalType();
+          }
+          else {
+            TypeDecl nest = hostType();
+            while(nest != null && !nest.instanceOf(C.enclosingType()))
+              nest = nest.enclosingType();
+            enclosing = nest == null ? illegalType() : nest;
+          }
+        }
+        else {
+          enclosing = enclosingInstance();
+        }
+      }
+      if(enclosing != null && !enclosing.instanceOf(type().enclosingType())) {
+        String msg = enclosing == null ? "None" : enclosing.fullName();
+        error("*** Can not instantiate " + type().fullName() + " with the enclosing instance " + msg + " due to incorrect enclosing instance");
+      }
+      else if(!isQualified() && C.isMemberType() && inExplicitConstructorInvocation() && enclosing == hostType()) {
+        error("*** The innermost enclosing instance of type " + enclosing.fullName() + " is this which is not yet initialized here.");
+      }
+      if(type().isAnonymous() && ((ClassDecl)type()).getSuperClass().isInnerType()) {
+        TypeDecl S = ((ClassDecl)type()).getSuperClass();
+        if(S.isLocalClass()) {
+          if(S.inStaticContext()) {
+          }
+          else if(inStaticContext()) {
+            error("*** No enclosing instance to class " + type().fullName() + " due to static context");
+          }
+          else if(inExplicitConstructorInvocation())
+            error("*** No enclosing instance to superclass " + S.fullName() + " of " + type().fullName() + " since this is not initialized yet");
+        }
+        else if(S.isMemberType()) {
+          if(!isQualified()) {
+            // 15.9.2 2nd paragraph
+            if(inStaticContext()) {
+              error("*** No enclosing instance to class " + type().fullName() + " due to static context");
+            }
+            else {
+              TypeDecl nest = hostType();
+              while(nest != null && !nest.instanceOf(S.enclosingType()))
+                nest = nest.enclosingType();
+              if(nest == null) {
+                error("*** No enclosing instance to superclass " + S.fullName() + " of " + type().fullName());
+              }
+              else if(inExplicitConstructorInvocation()) {
+                error("*** No enclosing instance to superclass " + S.fullName() + " of " + type().fullName() + " since this is not initialized yet");
+              }
+            }
+          }
+        }
+      }
+      
+    }
+    /*
+    if(hasExpr() && type().isInnerType() && !type().enclosingType().instanceOf(getExpr().type()))
+      error("*** The instantiation of " + type().fullName() + " is not an inner class of the qualifying type " + getExpr().type().fullName());
+      */
+    /*
+    if(hasExpr() && (type() == illegalType() || !decl().hostType().isInnerType()))
+      error("*** The instantiation of " + type().fullName() + " is not an inner class of the qualifying type " + getExpr().type().fullName());
+    */
+  }
+
+  public void QuestionColonExpr.typeCheck() {
+    if(!getCondition().type().isBoolean())
+      error("*** First expression must be a boolean in conditional operator");
+    if(type() == illegalType()) {
+      error("*** Operands in conditional operator does not match"); 
+    }
+ }
+
+ public void IntegerLiteral.typeCheck() {
+   if(constant().error)
+     error("*** Semantic Error: The value of an int literal must be a decimal value in the range -2147483648..2147483647 or a hexadecimal or octal literal that fits in 32 bits.");
+
+ }
+ public void LongLiteral.typeCheck() {
+   if(constant().error)
+     error("*** Semantic Error: The value of the long literal " + getLITERAL() + " is not legal");
+
+ }
+
+ public void FPLiteral.typeCheck() {
+   if(!isZero() && constant().floatValue() == 0.0f)
+     error("*** Semantic Error: It is an error for nonzero floating-point " + getLITERAL() + " to round to zero");
+   if(constant().floatValue() == Float.NEGATIVE_INFINITY || constant().floatValue() == Float.POSITIVE_INFINITY)
+     error("*** Semantic Error: It is an error for floating-point " + getLITERAL() + " to round to an infinity");
+     
+ }
+ public void DoubleLiteral.typeCheck() {
+   if(!isZero() && constant().doubleValue() == 0.0f)
+     error("*** Semantic Error: It is an error for nonzero floating-point " + getLITERAL() + " to round to zero");
+   if(constant().doubleValue() == Double.NEGATIVE_INFINITY || constant().doubleValue() == Double.POSITIVE_INFINITY)
+     error("*** Semantic Error: It is an error for floating-point " + getLITERAL() + " to round to an infinity");
+ }
+} 
+

@@ -1,0 +1,777 @@
+import java.util.*;
+import java.util.zip.*;
+import java.io.*;
+
+aspect SpecialClasses {
+  syn TypeDecl Program.typeObject() = lookupType("java.lang", "Object");
+  syn TypeDecl Program.typeCloneable() = lookupType("java.lang", "Cloneable");
+  syn TypeDecl Program.typeSerializable() = lookupType("java.io", "Serializable");
+  eq Program.getCompilationUnit().typeObject() = typeObject();
+  eq Program.getCompilationUnit().typeCloneable() = typeCloneable();
+  eq Program.getCompilationUnit().typeSerializable() = typeSerializable();
+ 
+  syn TypeDecl Program.typeString() = lookupType("java.lang", "String");
+  eq Program.getCompilationUnit().typeString() = typeString();
+  syn TypeDecl Program.typeBoolean() = lookupType("primitive", "boolean");
+  eq Program.getCompilationUnit().typeBoolean() = typeBoolean();
+  syn TypeDecl Program.typeVoid() = lookupType("primitive", "void");
+  eq Program.getCompilationUnit().typeVoid() = typeVoid();
+  syn TypeDecl Program.typeInt() = lookupType("primitive" , "int");
+  eq Program.getCompilationUnit().typeInt() = typeInt();
+  syn TypeDecl Program.typeLong() = lookupType("primitive" , "long");
+  eq Program.getCompilationUnit().typeLong() = typeLong();
+  
+  inh TypeDecl Expr.typeString();
+  inh TypeDecl Expr.typeBoolean();
+  inh TypeDecl Expr.typeVoid();
+  inh TypeDecl Expr.typeInt();
+  inh TypeDecl SwitchStmt.typeInt();
+  inh TypeDecl TypeDecl.typeInt();
+  inh TypeDecl Expr.typeLong();
+  inh TypeDecl SwitchStmt.typeLong();
+  
+  inh TypeDecl TypeDecl.typeObject();
+
+  inh TypeDecl ThrowStmt.typeThrowable();
+  inh TypeDecl Catch.typeThrowable();
+  
+ 
+  eq Program.getCompilationUnit().typeNull() = lookupType("primitive", "null");
+  inh TypeDecl ThrowStmt.typeNull();
+}
+
+aspect LookupFullyQualifiedTypes {
+  syn lazy boolean Program.hasPackage(String packageName) {
+    return ClassFile.isPackage(packageName);
+  }
+  eq Program.getCompilationUnit().hasPackage(String packageName) = hasPackage(packageName);
+  
+  inh TypeDecl Expr.lookupType(String packageName, String typeName);
+  inh TypeDecl Stmt.lookupType(String packageName, String typeName);
+  inh TypeDecl BodyDecl.lookupType(String packageName, String typeName);
+  inh TypeDecl TypeDecl.lookupType(String packageName, String typeName);
+  inh TypeDecl CompilationUnit.lookupType(String packageName, String typeName);
+
+  eq Program.getCompilationUnit().lookupType(String packageName, String typeName) = lookupType(packageName, typeName);
+
+  public int Program.classFileReadTime;
+  
+  syn lazy TypeDecl Program.lookupType(String packageName, String typeName) {
+    addPrimitiveTypes();
+    String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
+    for(int i = 0; i < getNumCompilationUnit(); i++) {
+      for(int j = 0; j < getCompilationUnit(i).getNumTypeDecl(); j++) {
+        TypeDecl type = getCompilationUnit(i).getTypeDecl(j);
+        if(type.fullName().equals(fullName))
+          return type;
+      }
+    }
+
+    long startTime = System.currentTimeMillis();
+    ClassFile classFile = new ClassFile(fullName);
+    if(classFile.exists()) {
+      try {
+        CompilationUnit u = classFile.getCompilationUnit();
+        addCompilationUnit(u);
+        classFileReadTime += (System.currentTimeMillis() - startTime);
+        for(int j = 0; j < u.getNumTypeDecl(); j++) {
+          if(u.getTypeDecl(j).name().equals(typeName))
+            return u.getTypeDecl(j);
+        }
+      }
+      catch (FileNotFoundException e) {
+        //System.out.println("Classfile for type: " + fullName  + " not found");
+      }
+      catch (Exception e) {
+        e.printStackTrace();
+        System.exit(1);
+      }
+    }
+    return null;
+  }
+}
+
+aspect LookupArray {
+
+  inh TypeDecl ArrayInit.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl ArrayDecl.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl ArrayInstanceExpr.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl TypeDecl.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl ArrayAccess.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl ArrayTypeAccess.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl AbstractDot.lookupArray(TypeDecl elementType, int dimension);
+  
+  eq Program.getCompilationUnit().lookupArray(TypeDecl elementType, int dimension) {
+    if(dimension == 0) return elementType;
+    for(int i = 0; i < getNumCompilationUnit(); i++) {
+      CompilationUnit unit = getCompilationUnit(i);
+      for(int j = 0; j < unit.getNumTypeDecl(); j++) {
+        TypeDecl type = unit.getTypeDecl(j);
+        if(type.elementType().equals(elementType) && type.dimension() == dimension) {
+          return type;
+        }
+      }
+    }
+
+    StringBuffer name = new StringBuffer();
+    name.append(elementType.fullName());
+    for(int i = 0; i < dimension; i++) {
+      name.append("[]");
+    }
+
+    TypeDecl type =
+      new ArrayDecl(
+        new Modifiers(new List().add(new Modifier("public"))),
+        new IdDecl(name.toString()),
+        new Opt(typeObject().createQualifiedAccess()), // [SuperClassAccess]
+        new List().add(typeCloneable().createQualifiedAccess()).add(typeSerializable().createQualifiedAccess()), // Implements*
+        new List().add( // BodyDecl*
+          new FieldDeclaration(
+            new Modifiers(new List().add(new Modifier("public")).add(new Modifier("final"))),
+            new TypeAccess(
+              new List(),
+              new IdUse("int")
+            ),
+            new IdDecl("length"),
+            new Opt() // [AbstractVarInit]
+          )).add(
+	  new MethodDecl(
+	    new Modifiers(new List().add(new Modifier("public"))),
+      typeObject().createQualifiedAccess(),
+	    new IdDecl("clone"),
+	    new List(),
+	    new List(),
+	    new List(),
+	    new Opt(new Block())
+	  )
+        ),
+        elementType,
+        dimension
+      );
+    
+    addCompilationUnit(
+      new CompilationUnit(
+        new List(), // PackageDecl*
+        new List(), // ImportDecl*
+        new List().add(type) // TypeDecl*
+      )
+    );
+
+    return type;
+  }
+  
+}
+
+
+aspect TypeScopePropagation {
+  class TypeCollection {
+    static class EmptyCollection extends TypeCollection implements TypeIterator {
+      public EmptyCollection() {
+      }
+      public TypeIterator iterator() {
+        return this;
+      }
+      public TypeDecl first() {
+        return null;
+      }
+      public int size() {
+        return 0;
+      }
+      public boolean isEmpty() {
+        return true;
+      }
+      public TypeCollection add(TypeDecl m) {
+        return singleCollection(m);
+      }
+      public boolean contains(TypeDecl m) {
+        return false;
+      }
+      public boolean hasNext() {
+        return false;
+      }
+      public TypeDecl next() {
+        return null;
+      }
+      public TypeCollection remove() {
+        return this;
+      }
+    }
+    static class SingleElementCollection extends TypeCollection implements TypeIterator {
+      boolean hasNext = false;
+      private TypeDecl element;
+      public SingleElementCollection(TypeDecl element) {
+        this.element = element;
+      }
+      public TypeIterator iterator() {
+        hasNext = true;
+        return this;
+      }
+      public TypeDecl first() {
+        return element;
+      }
+      public int size() {
+        return 1;
+      }
+      public boolean isEmpty() {
+        return false;
+      }
+      public TypeCollection add(TypeDecl m) {
+        if(contains(m))
+          return this;
+        TypeDecl[] list = new TypeDecl[2];
+        list[0] = element;
+        list[1] = m;
+        return multiCollection(list);
+      }
+      public boolean contains(TypeDecl m) {
+        return element == m;
+      }
+      public boolean hasNext() {
+        return hasNext;
+      }
+      public TypeDecl next() {
+        if(hasNext) {
+          hasNext = false;
+          return element;
+        }
+        return null;
+      }
+      public TypeCollection remove() {
+        return emptyCollection();
+      }
+    }
+    static class MultiElementCollection extends TypeCollection {
+      private TypeDecl[] list;
+      public MultiElementCollection(TypeDecl[] list) {
+        this.list = list;
+      }
+      public TypeIterator iterator() {
+        return new MultiIterator(list);
+      }
+      public TypeDecl first() {
+        return list[0];
+      }
+      public int size() {
+        return list.length;
+      }
+      public boolean isEmpty() {
+        return false;
+      }
+      public TypeCollection add(TypeDecl m) {
+        if(contains(m))
+          return this;
+        TypeDecl[] newList = new TypeDecl[list.length + 1];
+        System.arraycopy(list, 0, newList, 0, list.length);
+        newList[list.length] = m;
+        return multiCollection(newList);
+      }
+      public boolean contains(TypeDecl m) {
+        for(int i = 0; i < list.length; i++)
+          if(list[i].equals(m))
+            return true;
+        return false;
+      }
+    }
+    
+    private static TypeCollection emptyCollection = new EmptyCollection();
+
+    private static TypeCollection singleCollection(TypeDecl m) {
+      return new SingleElementCollection(m);
+    }
+    
+    private static TypeCollection multiCollection(TypeDecl[] list) {
+      return new MultiElementCollection(list);
+    }
+    
+    public static TypeCollection emptyCollection() {
+      return emptyCollection;
+    }
+    
+    private TypeCollection() {
+    }
+    
+    public TypeIterator iterator() { return null; }
+    public TypeDecl first() { return null; }
+    public int size() { return 0; }
+    public boolean isEmpty() { return false; }
+    public TypeCollection add(TypeDecl m) { return null; }
+    public boolean contains(TypeDecl m) { return false; }
+
+    static class MultiIterator implements TypeIterator {
+      TypeDecl[] list;
+      int counter = 0;
+      public MultiIterator(TypeDecl[] list) {
+        this.list = list;
+      }
+      public boolean hasNext() {
+        return counter < list.length;
+      }
+      public TypeDecl next() {
+        return list[counter++];
+      }
+      public TypeCollection remove() {
+        if(list.length == 1) {
+          return emptyCollection();
+        }
+        else if(list.length == 2) {
+          return singleCollection(list[0]);
+        }
+        else {
+          TypeDecl[] newList = new TypeDecl[list.length - 1];
+          for(int i = 0; i < counter - 1; i++)
+            newList[i] = list[i];
+          for(int i = counter; counter < list.length; i++)
+            newList[i-1] = list[i];
+          list = newList;
+          counter--;
+          return multiCollection(newList);
+        }
+      }
+    }
+
+    interface TypeIterator {
+      public boolean hasNext();
+      public TypeDecl next();
+      public TypeCollection remove();
+    }
+  }
+
+
+  inh lazy TypeDecl Access.unknownType();
+
+  syn lazy TypeCollection TypeAccess.decls() {
+    if(packageName().equals("")) {
+      return lookupType(getIdUse().getID());
+    }
+    else {
+      TypeCollection c = TypeCollection.emptyCollection();
+      TypeDecl typeDecl = lookupType(packageName(), getIdUse().getID());
+      c = c.add(typeDecl != null ? typeDecl : unknownType());
+      return c;
+    }
+  }
+  
+  syn lazy TypeDecl TypeAccess.decl() {
+    TypeCollection decls = decls();
+    if(decls.size() == 1) {
+      return decls.first();
+    }
+    return unknownType();
+  }
+  
+  eq ThisAccess.decls() = TypeCollection.emptyCollection();
+  eq SuperAccess.decls() = TypeCollection.emptyCollection();
+  syn lazy TypeDecl ThisAccess.decl() {
+    TypeDecl typeDecl = isQualified() ? ((AbstractDot)getParent()).getLeft().type() : hostType();
+    return typeDecl;
+  }
+  syn lazy TypeDecl SuperAccess.decl() {
+    TypeDecl typeDecl = isQualified() ? ((AbstractDot)getParent()).getLeft().type() : hostType();
+    if(!typeDecl.isClassDecl())
+      return illegalType();
+    ClassDecl classDecl = (ClassDecl)typeDecl;
+    if(!classDecl.hasSuperClass())
+      return illegalType();
+    return classDecl.getSuperClass();
+  }
+
+  syn lazy TypeDecl ArrayTypeAccess.decl() {
+    TypeDecl elementType = super.decl().elementType();
+    int dimension = super.decl().dimension() + getDimension();
+    return lookupArray(elementType, dimension);
+  }
+  
+  inh lazy TypeDecl ArrayAccess.illegalType();
+
+  inh TypeDecl ArrayAccess.arrayType();
+  eq AbstractDot.getRight().arrayType() {
+    TypeDecl typeDecl = getLeft().type();
+    return lookupArray(typeDecl.elementType(), typeDecl.dimension() - 1);
+  }
+  eq Block.getStmt().arrayType() = null;
+  eq Program.getCompilationUnit().arrayType() = null;
+  syn lazy TypeDecl ArrayAccess.decl() {
+    TypeDecl type = arrayType();
+    return type != null ? type : illegalType();
+  }
+  
+  eq MethodAccess.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
+  eq ParseMethodName.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
+  eq ConstructorAccess.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
+  eq ArrayAccess.getExpr().lookupType(String name) = unqualifiedScope().lookupType(name);
+  eq ParseArray.getDims().lookupType(String name) = unqualifiedScope().lookupType(name);
+
+  inh TypeCollection CompilationUnit.lookupType(String name);
+  inh TypeCollection TypeDecl.lookupType(String name);
+  inh TypeCollection Block.lookupType(String name);
+  inh TypeCollection Expr.lookupType(String name);
+
+  eq Program.getCompilationUnit().lookupType(String name) = TypeCollection.emptyCollection();
+  
+  eq CompilationUnit.getTypeDecl().lookupType(String name) {
+    TypeCollection c = localLookupType(name);
+    for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      if(!t.accessableFromPackage(packageName()))
+        c = iter.remove();
+    }
+    return c;
+  }
+    
+  eq CompilationUnit.getImportDecl().lookupType(String name) = lookupType(name);
+  
+  eq TypeDecl.getBodyDecl().lookupType(String name) {
+    TypeCollection c = localLookupType(name);
+    if(!c.isEmpty())
+      return c;
+
+    c = lookupType(name);
+    // 8.5.2
+    if(isClassDecl() && isStatic() && !isTopLevelType()) {
+      for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
+        TypeDecl d = (TypeDecl)iter.next();
+        if(!d.isStatic() && !instanceOf(d.enclosingType())) {
+          c = iter.remove();
+        }
+      }
+    }
+    if(!c.isEmpty())
+      return c;
+    return topLevelType().lookupType(name); // Fix to search imports
+  }
+
+  eq Block.getStmt(int index).lookupType(String name) {
+    TypeCollection c = TypeCollection.emptyCollection();
+    for(int i = 0; i < index; i++) {
+      if(getStmt(i) instanceof LocalClassDeclStmt) {
+        TypeDecl t = ((LocalClassDeclStmt)getStmt(i)).getClassDecl();
+        if(t.name().equals(name)) {
+          c = c.add(t);
+        }
+      }
+    }
+    if(!c.isEmpty())
+      return c;
+    return lookupType(name);
+  }
+
+  eq ClassInstanceExpr.getAccess().lookupType(String name) {
+    TypeCollection c = lookupType(name);
+    if(c.size() == 1) {
+      if(isQualified())
+        c = keepInnerClasses(c);
+    }
+    return c;
+  }
+  
+  eq ClassInstanceExpr.getTypeDecl().lookupType(String name) {
+    //System.err.println("Begin Delegation lookup for " + name + " from " + getTypeDecl().fullName());
+    TypeCollection c = localLookupType(name);
+    if(!c.isEmpty())
+      return c;
+    //System.err.println("Continue Delegation lookup from " + getTypeDecl().fullName());
+    c = lookupType(name);
+    if(!c.isEmpty())
+      return c;
+    c = unqualifiedScope().lookupType(name);
+    //System.err.println("End Delegation lookup from " + getTypeDecl().fullName() + ", found " + c.size() + " types");
+    return c;
+  }
+
+  eq ClassInstanceDot.getRight().lookupType(String name) {
+    if(getLeft().isPackageAccess()) {
+      TypeCollection c = TypeCollection.emptyCollection();
+      TypeDecl typeDecl = lookupType(getLeft().packageName(), name);
+      if(typeDecl != null && typeDecl.accessableFrom(hostType()))
+        c = c.add(typeDecl);
+      return c;
+    }
+    else {
+      TypeCollection c = getLeft().type().remoteLookupType(name);
+      c = keepAccessableTypes(c);
+      return c;
+    }
+  }
+  public TypeCollection ClassInstanceExpr.keepInnerTypes(TypeCollection c) {
+    for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      //System.err.print("&&&& Is " + t.fullName() + " an inner type? ");
+      if(!t.isInnerType()) {
+        c = iter.remove();
+        //System.err.println(" no");
+      }
+      else {
+        //System.err.println(" yes");
+      }
+    }
+    return c;
+  }
+  public TypeCollection ClassInstanceExpr.keepInnerClasses(TypeCollection c) {
+    for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      if(!t.isInnerType() || !t.isClassDecl()) {
+        c = iter.remove();
+      }
+    }
+    return c;
+  }
+  
+  eq AbstractDot.getRight().lookupType(String name) {
+    if(getLeft().isPackageAccess()) {
+      TypeCollection c = TypeCollection.emptyCollection();
+      TypeDecl typeDecl = lookupType(getLeft().packageName(), name);
+      if(typeDecl != null) {
+        if(hostType() != null && typeDecl.accessableFrom(hostType()))
+          c = c.add(typeDecl);
+        else if(hostType() == null && typeDecl.accessableFromPackage(hostPackage()))
+          c = c.add(typeDecl);
+      }
+      return c;
+    }
+    else {
+      TypeCollection c = getLeft().type().remoteLookupType(name);
+      c = keepAccessableTypes(c);
+      return c;
+    }
+  }
+  public TypeCollection AbstractDot.keepAccessableTypes(TypeCollection c) {
+    TypeDecl hostType = hostType();
+    for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      if((hostType != null && !t.accessableFrom(hostType)) || (hostType == null && !t.accessableFromPackage(hostPackage())))
+        c = iter.remove();
+    }
+    return c;
+  }
+
+  eq ThisDot.getRight().lookupType(String name) = getLeft().type().remoteLookupType(name);
+  eq SuperDot.getRight().lookupType(String name) = getLeft().type().remoteLookupType(name);
+  
+  syn TypeCollection ClassInstanceExpr.localLookupType(String name) {
+    TypeCollection c = TypeCollection.emptyCollection();
+    if(hasTypeDecl() && getTypeDecl().name().equals(name)) {
+      c = c.add(getTypeDecl());
+    }
+    return c;
+  }
+
+  public TypeCollection TypeDecl.remoteLookupType(String name) {
+    return localLookupType(name);
+  }
+
+  public TypeCollection TypeDecl.localLookupType(String name) {
+    TypeCollection c = TypeCollection.emptyCollection();
+    for(Iterator iter = types(name).iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      if(t.name().equals(name)) {
+        c = c.add(t);
+      }
+    }
+    if(c.isEmpty() && name().equals(name))
+      c = c.add(this);
+    return c;
+  }
+  
+  syn Collection TypeDecl.types(String name) {
+      return new ArrayList(0);
+  }
+
+  protected static int ASTNode.duringTypeLookup = 0;
+  protected static boolean ASTNode.duringTypeLookup() {
+    if(duringTypeLookup == 0)
+      return false;
+    else {
+      state.pop();
+      state.push(ASTNode.REWRITE_INTERRUPT);
+      return true;
+    }
+  }
+
+  public HashSet ClassDecl.types_visit = new HashSet();
+  //public boolean ClassDecl.types_visit;
+  public Collection ClassDecl.types(String name) {
+    duringTypeLookup++;
+    //if(types_visit) {
+    if(types_visit.contains(name)) {
+      //System.err.println("Circularity when searching for " + name + " in " + fullName());
+      //Collection list = new ArrayList(1);
+      //return list;
+      Collection result = myTypes(name);
+      duringTypeLookup--;
+      return result;
+    }
+    //types_visit = true;
+    types_visit.add(name);
+    Collection result = myTypes(name);
+    //types_visit = false;
+    types_visit.remove(name);
+    duringTypeLookup--;
+    return result;
+  }
+  
+  syn lazy Collection ClassDecl.myTypes(String name) {
+    Collection list = new HashSet(); //new ArrayList();
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MemberType) {
+        MemberType m = (MemberType)getBodyDecl(i);
+        if(m.getTypeDecl().name().equals(name))
+          list.add(m.getTypeDecl());
+      }
+    }
+    if(!list.isEmpty()) return list;
+    for(int i = 0; i < getNumImplements(); i++) {
+      for(Iterator iter = getImplements(i).type().types(name).iterator(); iter.hasNext(); ) {
+        TypeDecl decl = (TypeDecl)iter.next();
+        if(!decl.isPrivate() && decl.accessableFrom(this))
+          list.add(decl);
+      }
+    }
+    if(hasSuperClass()) {
+      for(Iterator iter = getSuperClass().types(name).iterator(); iter.hasNext(); ) {
+        TypeDecl decl = (TypeDecl)iter.next();
+        if(!decl.isPrivate() && decl.accessableFrom(this)) {
+          list.add(decl);
+        }
+      }
+    }
+    return list;
+  }
+
+  public HashSet InterfaceDecl.types_visit = new HashSet();
+  //public boolean InterfaceDecl.types_visit;
+  public Collection InterfaceDecl.types(String name) {
+    //if(types_visit) {
+    if(types_visit.contains(name)) {
+      return new ArrayList(0);
+    }
+    //types_visit = true;
+    types_visit.add(name);
+    Collection result = myTypes(name);
+    //types_visit = false;
+    types_visit.remove(name);
+    return result;
+  }
+  
+  syn lazy Collection InterfaceDecl.myTypes(String name) {
+    Collection list = new HashSet(); //new ArrayList();
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MemberType) {
+        MemberType m = (MemberType)getBodyDecl(i);
+        if(m.getTypeDecl().name().equals(name))
+          list.add(m.getTypeDecl());
+      }
+    }
+    if(!list.isEmpty())
+      return list;
+    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+      for(Iterator iter = getSuperInterfaceId(i).type().types(name).iterator(); iter.hasNext(); ) {
+        TypeDecl decl = (TypeDecl)iter.next();
+        if(!decl.isPrivate())
+          list.add(decl);
+      }
+    }
+    return list;
+  }
+
+
+  public TypeCollection PrimitiveType.localLookupType(String name) {
+    TypeCollection c = super.localLookupType(name);
+    if(c.isEmpty() && hasSuperClass()) {
+      if(name.equals("super")) {
+        c = TypeCollection.emptyCollection();
+        c = c.add(getSuperClass());
+      }
+      else 
+        c = getSuperClass().remoteLookupType(name);
+    }
+    return c;
+  }
+
+
+  syn lazy TypeCollection CompilationUnit.localLookupType(String name) {
+    for(int i = 0; i < getNumTypeDecl(); i++) {
+      if(getTypeDecl(i).name().equals(name)) {
+        TypeCollection c = TypeCollection.emptyCollection();
+        c = c.add(getTypeDecl(i));
+        return c;
+      }
+    }
+  
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      if(getImportDecl(i) instanceof SingleTypeImportDecl) {
+        SingleTypeImportDecl decl = (SingleTypeImportDecl)getImportDecl(i);
+        TypeDecl type = decl.getAccess().type();
+        if(type != null && type.name().equals(name)) {
+          TypeCollection c = TypeCollection.emptyCollection();
+          c = c.add(type);
+          return c;
+        }
+      }
+    }
+    
+    TypeDecl result;
+    result = lookupType(packageName(), name);
+    if(result != null) {
+      TypeCollection c = TypeCollection.emptyCollection();
+      c = c.add(result);
+      return c;
+    }
+    
+    TypeCollection c = TypeCollection.emptyCollection();
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      ImportDecl decl = getImportDecl(i);
+      if(decl instanceof TypeImportOnDemandDecl) {
+        if(decl.getAccess() instanceof PackageAccess) {
+          PackageAccess pack = (PackageAccess)decl.getAccess();
+          StringBuffer s = new StringBuffer();
+          s.append(pack.getPackage(0).getID());
+          for(int j = 1; j < pack.getNumPackage(); j++)
+            s.append("." + pack.getPackage(j).getID());
+          result = lookupType(s.toString(), name);
+          if(result != null && result.accessableFromPackage(packageName()) && 
+                 result.fullName().equals(pack.packageName() + "." + name)) {
+            c = c.add(result);
+          }
+        }
+        else if(decl.getAccess() instanceof TypeAccess) {
+          TypeAccess type = (TypeAccess)decl.getAccess();
+          TypeCollection c_temp = type.type().remoteLookupType(name);
+          if(c_temp.size() == 1) {
+            result = (TypeDecl)c_temp.first();
+            if(result != null && result.accessableFromPackage(packageName()) &&
+               result.fullName().equals(type.name() + "." + name)) {
+              c = c.add(result);
+            }
+          }
+        }
+        else if(decl.getAccess() instanceof TypeDot) {
+          TypeDot type = (TypeDot)decl.getAccess();
+          TypeCollection c_temp = type.type().remoteLookupType(name);
+          if(c_temp.size() == 1) {
+            result = (TypeDecl)c_temp.first();
+            if(result != null && result.accessableFromPackage(packageName()) &&
+               result.fullName().equals(type.name() + "." + name)) {
+              c = c.add(result);
+            }
+          }
+        }
+        else {
+          //System.out.println("@@@@ demand import is not package access");
+        }
+      }
+    }
+    
+    result = lookupType("java.lang", name);
+    if(result != null) {
+      c = c.add(result);
+      return c;
+    }
+    result = lookupType("primitive", name);
+    if(result != null) {
+      c = c.add(result);
+      return c;
+    }
+    return c;
+  }
+
+}

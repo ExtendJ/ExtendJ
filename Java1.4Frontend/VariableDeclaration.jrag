@@ -1,0 +1,187 @@
+aspect Variables {
+  interface Variable {
+    public String name();
+    public TypeDecl type();
+    // 4.5.3
+    public boolean isClassVariable();
+    public boolean isInstanceVariable();
+    public boolean isMethodParameter();
+    public boolean isConstructorParameter();
+    public boolean isExceptionHandlerParameter();
+    public boolean isLocalVariable();
+    // 4.5.4
+    public boolean isFinal();
+
+    public boolean isBlank();
+    public boolean isStatic();
+
+    public TypeDecl hostType();
+
+    public AbstractVarInit getAbstractVarInit();
+    public boolean hasAbstractVarInit();
+  }
+  
+  VariableDeclaration implements Variable;
+  // 4.5.3
+  syn boolean VariableDeclaration.isClassVariable() = false;
+  syn boolean VariableDeclaration.isInstanceVariable() = false;
+  syn boolean VariableDeclaration.isMethodParameter() = false;
+  syn boolean VariableDeclaration.isConstructorParameter() = false;
+  syn boolean VariableDeclaration.isExceptionHandlerParameter() = false;
+  syn boolean VariableDeclaration.isLocalVariable() = true;
+  // 4.5.4
+  syn boolean VariableDeclaration.isFinal() = getModifiers().isFinal();
+  syn boolean VariableDeclaration.isBlank() = !hasAbstractVarInit();
+  syn boolean VariableDeclaration.isStatic() = false;
+  
+  syn String VariableDeclaration.name() = getIdDecl().getID();
+
+  FieldDeclaration implements Variable;
+  // 4.5.3
+  syn boolean FieldDeclaration.isClassVariable() = getModifiers().isStatic() || hostType().isInterfaceDecl();
+  syn boolean FieldDeclaration.isInstanceVariable() = (hostType().isClassDecl() || hostType().isAnonymous() )&& !getModifiers().isStatic();
+  syn boolean FieldDeclaration.isMethodParameter() = false;
+  syn boolean FieldDeclaration.isConstructorParameter() = false;
+  syn boolean FieldDeclaration.isExceptionHandlerParameter() = false;
+  syn boolean FieldDeclaration.isLocalVariable() = false;
+
+  syn boolean FieldDeclaration.isBlank() = !hasAbstractVarInit();
+  
+  syn String FieldDeclaration.name() = getIdDecl().getID();
+
+  ParameterDeclaration implements Variable;
+  // 4.5.3
+  syn boolean ParameterDeclaration.isClassVariable() = false;
+  syn boolean ParameterDeclaration.isInstanceVariable() = false;
+  inh boolean ParameterDeclaration.isMethodParameter();
+  inh boolean ParameterDeclaration.isConstructorParameter();
+  inh boolean ParameterDeclaration.isExceptionHandlerParameter();
+  syn boolean ParameterDeclaration.isLocalVariable() = false;
+  
+  // 4.5.3
+  eq ConstructorDecl.getParameter().isMethodParameter() = false;
+  eq ConstructorDecl.getParameter().isConstructorParameter() = true;
+  eq ConstructorDecl.getParameter().isExceptionHandlerParameter() = false;
+  eq MethodDecl.getParameter().isMethodParameter() = true;
+  eq MethodDecl.getParameter().isConstructorParameter() = false;
+  eq MethodDecl.getParameter().isExceptionHandlerParameter() = false;
+  eq Catch.getParameter().isMethodParameter() = false;
+  eq Catch.getParameter().isConstructorParameter() = false;
+  eq Catch.getParameter().isExceptionHandlerParameter() = true;
+  
+  // 4.5.4
+  syn boolean ParameterDeclaration.isFinal() = getModifiers().isFinal();
+  syn boolean ParameterDeclaration.isBlank() = true;
+  syn boolean ParameterDeclaration.isStatic() = false;
+  
+  syn String ParameterDeclaration.name() = getIdDecl().getID();
+
+  syn boolean ParameterDeclaration.hasAbstractVarInit() = false;
+  syn AbstractVarInit ParameterDeclaration.getAbstractVarInit() { throw new UnsupportedOperationException(); }
+
+}
+
+aspect VariableDeclarationTransformation {
+
+  // Transform Parameter -> ParameterDeclaration (dimension at type only)
+  rewrite Parameter {
+    when(!(this instanceof ParameterDeclaration))
+    to Parameter new ParameterDeclaration(
+          getModifiers(),
+          new Dot(getTypeAccess(), new ArrayNameAccess(getNumEmptyBracket(), false)),
+          getIdDecl()
+      );
+  }
+
+  // MethodDecl dimension at type only
+  rewrite MethodDecl {
+    when(getNumEmptyBracket() > 0)
+    to MethodDecl {
+      setTypeAccess(new Dot(getTypeAccess(), new ArrayNameAccess(getNumEmptyBracket(), false)));
+      setEmptyBracketList(new List());
+      return this;
+    }
+  }
+
+  // FieldDecl with single VariableDecl -> FieldDeclaration
+  rewrite FieldDecl {
+    when(getNumVariableDecl() == 1)
+    to FieldDeclaration {
+      VariableDecl v = getVariableDecl(0);
+      FieldDeclaration decl = new FieldDeclaration(
+          getModifiers(),
+          new Dot(getTypeAccess(), new ArrayNameAccess(v.getNumEmptyBracket(), false)),
+          v.getIdDecl(),
+          v.getAbstractVarInitOpt()
+      );
+      return decl;
+    }
+  }
+  
+  // FieldDecl with multiple VariableDecl -> FieldDecl with single VariableDecl +
+  rewrite FieldDecl in TypeDecl.getBodyDecl() {
+    when(getNumVariableDecl() > 1)
+    to List {
+      List varList = new List();
+      for(int j = 0; j < getNumVariableDecl(); j++) {
+        varList.add(
+            new FieldDecl(
+                (Modifiers)getModifiers().fullCopy(),
+                (Access)getTypeAccess().fullCopy(),
+                new List().add(getVariableDecl(j))
+              )
+        );
+      }
+      return varList;
+    }
+  }
+
+  // VarDeclStmt with single VariableDecl -> VariableDeclaration
+  rewrite VarDeclStmt {
+    when(getNumVariableDecl() == 1)
+    to VariableDeclaration {
+      VariableDecl v = getVariableDecl(0);
+      VariableDeclaration decl = new VariableDeclaration(
+          getModifiers(),
+          new Dot(getTypeAccess(), new ArrayNameAccess(v.getNumEmptyBracket(), false)),
+          v.getIdDecl(),
+          v.getAbstractVarInitOpt()
+      );
+      return decl;
+    }
+  }
+
+  // VarDeclStmt with multiple VariableDecl -> VarDeclStmt with single VarialbeDecl +
+  rewrite VarDeclStmt in Block.getStmt() {
+    when(getNumVariableDecl() > 1)
+    to List {
+      List varList = new List();
+      for(int j = 0; j < getNumVariableDecl(); j++) {
+        varList.add(
+            new VarDeclStmt(
+                (Modifiers)getModifiers().fullCopy(),
+                (Access)getTypeAccess().fullCopy(),
+                new List().add(getVariableDecl(j))
+              )
+        );
+      }
+      return varList;
+    }
+  }
+  rewrite VarDeclStmt in ForStmt.getInitStmt() {
+    when(getNumVariableDecl() > 1)
+    to List {
+      List varList = new List();
+      for(int j = 0; j < getNumVariableDecl(); j++) {
+        varList.add(
+            new VarDeclStmt(
+                (Modifiers)getModifiers().fullCopy(),
+                (Access)getTypeAccess().fullCopy(),
+                new List().add(getVariableDecl(j))
+              )
+        );
+      }
+      return varList;
+    }
+  }
+}

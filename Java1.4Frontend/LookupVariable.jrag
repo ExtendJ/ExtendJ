@@ -1,0 +1,536 @@
+import java.util.*;
+
+aspect VariableScope {
+  inh ArrayList TypeDecl.lookupVariable(IdUse idUse);
+  inh ArrayList BodyDecl.lookupVariable(IdUse idUse);
+  inh ArrayList Block.lookupVariable(IdUse idUse);
+  inh ArrayList SwitchStmt.lookupVariable(IdUse idUse);
+  inh ArrayList ForStmt.lookupVariable(IdUse idUse);
+  inh ArrayList Expr.lookupVariable(IdUse idUse);
+  inh ArrayList Catch.lookupVariable(IdUse idUse);
+  inh ArrayList VariableDeclaration.lookupVariable(IdUse idUse);
+  inh ArrayList ParameterDeclaration.lookupVariable(IdUse idUse);
+  
+  private static final ArrayList Program.emptyVariableList = new ArrayList(0);
+  eq Program.getCompilationUnit().lookupVariable(IdUse idUse) = emptyVariableList;
+
+  // 6.5.6.1
+  eq TypeDecl.getBodyDecl(int i).lookupVariable(IdUse idUse) {
+    ArrayList list = new ArrayList(1);
+    list.addAll(findVariable(idUse));
+    if(list.isEmpty() && (isNestedType() || isAnonymous()))
+      list.addAll(lookupVariable(idUse));
+    if(getBodyDecl(i).filterInstanceMember()) {
+      for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+        Variable v = (Variable)iter.next();
+        if(v.isInstanceVariable())
+          iter.remove();
+      }
+    }
+    return list;
+  }
+  syn boolean BodyDecl.filterInstanceMember() = false;
+  eq StaticInitializer.filterInstanceMember() = true;
+  eq FieldDeclaration.filterInstanceMember() = isStatic();
+  eq MethodDecl.filterInstanceMember() = isStatic();
+  eq MemberType.filterInstanceMember() = isStatic();
+
+
+  eq MethodDecl.getBlock().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq MethodDecl.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+
+  eq ConstructorDecl.getBlock().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq ConstructorDecl.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+
+  eq Block.getStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+
+  eq SwitchStmt.getCase().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  
+  eq ForStmt.getInitStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq ForStmt.getCondition().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq ForStmt.getUpdateStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq ForStmt.getStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+
+  eq Catch.getBlock().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq Catch.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  
+  eq MethodAccess.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq ParseMethodName.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq ConstructorAccess.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq SuperConstructorAccess.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq ArrayAccess.getExpr().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq ParseArray.getDims().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+
+  eq ClassInstanceExpr.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+
+  eq AbstractDot.getRight().lookupVariable(IdUse idUse) = getLeft().isPackageAccess() ? unknownType().lookupVariable(idUse) : getLeft().type().findVariable(idUse); // TODO: Check lookupVariable
+
+
+  eq ConstructorDecl.getConstructorInvocation().lookupVariable(IdUse idUse) {
+    for(int i = 0; i < getNumParameter(); i++) {
+      Variable v = (Variable)getParameter(i);
+      if(v.name().equals(idUse.getID())) {
+        ArrayList list = new ArrayList();
+        list.add(v);
+        return list;
+      }
+    }
+    TypeDecl hostType = hostType();
+    ArrayList list = new ArrayList(1);
+    list.addAll(hostType.findVariable(idUse));
+    if(!list.isEmpty()) {
+      removeInstanceVariables(list);
+    }
+    else {
+      if(hostType.isNestedType() || hostType.isAnonymous()) {
+        list.addAll(hostType.lookupVariable(idUse));
+        //removeInstanceVariables(list);
+      }
+      if(idUse.hostType().isAnonymous() && idUse.hostType().inExplicitConstructorInvocation())
+        removeInstanceVariables(list);
+    }
+    return list;
+  }
+  inh TypeDecl IdUse.hostType();
+/*
+  eq ClassInstanceExpr.getTypeDecl().lookupVariable(IdUse idUse) {
+    ArrayList list = new ArrayList(1);
+    list.addAll(lookupVariable(idUse));
+    if(!list.isEmpty()) {
+      //removeInstanceVariables(list);
+    }
+    return list;
+  }
+*/
+  
+  public void ConstructorDecl.removeInstanceVariables(Collection c) {
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(v.isInstanceVariable())
+        iter.remove();
+    }
+  }
+  
+  public void ConstructorDecl.keepClassVariables(Collection c) {
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(!v.isClassVariable())
+        iter.remove();
+    }
+  }
+
+  public TypeDecl TypeDecl.subclassWithinBody(TypeDecl typeDecl) {
+    if(instanceOf(typeDecl))
+      return this;
+    if(isNestedType()) {
+      return enclosingType().subclassWithinBody(typeDecl);
+    }
+    return null;
+  }
+
+  public void FieldDot.keepAccessableFields(Collection c) {
+    TypeDecl hostType = hostType();
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(v instanceof FieldDeclaration) {
+        FieldDeclaration f = (FieldDeclaration)v;
+        if(!f.accessableFrom(hostType))
+          iter.remove();
+        // 6.6.2.1
+        else if(f.isProtected() && !f.hostPackage().equals(hostPackage()) && f.isInstanceVariable() && !getLeft().isSuperAccess()) {
+          TypeDecl C = f.hostType();
+          TypeDecl S = hostType().subclassWithinBody(C);
+          TypeDecl Q = getLeft().type();
+          if(S == null || !Q.instanceOf(S)) {
+            iter.remove();
+          }
+        }
+      }
+      else 
+        iter.remove();
+    }
+  }
+  
+  public void FieldDot.keepClassVariables(Collection c) {
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(!v.isClassVariable())
+        iter.remove();
+    }
+  }
+
+  // 15.11.1
+  eq FieldDot.getRight().lookupVariable(IdUse idUse) {
+    // 6.5.6.2
+    if(getLeft().isPackageAccess())
+      return unknownType().lookupVariable(idUse);
+    else if(getLeft().isTypeAccess()) {
+      ArrayList c = new ArrayList(1);
+      c.addAll(getLeft().type().findVariable(idUse));
+      if(getLeft().type().isClassDecl()) {
+        keepAccessableFields(c);
+        if(c.size() == 1)
+          keepClassVariables(c);
+        return c;
+      }
+      else if(getLeft().type().isInterfaceDecl()) {
+        keepAccessableFields(c);
+        return c;
+      }
+    }
+    else {
+      ArrayList c = new ArrayList(1);
+      if(getLeft().type().accessableFrom(hostType())) {
+        c.addAll(getLeft().type().findVariable(idUse));
+        keepAccessableFields(c);
+      }
+      return c;
+    }
+  }
+}
+
+aspect VariableScopePropagation {
+  
+  interface VariableScope {
+    public ArrayList lookupVariable(IdUse idUse);
+  }
+  
+  Catch implements VariableScope;
+  Block implements VariableScope;
+  TypeDecl implements VariableScope;
+  ForStmt implements VariableScope;
+
+  inh VariableScope ParameterDeclaration.outerScope();
+  inh VariableScope VariableDeclaration.outerScope();
+  eq Catch.getParameter().outerScope() = this;
+  eq Block.getStmt().outerScope() = this;
+  eq TypeDecl.getBodyDecl().outerScope() = this;
+  eq ForStmt.getInitStmt().outerScope() = this;
+  eq ForStmt.getStmt().outerScope() = this;
+
+  
+  inh Variable Access.unknownField();
+  inh Variable Access.illegalField();
+  inh Variable TypeDecl.illegalField();
+  
+  syn lazy Collection VarAccess.decls() {
+    Collection c = new ArrayList(1);
+    c.addAll(lookupVariable(getIdUse()));
+    
+    /*
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(v instanceof FieldDeclaration) {
+        FieldDeclaration decl = (FieldDeclaration)v;
+        if(!decl.accessableFrom(hostType())) {
+          iter.remove();
+        }
+      }
+    }
+    */
+    /*
+    if(inStaticContext()) {
+      c = new ArrayList(c);
+      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+        Variable v = (Variable)iter.next();
+        if(!v.isStatic()) {
+          System.err.println("Removing non accessable field " + v.type().fullName() + " " + v.name() + " declared in " + v.hostType().fullName());
+          iter.remove();
+        }
+      }
+      if(c.isEmpty())
+        c.add(unknownField());
+    }*/
+    
+    /*
+    if(isQualified()) {
+      c = new ArrayList(c);
+      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+        FieldDeclaration f = (FieldDeclaration)iter.next(); // Safe since the name is qualified
+        AbstractDot dot = (AbstractDot)getParent();
+        if(f.isProtected() && !dot.getLeft().type().instanceOf(f.hostType())) {
+          System.err.println("Removing non accessable field " + f.type().fullName() + " " + f.name() + " declared in " + f.hostType().fullName());
+          iter.remove();
+        }
+      }
+      if(c.isEmpty())
+        c.add(unknownField());
+    }
+    if(isQualified()) {
+      c = new ArrayList(c);
+      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+        Variable v = (Variable)iter.next();
+        if(v instanceof FieldDeclaration && !((FieldDeclaration)v).accessableFrom(hostType())) {
+          System.err.println("Removing non accessable field " + v.type().fullName() + " " + v.name() + " declared in " + v.hostType().fullName());
+
+          iter.remove();
+        }
+      }
+      if(c.isEmpty())
+        c.add(unknownField());
+    }
+    */
+    return c;
+  }
+  syn lazy Variable VarAccess.decl() {
+    Collection decls = decls();
+    if(decls.size() == 1) {
+      return (Variable)decls.iterator().next();
+    }
+    return unknownField();
+  }
+  
+}
+
+
+aspect LookupVariable {
+  
+  syn ArrayList TypeDecl.findVariable(IdUse idUse) {
+    ArrayList list = new ArrayList();
+    for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
+      FieldDeclaration decl = (FieldDeclaration)iter.next();
+      if(decl.getIdDecl().getID().equals(idUse.getID())) {
+        list.add(decl);
+      }
+    }
+    return list;
+  }
+  
+  public FieldDeclaration TypeDecl.findVariable(String name) {
+    for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
+      FieldDeclaration decl = (FieldDeclaration)iter.next();
+      if(decl.getIdDecl().getID().equals(name))
+        return decl;
+    }
+    return (FieldDeclaration)illegalField();
+  }
+  
+  public  ArrayList TypeDecl.findVariable(IdDecl idDecl) {
+    ArrayList list = new ArrayList();
+    for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
+      FieldDeclaration decl = (FieldDeclaration)iter.next();
+      if(decl.getIdDecl().getID().equals(idDecl.getID()))
+        list.add(decl);
+    }
+    return list;
+  }
+  
+  syn ArrayList TypeDecl.localLookupVariable(IdUse idUse) {
+    ArrayList v = findVariable(idUse);
+    if(v.isEmpty()) {
+      if(isInnerType() || isAnonymous()) {
+        return lookupVariable(idUse);
+      }
+      else if(isNestedType() && isStatic()) {
+        ArrayList w = lookupVariable(idUse);
+        for(Iterator iter = w.iterator(); iter.hasNext(); ) {
+          Variable var = (Variable)iter.next();
+          if(var.isStatic())
+            v.add(var);
+        }
+      }
+    }
+    return v;
+  }
+  
+  syn ArrayList Block.localLookupVariable(IdUse idUse) {
+    for(int i = 0; i < getNumStmt(); i++) {
+      if(getStmt(i) instanceof Variable) {
+        Variable v = (Variable)getStmt(i);
+        if(v.name().equals(idUse.getID())) {
+          if(declaredBeforeUse(v, idUse)) {
+            ArrayList list = new ArrayList();
+            list.add(v);
+            return list;
+          }
+        }
+      }
+    }
+    return lookupVariable(idUse);
+  }
+
+  syn ArrayList SwitchStmt.localLookupVariable(IdUse idUse) {
+    for(int i = 0; i < getNumCase(); i++) {
+      Case c = getCase(i);
+      for(int j = 0; j < c.getNumStmt(); j++) {
+        if(c.getStmt(j) instanceof Variable) {
+          Variable v = (Variable)c.getStmt(j);
+          if(v.name().equals(idUse.getID()) && declaredBeforeUse(v, idUse)) {
+            ArrayList list = new ArrayList();
+            list.add(v);
+            return list;
+          }
+        }
+      }
+    }
+    return lookupVariable(idUse);
+  }
+
+  syn ArrayList Catch.localLookupVariable(IdUse idUse) {
+    Variable v = (Variable)getParameter();
+    if(v.name().equals(idUse.getID())) {
+      ArrayList list = new ArrayList();
+      list.add(v);
+      return list;
+    }
+    return lookupVariable(idUse);
+  }
+
+  syn ArrayList MethodDecl.localLookupVariable(IdUse idUse) {
+    for(int i = 0; i < getNumParameter(); i++) {
+      Variable v = (Variable)getParameter(i);
+      if(v.name().equals(idUse.getID())) {
+        ArrayList list = new ArrayList();
+        list.add(v);
+        return list;
+      }
+    }
+    return lookupVariable(idUse);
+  }
+
+  syn ArrayList ConstructorDecl.localLookupVariable(IdUse idUse) {
+    for(int i = 0; i < getNumParameter(); i++) {
+      Variable v = (Variable)getParameter(i);
+      if(v.name().equals(idUse.getID())) {
+        ArrayList list = new ArrayList();
+        list.add(v);
+        return list;
+      }
+    }
+    return lookupVariable(idUse);
+  }
+  
+  syn ArrayList ForStmt.localLookupVariable(IdUse idUse) {
+    for(int i = 0; i < getNumInitStmt(); i++) {
+      if(getInitStmt(i) instanceof Variable) {
+        Variable v = (Variable)getInitStmt(i);
+        if(v.name().equals(idUse.getID())) {
+          ArrayList list = new ArrayList();
+          list.add(v);
+          return list;
+        }
+      }
+    }
+    return lookupVariable(idUse);
+  }
+}
+
+aspect Fields {
+  syn lazy ArrayList TypeDecl.fields() {
+    ArrayList list = new ArrayList();
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof FieldDeclaration) {
+        FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
+        list.add(decl);
+      }
+    }
+    return list;
+  }
+
+  eq ClassDecl.fields() {
+    ArrayList list = new ArrayList();
+    HashSet set = new HashSet();
+    for(int i = 0; i < getNumImplements(); i++) {
+      for(Iterator iter = getImplements(i).type().fields().iterator(); iter.hasNext(); ) {
+        FieldDeclaration decl = (FieldDeclaration)iter.next();
+        if(!decl.isPrivate() && decl.accessableFrom(this))
+          set.add(decl);
+      }
+    }
+    list.addAll(set);
+    if(hasSuperClass()) {
+      for(Iterator iter = getSuperClass().fields().iterator(); iter.hasNext(); ) {
+        FieldDeclaration decl = (FieldDeclaration)iter.next();
+        if(!decl.isPrivate() && decl.accessableFrom(this))
+          list.add(decl);
+      }
+    }
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof FieldDeclaration) {
+        FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
+        Set hides = hidesVariable(decl);
+        for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
+          FieldDeclaration f = (FieldDeclaration)iter.next();
+          if(hides.contains(f))
+            iter.remove();
+        }
+        list.add(decl);
+      }
+    }
+    return list;
+  }
+  
+  eq InterfaceDecl.fields() {
+    ArrayList list = new ArrayList();
+    HashSet set = new HashSet();
+    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+      for(Iterator iter = getSuperInterfaceId(i).type().fields().iterator(); iter.hasNext(); ) {
+        FieldDeclaration f = (FieldDeclaration)iter.next();
+        if(f.accessableFrom(this) && !f.isPrivate()) {
+          set.add(f);
+        }
+      }
+    }
+    list.addAll(set);
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof FieldDeclaration) {
+        FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
+        Set hides = hidesVariable(decl);
+        for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
+          FieldDeclaration f = (FieldDeclaration)iter.next();
+          if(hides.contains(f))
+            iter.remove();
+        }
+        list.add(decl);
+      }
+    }
+    return list;
+  }
+}
+
+aspect Hides {
+  syn HashSet TypeDecl.hidesVariable(Variable v) {
+    return new HashSet();
+  }
+
+  eq ClassDecl.hidesVariable(Variable v) {
+    HashSet set = new HashSet();
+    if(v.hostType() != this) {
+      for(int i = 0; i < getNumBodyDecl(); i++) {
+        if(getBodyDecl(i) instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)getBodyDecl(i);
+          if(f.name().equals(v.name()))
+            if(f.accessableFrom(v.hostType()))
+              set.add(f);
+        }
+      }
+    }
+    if(hasSuperClass()) {
+      set.addAll(getSuperClass().hidesVariable(v));
+    }
+    for(int i = 0; i < getNumImplements(); i++) {
+      set.addAll(getImplements(i).type().hidesVariable(v));
+    }
+    return set;
+  }
+  
+  eq InterfaceDecl.hidesVariable(Variable v) {
+    HashSet set = new HashSet();
+    if(v.hostType() != this) {
+      for(int i = 0; i < getNumBodyDecl(); i++) {
+        if(getBodyDecl(i) instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)getBodyDecl(i);
+          if(f.name().equals(v.name()))
+            if(f.accessableFrom(v.hostType()))
+              set.add(f);
+        }
+      }
+    }
+    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+      set.addAll(getSuperInterfaceId(i).type().hidesVariable(v));
+    }
+    return set;
+  }
+    
+}
+

@@ -1,0 +1,314 @@
+aspect AccessControl {
+
+  eq CompilationUnit.getTypeDecl().enclosingType() = null;
+  eq CompilationUnit.getImportDecl().enclosingType() = null;
+  
+  eq TypeDecl.getBodyDecl().enclosingType() = this;
+
+  inh TypeDecl TypeDecl.enclosingType();
+  syn TypeDecl TypeDecl.topLevelType() {
+    if(isTopLevelType())
+      return this;
+    return enclosingType().topLevelType();
+  }
+
+  // 8
+  inh boolean TypeDecl.isNestedType();
+  eq CompilationUnit.getTypeDecl().isNestedType() = false;
+  eq CompilationUnit.getImportDecl().isNestedType() = false;
+  eq TypeDecl.getBodyDecl().isNestedType() = true;
+
+  // 8
+  syn boolean TypeDecl.isTopLevelType() = !isNestedType();
+
+  // 8.5
+  inh boolean TypeDecl.isMemberType();
+  eq MemberClass.getClassDecl().isMemberType() = true;
+  eq MemberInterface.getInterfaceDecl().isMemberType() = true;
+  eq CompilationUnit.getTypeDecl().isMemberType() = false;
+  eq ClassInstanceExpr.getTypeDecl().isMemberType() = false;
+  
+  // 8.1.2
+  syn boolean TypeDecl.isInnerClass() = false;
+  eq ClassDecl.isInnerClass() = isNestedType() && !isStatic() && enclosingType().isClassDecl();
+  syn boolean TypeDecl.isInnerType() = (isLocalClass() || isAnonymous() || (isMemberType() && !isStatic())) && !inStaticContext();
+
+  syn boolean TypeDecl.isInnerTypeOf(TypeDecl typeDecl) = typeDecl == this || (isInnerType() && enclosingType().isInnerTypeOf(typeDecl));
+
+  inh boolean TypeDecl.isLocalClass();
+  eq CompilationUnit.getTypeDecl().isLocalClass() = false;
+  eq CompilationUnit.getImportDecl().isLocalClass() = false;
+  eq TypeDecl.getBodyDecl().isLocalClass() = false;
+  eq LocalClassDeclStmt.getClassDecl().isLocalClass() = true;
+  
+  syn TypeDecl TypeDecl.withinBodyThatSubclasses(TypeDecl type) {
+    if(instanceOf(type))
+      return this;
+    if(!isTopLevelType())
+      return enclosingType().withinBodyThatSubclasses(type);
+    return null;
+  }
+  
+  syn boolean TypeDecl.encloses(TypeDecl type) = type.enclosedBy(this);
+
+  syn boolean TypeDecl.enclosedBy(TypeDecl type) {
+    if(this == type)
+      return true;
+    if(isTopLevelType())
+      return false;
+    return enclosingType().enclosedBy(type);
+  }
+
+  eq CompilationUnit.getTypeDecl().hostPackage() = packageName();
+  eq CompilationUnit.getImportDecl().hostPackage() = packageName();
+
+  inh String TypeDecl.hostPackage();
+  inh String BodyDecl.hostPackage();
+  inh String Access.hostPackage();
+  
+  syn TypeDecl TypeDecl.hostType() = this;
+  eq TypeDecl.getBodyDecl().hostType() = hostType();
+  eq ClassInstanceExpr.getTypeDecl().hostType() = hostType();
+  eq PrimitiveType.getSuperClassAccess().hostType() = hostType();
+  eq ClassDecl.getSuperClassAccess().hostType() = hostType();
+  eq ClassDecl.getImplements().hostType() = hostType();
+  eq InterfaceDecl.getSuperInterfaceId().hostType() = hostType();
+  
+  eq Program.getCompilationUnit().hostType() = null;
+  inh TypeDecl CompilationUnit.illegalType();
+  eq CompilationUnit.getImportDecl().hostType() = null;
+  
+  inh TypeDecl BodyDecl.hostType();
+  inh TypeDecl Expr.hostType();
+  inh TypeDecl VariableDeclaration.hostType();
+  inh TypeDecl ParameterDeclaration.hostType();
+
+  inh BodyDecl Stmt.hostBodyDecl();
+  eq Program.getCompilationUnit().hostBodyDecl() { throw new UnsupportedOperationException(); }
+  eq InstanceInitializer.getBlock().hostBodyDecl() = this;
+  eq StaticInitializer.getBlock().hostBodyDecl() = this;
+  eq MethodDecl.getBlock().hostBodyDecl() = this;
+  eq ConstructorDecl.getBlock().hostBodyDecl() = this;
+  eq ConstructorDecl.getConstructorInvocation().hostBodyDecl() = this;
+  eq FieldDeclaration.getAbstractVarInit().hostBodyDecl() = this;
+ 
+  // 6.6 Access Control
+  
+  syn boolean ArrayDecl.accessableFrom(TypeDecl type) {
+    return elementType().accessableFrom(type);
+  }
+ 
+  syn boolean TypeDecl.accessableFromPackage(String packageName) {
+    if(isPublic()) {
+      return true;
+    }
+    else if(isPrivate()) {
+      return false;
+    }
+    return hostPackage().equals(packageName);
+  }
+ 
+  syn boolean TypeDecl.accessableFromExtend(TypeDecl type) {
+    if(type == this)
+      return true;
+    if(isInnerType()) { 
+      if(!enclosingType().accessableFrom(type)) {
+        return false;
+      }
+    }
+    if(isPublic()) 
+      return true;
+    else if(isProtected()) {
+      return true;
+    }
+    else if(isPrivate()) {
+      return topLevelType() == type.topLevelType();
+    }
+    else
+      return hostPackage().equals(type.hostPackage());
+  }
+  
+
+  syn lazy boolean TypeDecl.accessableFrom(TypeDecl type) {
+    if(type == this)
+      return true;
+    if(isInnerType()) { 
+      if(!enclosingType().accessableFrom(type)) {
+        return false;
+      }
+    }
+    if(isPublic()) {  
+      return true;
+    }
+    else if(isProtected()) {
+      if(hostPackage().equals(type.hostPackage())) {
+        return true;
+      }
+      if(isMemberType()) {
+        TypeDecl typeDecl = type;
+        while(typeDecl != null && !typeDecl.instanceOf(enclosingType()))
+          typeDecl = typeDecl.enclosingType();
+        if(typeDecl != null) {
+          return true;
+        }
+      }
+      return false;
+    }
+    else if(isPrivate()) {
+      return topLevelType() == type.topLevelType();
+    }
+    else {
+      return hostPackage().equals(type.hostPackage());
+    }
+  }
+
+  syn lazy boolean MethodDecl.accessableFrom(TypeDecl type) {
+    if(isPublic()) {
+      return true;
+    }
+    else if(isProtected()) {
+      if(hostPackage().equals(type.hostPackage()))
+        return true;
+      if(type.withinBodyThatSubclasses(hostType()) != null)
+        return true;
+      return false;
+    }
+    else if(isPrivate())
+      return hostType().topLevelType() == type.topLevelType();
+    else
+      return hostPackage().equals(type.hostPackage());
+  }
+  
+  syn lazy boolean ConstructorDecl.accessableFrom(TypeDecl type) {
+    if(!hostType().accessableFrom(type))
+      return false;
+    else if(isPublic())
+      return true;
+    else if(isProtected()) {
+      return true;
+    }
+    else if(isPrivate()) {
+      return hostType().topLevelType() == type.topLevelType();
+    }
+    else
+      return hostPackage().equals(type.hostPackage());
+  }
+
+  syn lazy boolean FieldDeclaration.accessableFrom(TypeDecl type) {
+    if(isPublic())
+      return true;
+    else if(isProtected()) {
+      if(hostPackage().equals(type.hostPackage()))
+        return true;
+      if(type.withinBodyThatSubclasses(hostType()) != null)
+        return true;
+      return false;
+    }
+    else if(isPrivate())
+      return hostType().topLevelType() == type.topLevelType();
+    else
+      return hostPackage().equals(type.hostPackage());
+  }
+    
+  public void ASTNode.accessControl() {
+  }
+  
+  public void TypeAccess.accessControl() {
+    super.accessControl();
+    TypeDecl hostType = hostType();
+    if(hostType != null && !hostType.isIllegal() && !type().accessableFrom(hostType)) {
+      error("*** Semantic Error: " + this + " in " + hostType().fullName() + " can not access type " + type().fullName());
+    }
+    else if((hostType == null || hostType.isIllegal())  && !type().accessableFromPackage(hostPackage())) {
+      error("*** Semantic Error: " + this + " can not access type " + type().fullName());
+    }
+  }
+
+  public void ClassInstanceExpr.accessControl() {
+    super.accessControl();
+    if(type().isAbstract())
+      error("*** Semantic Error: Can not instantiate abstract class " + type().fullName());
+    if(!decl().accessableFrom(hostType()))
+      error("*** Semantic Error: constructor " + decl().signature() + " is not accessable");
+  }
+  
+  // 8.1.3
+  syn boolean Expr.dependsOn(TypeDecl typeDecl) = false;
+  eq AbstractDot.dependsOn(TypeDecl typeDecl) = getLeft().dependsOn(typeDecl) || getRight().dependsOn(typeDecl);
+  eq TypeAccess.dependsOn(TypeDecl typeDecl) = type() == typeDecl;
+  
+  // 8.1.3
+  syn boolean TypeDecl.dependsOn(TypeDecl typeDecl) = false;
+  
+  eq ClassDecl.dependsOn(TypeDecl typeDecl) {
+    if(hasSuperClass())
+      if(getSuperClassAccess().dependsOn(typeDecl) || getSuperClass().dependsOn(typeDecl))
+        return true;
+    for(int i = 0; i < getNumImplements(); i++)
+      if(getImplements(i).dependsOn(typeDecl) || getImplements(i).type().dependsOn(typeDecl))
+        return true;
+    return false;
+  }
+
+  eq InterfaceDecl.dependsOn(TypeDecl typeDecl) {
+    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+      if(getSuperInterfaceId(i).dependsOn(typeDecl) || getSuperInterfaceId(i).type().dependsOn(typeDecl))
+        return true;
+    }
+    return false;
+  }
+
+  public void ClassDecl.accessControl() {
+    super.accessControl();
+    
+    // 8.1.1.2 final Classes
+    TypeDecl typeDecl = hasSuperClass() ? getSuperClass() : null;
+    if(typeDecl != null && typeDecl.isFinal()) {
+      error("*** Semantic Error: class " + fullName() + " may not extend final class " + typeDecl.fullName());
+    }
+    if(typeDecl != null && !typeDecl.accessableFromExtend(this))
+      error("*** Semantic Errror: class " + fullName() + " may not extend non accessable type " + typeDecl.fullName());
+
+    // 8.1.3
+    if(dependsOn(this))
+      error("*** Semantic Error: class " + fullName() + " depends on itself");
+
+ 
+    // 8.1.4
+    Set set = new HashSet();
+    for(int i = 0; i < getNumImplements(); i++) {
+      TypeDecl decl = getImplements(i).type();
+  
+      if(!decl.isInterfaceDecl())
+        error("Semantic Error: type " + fullName() + " tries no implement non interface type " + decl.fullName());
+      if(!decl.accessableFromExtend(this))
+        error("*** Semantic Error: class " + fullName() + " can not implement non accessable type " + decl.fullName());
+      if(set.contains(decl))
+        error("Semantic Error: type " + decl.fullName() + " mentionened multiple times in implements clause");
+      set.add(decl);
+    }
+  }
+
+  public void InterfaceDecl.accessControl() {
+    super.accessControl();
+    
+    // 8.1.3
+    if(dependsOn(this))
+      error("*** Semantic Error: interface " + fullName() + " depends on itself");
+
+    // 9.1.2
+    Set set = new HashSet();
+    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+      TypeDecl decl = getSuperInterfaceId(i).type();
+  
+      if(!decl.isInterfaceDecl() && !decl.fullName().equals("java.lang.Object"))
+        error("Semantic Error: interface " + fullName() + " tries no extend non interface type " + decl.fullName());
+      if(!decl.accessableFromExtend(this))
+        error("*** Semantic Error: interface " + fullName() + " can not extend non accessable type " + decl.fullName());
+      
+      if(set.contains(decl))
+        error("Semantic Error: extended interface " + decl.fullName() + " mentionened multiple times in extends clause");
+      set.add(decl);
+    }
+  }
+}

@@ -1,0 +1,483 @@
+aspect Modifiers {
+  void ASTNode.checkModifiers() {
+  }
+
+  syn lazy boolean TypeDecl.hasAbstract() {
+    for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
+      MethodDecl decl = (MethodDecl)iter.next();
+      if(decl.isAbstract()) {
+        // 8.4.6.4
+        boolean found = false;
+        MethodCollection list = localLookupMethod(decl);
+        for(MethodCollection.MethodIterator i2 = list.iterator(); i2.hasNext(); ) {
+          MethodDecl m = (MethodDecl)i2.next();
+          if(!m.isAbstract() && (m.isStatic() == decl.isStatic()) ) {
+            found = true;
+          }
+        }
+        if(!found) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  syn Set TypeDecl.abstractMethods() = new HashSet();
+  eq ClassDecl.abstractMethods() {
+    HashSet set = abstractMethodDeclarations();
+    if(set.size() != 0) {
+      return set;
+    }
+    for(int i = 0; i < getNumImplements(); i++) {
+      TypeDecl typeDecl = getImplements(i).type();
+      for(Iterator iter = typeDecl.abstractMethodDeclarations().iterator(); iter.hasNext(); ) {
+        MethodDecl decl = (MethodDecl)iter.next();
+        MethodCollection list = localLookupMethod(decl);
+        for(MethodCollection.MethodIterator i2 = list.iterator(); i2.hasNext(); ) {
+          MethodDecl d = (MethodDecl)i2.next();
+          if(d.isAbstract())
+            set.add(d);
+        }
+      }
+    }
+    return set;
+  }
+  
+  // 8.1.1.1
+  eq ClassDecl.hasAbstract() {
+    HashSet set = abstractMethodDeclarations();
+    if(set.size() != 0) {
+      return true;
+    }
+    for(int i = 0; i < getNumImplements(); i++) {
+      TypeDecl typeDecl = getImplements(i).type();
+      for(Iterator iter = typeDecl.abstractMethodDeclarations().iterator(); iter.hasNext(); ) {
+        MethodDecl decl = (MethodDecl)iter.next();
+        MethodCollection list = localLookupMethod(decl);
+        if(list.size() != 1) {
+          return true;
+        }
+        MethodDecl target = list.first();
+        if(target.isAbstract()) {
+          return true;
+        }
+      }
+    }
+    return false;
+    
+  }
+
+  
+  syn lazy HashSet TypeDecl.abstractMethodDeclarations() {
+    return new HashSet();
+  }
+  eq ClassDecl.abstractMethodDeclarations() {
+    HashSet set = new HashSet();
+    if(hasSuperClass())
+      set.addAll(getSuperClass().abstractMethodDeclarations());
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl m = (MethodDecl)getBodyDecl(i);
+        if(!m.isAbstract()) {
+          for(Iterator iter = m.overrides().iterator(); iter.hasNext(); ) {
+            MethodDecl n = (MethodDecl)iter.next();
+            if(set.contains(n))
+              set.remove(n);
+          }
+        }
+        else {
+          set.add(m);
+        }
+      }
+    }
+    return set;
+  }
+  
+  eq InterfaceDecl.abstractMethodDeclarations() {
+    HashSet set = new HashSet();
+    for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.isAbstract())
+        set.add(m);
+    }
+    return set;
+  }
+  
+
+  public void TypeDecl.checkModifiers() {
+    super.checkModifiers();
+    // 8.1.1
+    if(isPublic() && !isTopLevelType() && !isMemberType())
+      error("*** Semantic Error: public pertains only to top level types and member types");
+
+    // 8.1.1
+    if((isProtected() || isPrivate()) && !(isMemberType() && enclosingType().isClassDecl()))
+      error("*** Semantic Error: protected and private may only be used on member types within a directly enclosing class declaration");
+
+    // 8.1.1
+    if(isStatic() && !isMemberType())
+      error("*** Semantic Error: static pertains only to member types");
+    
+    
+    // 8.4.3.1
+    // 8.1.1.1
+    if(!isAbstract() && hasAbstract()) {
+      StringBuffer s = new StringBuffer();
+      s.append("*** Semantic Error: " + name() + " is not declared abstract but contains abstract members: ");
+      for(Iterator iter = abstractMethods().iterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        s.append(m.signature() + " in " + m.hostType().fullName() + " ");
+      }
+      error(s.toString());
+    }
+  }
+  
+  public void InterfaceDecl.checkModifiers() {
+    super.checkModifiers();
+  }
+ 
+  public void ConstructorDecl.checkModifiers() {
+    super.checkModifiers();
+  }
+ 
+  public void FieldDeclaration.checkModifiers() {
+    super.checkModifiers();
+    if(hostType().isInterfaceDecl()) {
+      if(isProtected())
+        error("*** Semantic Error: an interface field may not be protected");
+      if(isPrivate())
+        error("*** Semantic Error: an interface field may not be private");
+      if(isTransient())
+        error("*** Semantic Error: an interface field may not be transient");
+      if(isVolatile())
+        error("*** Semantic Error: an interface field may not be volatile");
+    }
+  }
+  
+  // 8.4.3
+  public void MethodDecl.checkModifiers() {
+    super.checkModifiers();
+    if(hostType().isClassDecl()) {
+      // 8.4.3.1
+      if(isAbstract() && !hostType().isAbstract())
+        error("*** Semantic Error: class must be abstract to include abstract methods");
+      // 8.4.3.1
+      if(isAbstract() && isPrivate())
+        error("*** Semantic Error: method may not be abstract and private");
+      // 8.4.3.1
+      // 8.4.3.2
+      if(isAbstract() && isStatic())
+        error("*** Semantic Error: method may not be abstract and static");
+      if(isAbstract() && isSynchronized())
+        error("*** Semantic Error: method may not be abstract and synchronized");
+      // 8.4.3.4
+      if(isAbstract() && isNative())
+        error("*** Semantic Error: method may not be abstract and native");
+      if(isAbstract() && isStrictfp())
+        error("*** Semantic Error: method may not be abstract and strictfp");
+      if(isNative() && isStrictfp())
+        error("*** Semantic Error: method may not be native and strictfp");
+    }
+    if(hostType().isInterfaceDecl()) {
+      // 9.4
+      if(isStatic())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be static");
+      if(isStrictfp())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be strictfp");
+      if(isNative())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be native");
+      if(isSynchronized())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be synchronized");
+      if(isFinal())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be final");
+      if(isProtected())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be protected");
+      if(isPrivate())
+        error("*** Semantic Error: interface method " + signature() + " in " +
+            hostType().fullName() +  " may not be private");
+    }
+  }
+
+  // 8.1.2
+  public void StaticInitializer.checkModifiers() {
+    super.checkModifiers();
+    if(hostType().isInnerClass())
+      error("*** Inner classes may not declare static initializers");
+  }
+ 
+  // 8.1.2
+  public void MemberInterface.checkModifiers() {
+    super.checkModifiers();
+    if(hostType().isInnerClass())
+      error("*** Inner classes may not declare member interfaces");
+  }
+   
+  public void MemberDecl.checkModifiers() {
+    super.checkModifiers();
+    if(isStatic() && hostType().isInnerClass() && !isConstant())
+      error("*** Inner classes may not declare static members, unless they are compile-time constant fields");
+  }
+  
+  syn boolean TypeDecl.isPublic() = getModifiers().isPublic() || isMemberType() && enclosingType().isInterfaceDecl();
+  //eq InterfaceDecl.isPublic() = !isProtected() && !isPrivate();
+  syn boolean TypeDecl.isPrivate() = getModifiers().isPrivate();
+  syn boolean TypeDecl.isProtected() = getModifiers().isProtected();
+  syn boolean TypeDecl.isAbstract() = getModifiers().isAbstract();
+  eq InterfaceDecl.isAbstract() = true;
+  syn boolean TypeDecl.isStatic() = getModifiers().isStatic() || isMemberType() && enclosingType().isInterfaceDecl();
+  // 8.5.2
+  eq InterfaceDecl.isStatic() = getModifiers().isStatic() || isMemberType();
+  syn boolean TypeDecl.isFinal() = getModifiers().isFinal();
+  syn boolean TypeDecl.isStrictfp() = getModifiers().isStrictfp();
+
+  syn boolean TypeDecl.isSynthetic() = getModifiers().isSynthetic();
+  
+
+  syn boolean MemberDecl.isStatic(); 
+  
+  syn boolean MethodDecl.isPublic() = getModifiers().isPublic() || hostType() instanceof InterfaceDecl;
+  syn boolean MethodDecl.isPrivate() = getModifiers().isPrivate();
+  syn boolean MethodDecl.isProtected() = getModifiers().isProtected();
+  syn boolean MethodDecl.isAbstract() = getModifiers().isAbstract() || hostType() instanceof InterfaceDecl;
+  syn boolean MethodDecl.isStatic() = getModifiers().isStatic();
+  // 8.4.3.3
+  syn boolean MethodDecl.isFinal() = getModifiers().isFinal() || hostType().isFinal() || isPrivate();
+  syn boolean MethodDecl.isSynchronized() = getModifiers().isSynchronized();
+  syn boolean MethodDecl.isNative() = getModifiers().isNative();
+  syn boolean MethodDecl.isStrictfp() = getModifiers().isStrictfp();
+  
+  syn boolean ConstructorDecl.isPublic() = getModifiers().isPublic();
+  syn boolean ConstructorDecl.isPrivate() = getModifiers().isPrivate();
+  syn boolean ConstructorDecl.isProtected() = getModifiers().isProtected();
+  
+  syn boolean FieldDeclaration.isPublic() = getModifiers().isPublic() || hostType() instanceof InterfaceDecl;
+  syn boolean FieldDeclaration.isPrivate() = getModifiers().isPrivate();
+  syn boolean FieldDeclaration.isProtected() = getModifiers().isProtected();
+  syn boolean FieldDeclaration.isStatic() = getModifiers().isStatic() || hostType() instanceof InterfaceDecl;
+  syn boolean FieldDecl.isStatic() = getModifiers().isStatic();
+  syn boolean FieldDeclaration.isFinal() = getModifiers().isFinal();
+  syn boolean FieldDeclaration.isTransient() = getModifiers().isTransient();
+  syn boolean FieldDeclaration.isVolatile() = getModifiers().isVolatile();
+
+  eq MemberType.isStatic() = getTypeDecl().isStatic();
+  
+  // 8.1.1 & 9.1.1
+  eq TypeDecl.getModifiers().mayBePublic() = true;
+  eq TypeDecl.getModifiers().mayBeProtected() = true;
+  eq TypeDecl.getModifiers().mayBePrivate() = true;
+  eq TypeDecl.getModifiers().mayBeAbstract() = true;
+  eq TypeDecl.getModifiers().mayBeStatic() = true;
+  eq TypeDecl.getModifiers().mayBeStrictfp() = true;
+
+  // 8.1.1
+  eq ClassDecl.getModifiers().mayBeFinal() = true;
+
+  // 8.3.1
+  eq FieldDeclaration.getModifiers().mayBePublic() = true;
+  eq FieldDeclaration.getModifiers().mayBeProtected() = true;
+  eq FieldDeclaration.getModifiers().mayBePrivate() = true;
+  eq FieldDeclaration.getModifiers().mayBeStatic() = true;
+  eq FieldDeclaration.getModifiers().mayBeFinal() = true;
+  eq FieldDeclaration.getModifiers().mayBeTransient() = true;
+  eq FieldDeclaration.getModifiers().mayBeVolatile() = true;
+  
+  // 8.4.3
+  eq MethodDecl.getModifiers().mayBePublic() = true;
+  eq MethodDecl.getModifiers().mayBeProtected() = true;
+  eq MethodDecl.getModifiers().mayBePrivate() = true;
+  eq MethodDecl.getModifiers().mayBeAbstract() = true;
+  eq MethodDecl.getModifiers().mayBeStatic() = true;
+  eq MethodDecl.getModifiers().mayBeFinal() = true;
+  eq MethodDecl.getModifiers().mayBeSynchronized() = true;
+  eq MethodDecl.getModifiers().mayBeNative() = true;
+  eq MethodDecl.getModifiers().mayBeStrictfp() = true;
+
+  // 8.8.3
+  eq ConstructorDecl.getModifiers().mayBePublic() = true;
+  eq ConstructorDecl.getModifiers().mayBeProtected() = true;
+  eq ConstructorDecl.getModifiers().mayBePrivate() = true;
+
+  eq VariableDeclaration.getModifiers().mayBeFinal() = true;
+
+  eq ParameterDeclaration.getModifiers().mayBeFinal() = true;
+   
+  eq Program.getCompilationUnit().mayBePublic() = false;
+  eq Program.getCompilationUnit().mayBeProtected() = false;
+  eq Program.getCompilationUnit().mayBePrivate() = false;
+  eq Program.getCompilationUnit().mayBeStatic() = false;
+  eq Program.getCompilationUnit().mayBeFinal() = false;
+  eq Program.getCompilationUnit().mayBeAbstract() = false;
+  eq Program.getCompilationUnit().mayBeVolatile() = false;
+  eq Program.getCompilationUnit().mayBeTransient() = false;
+  eq Program.getCompilationUnit().mayBeStrictfp() = false;
+  eq Program.getCompilationUnit().mayBeSynchronized() = false;
+  eq Program.getCompilationUnit().mayBeNative() = false;
+  eq TypeDecl.getBodyDecl().mayBePublic() = false;
+  eq TypeDecl.getBodyDecl().mayBeProtected() = false;
+  eq TypeDecl.getBodyDecl().mayBePrivate() = false;
+  eq TypeDecl.getBodyDecl().mayBeStatic() = false;
+  eq TypeDecl.getBodyDecl().mayBeFinal() = false;
+  eq TypeDecl.getBodyDecl().mayBeAbstract() = false;
+  eq TypeDecl.getBodyDecl().mayBeVolatile() = false;
+  eq TypeDecl.getBodyDecl().mayBeTransient() = false;
+  eq TypeDecl.getBodyDecl().mayBeStrictfp() = false;
+  eq TypeDecl.getBodyDecl().mayBeSynchronized() = false;
+  eq TypeDecl.getBodyDecl().mayBeNative() = false;
+
+  // 8.4.3
+  public void Modifiers.checkModifiers() {
+    super.checkModifiers();
+    if(numProtectionModifiers() > 1)
+      error("*** Semantic Error: only one public, protected, private allowed");
+    if(numStaticModifiers() > 1)
+      error("*** Semantic Error: only one static allowed");
+    // 8.4.3.1
+    // 8.4.3.2
+    // 8.1.1.2
+    if(numCompletenessModifiers() > 1)
+      error("*** Semantic Error: only one of final, abstract, volatile allowed");
+    if(numSynchronizedModifiers() > 1)
+      error("*** Semantic Error: only one synchronized allowed");
+    if(numTransientModifiers() > 1)
+      error("*** Semantic Error: only one transient allowed");
+    if(numNativeModifiers() > 1)
+      error("*** Semantic Error: only one native allowed");
+    if(numStrictfpModifiers() > 1)
+      error("*** Semantic Error: only one strictfp allowed");
+
+    if(isPublic() && !mayBePublic())
+      error("*** Semantic Error: modifier public not allowed in this context");
+    if(isPrivate() && !mayBePrivate())
+      error("*** Semantic Error: modifier private not allowed in this context");
+    if(isProtected() && !mayBeProtected())
+      error("*** Semantic Error: modifier protected not allowed in this context");
+    if(isStatic() && !mayBeStatic())
+      error("*** Semantic Error: modifier static not allowed in this context");
+    if(isFinal() && !mayBeFinal())
+      error("*** Semantic Error: modifier final not allowed in this context");
+    if(isAbstract() && !mayBeAbstract())
+      error("*** Semantic Error: modifier abstract not allowed in this context");
+    if(isVolatile() && !mayBeVolatile())
+      error("*** Semantic Error: modifier volatile not allowed in this context");
+    if(isTransient() && !mayBeTransient())
+      error("*** Semantic Error: modifier transient not allowed in this context");
+    if(isStrictfp() && !mayBeStrictfp())
+      error("*** Semantic Error: modifier strictfp not allowed in this context");
+    if(isSynchronized() && !mayBeSynchronized())
+      error("*** Semantic Error: modifier synchronized not allowed in this context");
+    if(isNative() && !mayBeNative())
+      error("*** Semantic Error: modifier native not allowed in this context");
+  }
+  
+  inh boolean Modifiers.mayBePublic();
+  inh boolean Modifiers.mayBePrivate();
+  inh boolean Modifiers.mayBeProtected();
+  inh boolean Modifiers.mayBeStatic();
+  inh boolean Modifiers.mayBeFinal();
+  inh boolean Modifiers.mayBeAbstract();
+  inh boolean Modifiers.mayBeVolatile();
+  inh boolean Modifiers.mayBeTransient();
+  inh boolean Modifiers.mayBeStrictfp();
+  inh boolean Modifiers.mayBeSynchronized();
+  inh boolean Modifiers.mayBeNative();
+
+  syn lazy boolean Modifiers.isPublic() = modifiers().contains("public");
+  syn lazy boolean Modifiers.isPrivate() = modifiers().contains("private");
+  syn lazy boolean Modifiers.isProtected() = modifiers().contains("protected");
+  syn lazy boolean Modifiers.isStatic() = modifiers().contains("static");
+  syn lazy boolean Modifiers.isFinal() = modifiers().contains("final");
+  syn lazy boolean Modifiers.isAbstract() = modifiers().contains("abstract");
+  syn lazy boolean Modifiers.isVolatile() = modifiers().contains("volatile");
+  syn lazy boolean Modifiers.isTransient() = modifiers().contains("transient");
+  syn lazy boolean Modifiers.isStrictfp() = modifiers().contains("strictfp");
+  syn lazy boolean Modifiers.isSynchronized() = modifiers().contains("synchronized");
+  syn lazy boolean Modifiers.isNative() = modifiers().contains("native");
+
+  syn lazy boolean Modifiers.isSynthetic() = modifiers().contains("synthetic");
+
+  syn lazy Collection Modifiers.modifiers() {
+    HashSet s = new HashSet();
+    for(int i = 0; i < getNumModifier(); i++)
+      s.add(getModifier(i).getID());
+    return s;
+  }
+
+  syn int Modifiers.numProtectionModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("public") || s.equals("protected") || s.equals("private"))
+        n++;
+    }
+    return n;
+  }
+  
+  syn int Modifiers.numCompletenessModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("abstract") || s.equals("final") || s.equals("volatile"))
+        n++;
+    }
+    return n;
+  }
+  
+  syn int Modifiers.numStaticModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("static"))
+        n++;
+    }
+    return n;
+  }
+  
+  syn int Modifiers.numSynchronizedModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("synchronized"))
+        n++;
+    }
+    return n;
+  }
+  
+  syn int Modifiers.numNativeModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("native"))
+        n++;
+    }
+    return n;
+  }
+  
+  syn int Modifiers.numTransientModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("transient"))
+        n++;
+    }
+    return n;
+  }
+  
+  syn int Modifiers.numStrictfpModifiers() {
+    int n = 0;
+    for(int i = 0; i < getNumModifier(); i++) {
+      String s = getModifier(i).getID();
+      if(s.equals("strictfp"))
+        n++;
+    }
+    return n;
+  }
+  
+
+}

@@ -1,0 +1,280 @@
+import java.util.Set;
+import java.util.HashSet;
+
+aspect LabelBinding {
+  interface FinallyHost {
+    //public Block getFinally();
+    public boolean isDUafterFinally(Variable v);
+  }
+  TryStmt implements FinallyHost;
+  SynchronizeStmt implements FinallyHost;
+  
+  syn Stmt BreakStmt.targetStmt() = breakTargetStmt(this);
+  syn Stmt ContinueStmt.targetStmt() = continueTargetStmt(this);
+  
+  inh Stmt BreakStmt.breakTargetStmt(BreakStmt stmt);
+  inh Stmt ContinueStmt.continueTargetStmt(ContinueStmt stmt);
+  
+  inh Stmt BranchTargetStmt.breakTargetStmt(BreakStmt stmt);
+  inh Stmt BranchTargetStmt.continueTargetStmt(ContinueStmt stmt);
+
+  inh Stmt TryStmt.breakTargetStmt(BreakStmt stmt);
+  inh Stmt TryStmt.continueTargetStmt(ContinueStmt stmt);
+  inh Stmt SynchronizeStmt.breakTargetStmt(BreakStmt stmt);
+  inh Stmt SynchronizeStmt.continueTargetStmt(ContinueStmt stmt);
+
+  protected Set BreakStmt.breakReachedFinally = new HashSet();
+  public void BreakStmt.addBreakReachedFinally(FinallyHost f) {
+    breakReachedFinally.add(f);
+  }
+  public Collection BreakStmt.breakReachedFinally() {
+    return breakReachedFinally;
+  }
+
+  protected Collection ReturnStmt.returnReachedFinally = new ArrayList(1);
+  public void ReturnStmt.addReturnReachedFinally(FinallyHost f) {
+    returnReachedFinally.add(f);
+  }
+  public Collection ReturnStmt.returnReachedFinally() {
+    return returnReachedFinally;
+  }
+
+  syn BodyDecl ReturnStmt.targetBodyDecl() = targetBodyDecl(this);
+  inh BodyDecl ReturnStmt.targetBodyDecl(ReturnStmt stmt);
+  inh BodyDecl TryStmt.targetBodyDecl(ReturnStmt stmt);
+  inh BodyDecl SynchronizeStmt.targetBodyDecl(ReturnStmt stmt);
+  eq Program.getCompilationUnit().targetBodyDecl(ReturnStmt stmt) = null;
+  eq MethodDecl.getBlock().targetBodyDecl(ReturnStmt stmt) = this;
+  eq ConstructorDecl.getBlock().targetBodyDecl(ReturnStmt stmt) = this;
+  eq TryStmt.getBlock().targetBodyDecl(ReturnStmt stmt) {
+    if(hasFinally())
+      stmt.addReturnReachedFinally(this);
+    return targetBodyDecl(stmt);
+  }
+  eq TryStmt.getCatch().targetBodyDecl(ReturnStmt stmt) {
+    if(hasFinally())
+      stmt.addReturnReachedFinally(this);
+    return targetBodyDecl(stmt);
+  }
+  eq SynchronizeStmt.getBlock().targetBodyDecl(ReturnStmt stmt) {
+    stmt.addReturnReachedFinally(this);
+    return targetBodyDecl(stmt);
+  }
+
+  protected Set ContinueStmt.continueReachedFinally = new HashSet();
+  public void ContinueStmt.addContinueReachedFinally(FinallyHost f) {
+    continueReachedFinally.add(f);
+  }
+  public Collection ContinueStmt.continueReachedFinally() {
+    return continueReachedFinally;
+  }
+  
+  protected Set BranchTargetStmt.breakTarget = new HashSet();
+  public void BranchTargetStmt.addBreakTarget(BreakStmt stmt) {
+    breakTarget.add(stmt);
+  }
+  public Iterator BranchTargetStmt.breakTarget() {
+    return breakTarget.iterator();
+  }
+  
+  protected Set BranchTargetStmt.breakEscape = new HashSet();
+  public void BranchTargetStmt.addBreakEscape(BreakStmt stmt) {
+    breakEscape.add(stmt);
+  }
+  public Iterator BranchTargetStmt.breakEscape() {
+    return breakEscape.iterator();
+  }
+  protected Set BranchTargetStmt.continueTarget = new HashSet();
+  public void BranchTargetStmt.addContinueTarget(ContinueStmt stmt) {
+    continueTarget.add(stmt);
+  }
+  public Iterator BranchTargetStmt.continueTarget() {
+    return continueTarget.iterator();
+  }
+  protected Set BranchTargetStmt.continueEscape = new HashSet();
+  public void BranchTargetStmt.addContinueEscape(ContinueStmt stmt) {
+    continueEscape.add(stmt);
+  }
+  public Iterator BranchTargetStmt.continueEscape() {
+    return continueEscape.iterator();
+  }
+
+  eq TypeDecl.getBodyDecl().breakTargetStmt(BreakStmt stmt) {
+    return null;
+  }
+  eq TypeDecl.getBodyDecl().continueTargetStmt(ContinueStmt stmt) {
+    return null;
+  }
+
+    
+  eq TryStmt.getBlock().breakTargetStmt(BreakStmt stmt) {
+    if(hasFinally() && !getFinally().canCompleteNormally()) {
+      return this;
+    }
+    if(hasFinally())
+      stmt.addBreakReachedFinally(this);
+    return breakTargetStmt(stmt);
+  }
+  eq TryStmt.getCatch().breakTargetStmt(BreakStmt stmt) {
+    if(hasFinally() && !getFinally().canCompleteNormally()) {
+      return this;
+    }
+    if(hasFinally())
+      stmt.addBreakReachedFinally(this);
+    return breakTargetStmt(stmt);
+  }
+  eq SynchronizeStmt.getBlock().breakTargetStmt(BreakStmt stmt) {
+    stmt.addBreakReachedFinally(this);
+    return breakTargetStmt(stmt);
+  }
+  
+  eq TryStmt.getBlock().continueTargetStmt(ContinueStmt stmt) {
+    if(hasFinally() && !getFinally().canCompleteNormally()) {
+      return this;
+    }
+    if(hasFinally()) {
+      stmt.addContinueReachedFinally(this);
+    }
+    return continueTargetStmt(stmt);
+  }
+  eq TryStmt.getCatch().continueTargetStmt(ContinueStmt stmt) {
+    if(hasFinally() && !getFinally().canCompleteNormally()) {
+      return this;
+    }
+    if(hasFinally())
+      stmt.addContinueReachedFinally(this);
+    return continueTargetStmt(stmt);
+  }
+  eq SynchronizeStmt.getBlock().continueTargetStmt(ContinueStmt stmt) {
+    stmt.addContinueReachedFinally(this);
+    return continueTargetStmt(stmt);
+  }
+  
+  eq LabelStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
+    if(stmt.hasLabel() && getLabel().getID().equals(stmt.getLabel().getID())) {
+      if(getStmt() instanceof BranchTargetStmt) {
+        BranchTargetStmt branchTarget = (BranchTargetStmt)getStmt();
+        branchTarget.addBreakTarget(stmt);
+        branchTarget.addBreakEscape(stmt);
+        return branchTarget;
+      }
+      else {
+        addBreakEscape(stmt);
+        addBreakTarget(stmt);
+        return this;
+      }
+    }
+    breakEscape.add(stmt);
+    return breakTargetStmt(stmt);
+  }
+
+  eq LabelStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
+    if(stmt.hasLabel() && getLabel().getID().equals(stmt.getLabel().getID())) {
+      if(getStmt() instanceof BranchTargetStmt) {
+        BranchTargetStmt branchTarget = (BranchTargetStmt)getStmt();
+        branchTarget.addContinueTarget(stmt);
+        return branchTarget;
+      }
+      else {
+        addContinueTarget(stmt);
+        return this;
+      }
+    }
+    continueEscape.add(stmt);
+    return continueTargetStmt(stmt);
+  }
+
+  eq SwitchStmt.getCase().breakTargetStmt(BreakStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addBreakTarget(stmt);
+      addBreakEscape(stmt);
+      return this;
+    }
+    breakEscape.add(stmt);
+    return breakTargetStmt(stmt);
+  }
+  
+  eq WhileStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addBreakTarget(stmt);
+      addBreakEscape(stmt);
+      return this;
+    }
+    breakEscape.add(stmt);
+    return breakTargetStmt(stmt);
+  }
+  
+  eq WhileStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addContinueTarget(stmt);
+      return this;
+    }
+    addContinueEscape(stmt);
+    return continueTargetStmt(stmt);
+  }
+
+
+  eq DoStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addBreakTarget(stmt);
+      addBreakEscape(stmt);
+      return this;
+    }
+    breakEscape.add(stmt);
+    return breakTargetStmt(stmt);
+  }
+  
+  eq DoStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addContinueTarget(stmt);
+      return this;
+    }
+    addContinueEscape(stmt);
+    return continueTargetStmt(stmt);
+  }
+
+
+  eq ForStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addBreakTarget(stmt);
+      addBreakEscape(stmt);
+      return this;
+    }
+    breakEscape.add(stmt);
+    return breakTargetStmt(stmt);
+  }
+  
+  eq ForStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
+    if(!stmt.hasLabel()) {
+      addContinueTarget(stmt);
+      return this;
+    }
+    addContinueEscape(stmt);
+    return continueTargetStmt(stmt);
+  }
+
+  inh BodyDecl LabelStmt.enclosingBodyDecl();
+
+  eq InstanceInitializer.getBlock().enclosingBodyDecl() = this;
+  eq StaticInitializer.getBlock().enclosingBodyDecl() = this;
+  eq ConstructorDecl.getBlock().enclosingBodyDecl() = this;
+  eq ConstructorDecl.getConstructorInvocation().enclosingBodyDecl() = this;
+  eq MethodDecl.getBlock().enclosingBodyDecl() = this;
+  eq FieldDeclaration.getAbstractVarInit().enclosingBodyDecl() = this;
+
+  eq Program.getCompilationUnit().enclosingBodyDecl() = null;
+
+  inh BodyDecl VariableDeclaration.enclosingBodyDecl();
+  inh BodyDecl ParameterDeclaration.enclosingBodyDecl();
+  inh BodyDecl VarAccess.enclosingBodyDecl();
+
+  eq MethodDecl.getParameter().enclosingBodyDecl() = this;
+  eq ConstructorDecl.getParameter().enclosingBodyDecl() = this;
+
+
+  inh LabelStmt LabelStmt.lookupLabel(String name);
+  eq LabelStmt.getStmt().lookupLabel(String name) = name.equals(getLabel().getID()) ? this : lookupLabel(name);
+  eq TypeDecl.getBodyDecl().lookupLabel(String name) = null;
+  
+}
+

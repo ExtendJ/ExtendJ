@@ -1,0 +1,1289 @@
+aspect DefiniteAssignment {
+
+  public void ASTNode.definiteAssignment() {
+  }
+
+  inh boolean Expr.isDest();
+  eq CompilationUnit.getTypeDecl().isDest() = false;
+  eq AssignSimpleExpr.getDest().isDest() = true;
+  eq AssignExpr.getDest().isDest() = true;
+  eq AssignExpr.getSource().isDest() = false;
+  eq TypeDecl.getBodyDecl().isDest() = false;
+  eq AbstractDot.getLeft().isDest() = false;
+  
+  eq ImportDecl.getAccess().isDest() = false;
+
+  inh boolean Expr.isSource();
+  eq CompilationUnit.getTypeDecl().isSource() = true;
+  eq AssignSimpleExpr.getDest().isSource() = false;
+  eq AssignExpr.getDest().isSource() = true;
+  eq AssignExpr.getSource().isSource() = true;
+  eq TypeDecl.getBodyDecl().isSource() = true;
+  eq AbstractDot.getLeft().isSource() = true;
+  eq ImportDecl.getAccess().isSource() = true;
+
+  eq ArrayAccess.getExpr().isDest() = false;
+  eq ArrayAccess.getExpr().isSource() = true;
+  
+
+  eq VarInit.getExpr().isSource() = true;
+  eq ArrayInit.getAbstractVarInit().isSource() = true;
+
+  eq Unary.getOperand().isSource() = true;
+  eq PostfixExpr.getOperand().isDest() = true;
+  eq PreIncExpr.getOperand().isDest() = true;
+  eq PreDecExpr.getOperand().isDest() = true;
+  
+  inh boolean Expr.isIncOrDec();
+  eq CompilationUnit.getTypeDecl().isIncOrDec() = false;
+  eq Block.getStmt().isIncOrDec() = false;
+  eq PostfixExpr.getOperand().isIncOrDec() = true;
+  eq PreIncExpr.getOperand().isIncOrDec() = true;
+  eq PreDecExpr.getOperand().isIncOrDec() = true;
+  
+  public void FieldDot.definiteAssignment() {
+    VarAccess v = (VarAccess)getRight();
+    if(v.isDest() && v.decl().isFinal() && !(getLeft() instanceof ThisAccess))
+      error("Semantic Error: The blank final field " + v.name() + " may only be assigned by simple name");
+  }
+  
+  syn Variable Expr.varDecl() = null;
+  eq FieldDot.varDecl() = ((VarAccess)getRight()).decl();
+  eq VarAccess.varDecl() = decl();
+  eq ParExpr.varDecl() = getExpr().varDecl();
+  
+  public void PostfixExpr.definiteAssignment() {
+    if(getOperand().isVariable()) {
+      Variable v = getOperand().varDecl();
+      if(v != null && v.isFinal()) {
+        error("*** Semantic Error: ++ and -- can not be applied to final variable " + v);
+      }
+    }
+  }
+  
+  public void PreIncExpr.definiteAssignment() {
+    if(getOperand().isVariable()) {
+      Variable v = getOperand().varDecl();
+      if(v != null && v.isFinal()) {
+        error("*** Semantic Error: ++ and -- can not be applied to final variable " + v);
+      }
+    }
+  }
+  
+  public void PreDecExpr.definiteAssignment() {
+    if(getOperand().isVariable()) {
+      Variable v = getOperand().varDecl();
+      if(v != null && v.isFinal()) {
+        error("*** Semantic Error: ++ and -- can not be applied to final variable " + v);
+      }
+    }
+  }
+  
+  public void VarAccess.definiteAssignment() {
+    if(isSource()) {
+      if(decl() instanceof VariableDeclaration) {
+        VariableDeclaration v = (VariableDeclaration)decl();
+        //System.err.println("Is " + v + " final? " + v.isFinal() + ", DAbefore: " + isDAbefore(v));
+        if(v.isFinal()) {
+          if(!isDAbefore(v) && !v.hasAbstractVarInit() && !v.getAbstractVarInit().isConstant())
+            error("*** Semantic Error: Final variable " + v + " is not assigned before used");
+        }
+        else {
+          //if(!v.hasAbstractVarInit() && !isDAbefore(v)) {
+          if(!isDAbefore(v))
+          error("*** Semantic Error: Local variable " + v + " in not assigned before used in " + enclosingStmt());
+        }
+      }
+      
+      else if(decl() instanceof FieldDeclaration && !isQualified()) {
+        FieldDeclaration f = (FieldDeclaration)decl();
+        //if(f.isFinal() && f.isInstanceVariable() && !isDAbefore(f)) {
+        if(f.isFinal() && !isDAbefore(f) && !f.hasAbstractVarInit() && !f.getAbstractVarInit().isConstant()) {
+          error("*** Semantic Error: Final field " + f + " is not assigned before used");
+        }
+      }
+      
+    }
+    if(isDest()) {
+      Variable v = decl();
+      // Blank final field
+      if(v.isFinal() && v.isBlank() && !hostType().instanceOf(v.hostType()))
+        error("*** Semantic Error: The final variable is not a blank final in this context, so it may not be assigned.");
+      
+      // local variable or parameter
+      if(v instanceof VariableDeclaration) {
+        VariableDeclaration var = (VariableDeclaration)v;
+        //System.out.println("### is variable");
+        if(var.isFinal() && (var.hasAbstractVarInit() || !isDUbefore(var))) {
+        //if(var.isFinal() && ((var.hasAbstractVarInit() && var.getAbstractVarInit().isConstant()) || !isDUbefore(var))) {
+          error("*** Semantic Error: Final variable " + var.name() + " may only be assigned once");
+        }
+        /*
+        if(var.isFinal() && isIncOrDec())
+          error("*** Semantic Error: ++ and -- can not be applied to final variables");
+          */
+      }
+      // field
+      else if(v instanceof FieldDeclaration) {
+        FieldDeclaration f = (FieldDeclaration)v;
+        if(f.isFinal()) {
+          if(f.hasAbstractVarInit())
+            error("*** Semantic Error: initialized field " + f.name() + " can not be assigned");
+          BodyDecl bodyDecl = enclosingBodyDecl();
+          if(!(bodyDecl instanceof ConstructorDecl) && !(bodyDecl instanceof InstanceInitializer) && !(bodyDecl instanceof StaticInitializer) && !(bodyDecl instanceof FieldDeclaration))
+            error("*** Semantic Error: final field " + f.name() + " may only be assigned in constructors and initializers");
+          if(!isDUbefore(f))
+            error("*** Semantic Error: Final field " + f.name() + " may only be assigned once");
+          /*
+          if(isIncOrDec())
+            error("*** Semantic Error: ++ and -- can not be applied to final fields");
+            */
+
+        }
+      }
+      else if(v instanceof ParameterDeclaration) {
+        ParameterDeclaration p = (ParameterDeclaration)v;
+
+        // 8.4.1
+        if(p.isFinal()) {
+          error("*** Semantic Error: Final parameter " + p.name() + " may not be assigned");
+        }
+
+        /*
+        if(p.isFinal() && isIncOrDec())
+          error("*** Semantic Error: ++ and -- can not be applied to final parameters");
+          */
+      }
+      
+    }
+  }
+}
+
+aspect DA {
+  syn boolean Expr.booleanValued() = type().isBoolean();
+  syn boolean QuestionColonExpr.booleanOperator() = getTrueExpr().booleanValued() && getFalseExpr().booleanValued();
+  
+  inh lazy boolean Stmt.isDAbefore(Variable v);
+  syn lazy boolean Stmt.isDAafter(Variable v);
+  inh lazy boolean Expr.isDAbefore(Variable v);
+  syn lazy boolean Expr.isDAafter(Variable v);
+
+  syn lazy boolean Binary.isDAafter(Variable v);
+
+  inh boolean TypeDecl.isDAbefore(Variable v);
+
+  inh boolean BodyDecl.isDAbefore(Variable v);
+  syn lazy boolean BodyDecl.isDAafter(Variable v) = true;
+
+  eq TypeDecl.getBodyDecl().isDAbefore(Variable v) {
+    BodyDecl b = getBodyDecl(childIndex);
+    if(b instanceof MethodDecl /*|| b instanceof MemberType*/) {
+      return true;
+    }
+    if(v.isClassVariable() || v.isInstanceVariable()) {
+      if(v.isFinal() &&  v.hostType() != this && instanceOf(v.hostType()))
+        return true;
+      int index = childIndex - 1;
+      if(b instanceof ConstructorDecl)
+        index = getNumBodyDecl() - 1;
+        
+      for(int i = index; i >= 0; i--) {
+        b = getBodyDecl(i);
+        if(b instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)b;
+          if((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
+            boolean c = f.isDAafter(v);
+            //System.err.println("DefiniteAssignment: is " + v.name() + " DA after index " + i + ", " + f + ": " + c);
+            return c;
+            //return f.isDAafter(v);
+          }
+        }
+        else if(b instanceof StaticInitializer && v.isClassVariable()) {
+          StaticInitializer si = (StaticInitializer)b;
+          return si.isDAafter(v);
+        }
+        else if(b instanceof InstanceInitializer && v.isInstanceVariable()) {
+          InstanceInitializer ii = (InstanceInitializer)b;
+          return ii.isDAafter(v);
+        }
+      }
+    }
+    return isDAbefore(v);
+  }
+
+  eq InstanceInitializer.isDAafter(Variable v) = getBlock().isDAafter(v);
+  eq StaticInitializer.isDAafter(Variable v) = getBlock().isDAafter(v);
+  
+  eq ConstructorDecl.isDAafter(Variable v) = getBlock().isDAafter(v) && getBlock().checkReturnDA(v);
+  eq ConstructorAccess.isDAafter(Variable v) = decl().isDAafter(v);
+  eq SuperConstructorAccess.isDAafter(Variable v) = isDAbefore(v);
+  eq ConstructorDecl.getBlock().isDAbefore(Variable v) = hasConstructorInvocation() ? getConstructorInvocation().isDAafter(v) : isDAbefore(v);
+
+  syn boolean Stmt.checkReturnDA(Variable v) = true;
+  eq Block.checkReturnDA(Variable v) {
+    for(int i = 0; i < getNumStmt(); i++)
+      if(!getStmt(i).checkReturnDA(v))
+        return false;
+    return true;
+  }
+  eq LabelStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
+  eq SwitchStmt.checkReturnDA(Variable v) {
+    for(int i = 0; i < getNumCase(); i++) {
+      Case c = getCase(i);
+      for(int j = 0; j < c.getNumStmt(); j++) {
+        if(!c.getStmt(j).checkReturnDA(v))
+          return false;
+      }
+    }
+    return true;
+  }
+  eq IfStmt.checkReturnDA(Variable v) = getThen().checkReturnDA(v) && (hasElse() ? getThen().checkReturnDA(v) : true);
+  eq WhileStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
+  eq DoStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
+  eq ForStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
+  eq SynchronizeStmt.checkReturnDA(Variable v) = getBlock().checkReturnDA(v);
+  eq TryStmt.checkReturnDA(Variable v) {
+    if(!getBlock().checkReturnDA(v))
+      return false;
+    for(int i = 0; i < getNumCatch(); i++)
+      if(!getCatch(i).getBlock().checkReturnDA(v))
+        return false;
+    if(hasFinally() && !getFinally().checkReturnDA(v))
+      return false;
+    return true;
+  }
+  eq ReturnStmt.checkReturnDA(Variable v) {
+    boolean result = hasResult() ? getResult().isDAafter(v) : isDAbefore(v);
+    if(result) return true;
+    
+    ASTNode n = this;
+    while(!(n instanceof ConstructorDecl)) {
+      if(n instanceof TryStmt) {
+        TryStmt s = (TryStmt)n;
+        if(s.hasFinally() && s.getFinally().isDAafter(v))
+          return true;
+      }
+      n = n.getParent();
+    }
+    return false;
+  }
+
+  eq FieldDeclaration.isDAafter(Variable v) {
+    if(v == this)
+      return hasAbstractVarInit();
+    return hasAbstractVarInit() ? getAbstractVarInit().isDAafter(v) : isDAbefore(v);
+  }
+
+  eq FieldDeclaration.getAbstractVarInit().isDAbefore(Variable v) {
+    return isDAbefore(v);
+  }
+  
+  syn boolean Expr.isDAafterTrue(Variable v);
+  syn boolean Expr.isDAafterFalse(Variable v);
+
+  eq Program.getCompilationUnit().isDAbefore(Variable v) = false;
+  eq Stmt.isDAafter(Variable v) {
+    //System.out.println("### isDAafter reached in " + getClass().getName());
+    throw new NullPointerException();
+  }
+  
+
+
+
+  eq Expr.isDAafterFalse(Variable v) {
+    if(isTrue())
+      return true;
+    return isDAbefore(v);
+  }
+  //= isFalse() && isDAbefore(v) || isTrue();
+  eq Expr.isDAafterTrue(Variable v) {
+    if(isFalse())
+      return true;
+    return isDAbefore(v);
+  }
+  //= isTrue() && isDAbefore(v) || isFalse();
+  eq Expr.isDAafter(Variable v) = (isDAafterFalse(v) && isDAafterTrue(v)) || isDAbefore(v);
+
+  eq ParExpr.isDAafterTrue(Variable v) = getExpr().isDAafterTrue(v);
+  eq ParExpr.isDAafterFalse(Variable v) = getExpr().isDAafterFalse(v);
+
+  eq VarAccess.isDAafter(Variable v) {
+    return (isDest() && decl() == v) || isDAbefore(v);
+  }
+  eq AbstractDot.getRight().isDAbefore(Variable v) = getLeft().isDAafter(v);
+  eq AbstractDot.isDAafter(Variable v) = getRight().isDAafter(v);
+  eq ArrayAccess.isDAafter(Variable v) = getExpr().isDAafter(v);
+
+  // 16.1.2 1st bullet
+  eq AndLogicalExpr.isDAafterTrue(Variable v) = getRightOperand().isDAafterTrue(v);
+  // 16.1.2 2nd bullet
+  eq AndLogicalExpr.isDAafterFalse(Variable v) = getLeftOperand().isDAafterFalse(v) && getRightOperand().isDAafterFalse(v);
+  // 16.1.2 3rd bullet
+  eq AndLogicalExpr.getLeftOperand().isDAbefore(Variable v) = isDAbefore(v);
+  // 16.1.2 4th bullet
+  eq AndLogicalExpr.getRightOperand().isDAbefore(Variable v) = getLeftOperand().isDAafterTrue(v);
+  // 16.1.2 5th bullet
+  eq AndLogicalExpr.isDAafter(Variable v) = isDAafterTrue(v) && isDAafterFalse(v);
+
+  eq OrLogicalExpr.isDAafterTrue(Variable v) = getLeftOperand().isDAafterTrue(v) && getRightOperand().isDAafterTrue(v);
+  eq OrLogicalExpr.isDAafterFalse(Variable v) = getRightOperand().isDAafterFalse(v);
+  eq OrLogicalExpr.getLeftOperand().isDAbefore(Variable v) = isDAbefore(v);
+  eq OrLogicalExpr.getRightOperand().isDAbefore(Variable v) = getLeftOperand().isDAafterFalse(v);
+  eq OrLogicalExpr.isDAafter(Variable v) = isDAafterTrue(v) && isDAafterFalse(v);
+
+  eq LogNotExpr.isDAafterTrue(Variable v) = getOperand().isDAafterFalse(v);
+  eq LogNotExpr.isDAafterFalse(Variable v) = getOperand().isDAafterTrue(v);
+  eq LogNotExpr.getOperand().isDAbefore(Variable v) = isDAbefore(v);
+  eq LogNotExpr.isDAafter(Variable v) = isDAafterTrue(v) && isDAafterFalse(v);
+  
+  eq QuestionColonExpr.isDAafterTrue(Variable v) = getTrueExpr().isDAafterTrue(v) && getFalseExpr().isDAafterTrue(v);
+  eq QuestionColonExpr.isDAafterFalse(Variable v) = getTrueExpr().isDAafterFalse(v) && getFalseExpr().isDAafterFalse(v);
+  eq QuestionColonExpr.getCondition().isDAbefore(Variable v) = isDAbefore(v);
+  eq QuestionColonExpr.getTrueExpr().isDAbefore(Variable v) = getCondition().isDAafterTrue(v);
+  eq QuestionColonExpr.getFalseExpr().isDAbefore(Variable v) = getCondition().isDAafterFalse(v);
+  eq QuestionColonExpr.isDAafter(Variable v) = booleanOperator() ? isDAafterTrue(v) && isDAafterFalse(v) : getTrueExpr().isDAafter(v) && getFalseExpr().isDAafter(v);
+
+  eq AssignExpr.isDAafter(Variable v) = /*(getDest().isVariable() && getDest().varDecl() == v) ||*/ getSource().isDAafter(v);
+  eq AssignExpr.getSource().isDAbefore(Variable v) = getDest().isDAafter(v);
+  eq AssignExpr.getDest().isDAbefore(Variable v) = isDAbefore(v);
+  eq AssignExpr.isDAafterTrue(Variable v) = isDAafter(v);
+  eq AssignExpr.isDAafterFalse(Variable v) = isDAafter(v);
+
+  eq ParExpr.isDAafter(Variable v) = getExpr().isDAafter(v);
+  eq Unary.isDAafter(Variable v) = getOperand().isDAafter(v);
+  eq CastExpr.isDAafter(Variable v) = getExpr().isDAafter(v);
+  
+  eq Binary.isDAafterTrue(Variable v) = getRightOperand().isDAafter(v);
+  eq Binary.isDAafterFalse(Variable v) = getRightOperand().isDAafter(v);
+  
+  syn lazy boolean Binary.isDAafter(Variable v) = getRightOperand().isDAafter(v);
+  //eq Binary.isDAafter(Variable v) = getRightOperand().isDAafter(v);
+  eq Binary.getRightOperand().isDAbefore(Variable v) = getLeftOperand().isDAafter(v);
+
+  eq InstanceOfExpr.isDAafter(Variable v) = getExpr().isDAafter(v);
+
+  eq MethodAccess.getArg(int i).isDAbefore(Variable v) = i == 0 ? isDAbefore(v) : getArg(i-1).isDAafter(v);
+  eq MethodAccess.isDAafter(Variable v) = getNumArg() == 0 ? isDAbefore(v) : getArg(getNumArg()-1).isDAafter(v);
+
+  
+  eq EmptyStmt.isDAafter(Variable v) = isDAbefore(v);
+
+  eq AssertStmt.isDAafter(Variable v) = getfirst().isDAafter(v);
+
+  // TODO: Fix nested classes
+  syn boolean ClassInstanceExpr.isDAafterInstance(Variable v) {
+    if(getNumArg() == 0)
+      return isDAbefore(v);
+    return getArg(getNumArg()-1).isDAafter(v);
+  }
+  eq ClassInstanceExpr.isDAafter(Variable v) = isDAafterInstance(v);
+  eq ClassInstanceExpr.getArg(int i).isDAbefore(Variable v) {
+    if(i == 0)
+      return isDAbefore(v);
+    return getArg(i-1).isDAafter(v);
+  }
+  eq ClassInstanceExpr.getTypeDecl().isDAbefore(Variable v) = isDAafterInstance(v);
+
+  // 16.2.2 1st bullet
+  eq MethodDecl.getBlock().isDAbefore(Variable v) = v.isFinal() && (v.isClassVariable() || v.isInstanceVariable()) ? true : isDAbefore(v);
+  eq InstanceInitializer.getBlock().isDAbefore(Variable v) = isDAbefore(v);
+  eq StaticInitializer.getBlock().isDAbefore(Variable v) = isDAbefore(v);
+  
+  eq Block.isDAafter(Variable v) = getNumStmt() == 0 ? isDAbefore(v) : getStmt(getNumStmt()-1).isDAafter(v);
+
+  // 16.2.2 7th bullet
+  eq Block.getStmt(int index).isDAbefore(Variable v) = index == 0 ? isDAbefore(v) : getStmt(index - 1).isDAafter(v);
+
+  // 16.2.2 8th, 9th, 10th bullet
+  syn boolean Block.isDUeverywhere(Variable v) = isDUbefore(v) && checkDUeverywhere(v);
+
+  // 16.2.2 9th, 10th bullet
+  protected boolean ASTNode.checkDUeverywhere(Variable v) {
+    for(int i = 0; i < getNumChild(); i++)
+      if(!getChild(i).checkDUeverywhere(v))
+        return false;
+    return true;
+  }
+
+  protected boolean VarAccess.checkDUeverywhere(Variable v) {
+    if(isDest() && decl() == v)
+      return false;
+    return super.checkDUeverywhere(v);
+  }
+  // 16.2.2 9th bullet
+  protected boolean AssignExpr.checkDUeverywhere(Variable v) {
+    if(getDest().isVariable() && getDest().varDecl() == v)
+      if(!getSource().isDAafter(v))
+        return false;
+    return super.checkDUeverywhere(v);
+  }
+  
+  // 16.2.2 10th bullet
+  protected boolean PostfixExpr.checkDUeverywhere(Variable v) {
+    if(getOperand().isVariable() && getOperand().varDecl() == v)
+      if(!isDAbefore(v))
+        return false;
+    return super.checkDUeverywhere(v);
+  }
+  protected boolean PreIncExpr.checkDUeverywhere(Variable v) {
+    if(getOperand().isVariable() && getOperand().varDecl() == v)
+      if(!isDAbefore(v))
+        return false;
+    return super.checkDUeverywhere(v);
+  }
+  protected boolean PreDecExpr.checkDUeverywhere(Variable v) {
+    if(getOperand().isVariable() && getOperand().varDecl() == v)
+      if(!isDAbefore(v))
+        return false;
+    return super.checkDUeverywhere(v);
+  }
+  
+  eq LocalClassDeclStmt.isDAafter(Variable v) = isDAbefore(v);
+
+  eq VariableDeclaration.isDAafter(Variable v) {
+    if(v == this)
+      return hasAbstractVarInit();
+    return hasAbstractVarInit() ? getAbstractVarInit().isDAafter(v) : isDAbefore(v);
+  }
+  
+  inh lazy boolean AbstractVarInit.isDAbefore(Variable v);
+  syn lazy boolean AbstractVarInit.isDAafter(Variable v);
+  eq VarInit.isDAafter(Variable v) = getExpr().isDAafter(v);
+  eq ArrayInit.isDAafter(Variable v) = getNumAbstractVarInit() == 0 ? isDAbefore(v) : getAbstractVarInit(getNumAbstractVarInit()-1).isDAafter(v);
+  eq ArrayInit.getAbstractVarInit().isDAbefore(Variable v) = childIndex == 0 ? isDAbefore(v) : getAbstractVarInit(childIndex-1).isDAafter(v);
+
+  eq LabelStmt.getStmt().isDAbefore(Variable v) = isDAbefore(v);
+  eq LabelStmt.isDAafter(Variable v) {
+    if(!getStmt().isDAafter(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return true;
+  }
+
+  eq ExprStmt.isDAafter(Variable v) = getExpr().isDAafter(v);
+  eq ExprStmt.getExpr().isDAbefore(Variable v) = isDAbefore(v);
+
+  eq IfStmt.isDAafter(Variable v) = hasElse() ? getThen().isDAafter(v) && getElse().isDAafter(v) : getThen().isDAafter(v) && getCondition().isDAafterFalse(v);
+  eq IfStmt.getCondition().isDAbefore(Variable v) = isDAbefore(v);
+  eq IfStmt.getThen().isDAbefore(Variable v) = getCondition().isDAafterTrue(v);
+  eq IfStmt.getElse().isDAbefore(Variable v) = getCondition().isDAafterFalse(v);
+
+  // 16.2.9 1st bullet
+  eq SwitchStmt.isDAafter(Variable v) {
+    if(!(!noDefaultLabel() || getExpr().isDAafter(v))) {
+      return false;
+    }
+    if(!(!switchLabelEndsBlock() || getExpr().isDAafter(v))) {
+      return false;
+    }
+    if(!assignedAfterLastStmt(v)) {
+      return false;
+    }
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      //if(!stmt.isDAbefore(v))
+      if(!stmt.isDAtest(v)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  syn boolean SwitchStmt.assignedAfterLastStmt(Variable v) {
+    boolean result = true;
+    int i = getNumCase() - 1;
+    while(i >= 0 && getCase(i).getNumStmt() == 0)
+      i--;
+    if(i >= 0 && getCase(i).getNumStmt() > 0)
+      return getCase(i).getStmt(getCase(i).getNumStmt()-1).isDAafter(v);
+    return true;
+  }
+  
+  // 16.2.9 2nd bullet
+  eq SwitchStmt.getExpr().isDAbefore(Variable v) {
+    if(((ASTNode)v).isDescendantTo(this))
+      return false;
+    boolean result = isDAbefore(v);
+    return result;
+  }
+
+  protected boolean ASTNode.isDescendantTo(ASTNode node) {
+    if(this == node)
+      return true;
+    if(getParent() == null)
+      return false;
+    return getParent().isDescendantTo(node);
+  }
+
+  eq SwitchStmt.getCase(int i).isDAbefore(Variable v) {
+    // 16.2.9 3rd bullet
+    if(i == 0)
+      return getExpr().isDAafter(v);
+    Case c = getCase(i-1);
+    if(c.getNumStmt() == 0)
+      return c.isDAbefore(v);
+    return getExpr().isDAafter(v) && c.getStmt(c.getNumStmt()-1).isDAafter(v);
+  }
+
+  inh boolean Case.isDAbefore(Variable v);
+  // 16.2.8 5th bullet
+  eq Case.getStmt(int i).isDAbefore(Variable v) {
+    if(i ==  0)
+      return isDAbefore(v);
+    return getStmt(i-1).isDAafter(v);
+  }
+
+  eq WhileStmt.isDAafter(Variable v) {
+    if(!getCondition().isDAafterFalse(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return true;
+  }
+  eq WhileStmt.getCondition().isDAbefore(Variable v) = isDAbefore(v);
+  eq WhileStmt.getStmt().isDAbefore(Variable v) = getCondition().isDAafterTrue(v);
+
+  eq DoStmt.isDAafter(Variable v) {
+    if(!getCondition().isDAafterFalse(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return true;
+  }
+  eq DoStmt.getStmt().isDAbefore(Variable v) = isDAbefore(v);
+  eq DoStmt.getCondition().isDAbefore(Variable v) {
+    if(!getStmt().isDAafter(v))
+      return false;
+    for(Iterator iter = continueTarget(); iter.hasNext(); ) {
+      ContinueStmt stmt = (ContinueStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return true;
+  }
+    
+  // 16.2.11 1st bullet
+  eq ForStmt.isDAafter(Variable v) {
+    if(!(!hasCondition() || getCondition().isDAafterFalse(v)))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return true;
+  }
+  // 16.2.11 2nd bullet
+  eq ForStmt.getInitStmt().isDAbefore(Variable v) = isDAbefore(v);
+  // 16.2.11 3rd bullet
+  syn boolean ForStmt.isDAafterInitialization(Variable v) = getNumInitStmt() == 0 ? isDAbefore(v) : getInitStmt(getNumInitStmt()-1).isDAafter(v);
+  eq ForStmt.getCondition().isDAbefore(Variable v) = isDAafterInitialization(v);
+  // 16.2.11 5th bullet
+  eq ForStmt.getStmt().isDAbefore(Variable v) {
+    if(hasCondition() && getCondition().isDAafterTrue(v))
+      return true;
+    if(!hasCondition() && isDAafterInitialization(v))
+      return true;
+    return false;
+  }
+  // 16.2.11 6th bullet
+  eq ForStmt.getUpdateStmt().isDAbefore(Variable v) {
+    if(!getStmt().isDAafter(v))
+      return false;
+    for(Iterator iter = continueTarget(); iter.hasNext(); ) {
+      ContinueStmt stmt = (ContinueStmt)iter.next();
+      if(!stmt.isDAtest(v))
+        return false;
+    }
+    return true;
+  }
+
+  eq BreakStmt.isDAafter(Variable v) = true;
+  eq ContinueStmt.isDAafter(Variable v) = true;
+  eq ReturnStmt.isDAafter(Variable v) = true;
+  eq ThrowStmt.isDAafter(Variable v) = true;
+  
+  eq ReturnStmt.getResult().isDAbefore(Variable v) = isDAbefore(v);
+  eq ThrowStmt.getExpr().isDAbefore(Variable v) = isDAbefore(v);
+
+  eq SynchronizeStmt.isDAafter(Variable v) = getBlock().isDAafter(v);
+  eq SynchronizeStmt.getExpr().isDAbefore(Variable v) = isDAbefore(v);
+  eq SynchronizeStmt.getBlock().isDAbefore(Variable v) = getExpr().isDAafter(v);
+
+  // 16.2.15 1st bullet
+  eq TryStmt.getBlock().isDAbefore(Variable v) = isDAbefore(v);
+  // 16.2.15 2nd bullet
+  eq TryStmt.getCatch().isDAbefore(Variable v) = getBlock().isDAbefore(v);
+  
+  // 16.2.15 6th bullet
+  eq TryStmt.getFinally().isDAbefore(Variable v) = isDAbefore(v);
+  eq TryStmt.isDAafter(Variable v) {
+    // 16.2.15 4th bullet
+    if(!hasFinally()) {
+      if(!getBlock().isDAafter(v))
+        return false;
+      for(int i = 0; i < getNumCatch(); i++)
+        if(!getCatch(i).getBlock().isDAafter(v))
+          return false;
+      return true;
+    }
+    else {
+      // 16.2.15 5th bullet
+      if(getFinally().isDAafter(v))
+        return true;
+      if(!getBlock().isDAafter(v))
+        return false;
+      for(int i = 0; i < getNumCatch(); i++)
+        if(!getCatch(i).getBlock().isDAafter(v))
+          return false;
+      return true;
+    }
+  }
+
+
+  
+}
+
+aspect DU {
+  inh boolean Stmt.isDUbefore(Variable v);
+  syn boolean Stmt.isDUafter(Variable v);
+  inh boolean Expr.isDUbefore(Variable v);
+  syn boolean Expr.isDUafter(Variable v);
+
+  syn boolean Expr.isDUafterTrue(Variable v);
+  syn boolean Expr.isDUafterFalse(Variable v);
+
+  inh boolean TypeDecl.isDUbefore(Variable v);
+
+  inh boolean BodyDecl.isDUbefore(Variable v);
+  syn boolean BodyDecl.isDUafter(Variable v) = true;
+
+  eq Program.getCompilationUnit().isDUbefore(Variable v) = true;
+
+  eq TypeDecl.getBodyDecl().isDUbefore(Variable v) {
+    //System.err.println("Computing DU for " + v.name() + " for child "  + childIndex);
+    BodyDecl b = getBodyDecl(childIndex);
+    if(b instanceof MethodDecl || b instanceof MemberType) {
+      return false;
+    }
+    if(v.isClassVariable() || v.isInstanceVariable()) {
+      int index = childIndex - 1;
+      if(b instanceof ConstructorDecl)
+        index = getNumBodyDecl() - 1;
+        
+      for(int i = index; i >= 0; i--) {
+        b = getBodyDecl(i);
+        if(b instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)b;
+          //System.err.println("  working on field " + f.name() + " which is child " + i);
+          if(f == v)
+            return !f.hasAbstractVarInit();
+          if((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic()))
+            return f.isDUafter(v);
+          //System.err.println("  field " + f.name() + " can not affect " + v.name());
+        }
+        else if(b instanceof StaticInitializer && v.isClassVariable()) {
+          StaticInitializer si = (StaticInitializer)b;
+          //System.err.println("  working on static initializer which is child " + i);
+          return si.isDUafter(v);
+        }
+        else if(b instanceof InstanceInitializer && v.isInstanceVariable()) {
+          InstanceInitializer ii = (InstanceInitializer)b;
+          //System.err.println("  working on instance initializer which is child " + i);
+          return ii.isDUafter(v);
+        }
+      }
+    }
+    //System.err.println("Reached TypeDecl when searching for DU for variable");
+    return isDUbefore(v);
+  }
+  
+  eq InstanceInitializer.isDUafter(Variable v) = getBlock().isDUafter(v);
+  eq StaticInitializer.isDUafter(Variable v) = getBlock().isDUafter(v);
+  
+  eq ConstructorDecl.isDUafter(Variable v) = getBlock().isDUafter(v) && getBlock().checkReturnDU(v);
+  eq ConstructorAccess.isDUafter(Variable v) = decl().isDUafter(v);
+  eq SuperConstructorAccess.isDUafter(Variable v) = isDUbefore(v);
+  eq ConstructorDecl.getBlock().isDUbefore(Variable v) = hasConstructorInvocation() ? getConstructorInvocation().isDUafter(v) : isDUbefore(v);
+
+  syn boolean Stmt.checkReturnDU(Variable v) = true;
+  eq Block.checkReturnDU(Variable v) {
+    for(int i = 0; i < getNumStmt(); i++)
+      if(!getStmt(i).checkReturnDU(v))
+        return false;
+    return true;
+  }
+  eq LabelStmt.checkReturnDU(Variable v) = getStmt().checkReturnDU(v);
+  eq SwitchStmt.checkReturnDU(Variable v) {
+    for(int i = 0; i < getNumCase(); i++) {
+      Case c = getCase(i);
+      for(int j = 0; j < c.getNumStmt(); j++) {
+        if(!c.getStmt(j).checkReturnDU(v))
+          return false;
+      }
+    }
+    return true;
+  }
+  eq IfStmt.checkReturnDU(Variable v) = getThen().checkReturnDU(v) && (hasElse() ? getThen().checkReturnDU(v) : true);
+  eq WhileStmt.checkReturnDU(Variable v) = getStmt().checkReturnDU(v);
+  eq DoStmt.checkReturnDU(Variable v) = getStmt().checkReturnDU(v);
+  eq ForStmt.checkReturnDU(Variable v) = getStmt().checkReturnDU(v);
+  eq SynchronizeStmt.checkReturnDU(Variable v) = getBlock().checkReturnDU(v);
+  eq TryStmt.checkReturnDU(Variable v) {
+    if(!getBlock().checkReturnDU(v))
+      return false;
+    for(int i = 0; i < getNumCatch(); i++)
+      if(!getCatch(i).getBlock().checkReturnDU(v))
+        return false;
+    if(hasFinally() && !getFinally().checkReturnDU(v))
+      return false;
+    return true;
+  }
+  eq ReturnStmt.checkReturnDU(Variable v) {
+    boolean result = hasResult() ? getResult().isDUafter(v) : isDUbefore(v);
+    if(result) return true;
+    
+    ASTNode n = this;
+    while(!(n instanceof ConstructorDecl)) {
+      if(n instanceof TryStmt) {
+        TryStmt s = (TryStmt)n;
+        if(s.hasFinally() && s.getFinally().isDUafter(v))
+          return true;
+      }
+      n = n.getParent();
+    }
+    return false;
+  }
+
+  eq FieldDeclaration.isDUafter(Variable v) {
+    if(v == this)
+      return !hasAbstractVarInit();
+    return hasAbstractVarInit() ? getAbstractVarInit().isDUafter(v) : isDUbefore(v);
+  }
+  
+  eq Stmt.isDUafter(Variable v) {
+    //System.out.println("### isDUafter reached in " + getClass().getName());
+    throw new NullPointerException();
+  }
+
+  eq Expr.isDUafterFalse(Variable v) {
+    if(isTrue())
+      return true;
+    return isDUbefore(v);
+  }
+  //= isFalse() && isDUbefore(v) || isTrue();
+  eq Expr.isDUafterTrue(Variable v) {
+    if(isFalse())
+      return true;
+    return isDUbefore(v);
+  }
+  //= isTrue() && isDUbefore(v) || isFalse();
+  eq Expr.isDUafter(Variable v) = (isDUafterFalse(v) && isDUafterTrue(v)) || isDUbefore(v);
+
+  eq ParExpr.isDUafterTrue(Variable v) = getExpr().isDUafterTrue(v);
+  eq ParExpr.isDUafterFalse(Variable v) = getExpr().isDUafterFalse(v);
+
+  eq AndLogicalExpr.isDUafterTrue(Variable v) = getRightOperand().isDUafterTrue(v);
+  eq AndLogicalExpr.isDUafterFalse(Variable v) = getLeftOperand().isDUafterFalse(v) && getRightOperand().isDUafterFalse(v);
+  eq AndLogicalExpr.getLeftOperand().isDUbefore(Variable v) = isDUbefore(v);
+  eq AndLogicalExpr.getRightOperand().isDUbefore(Variable v) = getLeftOperand().isDUafterTrue(v);
+  eq AndLogicalExpr.isDUafter(Variable v) = isDUafterTrue(v) && isDUafterFalse(v);
+
+  eq OrLogicalExpr.isDUafterTrue(Variable v) = getLeftOperand().isDUafterTrue(v) && getRightOperand().isDUafterTrue(v);
+  eq OrLogicalExpr.isDUafterFalse(Variable v) = getRightOperand().isDUafterFalse(v);
+  eq OrLogicalExpr.getLeftOperand().isDUbefore(Variable v) = isDUbefore(v);
+  eq OrLogicalExpr.getRightOperand().isDUbefore(Variable v) = getLeftOperand().isDUafterFalse(v);
+  eq OrLogicalExpr.isDUafter(Variable v) = isDUafterTrue(v) && isDUafterFalse(v);
+
+  eq LogNotExpr.isDUafterTrue(Variable v) = getOperand().isDUafterFalse(v);
+  eq LogNotExpr.isDUafterFalse(Variable v) = getOperand().isDUafterTrue(v);
+  eq LogNotExpr.getOperand().isDUbefore(Variable v) = isDUbefore(v);
+  eq LogNotExpr.isDUafter(Variable v) = isDUafterTrue(v) && isDUafterFalse(v);
+
+  eq QuestionColonExpr.isDUafterTrue(Variable v) = getTrueExpr().isDUafterTrue(v) && getFalseExpr().isDUafterTrue(v);
+  eq QuestionColonExpr.isDUafterFalse(Variable v) = getTrueExpr().isDUafterFalse(v) && getFalseExpr().isDUafterFalse(v);
+  eq QuestionColonExpr.getCondition().isDUbefore(Variable v) = isDUbefore(v);
+  eq QuestionColonExpr.getTrueExpr().isDUbefore(Variable v) = getCondition().isDUafterTrue(v);
+  eq QuestionColonExpr.getFalseExpr().isDUbefore(Variable v) = getCondition().isDUafterFalse(v);
+  eq QuestionColonExpr.isDUafter(Variable v) = booleanOperator() ? isDUafterTrue(v) && isDUafterFalse(v) : getTrueExpr().isDUafter(v) && getFalseExpr().isDUafter(v);
+
+  eq AssignExpr.isDUafter(Variable v) = getSource().isDUafter(v);
+  eq AssignExpr.getSource().isDUbefore(Variable v) = getDest().isDUafter(v);
+  eq AssignExpr.getDest().isDUbefore(Variable v) = isDUbefore(v);
+  eq AssignExpr.isDUafterTrue(Variable v) = isDUafter(v);
+  eq AssignExpr.isDUafterFalse(Variable v) = isDUafter(v);
+
+  eq VarAccess.isDUafter(Variable v) {
+    if(isDest() && decl() == v)
+      return false;
+    return isDUbefore(v);
+  }
+  eq AbstractDot.getRight().isDUbefore(Variable v) = getLeft().isDUafter(v);
+  eq AbstractDot.isDUafter(Variable v) = getRight().isDUafter(v);
+  eq ArrayAccess.isDUafter(Variable v) = getExpr().isDUafter(v);
+
+  eq ParExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
+  eq Unary.isDUafter(Variable v) = getOperand().isDUafter(v);
+  eq CastExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
+  
+  syn lazy boolean Binary.isDUafter(Variable v) = getRightOperand().isDUafter(v);
+  //eq Binary.isDUafter(Variable v) = getRightOperand().isDUafter(v);
+  eq Binary.getRightOperand().isDUbefore(Variable v) = getLeftOperand().isDUafter(v);
+
+  eq InstanceOfExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
+  
+  syn boolean ClassInstanceExpr.isDUafterInstance(Variable v) {
+    if(getNumArg() == 0)
+      return isDUbefore(v);
+    return getArg(getNumArg()-1).isDUafter(v);
+  }
+  eq ClassInstanceExpr.isDUafter(Variable v) = isDUafterInstance(v);
+  eq ClassInstanceExpr.getArg(int i).isDUbefore(Variable v) {
+    if(i == 0)
+      return isDUbefore(v);
+    return getArg(i-1).isDUafter(v);
+  }
+  
+  eq EmptyStmt.isDUafter(Variable v) = isDUbefore(v);
+  eq AssertStmt.isDUafter(Variable v) = getfirst().isDUafter(v);
+
+  eq MethodDecl.getBlock().isDUbefore(Variable v) = v.isFinal() && (v.isClassVariable() || v.isInstanceVariable()) ? false : true;
+
+  eq Block.isDUafter(Variable v) = getNumStmt() == 0 ? isDUbefore(v) : getStmt(getNumStmt()-1).isDUafter(v);
+  eq Block.getStmt(int index).isDUbefore(Variable v) = index == 0 ? isDUbefore(v) : getStmt(index - 1).isDUafter(v);
+  
+  eq LocalClassDeclStmt.isDUafter(Variable v) = isDUbefore(v);
+
+  eq VariableDeclaration.isDUafter(Variable v) {
+    if(v == this)
+      return !hasAbstractVarInit();
+    return hasAbstractVarInit() ? getAbstractVarInit().isDUafter(v) : isDUbefore(v);
+  }
+  eq VariableDeclaration.getAbstractVarInit().isDUbefore(Variable v) = isDUbefore(v);
+
+  inh boolean AbstractVarInit.isDUbefore(Variable v);
+  syn boolean AbstractVarInit.isDUafter(Variable v);
+  eq VarInit.isDUafter(Variable v) = getExpr().isDUafter(v);
+  eq ArrayInit.isDUafter(Variable v) = getNumAbstractVarInit() == 0 ? isDUbefore(v) : getAbstractVarInit(getNumAbstractVarInit()-1).isDUafter(v);
+  eq ArrayInit.getAbstractVarInit().isDUbefore(Variable v) = childIndex == 0 ? isDUbefore(v) : getAbstractVarInit(childIndex-1).isDUafter(v);
+
+  eq LabelStmt.getStmt().isDUbefore(Variable v) = isDUbefore(v);
+  eq LabelStmt.isDUafter(Variable v) {
+    if(!getStmt().isDUafter(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    return true;
+  }
+  
+  syn boolean TryStmt.isDUafterFinally(Variable v) = getBlock().isDUafter(v);
+  syn boolean SynchronizeStmt.isDUafterFinally(Variable v) = true;
+  
+  syn boolean BreakStmt.isDUtest(Variable v) {
+    if(!isDUbefore(v))
+      return false;
+    
+    Iterator i2 = breakReachedFinally().iterator();
+    if(!i2.hasNext())
+      return true;
+    
+    while(i2.hasNext()) {
+      FinallyHost f = (FinallyHost)i2.next();
+      if(!f.isDUafterFinally(v))
+        return false;
+    }
+    return true;
+  }
+  
+  syn boolean ContinueStmt.isDUtest(Variable v) {
+    if(!isDUbefore(v))
+      return false;
+
+    Iterator i2 = continueReachedFinally().iterator();
+    if(!i2.hasNext())
+      return true;
+    
+    while(i2.hasNext()) {
+      FinallyHost f = (FinallyHost)i2.next();
+      if(!f.isDUafterFinally(v))
+        return false;
+    }
+    return true;
+  }
+
+
+  syn boolean BreakStmt.isDAtest(Variable v) {
+    if(isDAbefore(v))
+      return true;
+    
+    Iterator i2 = breakReachedFinally().iterator();
+    if(!i2.hasNext())
+      return false;
+    
+    while(i2.hasNext()) {
+      FinallyHost f = (FinallyHost)i2.next();
+      if(!f.isDUafterFinally(v))
+        return false;
+    }
+    return true;
+  }
+  
+  syn boolean ContinueStmt.isDAtest(Variable v) {
+    if(isDAbefore(v))
+      return true;
+
+    Iterator i2 = continueReachedFinally().iterator();
+    if(!i2.hasNext())
+      return false;
+    
+    while(i2.hasNext()) {
+      FinallyHost f = (FinallyHost)i2.next();
+      if(!f.isDUafterFinally(v))
+        return false;
+    }
+    return true;
+  }
+
+  eq ExprStmt.isDUafter(Variable v) = getExpr().isDUafter(v);
+  eq ExprStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
+
+  eq IfStmt.isDUafter(Variable v) = hasElse() ? getThen().isDUafter(v) && getElse().isDUafter(v) : getThen().isDUafter(v) && getCondition().isDUafterFalse(v);
+  eq IfStmt.getCondition().isDUbefore(Variable v) = isDUbefore(v);
+  eq IfStmt.getThen().isDUbefore(Variable v) = getCondition().isDUafterTrue(v);
+  eq IfStmt.getElse().isDUbefore(Variable v) = getCondition().isDUafterFalse(v);
+
+  // 16.2.9 1st bullet
+  eq SwitchStmt.isDUafter(Variable v) {
+    if(!(!noDefaultLabel() || getExpr().isDUafter(v)))
+      return false;
+    if(!(!switchLabelEndsBlock() || getExpr().isDUafter(v)))
+      return false;
+    if(!unassignedAfterLastStmt(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      //if(!stmt.isDUbefore(v))
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    return true;
+  }
+
+  syn boolean SwitchStmt.unassignedAfterLastStmt(Variable v) {
+    boolean result = true;
+    int i = getNumCase() - 1;
+    while(i >= 0 && getCase(i).getNumStmt() == 0)
+      i--;
+    if(i >= 0 && getCase(i).getNumStmt() > 0)
+      return getCase(i).getStmt(getCase(i).getNumStmt()-1).isDUafter(v);
+    return true;
+  }
+  
+  syn boolean SwitchStmt.switchLabelEndsBlock() {
+    int i = getNumCase() - 1;
+    if(i >= 0 && (getCase(i) instanceof ConstCase) && getCase(i).getNumStmt() == 0)
+      return true;
+    return false;
+  }
+  
+  // 16.2.8 2nd bullet
+  eq SwitchStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
+  eq SwitchStmt.getCase(int i).isDUbefore(Variable v) {
+    if(i == 0)
+      return getExpr().isDUafter(v);
+    Case c = getCase(i-1);
+    if(c.getNumStmt() == 0)
+      return c.isDUbefore(v);
+    return c.getStmt(c.getNumStmt()-1).isDUafter(v);
+  }
+
+  inh boolean Case.isDUbefore(Variable v);
+
+  eq Case.getStmt(int i).isDUbefore(Variable v) {
+    if(i ==  0)
+      return isDUbefore(v);
+    return getStmt(i-1).isDUafter(v);
+  }
+
+  // 16.2.10 1st bullet
+  eq WhileStmt.isDUafter(Variable v) {
+    if(!getCondition().isDUafterFalse(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      //if(!stmt.isDUbefore(v))
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    return true;
+  }
+
+  // 16.2.10 3rd bullet
+  eq WhileStmt.getCondition().isDUbefore(Variable v) = isDUbeforeCondition(v);
+
+  // 16.2.10 3rd bullet
+  private boolean WhileStmt.conditionVisited;
+  private boolean WhileStmt.isDUbeforeCondition(Variable v) {
+    if(conditionVisited)
+      return true;
+    conditionVisited = true;
+    boolean result = true;
+    // 1st
+    if(!isDUbefore(v))
+      result = false;
+    // 
+    else if(!getStmt().isDUafter(v))
+      result = false;
+    else {
+      for(Iterator iter = continueTarget(); iter.hasNext(); ) {
+        ContinueStmt stmt = (ContinueStmt)iter.next();
+        //if(!stmt.isDUbefore(v))
+        if(!stmt.isDUtest(v))
+          result = false;
+      }
+    }
+    conditionVisited = false;
+    return result;
+  }
+  
+  // 16.2.10 4th bullet
+  eq WhileStmt.getStmt().isDUbefore(Variable v) = getCondition().isDUafterTrue(v);
+
+  eq DoStmt.isDUafter(Variable v) {
+    if(!getCondition().isDUafterFalse(v))
+      return false;
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      //if(!stmt.isDUbefore(v))
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    return true;
+  }
+  eq DoStmt.getStmt().isDUbefore(Variable v) = isDUbefore(v) && getCondition().isDUafterTrue(v);
+  private boolean DoStmt.conditionVisited;
+  eq DoStmt.getCondition().isDUbefore(Variable v) {
+    if(conditionVisited)
+      return true;
+    conditionVisited = true;
+    boolean result = true;
+    if(!getStmt().isDUafter(v))
+      result = false;
+    else {
+      for(Iterator iter = continueTarget(); iter.hasNext(); ) {
+        ContinueStmt stmt = (ContinueStmt)iter.next();
+        //if(!stmt.isDUbefore(v))
+        if(!stmt.isDUtest(v))
+          result = false;
+      }
+    }
+    conditionVisited = false;
+    return result;
+  }
+    
+  // 16.2.11 1st bullet
+  eq ForStmt.isDUafter(Variable v) {
+    if(!(!hasCondition() || getCondition().isDUafterFalse(v))) {
+      return false;
+    }
+    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+      BreakStmt stmt = (BreakStmt)iter.next();
+      //if(!stmt.isDUbefore(v))
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    //if(!isDUafterUpdate(v))
+    //  return false;
+    return true;
+  }
+  // 16.2.11 2nd  bullet
+  eq ForStmt.getInitStmt().isDUbefore(Variable v) = childIndex == 0 ? isDUbefore(v) : getInitStmt(childIndex-1).isDUafter(v);
+  // 16.2.11 3rd bullet
+  eq ForStmt.getCondition().isDUbefore(Variable v) = isDUbeforeCondition(v);
+  // 16.2.11 3rd bullet
+  syn boolean ForStmt.isDUafterInit(Variable v) = getNumInitStmt() == 0 ? isDUbefore(v) : getInitStmt(getNumInitStmt()-1).isDUafter(v);
+  // 16.2.11 4th bullet
+  private boolean ForStmt.conditionVisited;
+  private boolean ForStmt.isDUbeforeCondition(Variable v) {
+    if(conditionVisited)
+      return true;
+    conditionVisited = true;
+    boolean result = true;
+    if(!isDUafterInit(v))
+      result = false;
+    else if(!isDUafterUpdate(v))
+      result = false;
+    conditionVisited = false;
+    return result;
+  }
+  // 16.2.11 5th bullet
+  eq ForStmt.getStmt().isDUbefore(Variable v) {
+    if(hasCondition())
+      return getCondition().isDUafterTrue(v);
+    else
+      return isDUafterInit(v);
+  }
+
+  syn boolean ForStmt.isDUafterUpdate(Variable v) {
+    if(getNumUpdateStmt() > 0)
+      return getUpdateStmt(getNumUpdateStmt()-1).isDUafter(v);
+    if(!getStmt().isDUafter(v))
+      return false;
+    for(Iterator iter = continueTarget(); iter.hasNext(); ) {
+      ContinueStmt stmt = (ContinueStmt)iter.next();
+      //if(!stmt.isDUbefore(v))
+      if(!stmt.isDUtest(v))
+        return false;
+    }
+    return true;
+  }
+
+  // 16.2.11 6th bullet
+  eq ForStmt.getUpdateStmt(int i).isDUbefore(Variable v) {
+    if(i == 0) {
+      if(!getStmt().isDUafter(v))
+        return false;
+      for(Iterator iter = continueTarget(); iter.hasNext(); ) {
+        ContinueStmt stmt = (ContinueStmt)iter.next();
+        //if(!stmt.isDUbefore(v))
+        if(!stmt.isDUtest(v))
+          return false;
+      }
+      return true;
+    }
+    else
+      return getUpdateStmt(i-1).isDUafter(v);
+  }
+
+  rewrite ForStmt {
+    when (!hasCondition())
+    to ForStmt {
+      setCondition(new BooleanLiteral("true"));
+      return this;
+    }
+  }
+
+  eq BreakStmt.isDUafter(Variable v) = true;
+  eq ContinueStmt.isDUafter(Variable v) = true;
+  eq ReturnStmt.isDUafter(Variable v) = true;
+  eq ThrowStmt.isDUafter(Variable v) = true;
+  
+  eq ReturnStmt.getResult().isDUbefore(Variable v) = isDUbefore(v);
+  eq ThrowStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
+
+  eq SynchronizeStmt.isDUafter(Variable v) = getBlock().isDUafter(v);
+  eq SynchronizeStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
+  eq SynchronizeStmt.getBlock().isDUbefore(Variable v) = getExpr().isDUafter(v);
+
+  // 16.2.15 1st bullet
+  eq TryStmt.getBlock().isDUbefore(Variable v) = isDUbefore(v);
+
+  // 16.2.15 3rd bullet
+  eq TryStmt.getCatch().isDUbefore(Variable v) {
+    if(!getBlock().isDUafter(v))
+      return false;
+    if(!getBlock().checkCatchBlockDU(v, this))
+      return false;
+    if(!getBlock().isDUeverywhere(v))
+      return false;
+    else {
+      //System.err.println(v.name() + " isDUeverywhere");
+    }
+    return true;
+  }
+
+  syn boolean ASTNode.unassignedEverywhere(Variable v, TryStmt stmt) {
+    for(int i = 0; i < getNumChild(); i++) {
+      if(!getChild(i).unassignedEverywhere(v, stmt))
+        return false;
+    }
+    return true;
+  }
+
+  eq VarAccess.unassignedEverywhere(Variable v, TryStmt stmt) {
+    if(isDest() && decl() == v && enclosingStmt().reachable()) {
+      return false;
+    }
+    return super.unassignedEverywhere(v, stmt);
+  }
+
+  syn boolean ASTNode.checkCatchBlockDU(Variable v, TryStmt stmt) {
+    for(int i = 0; i < getNumChild(); i++) {
+      if(!getChild(i).checkCatchBlockDU(v, stmt))
+        return false;
+    }
+    return true;
+  }
+  eq ReturnStmt.checkCatchBlockDU(Variable v, TryStmt stmt) = isDUbefore(v);
+  eq ThrowStmt.checkCatchBlockDU(Variable v, TryStmt stmt) = getExpr().isDUafter(v);
+  eq BreakStmt.checkCatchBlockDU(Variable v, TryStmt stmt) = targetStmt() == stmt ? isDUbefore(v) : true;
+  eq ContinueStmt.checkCatchBlockDU(Variable v, TryStmt stmt) = targetStmt() == stmt ? isDUbefore(v) : true;
+  
+  eq MethodAccess.checkCatchBlockDU(Variable v, TryStmt stmt) {
+    if(decl().getNumException() > 0) {
+      if(!isDUbefore(v))
+        return false;
+    }
+    return super.checkCatchBlockDU(v, stmt);
+  }
+  eq DivExpr.checkCatchBlockDU(Variable v, TryStmt stmt) {
+    if(getRightOperand().isConstant() && getRightOperand().constant().intValue() == 0) {
+      if(!isDUbefore(v))
+        return false;
+    }
+    return super.checkCatchBlockDU(v, stmt);
+  }
+  eq AssignDivExpr.checkCatchBlockDU(Variable v, TryStmt stmt) {
+    if(getSource().isConstant() && getSource().constant().intValue() == 0) {
+      if(!isDUbefore(v))
+        return false;
+    }
+    return super.checkCatchBlockDU(v, stmt);
+  }
+  
+  // 16.2.14 6th bullet
+  eq TryStmt.getFinally().isDUbefore(Variable v) {
+    if(!getBlock().isDUeverywhere(v))
+      return false;
+    for(int i = 0; i < getNumCatch(); i++)
+      if(!getCatch(i).getBlock().unassignedEverywhere(v, this))
+        return false;
+    return true;
+  }
+  
+  eq TryStmt.isDUafter(Variable v) {
+    // 16.2.14 4th bulldet
+    if(!hasFinally()) {
+      if(!getBlock().isDUafter(v))
+        return false;
+      for(int i = 0; i < getNumCatch(); i++)
+        if(!getCatch(i).getBlock().isDUafter(v))
+          return false;
+      return true;
+    }
+    else {
+      if(getFinally().isDUafter(v))
+        return true;
+      else {
+        //System.err.println(v.name() + " is not DUafter finally");
+      }
+      return false;
+    }
+  }
+
+}
+
+

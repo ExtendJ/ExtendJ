@@ -1,0 +1,1041 @@
+aspect PrettyPrint {
+
+  public long Program.stringComputation;
+  public long Program.printTime;
+  public void Program.prettyPrint(int num) {
+    StringBuffer s = new StringBuffer();
+    long start = System.currentTimeMillis();
+    for(int i = 0; i < num && i < getNumCompilationUnit(); i++) {
+      getCompilationUnit(i).toString(s);
+    }
+    long stringComputation = System.currentTimeMillis() - start;
+    System.out.println(s.toString());
+    long printTime = System.currentTimeMillis() - start - stringComputation;
+    this.stringComputation = stringComputation;
+    this.printTime = printTime;
+  }
+  
+
+  public void ASTNode.printTypes() {
+    System.out.print(indent());
+    System.out.println(getClass());
+    indent++;
+    for(int i = 0; i < getNumChild(); i++) {
+      getChild(i).printTypes();
+    }
+    indent--;
+  }
+  public void Program.printTypes() {
+    getCompilationUnit(0).printTypes();
+  }
+
+  public void TypeAccess.printTypes() {
+    System.out.print(indent());
+    System.out.println(getClass() + " " + type().fullName());
+    indent++;
+    for(int i = 0; i < getNumChild(); i++) {
+      getChild(i).printTypes();
+    }
+    indent--;
+  }
+  
+  
+  
+  // Helper for indentation
+  
+  protected static int ASTNode.indent = 0;
+  
+  public static String ASTNode.indent() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < indent; i++) {
+      s.append("  ");
+    }
+    return s.toString();
+  }
+
+  // Default output
+  
+  public String ASTNode.toString() {
+    StringBuffer s = new StringBuffer();
+    toString(s);
+    return s.toString().trim();
+  }
+  
+  public void ASTNode.toString(StringBuffer s) {
+  }
+
+  public void Program.toString(StringBuffer s) {
+    int num = getNumCompilationUnit();
+    for(int i = 0; i < num; i++) {
+      getCompilationUnit(i).toString(s);
+    }
+  }
+        
+  public void CompilationUnit.toString(StringBuffer s) {
+    try {
+    if(getNumPackageDecl() > 0) {
+      s.append("package ");
+      getPackageDecl(0).toString(s);
+      for(int i = 1; i < getNumPackageDecl(); i++) {
+        s.append(".");
+        getPackageDecl(i).toString(s);
+      }
+      s.append(";\n");
+    }
+    for(int i = 0; i < getNumImportDecl(); i++) {
+      getImportDecl(i).toString(s);
+      s.append("\n");
+    }
+    for(int i = 0; i < getNumTypeDecl(); i++) {
+      getTypeDecl(i).toString(s);
+      s.append("\n");
+    }
+    } catch (NullPointerException e) {
+      System.out.print("Error in compilation unit hosting " + getTypeDecl(0).fullName());
+      throw e;
+    }
+  }
+
+  public void SingleTypeImportDecl.toString(StringBuffer s) {
+    s.append("import ");
+    getAccess().toString(s);
+    s.append(";\n");
+  }
+
+  public void TypeImportOnDemandDecl.toString(StringBuffer s) {
+    s.append("import ");
+    getAccess().toString(s);
+    s.append(".*;\n");
+  }
+
+
+    
+  public void ClassDecl.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    s.append("class ");
+    getIdDecl().toString(s);
+    if(hasSuperClass()) {
+      s.append(" extends ");
+      s.append(getSuperClass().name());
+      //s.append(getSuperClass().fullName());
+    }
+    if(getNumImplements() > 0) {
+      s.append(" implements ");
+      getImplements(0).toString(s);
+      for(int i = 1; i < getNumImplements(); i++) {
+        s.append(", ");
+        getImplements(i).toString(s);
+      }
+    }
+    s.append(" {\n");
+    indent++;
+    for(int i=0; i < getNumBodyDecl(); i++) {
+      getBodyDecl(i).toString(s);
+    }
+
+/*
+    s.append("// All types in " + fullName() + "\n");
+    for(Iterator iter = types().iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      s.append(t.fullName() + "\n");
+    }
+    s.append("// All fields in " + fullName() + "\n");
+    for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      s.append(v.name() + " declared in " + v.hostType().fullName() + "\n");
+    }
+    s.append("// All methods in " + fullName() + "\n");
+    for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(!m.hostType().isObject())
+        s.append(m.signature() + " declared in " + m.hostType().fullName() + "\n");
+    }
+    */
+    indent--;
+    s.append(indent() + "}\n");
+  }
+  
+  public void InterfaceDecl.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    s.append(" interface ");
+    getIdDecl().toString(s);
+    if(getNumSuperInterfaceId() > 0) {
+      s.append(" extends ");
+      getSuperInterfaceId(0).toString(s);
+      for(int i = 1; i < getNumSuperInterfaceId(); i++) {
+        s.append(", ");
+        getSuperInterfaceId(i).toString(s);
+      }
+    }
+    s.append(" {\n");
+    indent++;
+    for(int i=0; i < getNumBodyDecl(); i++) {
+      getBodyDecl(i).toString(s);
+    }
+    
+    /*
+    s.append("// All types in " + fullName()  +"\n");
+    for(Iterator iter = types().iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      s.append(t.fullName() + "\n");
+    }
+    s.append("// All fields in " + fullName() + "\n");
+    for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      s.append(v.name() + " declared in " + v.hostType().fullName() + "\n");
+    }
+    s.append("// All methods in " + fullName() + "\n");
+    for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(!m.hostType().isObject())
+        s.append(m.signature() + " declared in " + m.hostType().fullName() + "\n");
+    }
+    */
+    indent--;
+    s.append(indent() + "}\n");
+  }
+
+  // Type body decl
+
+  public void InstanceInitializer.toString(StringBuffer s) {
+    s.append(indent());
+    getBlock().toString(s);
+  }
+
+  public void StaticInitializer.toString(StringBuffer s) {
+    s.append(indent());
+    s.append("static ");
+    getBlock().toString(s);
+  }
+  
+  public void ConstructorDecl.toString(StringBuffer s) {
+    s.append(indent());
+    getModifiers().toString(s);
+    getIdDecl().toString(s);
+    s.append("(");
+    if(getNumParameter() > 0) {
+      getParameter(0).toString(s);
+      for(int i = 1; i < getNumParameter(); i++) {
+        s.append(", ");
+        getParameter(i).toString(s);
+      }
+    }
+    s.append(")");
+    if(getNumException() > 0) {
+      s.append(" throws ");
+      getException(0).toString(s);
+      for(int i = 1; i < getNumException(); i++) {
+        s.append(", ");
+        getException(i).toString(s);
+      }
+    }
+    
+    s.append("{\n");
+    indent++;
+    if(hasConstructorInvocation()) {
+      s.append(indent());
+      getConstructorInvocation().toString(s);
+    }
+    for(int i = 0; i < getBlock().getNumStmt(); i++) {
+      s.append(indent());
+      getBlock().getStmt(i).toString(s);
+    }
+    indent--;
+    s.append(indent());
+    s.append("}\n");
+  }
+
+  // Type members 
+
+  public void FieldDecl.toString(StringBuffer s) {
+    s.append(indent());
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    getVariableDecl(0).toString(s);
+    for(int i = 1; i < getNumVariableDecl(); i++) {
+      s.append(", ");
+      getVariableDecl(i).toString(s);
+    }
+    s.append(";/* error */\n");
+  }
+  
+  public void FieldDeclaration.toString(StringBuffer s) {
+    s.append(indent());
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    
+    getIdDecl().toString(s);
+    
+    if(hasAbstractVarInit()) {
+      s.append(" = ");
+      getAbstractVarInit().toString(s);
+    }
+    s.append(";\n");
+  }
+
+  public void MethodDecl.toString(StringBuffer s) {
+    s.append(indent());
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    getIdDecl().toString(s);
+    s.append("(");
+    if(getNumParameter() > 0) {
+      getParameter(0).toString(s);
+      for(int i = 1; i < getNumParameter(); i++) {
+        s.append(", ");
+        getParameter(i).toString(s);
+      }
+    }
+    s.append(")");
+    for(int i = 0; i < getNumEmptyBracket(); i++) {
+      s.append("[]");
+    }
+    if(getNumException() > 0) {
+      s.append(" throws ");
+      getException(0).toString(s);
+      for(int i = 1; i < getNumException(); i++) {
+        s.append(", ");
+        getException(i).toString(s);
+      }
+    }
+    if(hasBlock()) {
+      s.append(" ");
+      getBlock().toString(s);
+    }
+    else {
+      s.append(";\n");
+    }
+  }
+
+  public void MemberClass.toString(StringBuffer s) {
+    s.append(indent());
+    getClassDecl().toString(s);
+  }
+
+  public void MemberInterface.toString(StringBuffer s) {
+    s.append(indent());
+    getInterfaceDecl().toString(s);
+  }
+
+  //
+  
+  public void VariableDecl.toString(StringBuffer s) {
+    getIdDecl().toString(s);
+    
+    for(int i = 0; i < getNumEmptyBracket(); i++) {
+      s.append("[]");
+    }
+    if(hasAbstractVarInit()) {
+      s.append(" = ");
+      getAbstractVarInit().toString(s);
+    }
+  }
+
+  public void VarInit.toString(StringBuffer s) {
+    getExpr().toString(s);
+  }
+
+  public void ArrayInit.toString(StringBuffer s) {
+    s.append("{ ");
+    if(getNumAbstractVarInit() > 0) {
+      getAbstractVarInit(0).toString(s);
+      for(int i = 1; i < getNumAbstractVarInit(); i++) {
+        s.append(", ");
+        getAbstractVarInit(i).toString(s);
+      }
+    }
+    s.append(" } ");
+  }
+
+  public void Parameter.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    getIdDecl().toString(s);
+    for(int i = 0; i < getNumEmptyBracket(); i++) {
+      s.append("[]");
+    }
+  }
+
+  public void IdDecl.toString(StringBuffer s) {
+    s.append(getID());
+  }
+
+  public void IdUse.toString(StringBuffer s) {
+    s.append(getID());
+  }
+
+  // Assign Expression
+
+  public void AssignExpr.toString(StringBuffer s) {
+    getDest().toString(s);
+    printOp(s);
+    getSource().toString(s);
+  }
+
+  public void AssignExpr.printOp(StringBuffer s) {
+    s.append(" = ");
+  }
+
+  public void AssignSimpleExpr.printOp(StringBuffer s) {
+    s.append(" = ");
+  }
+
+  public void AssignMulExpr.printOp(StringBuffer s) {
+    s.append(" *= ");
+  }
+
+  public void AssignDivExpr.printOp(StringBuffer s) {
+    s.append(" /= ");
+  }
+
+  public void AssignModExpr.printOp(StringBuffer s) {
+    s.append(" %= ");
+  }
+
+  public void AssignPlusExpr.printOp(StringBuffer s) {
+    s.append(" += ");
+  }
+
+  public void AssignMinusExpr.printOp(StringBuffer s) {
+    s.append(" -= ");
+  }
+
+  public void AssignLShiftExpr.printOp(StringBuffer s) {
+    s.append(" <<= ");
+  }
+
+  public void AssignRShiftExpr.printOp(StringBuffer s) {
+    s.append(" >>= ");
+  }
+
+  public void AssignURShiftExpr.printOp(StringBuffer s) {
+    s.append(" >>>= ");
+  }
+
+  public void AssignAndExpr.printOp(StringBuffer s) {
+    s.append(" &= ");
+  }
+
+  public void AssignXorExpr.printOp(StringBuffer s) {
+    s.append(" ^= ");
+  }
+
+  public void AssignOrExpr.printOp(StringBuffer s) {
+    s.append(" |= ");
+  }
+
+  // Literals
+    
+  public void Literal.toString(StringBuffer s) {
+    s.append(getLITERAL());
+  }
+  
+  public void StringLiteral.toString(StringBuffer s) {
+    s.append("\"" + getLITERAL() + "\"");
+  }
+  
+  public void CharLiteral.toString(StringBuffer s) {
+    s.append("'" + getLITERAL() + "'");
+  }
+
+  public void StringLiteralExpr.toString(StringBuffer s) {
+    getStringLiteral().toString(s);
+  }
+  
+  public void ParExpr.toString(StringBuffer s) {
+    s.append("(");
+    getExpr().toString(s);
+    s.append(")");
+  }
+
+
+  public void PrimTypeClassExpr.toString(StringBuffer s) {
+    s.append(getID());
+    s.append(".class");
+  }
+
+  public void ClassInstanceExpr.toString(StringBuffer s) {
+    findExceptionHandler();
+    s.append("new ");
+    getAccess().toString(s);
+    s.append("(");
+    if(getNumArg() > 0) {
+      getArg(0).toString(s);
+      for(int i = 1; i < getNumArg(); i++) {
+        s.append(", ");
+        getArg(i).toString(s);
+      }
+    }
+    s.append(")");
+
+    if(hasTypeDecl()) {
+      TypeDecl decl = getTypeDecl();
+      decl.toString(s);
+      /*
+      s.append(" {\n");
+      indent++;
+      for(int i=0; i < decl.getNumBodyDecl(); i++) {
+        decl.getBodyDecl(i).toString(s);
+      }
+      indent--;
+      s.append(indent());
+      s.append("}\n");
+      */
+    }
+  }
+
+  public void ArrayInstanceExpr.toString(StringBuffer s) {
+    s.append("new ");
+    getTypeAccess().toString(s);
+
+    for(int i = 0; i < getNumDims(); i++) {
+      getDims(i).toString(s);
+    }
+    
+    if(hasArrayInit()) {
+      s.append(" = ");
+      getArrayInit().toString(s);
+    }
+  }
+
+  public void Dims.toString(StringBuffer s) {
+    s.append("[");
+    if(hasExpr())
+      getExpr().toString(s);
+    s.append("]");
+  }
+
+  // Pre and post operations for unary expression
+  
+  public void Unary.toString(StringBuffer s) {
+    printPreOp(s);
+    getOperand().toString(s);
+    printPostOp(s);
+  }
+
+  public void Unary.printPreOp(StringBuffer s) {
+  }
+
+  public void Unary.printPostOp(StringBuffer s) {
+  }
+
+  public void PostIncExpr.printPostOp(StringBuffer s) {
+    s.append("++");
+  }
+
+  public void PostDecExpr.printPostOp(StringBuffer s) {
+    s.append("--");
+  }
+
+  public void PreIncExpr.printPreOp(StringBuffer s) {
+    s.append("++");
+  }
+
+  public void PreDecExpr.printPreOp(StringBuffer s) {
+    s.append("--");
+  }
+
+  public void MinusExpr.printPreOp(StringBuffer s) {
+    s.append("-");
+  }
+
+  public void PlusExpr.printPreOp(StringBuffer s) {
+    s.append("+");
+  }
+
+  public void BitNotExpr.printPreOp(StringBuffer s) {
+    s.append("~");
+  }
+
+  public void LogNotExpr.printPreOp(StringBuffer s) {
+    s.append("!");
+  }
+
+  public void CastExpr.toString(StringBuffer s) {
+    s.append("(");
+    getTypeAccess().toString(s);
+    s.append(")");
+    getExpr().toString(s);
+  }
+
+  // Binary Expr
+
+  public void Binary.toString(StringBuffer s) {
+    getLeftOperand().toString(s);
+    printOp(s);
+    getRightOperand().toString(s);
+  }
+
+  public abstract void Binary.printOp(StringBuffer s);
+
+  public void MulExpr.printOp(StringBuffer s) {
+    s.append(" * ");
+  }
+
+  public void DivExpr.printOp(StringBuffer s) {
+    s.append(" / ");
+  }
+
+  public void ModExpr.printOp(StringBuffer s) {
+    s.append(" % ");
+  }
+
+  public void AddExpr.printOp(StringBuffer s) {
+    s.append(" + ");
+  }
+
+  public void SubExpr.printOp(StringBuffer s) {
+    s.append(" - ");
+  }
+
+  public void LShiftExpr.printOp(StringBuffer s) {
+    s.append(" << ");
+  }
+
+  public void RShiftExpr.printOp(StringBuffer s) {
+    s.append(" >> ");
+  }
+
+  public void URShiftExpr.printOp(StringBuffer s) {
+    s.append(" >>> ");
+  }
+
+  public void AndBitwiseExpr.printOp(StringBuffer s) {
+    s.append(" & ");
+  }
+
+  public void OrBitwiseExpr.printOp(StringBuffer s) {
+    s.append(" | ");
+  }
+
+  public void XorBitwiseExpr.printOp(StringBuffer s) {
+    s.append(" ^ ");
+  }
+
+  public void LTExpr.printOp(StringBuffer s) {
+    s.append(" < ");
+  }
+
+  public void GTExpr.printOp(StringBuffer s) {
+    s.append(" > ");
+  }
+
+  public void LEExpr.printOp(StringBuffer s) {
+    s.append(" <= ");
+  }
+
+  public void GEExpr.printOp(StringBuffer s) {
+    s.append(" >= ");
+  }
+
+  public void InstanceOfExpr.printOp(StringBuffer s) {
+    s.append(" instanceof ");
+  }
+  
+  public void InstanceOfExpr.toString(StringBuffer s) {
+    getExpr().toString(s);
+    printOp(s);
+    getTypeAccess().toString(s);
+  }
+
+  public void EQExpr.printOp(StringBuffer s) {
+    s.append(" == ");
+  }
+
+  public void NEExpr.printOp(StringBuffer s) {
+    s.append(" != ");
+  }
+
+  public void AndLogicalExpr.printOp(StringBuffer s) {
+    s.append(" && ");
+  }
+
+  public void OrLogicalExpr.printOp(StringBuffer s) {
+    s.append(" || ");
+  }
+
+  public void QuestionColonExpr.toString(StringBuffer s) {
+    getCondition().toString(s);
+    s.append(" ? ");
+    getTrueExpr().toString(s);
+    s.append(" : ");
+    getFalseExpr().toString(s);
+  }
+
+  public void Modifiers.toString(StringBuffer s) {
+    for(int i = 0; i < getNumModifier(); i++) {
+      getModifier(i).toString(s);
+      s.append(" ");
+    }
+  }
+     
+  public void Modifier.toString(StringBuffer s) {
+    s.append(getID());
+  }
+
+  public void AbstractDot.toString(StringBuffer s) {
+    getLeft().toString(s);
+    s.append(".");
+    getRight().toString(s);
+  }
+  public void ArrayDot.toString(StringBuffer s) {
+    getLeft().toString(s);
+    getRight().toString(s);
+  }
+  
+  public void Dot.toString(StringBuffer s) {
+    getLeft().toString(s);
+    s.append("#");
+    getRight().toString(s);
+  }
+  
+  public void TypeAccess.toString(StringBuffer s) {
+    for(int i = 0; i < getNumPackage(); i++)
+      s.append(getPackage(i).getID() + ".");
+    s.append(getIdUse().getID());
+  }
+
+  public void PackageAccess.toString(StringBuffer s) {
+    s.append(getPackage(0).getID());
+    for(int i = 1; i < getNumPackage(); i++)
+      s.append("." + getPackage(i).getID());
+  }
+  
+  public void ArrayTypeAccess.toString(StringBuffer s) {
+    super.toString(s);
+    for(int i = 0; i < getDimension(); i++)
+      s.append("[]");
+  }
+
+  public void ThisAccess.toString(StringBuffer s) {
+    s.append("this");
+  }
+  
+  public void SuperAccess.toString(StringBuffer s) {
+    s.append("super");
+  }
+
+  public void ArrayAccess.toString(StringBuffer s) {
+    s.append("[");
+    getExpr().toString(s);
+    s.append("]");
+  }
+
+  public void VarAccess.toString(StringBuffer s) {
+    s.append(name());
+    //s.append(getDecl().name());
+  }
+
+  public void MethodAccess.toString(StringBuffer s) {
+    findExceptionHandler();
+    s.append(name());
+    //s.append(getDecl().getIdDecl().getID());
+    s.append("(");
+    if(getNumArg() > 0) {
+      getArg(0).toString(s);
+      for(int i = 1; i < getNumArg(); i++) {
+        s.append(", ");
+        getArg(i).toString(s);
+      }
+    }
+    s.append(")");
+  }
+
+  public void ConstructorAccess.toString(StringBuffer s) {
+    findExceptionHandler();
+    s.append(name());
+    //s.append(getDecl().getIdDecl().getID());
+    s.append("(");
+    if(getNumArg() > 0) {
+      getArg(0).toString(s);
+      for(int i = 1; i < getNumArg(); i++) {
+        s.append(", ");
+        getArg(i).toString(s);
+      }
+    }
+    s.append(")");
+  }
+
+  public void ClassAccess.toString(StringBuffer s) {
+    s.append("class");
+  }
+
+
+  // Stmts
+
+  public void Block.toString(StringBuffer s) {
+    s.append("{\n");
+    indent++;
+    for(int i = 0; i < getNumStmt(); i++) {
+      s.append(indent());
+      getStmt(i).toString(s);
+    }
+    indent--;
+    s.append(indent());
+    s.append("}\n");
+  }
+
+  public void EmptyStmt.toString(StringBuffer s) {
+    s.append(";\n");
+  }
+
+  public void LabelStmt.toString(StringBuffer s) {
+    getLabel().toString(s);
+    s.append(":\n");
+    s.append(indent());
+    getStmt().toString(s);
+  }
+
+  public void ExprStmt.toString(StringBuffer s) {
+    getExpr().toString(s);
+    s.append(";\n");
+  }
+
+  public void SwitchStmt.toString(StringBuffer s) {
+    s.append("switch (");
+    getExpr().toString(s);
+    s.append(")");
+
+    s.append(" {\n");
+    indent++;
+    for(int i = 0; i < getNumCase(); i++) {
+      getCase(i).toString(s);
+    }
+    indent--;
+    s.append(indent());
+    s.append("}\n");
+  }
+
+  public void ConstCase.toString(StringBuffer s) {
+    s.append(indent());
+    s.append("case ");
+    getValue().toString(s);
+    s.append(":\n");
+    indent++;
+    for(int i = 0; i < getNumStmt(); i++) {
+      s.append(indent());
+      getStmt(i).toString(s);
+    }
+    indent--;
+  }
+
+  public void DefaultCase.toString(StringBuffer s) {
+    s.append(indent());
+    s.append("default:\n");
+    indent++;
+    for(int i = 0; i < getNumStmt(); i++) {
+      s.append(indent());
+      getStmt(i).toString(s);
+    }
+    indent--;
+  }
+
+  public void IfStmt.toString(StringBuffer s) {
+    s.append("if(");
+    getCondition().toString(s);
+    s.append(") ");
+    getThen().toString(s);
+    if(hasElse()) {
+      s.append(indent());
+      s.append("else ");
+      getElse().toString(s);
+    }
+  }
+
+  public void WhileStmt.toString(StringBuffer s) {
+    s.append("while(");
+    getCondition().toString(s);
+    s.append(") ");
+    getStmt().toString(s);
+  }
+
+  public void DoStmt.toString(StringBuffer s) {
+    s.append("do ");
+    getStmt().toString(s);
+    s.append("while(");
+    getCondition().toString(s);
+    s.append(");\n");
+  }
+
+  public void ForStmt.toString(StringBuffer s) {
+    s.append("for(");
+    
+    if(getNumInitStmt() > 0) {
+      if(getInitStmt(0) instanceof VariableDeclaration) {
+        VariableDeclaration var = (VariableDeclaration)getInitStmt(0);
+        var.getModifiers().toString(s);
+        var.getTypeAccess().toString(s);
+        s.append(" ");
+        s.append(var.getIdDecl().getID());
+        for(int i = 1; i < getNumInitStmt(); i++) {
+          s.append(", ");
+          s.append(((VariableDeclaration)getInitStmt(i)).getIdDecl().getID());
+        }
+      }
+      else {
+        if(!(getInitStmt(0) instanceof ExprStmt)) {
+          System.err.println("Found unexpected type: " + getInitStmt(0).getClass().getName());
+        }
+        ExprStmt stmt = (ExprStmt)getInitStmt(0);
+        stmt.getExpr().toString(s);
+        for(int i = 1; i < getNumInitStmt(); i++) {
+          s.append(", ");
+          stmt = (ExprStmt)getInitStmt(i);
+          stmt.getExpr().toString(s);
+        }
+      }
+    }
+    
+    s.append("; ");
+    if(hasCondition()) {
+      getCondition().toString(s);
+    }
+    s.append("; ");
+
+    if(getNumUpdateStmt() > 0) {
+      ExprStmt stmt = (ExprStmt)getUpdateStmt(0);
+      stmt.getExpr().toString(s);
+      for(int i = 1; i < getNumUpdateStmt(); i++) {
+        s.append(", ");
+        stmt = (ExprStmt)getUpdateStmt(i);
+        stmt.getExpr().toString(s);
+      }
+    }
+    
+    s.append(") ");
+    getStmt().toString(s);
+  }
+
+  public void BreakStmt.toString(StringBuffer s) {
+    targetStmt();
+    s.append("break ");
+    if(hasLabel())
+      getLabel().toString(s);
+    s.append(";\n");
+  }
+
+  public void ContinueStmt.toString(StringBuffer s) {
+    targetStmt();
+    s.append("continue ");
+    if(hasLabel())
+      getLabel().toString(s);
+    s.append(";\n");
+  }
+
+  public void ReturnStmt.toString(StringBuffer s) {
+    targetBodyDecl();
+    s.append("return ");
+    if(hasResult()) {
+      getResult().toString(s);
+    }
+    s.append(";\n");
+  }
+
+  public void ThrowStmt.toString(StringBuffer s) {
+    findExceptionHandler();
+    s.append("throw ");
+    getExpr().toString(s);
+    s.append(";\n");
+  }
+
+  public void SynchronizeStmt.toString(StringBuffer s) {
+    s.append("synchronized(");
+    getExpr().toString(s);
+    s.append(") ");
+    getBlock().toString(s);
+  }
+
+  public void TryStmt.toString(StringBuffer s) {
+    s.append("try ");
+    getBlock().toString(s);
+    for(int i = 0; i < getNumCatch(); i++) {
+      s.append(indent());
+      getCatch(i).toString(s);
+    }
+    if(hasFinally()) {
+      s.append(indent());
+      s.append("finally ");
+      getFinally().toString(s);
+    }
+  }
+
+  public void Catch.toString(StringBuffer s) {
+    s.append("catch (");
+    getParameter().toString(s);
+    s.append(") ");
+    getBlock().toString(s);
+  }
+
+  public void VarDeclStmt.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    getVariableDecl(0).toString(s);
+    for(int i = 1; i < getNumVariableDecl(); i++) {
+      s.append(", ");
+      getVariableDecl(i).toString(s);
+    }
+    s.append(";\n");
+  }
+
+  public void VariableDeclaration.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    
+    getIdDecl().toString(s);
+    
+    if(hasAbstractVarInit()) {
+      s.append(" = ");
+      getAbstractVarInit().toString(s);
+    }
+    s.append(";\n");
+  }
+  
+  
+  public void ParameterDeclaration.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    getTypeAccess().toString(s);
+    s.append(" ");
+    getIdDecl().toString(s);
+  }
+
+  public void LocalClassDeclStmt.toString(StringBuffer s) {
+    getClassDecl().toString(s);
+  }
+
+
+  public void ASTNode.dumpTree(int j) {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < j; i++) {
+      s.append("  ");
+    }
+    System.out.println(s.toString() + getClass().getName());
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).dumpTree(j + 1);
+  }
+  public void IdDecl.dumpTree(int j) {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < j; i++) {
+      s.append("  ");
+    }
+    System.out.println(s.toString() + getClass().getName() + ": " + getID());
+  }
+  public void IdUse.dumpTree(int j) {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < j; i++) {
+      s.append("  ");
+    }
+    System.out.println(s.toString() + getClass().getName() + ": " + getID());
+  }
+  public void Program.printTree(int num) {
+    for(int i = 0; i < num; i++) {
+      getCompilationUnit(i).dumpTree(0);
+    }
+  }
+}
+

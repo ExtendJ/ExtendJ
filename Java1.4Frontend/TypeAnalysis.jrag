@@ -1,0 +1,494 @@
+import java.util.*;
+
+aspect Arrays {
+  syn int TypeDecl.dimension() = 0;
+  eq ArrayDecl.dimension() = getDimension();
+  
+  syn TypeDecl TypeDecl.elementType() = this;
+  eq ArrayDecl.elementType() = getElementType();
+  
+  eq ArrayDecl.name() = fullName();
+  eq ArrayDecl.fullName() = getIdDecl().getID();
+}
+
+// 5.1 Kinds of Conversion
+aspect TypeConversion {
+  // 5.1.1 Identity Conversion
+  syn lazy boolean TypeDecl.identityConversionTo(TypeDecl type) = this == type;
+  
+  syn lazy boolean TypeDecl.wideningConversionTo(TypeDecl type) = instanceOf(type);
+  syn lazy boolean TypeDecl.narrowingConversionTo(TypeDecl type) = instanceOf(type);
+  
+  // 5.1.2 Widening Primitive Conversions
+  eq PrimitiveType.wideningConversionTo(TypeDecl type) = instanceOf(type);
+
+  // 5.1.3 Narrowing Primitive Conversion
+  syn lazy boolean PrimitiveType.narrowingConversionTo(TypeDecl type) = type.instanceOf(this);
+  eq ShortType.narrowingConversionTo(TypeDecl type) = type.isByte() || type.isChar();
+  eq CharType.narrowingConversionTo(TypeDecl type) =  type.isByte() || type.isShort();
+  eq ByteType.narrowingConversionTo(TypeDecl type) = type.isChar();
+
+  // 5.1.4 Widening Reference Conversions
+  syn lazy boolean ReferenceType.wideningConversionTo(TypeDecl type) = instanceOf(type);
+
+  // 5.1.5 Narrowing Reference Conversions
+  syn lazy boolean ReferenceType.narrowingConversionTo(TypeDecl type) {
+    if(type.instanceOf(this))
+      return true;
+    if(isClassDecl() && !getModifiers().isFinal() && type.isInterfaceDecl())
+      return true;
+    if(isInterfaceDecl() && type.isClassDecl() && !type.getModifiers().isFinal())
+      return true;
+    if(isInterfaceDecl() && type.instanceOf(this))
+      return true;
+    if(fullName().equals("java.lang.Object") && type.isInterfaceDecl())
+      return true;
+    // Dragons
+    // TODO: Check if both are interfaces with compatible methods
+    if(isArrayDecl() && type.isArrayDecl() && elementType().instanceOf(type.elementType()))
+      return true;
+    return false;
+  }
+
+  // 5.1.6 String Conversions
+  syn boolean TypeDecl.stringConversion() = true;
+  eq VoidType.stringConversion() = false;
+
+  // 5.2 Assignment Conversion
+  syn boolean TypeDecl.assignConversionTo(TypeDecl type, Expr expr) {
+    //System.out.println("@@@ " + fullName() + " assign conversion to " + type.fullName() + ", expr: " + expr);
+    boolean sourceIsConstant = expr != null ? expr.isConstant() : false;
+    //System.out.println("@@@ sourceIsConstant: " + sourceIsConstant);
+    if(identityConversionTo(type) || wideningConversionTo(type))
+      return true;
+    //System.out.println("@@@ narrowing conversion needed");
+    //System.out.println("@@@ value: " + expr.value());
+    if(sourceIsConstant && (isInt() || isChar() || isShort() || isByte()) &&
+        (type.isByte() || type.isShort() || type.isChar()) &&
+        narrowingConversionTo(type) && expr.representableIn(type))
+      return true;
+    //System.out.println("@@@ false");
+    return false;
+  }
+
+  // 5.3 Method Invocation Conversion
+  syn lazy boolean TypeDecl.methodInvocationConversionTo(TypeDecl type) {
+    return identityConversionTo(type) || wideningConversionTo(type);
+  }
+
+  // 5.5 Casting Conversion
+  syn lazy boolean TypeDecl.castingConversionTo(TypeDecl type) = identityConversionTo(type) ||
+    wideningConversionTo(type) || narrowingConversionTo(type);
+
+  eq ClassDecl.castingConversionTo(TypeDecl type) {
+    if(type.isArrayDecl()) {
+      return isObject();
+    }
+    else if(type.isClassDecl()) {
+      return this == type || instanceOf(type) || type.instanceOf(this);
+    }
+    else if(type.isInterfaceDecl()) {
+      return !isFinal() || instanceOf(type);
+    }
+    else return super.castingConversionTo(type);
+  }
+  
+  inh MethodDecl InterfaceDecl.illegalMethod();
+
+  eq InterfaceDecl.castingConversionTo(TypeDecl type) {
+    if(type.isArrayDecl()) {
+      return type.instanceOf(this);
+    }
+    else if(type.isClassDecl()) {
+      return !type.isFinal() || instanceOf(type);
+    }
+    else if(type.isInterfaceDecl()) {
+      MethodDecl illegalMethod = illegalMethod();
+      for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        MethodCollection list = type.localLookupMethod(m);
+        if(!list.isEmpty()) {
+          MethodDecl n = (MethodDecl)list.iterator().next();
+          if(n != illegalMethod && m.type() != n.type())
+            return false;
+        }
+      }
+      return true;
+    }
+    else return super.castingConversionTo(type);
+  }
+  
+  eq ArrayDecl.castingConversionTo(TypeDecl type) {
+    //System.err.println("ArrayDecl.castingConversionTo");
+    if(type.isArrayDecl()) {
+      //System.err.println("Both are arrays");
+      TypeDecl SC = lookupArray(elementType(), dimension() - 1);
+      TypeDecl TC = lookupArray(type.elementType(), type.dimension() - 1);
+      //System.err.println("Elements are " + SC.fullName() + " and " + TC.fullName());
+      if(SC.isPrimitiveType() && TC.isPrimitiveType() && SC == TC)
+        return true;
+      if(SC.isReferenceType() && TC.isReferenceType()) {
+        //System.err.println("Trying recursively with " + SC.fullName() + " and " + TC.fullName());
+        return SC.castingConversionTo(TC);
+      }
+      return false;
+    }
+    else if(type.isClassDecl()) {
+      return type.isObject();
+    }
+    else if(type.isInterfaceDecl()) {
+      return type == typeSerializable() || type == typeCloneable();
+    }
+    else return super.castingConversionTo(type);
+  }
+
+  inh TypeDecl ArrayDecl.typeSerializable();
+  inh TypeDecl ArrayDecl.typeCloneable();
+    
+}
+
+aspect NumericPromotion {
+  // 5.6.1 Unary Numeric Promotion
+  syn lazy NumericType NumericType.unaryNumericPromotion() = this;
+  eq ByteType.unaryNumericPromotion() = (NumericType)typeInt();
+  eq ShortType.unaryNumericPromotion() = (NumericType)typeInt();
+  eq CharType.unaryNumericPromotion() = (NumericType)typeInt();
+
+  // 5.6.2 Binary Numeric Promotion
+  syn lazy NumericType NumericType.binaryNumericPromotion(NumericType type) =
+    unaryNumericPromotion().instanceOf(type) ? type : unaryNumericPromotion();
+
+
+}
+
+aspect TypeAnalysis {
+  // 4.1 The Kinds of Types and Values
+  syn boolean TypeDecl.isReferenceType() = false;
+  eq ReferenceType.isReferenceType() = true;
+  syn boolean TypeDecl.isPrimitiveType() = false;
+  eq PrimitiveType.isPrimitiveType() = true;
+  
+  // 4.2 Primitive Types and Values
+  syn boolean TypeDecl.isNumericType() = false;
+  eq NumericType.isNumericType() = true;
+  syn boolean TypeDecl.isIntegralType() = false;
+  eq IntegralType.isIntegralType() = true;
+  syn boolean TypeDecl.isBoolean() = false;
+  eq BooleanType.isBoolean() = true;
+  syn boolean TypeDecl.isByte() = false;
+  eq ByteType.isByte() = true;
+  syn boolean TypeDecl.isChar() = false;
+  eq CharType.isChar() = true;
+  syn boolean TypeDecl.isShort() = false;
+  eq ShortType.isShort() = true;
+  syn boolean TypeDecl.isInt() = false;
+  eq IntType.isInt() = true;
+
+  syn boolean TypeDecl.isVoid() = false;
+  eq VoidType.isVoid() = true;
+
+  syn boolean TypeDecl.isNull() = false;
+  eq NullType.isNull() = true;
+
+  // 4.3 Reference Types and Values
+  syn boolean TypeDecl.isClassDecl() = false;
+  eq ClassDecl.isClassDecl() = true;
+  syn boolean TypeDecl.isInterfaceDecl() = false;
+  eq InterfaceDecl.isInterfaceDecl() = true;
+  syn boolean TypeDecl.isArrayDecl() = false;
+  eq ArrayDecl.isArrayDecl() = true;
+
+  inh boolean TypeDecl.isAnonymous();
+  eq ClassInstanceExpr.getTypeDecl().isAnonymous() = true;
+  eq TypeDecl.getBodyDecl().isAnonymous() = false;
+  eq CompilationUnit.getTypeDecl().isAnonymous() = false;
+
+  syn boolean TypeDecl.isPrimitive() = false;
+  eq PrimitiveType.isPrimitive() = true;
+
+  syn boolean TypeDecl.isString() = false;
+  eq ClassDecl.isString() = fullName().equals("java.lang.String");
+
+  syn lazy boolean TypeDecl.isObject() = false;
+  eq ClassDecl.isObject() = name().equals("Object") && packageName().equals("java.lang");
+
+  syn lazy boolean TypeDecl.isIllegal() = fullName().equals("primitive.Illegal");
+  syn lazy boolean TypeDecl.isUnknown() = fullName().equals("primitive.Unknown");
+
+  eq Program.getCompilationUnit().unknownType() = lookupType("primitive", "Unknown");
+  eq Program.getCompilationUnit().illegalType() = lookupType("primitive", "Illegal");
+  inh TypeDecl Expr.illegalType();
+  eq Program.getCompilationUnit().unknownField() = lookupType("primitive", "Unknown").findVariable("unknown");
+  eq Program.getCompilationUnit().illegalField() = lookupType("primitive", "Illegal").findVariable("illegal");
+  eq Program.getCompilationUnit().illegalMethod() {
+    TypeDecl unknownType = lookupType("primitive", "Illegal");
+    for(Iterator iter = unknownType.methods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.getIdDecl().getID().equals("illegal"))
+        return m;
+    }
+    throw new Error("Could not find method unknown in type Unknown");
+  }
+  eq Program.getCompilationUnit().unknownMethod() {
+    TypeDecl unknownType = lookupType("primitive", "Unknown");
+    for(Iterator iter = unknownType.methods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.getIdDecl().getID().equals("unknown"))
+        return m;
+    }
+    throw new Error("Could not find method unknown in type Unknown");
+  }
+  eq Program.getCompilationUnit().illegalConstructor() = illegalConstructor(); 
+  syn lazy ConstructorDecl Program.illegalConstructor() {
+    TypeDecl unknownType = lookupType("primitive", "Unknown");
+    for(int i = 0; i < unknownType.getNumBodyDecl(); i++) {
+      if(unknownType.getBodyDecl(i) instanceof ConstructorDecl)
+        return (ConstructorDecl)unknownType.getBodyDecl(i);
+    }
+    throw new Error("Could not find constructor in type Unknown");
+  }
+
+  eq AbstractDot.type() = getRight().type();
+  
+  syn lazy TypeDecl FieldDeclaration.type() = getTypeAccess().type();
+  syn lazy TypeDecl VariableDeclaration.type() = getTypeAccess().type();
+  syn lazy TypeDecl ParameterDeclaration.type() = getTypeAccess().type();
+  syn lazy TypeDecl Parameter.type() = getTypeAccess().type();
+
+  inh TypeDecl ArrayInit.declType();
+  eq FieldDeclaration.getAbstractVarInit().declType() = type();
+  eq FieldDecl.getVariableDecl().declType() = null;
+  eq VarDeclStmt.getVariableDecl().declType() = null;
+  eq VariableDeclaration.getAbstractVarInit().declType() = type();
+  eq ArrayInstanceExpr.getArrayInit().declType() = type();
+  eq ArrayInit.getAbstractVarInit().declType() = lookupArray(declType().elementType(), declType().dimension() - 1);
+  
+  syn TypeDecl AbstractVarInit.type();
+  eq VarInit.type() = getExpr().type();
+  eq ArrayInit.type() = declType();
+
+  inh TypeDecl ConstructorDecl.unknownType();
+  syn TypeDecl ConstructorDecl.type() = unknownType();
+  syn lazy TypeDecl MethodDecl.type() = getTypeAccess().type();
+
+  syn boolean BodyDecl.isVoid() = false;
+  eq MethodDecl.isVoid() = type().fullName().equals("primitive.void");
+  eq FieldDeclaration.isVoid() = type().fullName().equals("primitive.void");
+  eq ConstructorDecl.isVoid() = true;
+
+  syn lazy TypeDecl Expr.type();
+
+  eq Access.type() = unknownType();
+  eq TypeAccess.type() = decl();
+  eq ArrayAccess.type() = decl();
+  eq VarAccess.type() = decl().type();
+  eq MethodAccess.type() = decl().type();
+  eq ConstructorAccess.type() = decl().type();
+
+  eq AssignExpr.type() = getDest().type();
+  
+  eq IntegerLiteral.type() = lookupType("primitive", "int");
+  eq LongLiteral.type() = lookupType("primitive", "long");
+  eq FPLiteral.type() = lookupType("primitive", "float");
+  eq DoubleLiteral.type() = lookupType("primitive", "double");
+  eq BooleanLiteral.type() = lookupType("primitive", "boolean");
+  eq CharLiteral.type() = lookupType("primitive", "char");
+  eq StringLiteral.type() = lookupType("java.lang", "String");
+  eq NullLiteral.type() = lookupType("primitive", "null");
+
+  eq ParExpr.type() = getExpr().type();
+
+  eq StringLiteralExpr.type() = getStringLiteral().type();
+
+  eq PrimTypeClassExpr.type() {
+    if(getID().equals("byte")) return lookupType("java.lang", "Byte");
+    else if(getID().equals("short")) return lookupType("java.lang", "Short");
+    else if(getID().equals("int")) return lookupType("java.lang", "Integer");
+    else if(getID().equals("long")) return lookupType("java.lang", "Long");
+    else if(getID().equals("float")) return lookupType("java.lang", "Float");
+    else if(getID().equals("double")) return lookupType("java.lang", "Double");
+    else if(getID().equals("boolean")) return lookupType("java.lang", "Boolean");
+    else if(getID().equals("char")) return lookupType("java.lang", "Character");
+    else if(getID().equals("void")) return lookupType("java.lang", "Void");
+    else return null;
+  }
+
+  eq ClassInstanceExpr.type() = hasTypeDecl() ? getTypeDecl() : getAccess().type();
+  eq ArrayInstanceExpr.type() = lookupArray(
+      getTypeAccess().type().elementType(),
+      getTypeAccess().type().dimension() + getNumDims()
+    );
+
+  eq Unary.type() = getOperand().type();
+  eq PlusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();
+  eq MinusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();
+  eq BitNotExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();
+  
+  eq CastExpr.type() = getTypeAccess().type();
+
+  eq Binary.type() {
+    if(getLeftOperand().type().instanceOf(getRightOperand().type()))
+      return getRightOperand().type();
+    if(getRightOperand().type().instanceOf(getLeftOperand().type()))
+      return getLeftOperand().type();
+    return illegalType();
+  }
+
+  eq AddExpr.type() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    TypeDecl stringType = typeString();
+    TypeDecl voidType = typeVoid();
+    TypeDecl illegalType = illegalType();
+    if(left != stringType && right != stringType)
+      return super.type();
+    else {
+      if(left == voidType || right == voidType)
+        return illegalType;
+      return stringType;
+    }
+  }
+
+  eq RelationalExpr.type() = typeBoolean();
+  eq LogicalExpr.type() = typeBoolean();
+  
+  eq InstanceOfExpr.type() = typeBoolean();
+
+  eq QuestionColonExpr.type() {
+    TypeDecl trueType = getTrueExpr().type();
+    TypeDecl falseType = getFalseExpr().type();
+    
+    if(trueType == falseType) return trueType;
+    
+    if(trueType.isNumericType() && falseType.isNumericType()) {
+      if(trueType.isByte() && falseType.isShort()) return falseType;
+      if(trueType.isShort() && falseType.isByte()) return trueType;
+      if((trueType.isByte() || trueType.isShort() || trueType.isChar()) && 
+         falseType.isInt() && getFalseExpr().isConstant() && getFalseExpr().representableIn(trueType))
+        return trueType;
+      if((falseType.isByte() || falseType.isShort() || falseType.isChar()) && 
+         trueType.isInt() && getTrueExpr().isConstant() && getTrueExpr().representableIn(falseType))
+        return falseType;
+      return ((NumericType)trueType).binaryNumericPromotion((NumericType)falseType);
+    }
+    else if(trueType.isBoolean() && falseType.isBoolean()) {
+      return trueType;
+    }
+    else if(trueType.isReferenceType() && falseType.isNull()) {
+      return trueType;
+    }
+    else if(trueType.isNull() && falseType.isReferenceType()) {
+      return falseType;
+    }
+    else if(trueType.isReferenceType() && falseType.isReferenceType()) {
+      if(trueType.assignConversionTo(falseType, null))
+        return falseType;
+      if(falseType.assignConversionTo(trueType, null))
+        return trueType;
+      return illegalType();
+    }
+    else
+      return illegalType();
+  }
+
+  eq ClassAccess.type() = lookupType("java.lang", "Class");
+
+}
+
+aspect TypeWideningAndIdentity {
+  syn lazy boolean TypeDecl.instanceOf(TypeDecl typeDecl) circular [false];
+
+  eq NullType.instanceOf(TypeDecl typeDecl) =  typeDecl.isReferenceType() || typeDecl.isNull();
+  eq VoidType.instanceOf(TypeDecl typeDecl) = false;
+
+  eq PrimitiveType.instanceOf(TypeDecl typeDecl) {
+    if(typeDecl  == this)
+      return true;
+    else if(typeDecl instanceof PrimitiveType) {
+      if(hasSuperClass() && getSuperClass() != null) {
+        if(getSuperClass().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  eq ClassDecl.instanceOf(TypeDecl typeDecl) {
+    if(typeDecl == this) {
+      return true;
+    }
+    else if(typeDecl instanceof ClassDecl) {
+      if(hasSuperClass() && getSuperClass() != null) {
+        if(getSuperClass().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+    }
+    else if(typeDecl instanceof InterfaceDecl) {
+      if(hasSuperClass() && getSuperClass() != null) {
+        if(getSuperClass().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+      for(int i = 0; i < getNumImplements(); i++) {
+        if(getImplements(i).type().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  eq InterfaceDecl.instanceOf(TypeDecl typeDecl) {
+    if(typeDecl == this) {
+      return true;
+    }
+    else if(typeDecl instanceof ClassDecl) {
+      if(typeDecl.fullName().equals("java.lang.Object")) return true;
+      return false;
+    }
+    else if(typeDecl instanceof InterfaceDecl) {
+      for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+        if(getSuperInterfaceId(i).type().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  
+  eq ArrayDecl.instanceOf(TypeDecl typeDecl) {
+    //System.out.println("@@@ is " + fullName() + " an instance of " + typeDecl.fullName() + "?");
+    if(typeDecl == this) {
+      return true;
+    }
+    else if(typeDecl instanceof ArrayDecl) {
+      ArrayDecl decl = (ArrayDecl)typeDecl;
+      //System.out.print("@@@ trying element types: ");
+      //System.out.println("is " + elementType().fullName() + " an instance of " + decl.elementType().fullName() + "?");
+      if(elementType().isReferenceType()) {
+        return dimension() == decl.dimension() && elementType().instanceOf(decl.elementType());
+      }
+      else {
+        return dimension() == decl.dimension() && elementType() == decl.elementType();
+      }
+    }
+    else if(typeDecl instanceof ClassDecl || typeDecl instanceof InterfaceDecl) {
+      if(hasSuperClass() && getSuperClass() != null) {
+        if(getSuperClass().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+      for(int i = 0; i < getNumImplements(); i++) {
+        if(getImplements(i).type().instanceOf(typeDecl)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+}
+
