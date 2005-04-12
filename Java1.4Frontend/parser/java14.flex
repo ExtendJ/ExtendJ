@@ -35,8 +35,9 @@
 
 package parser;
 
-import beaver.core.Token;
-import beaver.core.Scanner;
+import beaver.Symbol;
+import beaver.Scanner;
+import parser.JavaParser.Terminals;
 
 %%
 
@@ -46,10 +47,10 @@ import beaver.core.Scanner;
 %extends Scanner
 %unicode
 %function nextToken
-%type Token
+%type Symbol
 %yylexthrow Scanner.Exception
 %eofval{
-	return Token.New(JavaParser.Tokens.EOF, "end-of-file");
+	return newSymbol(Terminals.EOF, "end-of-file");
 %eofval}
 %line
 %column
@@ -57,14 +58,14 @@ import beaver.core.Scanner;
 %{
   StringBuffer string = new StringBuffer(128);
 
-  private Token token(short id)
+  private Symbol newSymbol(short id)
   {
-    return Token.New(id, yyline + 1, yycolumn + 1);
+    return new Symbol(id, yyline + 1, yycolumn + 1, yylength(), yytext());
   }
 
-  private Token token(short id, Object value)
+  private Symbol newSymbol(short id, Object value)
   {
-    return Token.New(id, yyline + 1, yycolumn + 1, value);
+    return new Symbol(id, yyline + 1, yycolumn + 1, yylength(), value);
   }
 
 %}
@@ -119,115 +120,115 @@ SingleCharacter = [^\r\n\'\\]
 <YYINITIAL> {
 
   /* keywords */
-  "assert"                       { return token(JavaParser.Tokens.ASSERT); }
-  "abstract"                     { return token(JavaParser.Tokens.ABSTRACT); }
-  "boolean"                      { return token(JavaParser.Tokens.BOOLEAN); }
-  "break"                        { return token(JavaParser.Tokens.BREAK); }
-  "byte"                         { return token(JavaParser.Tokens.BYTE); }
-  "case"                         { return token(JavaParser.Tokens.CASE); }
-  "catch"                        { return token(JavaParser.Tokens.CATCH); }
-  "char"                         { return token(JavaParser.Tokens.CHAR); }
-  "class"                        { return token(JavaParser.Tokens.CLASS); }
-  "const"                        { return token(JavaParser.Tokens.CONST); }
-  "continue"                     { return token(JavaParser.Tokens.CONTINUE); }
-  "do"                           { return token(JavaParser.Tokens.DO); }
-  "double"                       { return token(JavaParser.Tokens.DOUBLE); }
-  "else"                         { return token(JavaParser.Tokens.ELSE); }
-/*  "enum"                         { return token(JavaParser.Tokens.ENUM); }*/
-  "extends"                      { return token(JavaParser.Tokens.EXTENDS); }
-  "final"                        { return token(JavaParser.Tokens.FINAL); }
-  "finally"                      { return token(JavaParser.Tokens.FINALLY); }
-  "float"                        { return token(JavaParser.Tokens.FLOAT); }
-  "for"                          { return token(JavaParser.Tokens.FOR); }
-  "default"                      { return token(JavaParser.Tokens.DEFAULT); }
-  "implements"                   { return token(JavaParser.Tokens.IMPLEMENTS); }
-  "import"                       { return token(JavaParser.Tokens.IMPORT); }
-  "instanceof"                   { return token(JavaParser.Tokens.INSTANCEOF); }
-  "int"                          { return token(JavaParser.Tokens.INT); }
-  "interface"                    { return token(JavaParser.Tokens.INTERFACE); }
-  "long"                         { return token(JavaParser.Tokens.LONG); }
-  "native"                       { return token(JavaParser.Tokens.NATIVE); }
-  "new"                          { return token(JavaParser.Tokens.NEW); }
-  "goto"                         { return token(JavaParser.Tokens.GOTO); }
-  "if"                           { return token(JavaParser.Tokens.IF); }
-  "public"                       { return token(JavaParser.Tokens.PUBLIC); }
-  "short"                        { return token(JavaParser.Tokens.SHORT); }
-  "super"                        { return token(JavaParser.Tokens.SUPER); }
-  "switch"                       { return token(JavaParser.Tokens.SWITCH); }
-  "synchronized"                 { return token(JavaParser.Tokens.SYNCHRONIZED); }
-  "package"                      { return token(JavaParser.Tokens.PACKAGE); }
-  "private"                      { return token(JavaParser.Tokens.PRIVATE); }
-  "protected"                    { return token(JavaParser.Tokens.PROTECTED); }
-  "transient"                    { return token(JavaParser.Tokens.TRANSIENT); }
-  "return"                       { return token(JavaParser.Tokens.RETURN); }
-  "void"                         { return token(JavaParser.Tokens.VOID); }
-  "static"                       { return token(JavaParser.Tokens.STATIC); }
-  "while"                        { return token(JavaParser.Tokens.WHILE); }
-  "this"                         { return token(JavaParser.Tokens.THIS); }
-  "throw"                        { return token(JavaParser.Tokens.THROW); }
-  "throws"                       { return token(JavaParser.Tokens.THROWS); }
-  "try"                          { return token(JavaParser.Tokens.TRY); }
-  "volatile"                     { return token(JavaParser.Tokens.VOLATILE); }
-  "strictfp"                     { return token(JavaParser.Tokens.STRICTFP); }
+  "assert"                       { return newSymbol(Terminals.ASSERT); }
+  "abstract"                     { return newSymbol(Terminals.ABSTRACT); }
+  "boolean"                      { return newSymbol(Terminals.BOOLEAN); }
+  "break"                        { return newSymbol(Terminals.BREAK); }
+  "byte"                         { return newSymbol(Terminals.BYTE); }
+  "case"                         { return newSymbol(Terminals.CASE); }
+  "catch"                        { return newSymbol(Terminals.CATCH); }
+  "char"                         { return newSymbol(Terminals.CHAR); }
+  "class"                        { return newSymbol(Terminals.CLASS); }
+/*  "const"                        { return newSymbol(Terminals.CONST); }*/
+  "continue"                     { return newSymbol(Terminals.CONTINUE); }
+  "do"                           { return newSymbol(Terminals.DO); }
+  "double"                       { return newSymbol(Terminals.DOUBLE); }
+  "else"                         { return newSymbol(Terminals.ELSE); }
+/*  "enum"                         { return newSymbol(Terminals.ENUM); }*/
+  "extends"                      { return newSymbol(Terminals.EXTENDS); }
+  "final"                        { return newSymbol(Terminals.FINAL); }
+  "finally"                      { return newSymbol(Terminals.FINALLY); }
+  "float"                        { return newSymbol(Terminals.FLOAT); }
+  "for"                          { return newSymbol(Terminals.FOR); }
+  "default"                      { return newSymbol(Terminals.DEFAULT); }
+  "implements"                   { return newSymbol(Terminals.IMPLEMENTS); }
+  "import"                       { return newSymbol(Terminals.IMPORT); }
+  "instanceof"                   { return newSymbol(Terminals.INSTANCEOF); }
+  "int"                          { return newSymbol(Terminals.INT); }
+  "interface"                    { return newSymbol(Terminals.INTERFACE); }
+  "long"                         { return newSymbol(Terminals.LONG); }
+  "native"                       { return newSymbol(Terminals.NATIVE); }
+  "new"                          { return newSymbol(Terminals.NEW); }
+/*  "goto"                         { return newSymbol(Terminals.GOTO); }*/
+  "if"                           { return newSymbol(Terminals.IF); }
+  "public"                       { return newSymbol(Terminals.PUBLIC); }
+  "short"                        { return newSymbol(Terminals.SHORT); }
+  "super"                        { return newSymbol(Terminals.SUPER); }
+  "switch"                       { return newSymbol(Terminals.SWITCH); }
+  "synchronized"                 { return newSymbol(Terminals.SYNCHRONIZED); }
+  "package"                      { return newSymbol(Terminals.PACKAGE); }
+  "private"                      { return newSymbol(Terminals.PRIVATE); }
+  "protected"                    { return newSymbol(Terminals.PROTECTED); }
+  "transient"                    { return newSymbol(Terminals.TRANSIENT); }
+  "return"                       { return newSymbol(Terminals.RETURN); }
+  "void"                         { return newSymbol(Terminals.VOID); }
+  "static"                       { return newSymbol(Terminals.STATIC); }
+  "while"                        { return newSymbol(Terminals.WHILE); }
+  "this"                         { return newSymbol(Terminals.THIS); }
+  "throw"                        { return newSymbol(Terminals.THROW); }
+  "throws"                       { return newSymbol(Terminals.THROWS); }
+  "try"                          { return newSymbol(Terminals.TRY); }
+  "volatile"                     { return newSymbol(Terminals.VOLATILE); }
+  "strictfp"                     { return newSymbol(Terminals.STRICTFP); }
 
   /* boolean literals */
-  "true"                         { return token(JavaParser.Tokens.BOOLEAN_LITERAL, "true"); }
-  "false"                        { return token(JavaParser.Tokens.BOOLEAN_LITERAL, "false"); }
+  "true"                         { return newSymbol(Terminals.BOOLEAN_LITERAL, "true"); }
+  "false"                        { return newSymbol(Terminals.BOOLEAN_LITERAL, "false"); }
 
   /* null literal */
-  "null"                         { return token(JavaParser.Tokens.NULL_LITERAL); }
+  "null"                         { return newSymbol(Terminals.NULL_LITERAL); }
 
 
   /* separators */
-  "("                            { return token(JavaParser.Tokens.LPAREN); }
-  ")"                            { return token(JavaParser.Tokens.RPAREN); }
-  "{"                            { return token(JavaParser.Tokens.LBRACE); }
-  "}"                            { return token(JavaParser.Tokens.RBRACE); }
-  "["                            { return token(JavaParser.Tokens.LBRACK); }
-  "]"                            { return token(JavaParser.Tokens.RBRACK); }
-  ";"                            { return token(JavaParser.Tokens.SEMICOLON); }
-  ","                            { return token(JavaParser.Tokens.COMMA); }
-  "."                            { return token(JavaParser.Tokens.DOT); }
+  "("                            { return newSymbol(Terminals.LPAREN); }
+  ")"                            { return newSymbol(Terminals.RPAREN); }
+  "{"                            { return newSymbol(Terminals.LBRACE); }
+  "}"                            { return newSymbol(Terminals.RBRACE); }
+  "["                            { return newSymbol(Terminals.LBRACK); }
+  "]"                            { return newSymbol(Terminals.RBRACK); }
+  ";"                            { return newSymbol(Terminals.SEMICOLON); }
+  ","                            { return newSymbol(Terminals.COMMA); }
+  "."                            { return newSymbol(Terminals.DOT); }
 
   /* operators */
-  "="                            { return token(JavaParser.Tokens.EQ); }
-  ">"                            { return token(JavaParser.Tokens.GT); }
-  "<"                            { return token(JavaParser.Tokens.LT); }
-  "!"                            { return token(JavaParser.Tokens.NOT); }
-  "~"                            { return token(JavaParser.Tokens.COMP); }
-  "?"                            { return token(JavaParser.Tokens.QUESTION); }
-  ":"                            { return token(JavaParser.Tokens.COLON); }
-  "=="                           { return token(JavaParser.Tokens.EQEQ); }
-  "<="                           { return token(JavaParser.Tokens.LTEQ); }
-  ">="                           { return token(JavaParser.Tokens.GTEQ); }
-  "!="                           { return token(JavaParser.Tokens.NOTEQ); }
-  "&&"                           { return token(JavaParser.Tokens.ANDAND); }
-  "||"                           { return token(JavaParser.Tokens.OROR); }
-  "++"                           { return token(JavaParser.Tokens.PLUSPLUS); }
-  "--"                           { return token(JavaParser.Tokens.MINUSMINUS); }
-  "+"                            { return token(JavaParser.Tokens.PLUS); }
-  "-"                            { return token(JavaParser.Tokens.MINUS); }
-  "*"                            { return token(JavaParser.Tokens.MULT); }
-  "/"                            { return token(JavaParser.Tokens.DIV); }
-  "&"                            { return token(JavaParser.Tokens.AND); }
-  "|"                            { return token(JavaParser.Tokens.OR); }
-  "^"                            { return token(JavaParser.Tokens.XOR); }
-  "%"                            { return token(JavaParser.Tokens.MOD); }
-  "<<"                           { return token(JavaParser.Tokens.LSHIFT); }
-  ">>"                           { return token(JavaParser.Tokens.RSHIFT); }
-  ">>>"                          { return token(JavaParser.Tokens.URSHIFT); }
-  "+="                           { return token(JavaParser.Tokens.PLUSEQ); }
-  "-="                           { return token(JavaParser.Tokens.MINUSEQ); }
-  "*="                           { return token(JavaParser.Tokens.MULTEQ); }
-  "/="                           { return token(JavaParser.Tokens.DIVEQ); }
-  "&="                           { return token(JavaParser.Tokens.ANDEQ); }
-  "|="                           { return token(JavaParser.Tokens.OREQ); }
-  "^="                           { return token(JavaParser.Tokens.XOREQ); }
-  "%="                           { return token(JavaParser.Tokens.MODEQ); }
-  "<<="                          { return token(JavaParser.Tokens.LSHIFTEQ); }
-  ">>="                          { return token(JavaParser.Tokens.RSHIFTEQ); }
-  ">>>="                         { return token(JavaParser.Tokens.URSHIFTEQ); }
-  "..."                          { return token(JavaParser.Tokens.ELLIPSIS); }
+  "="                            { return newSymbol(Terminals.EQ); }
+  ">"                            { return newSymbol(Terminals.GT); }
+  "<"                            { return newSymbol(Terminals.LT); }
+  "!"                            { return newSymbol(Terminals.NOT); }
+  "~"                            { return newSymbol(Terminals.COMP); }
+  "?"                            { return newSymbol(Terminals.QUESTION); }
+  ":"                            { return newSymbol(Terminals.COLON); }
+  "=="                           { return newSymbol(Terminals.EQEQ); }
+  "<="                           { return newSymbol(Terminals.LTEQ); }
+  ">="                           { return newSymbol(Terminals.GTEQ); }
+  "!="                           { return newSymbol(Terminals.NOTEQ); }
+  "&&"                           { return newSymbol(Terminals.ANDAND); }
+  "||"                           { return newSymbol(Terminals.OROR); }
+  "++"                           { return newSymbol(Terminals.PLUSPLUS); }
+  "--"                           { return newSymbol(Terminals.MINUSMINUS); }
+  "+"                            { return newSymbol(Terminals.PLUS); }
+  "-"                            { return newSymbol(Terminals.MINUS); }
+  "*"                            { return newSymbol(Terminals.MULT); }
+  "/"                            { return newSymbol(Terminals.DIV); }
+  "&"                            { return newSymbol(Terminals.AND); }
+  "|"                            { return newSymbol(Terminals.OR); }
+  "^"                            { return newSymbol(Terminals.XOR); }
+  "%"                            { return newSymbol(Terminals.MOD); }
+  "<<"                           { return newSymbol(Terminals.LSHIFT); }
+  ">>"                           { return newSymbol(Terminals.RSHIFT); }
+  ">>>"                          { return newSymbol(Terminals.URSHIFT); }
+  "+="                           { return newSymbol(Terminals.PLUSEQ); }
+  "-="                           { return newSymbol(Terminals.MINUSEQ); }
+  "*="                           { return newSymbol(Terminals.MULTEQ); }
+  "/="                           { return newSymbol(Terminals.DIVEQ); }
+  "&="                           { return newSymbol(Terminals.ANDEQ); }
+  "|="                           { return newSymbol(Terminals.OREQ); }
+  "^="                           { return newSymbol(Terminals.XOREQ); }
+  "%="                           { return newSymbol(Terminals.MODEQ); }
+  "<<="                          { return newSymbol(Terminals.LSHIFTEQ); }
+  ">>="                          { return newSymbol(Terminals.RSHIFTEQ); }
+  ">>>="                         { return newSymbol(Terminals.URSHIFTEQ); }
+/*  "..."                          { return newSymbol(Terminals.ELLIPSIS); }*/
 
   /* string literal */
   \"                             { yybegin(STRING); string.setLength(0); }
@@ -237,18 +238,18 @@ SingleCharacter = [^\r\n\'\\]
 
   /* numeric literals */
 
-  {DecIntegerLiteral}            { return token(JavaParser.Tokens.INTEGER_LITERAL, yytext()); }
-  {DecLongLiteral}               { return token(JavaParser.Tokens.LONG_LITERAL, yytext().substring(0,yylength()-1)); }
+  {DecIntegerLiteral}            { return newSymbol(Terminals.INTEGER_LITERAL, yytext()); }
+  {DecLongLiteral}               { return newSymbol(Terminals.LONG_LITERAL, yytext().substring(0,yylength()-1)); }
 
-  {HexIntegerLiteral}            { return token(JavaParser.Tokens.INTEGER_LITERAL, yytext()); }
-  {HexLongLiteral}               { return token(JavaParser.Tokens.LONG_LITERAL, yytext().substring(0, yylength()-1)); }
+  {HexIntegerLiteral}            { return newSymbol(Terminals.INTEGER_LITERAL, yytext()); }
+  {HexLongLiteral}               { return newSymbol(Terminals.LONG_LITERAL, yytext().substring(0, yylength()-1)); }
 
-  {OctIntegerLiteral}            { return token(JavaParser.Tokens.INTEGER_LITERAL, yytext()); }
-  {OctLongLiteral}               { return token(JavaParser.Tokens.LONG_LITERAL, yytext().substring(0, yylength()-1)); }
+  {OctIntegerLiteral}            { return newSymbol(Terminals.INTEGER_LITERAL, yytext()); }
+  {OctLongLiteral}               { return newSymbol(Terminals.LONG_LITERAL, yytext().substring(0, yylength()-1)); }
 
-  {FloatLiteral}                 { return token(JavaParser.Tokens.FLOATING_POINT_LITERAL, yytext().substring(0,yylength()-1)); }
-  {DoubleLiteral}                { return token(JavaParser.Tokens.DOUBLE_LITERAL, yytext()); }
-  {DoubleLiteral}[dD]            { return token(JavaParser.Tokens.DOUBLE_LITERAL, yytext().substring(0,yylength()-1)); }
+  {FloatLiteral}                 { return newSymbol(Terminals.FLOATING_POINT_LITERAL, yytext().substring(0,yylength()-1)); }
+  {DoubleLiteral}                { return newSymbol(Terminals.DOUBLE_LITERAL, yytext()); }
+  {DoubleLiteral}[dD]            { return newSymbol(Terminals.DOUBLE_LITERAL, yytext().substring(0,yylength()-1)); }
   
   /* comments */
   {Comment}                      { /* ignore */ }
@@ -257,11 +258,11 @@ SingleCharacter = [^\r\n\'\\]
   {WhiteSpace}                   { /* ignore */ }
 
   /* identifiers */
-  {Identifier}                   { return token(JavaParser.Tokens.IDENTIFIER, yytext()); }
+  {Identifier}                   { return newSymbol(Terminals.IDENTIFIER, yytext()); }
 }
 
 <STRING> {
-  \"                             { yybegin(YYINITIAL); return token(JavaParser.Tokens.STRING_LITERAL, string.toString()); }
+  \"                             { yybegin(YYINITIAL); return newSymbol(Terminals.STRING_LITERAL, string.toString()); }
 
   {StringCharacter}+             { string.append( yytext() ); }
 
@@ -282,20 +283,20 @@ SingleCharacter = [^\r\n\'\\]
 }
 
 <CHARLITERAL> {
-  {SingleCharacter}\'            { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character(yytext().charAt(0))); }
+  {SingleCharacter}\'            { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character(yytext().charAt(0))); }
 
   /* escape sequences */
-  "\\b"\'                        { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\b'));}
-  "\\t"\'                        { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\t'));}
-  "\\n"\'                        { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\n'));}
-  "\\f"\'                        { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\f'));}
-  "\\r"\'                        { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\r'));}
-  "\\\""\'                       { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\"'));}
-  "\\'"\'                        { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\''));}
-  "\\\\"\'                       { yybegin(YYINITIAL); return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character('\\')); }
+  "\\b"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\b'));}
+  "\\t"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\t'));}
+  "\\n"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\n'));}
+  "\\f"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\f'));}
+  "\\r"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\r'));}
+  "\\\""\'                       { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\"'));}
+  "\\'"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\''));}
+  "\\\\"\'                       { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\\')); }
   \\[0-3]?{OctDigit}?{OctDigit}\' { yybegin(YYINITIAL);
 			                              int val = Integer.parseInt(yytext().substring(1,yylength()-1),8);
-			                            return token(JavaParser.Tokens.CHARACTER_LITERAL, new Character((char)val)); }
+			                            return newSymbol(Terminals.CHARACTER_LITERAL, new Character((char)val)); }
 
   /* error cases */
   \\.                            { throw new RuntimeException("Illegal escape sequence \""+yytext()+"\""); }
@@ -304,4 +305,4 @@ SingleCharacter = [^\r\n\'\\]
 
 /* error fallback */
 .|\n                             { throw new RuntimeException("Illegal character \""+yytext()+ "\" at line "+yyline+", column "+yycolumn); }
-<<EOF>>                          { return token(JavaParser.Tokens.EOF); }
+<<EOF>>                          { return newSymbol(Terminals.EOF); }

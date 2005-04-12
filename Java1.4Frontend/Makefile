@@ -3,7 +3,7 @@ JASTADD=java -jar tools/jastadd2.jar --novisitcheck
 JAVACOMPILER = jikes -nowarn
 #JAVACOMPILER = ajc
 JFLEXCOMPILER = java -jar tools/JFlex.jar --nobak
-BEAVERCOMPILER = java -jar tools/Beaver.jar
+BEAVERCOMPILER = java -jar tools/beaver.jar
 
 # -- Names of the main programs --
 MAIN=JavaPrettyPrinter.java JavaDumpTree.java
@@ -19,7 +19,8 @@ JRAGFILES=PrettyPrint.jadd TypeAnalysis.jrag LookupVariable.jrag LookupType.jrag
 
 ASTFILES = java.ast
 
-BEAVERFILES = parser/java14.beaver
+PARSERFILES = parser/java14.parser
+PARSERFILES += $(EXTERNALPARSERFILES)
 
 # -- Name of the start nonterminal for the abstract syntax tree --
 STARTSYMBOL=Program
@@ -47,7 +48,7 @@ $(HANDWRITTENJAVA:java=class):	$(BUILDDIR)/$(PACKAGE)/$(NODEPREFIX)$(STARTSYMBOL
 
 # -- Run AST class generation --
 $(BUILDDIR)/$(PACKAGE)/$(NODEPREFIX)$(STARTSYMBOL).java:	$(ASTFILES) $(JRAGFILES) Makefile
-	$(JASTADD) --rewrite --grammar=$(PARSERNAME) --o=$(BUILDDIR) --package=$(PACKAGE) --prefix="$(NODEPREFIX)" $(JRAGFILES) $(ASTFILES)
+	$(JASTADD) --rewrite --beaver --o=$(BUILDDIR) --package=$(PACKAGE) --prefix="$(NODEPREFIX)" $(JRAGFILES) $(ASTFILES)
 
 # -- Run test cases --
 test:	$(HANDWRITTENJAVA:java=class)
@@ -59,9 +60,10 @@ $(BUILDDIR)/parser/JavaScanner.java: parser/java14.flex
 $(BUILDDIR)/parser/UnicodeEscapes.java: parser/unicode.flex
 	$(JFLEXCOMPILER) -d $(BUILDDIR)/parser $^
 
-$(BUILDDIR)/parser/JavaParser.java: $(BEAVERFILES) Makefile
-	cat $(BEAVERFILES) > all.beaver && $(BEAVERCOMPILER) -c all.beaver && rm all.beaver && mkdir -p $(BUILDDIR)/parser && mv JavaParser.* $(BUILDDIR)/parser
-	-cp -r beaver $(BUILDDIR)/beaver
+$(BUILDDIR)/parser/JavaParser.beaver: $(PARSERFILES) Makefile
+	cat $(PARSERFILES) >$(BUILDDIR)/parser/JavaParser.all && java -cp tools/proj.jar:tools/beaver-rt.jar Main $(BUILDDIR)/parser/JavaParser.all $(BUILDDIR)/parser/JavaParser.beaver
+$(BUILDDIR)/parser/JavaParser.java: $(BUILDDIR)/parser/JavaParser.beaver Makefile
+	$(BEAVERCOMPILER) -w  $(BUILDDIR)/parser/JavaParser.beaver
 
 # -- Clean up by removing generated files and backup files from text editors --
 clean:

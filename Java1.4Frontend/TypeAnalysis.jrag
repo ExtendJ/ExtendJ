@@ -6,6 +6,8 @@ aspect Arrays {
   
   syn TypeDecl TypeDecl.elementType() = this;
   eq ArrayDecl.elementType() = getElementType();
+
+  syn TypeDecl ArrayDecl.componentType() = lookupArray(elementType(), dimension() - 1);
   
   eq ArrayDecl.name() = fullName();
   eq ArrayDecl.fullName() = getIdDecl().getID();
@@ -396,98 +398,95 @@ aspect TypeAnalysis {
 }
 
 aspect TypeWideningAndIdentity {
-  syn lazy boolean TypeDecl.instanceOf(TypeDecl typeDecl) circular [false];
 
-  eq NullType.instanceOf(TypeDecl typeDecl) =  typeDecl.isReferenceType() || typeDecl.isNull();
-  eq VoidType.instanceOf(TypeDecl typeDecl) = false;
-
-  eq PrimitiveType.instanceOf(TypeDecl typeDecl) {
-    if(typeDecl  == this)
-      return true;
-    else if(typeDecl instanceof PrimitiveType) {
-      if(hasSuperClass() && getSuperClass() != null) {
-        if(getSuperClass().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  eq ClassDecl.instanceOf(TypeDecl typeDecl) {
-    if(typeDecl == this) {
-      return true;
-    }
-    else if(typeDecl instanceof ClassDecl) {
-      if(hasSuperClass() && getSuperClass() != null) {
-        if(getSuperClass().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-    }
-    else if(typeDecl instanceof InterfaceDecl) {
-      if(hasSuperClass() && getSuperClass() != null) {
-        if(getSuperClass().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-      for(int i = 0; i < getNumImplements(); i++) {
-        if(getImplements(i).type().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  eq InterfaceDecl.instanceOf(TypeDecl typeDecl) {
-    if(typeDecl == this) {
-      return true;
-    }
-    else if(typeDecl instanceof ClassDecl) {
-      if(typeDecl.fullName().equals("java.lang.Object")) return true;
-      return false;
-    }
-    else if(typeDecl instanceof InterfaceDecl) {
-      for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-        if(getSuperInterfaceId(i).type().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
+  syn lazy boolean TypeDecl.instanceOf(TypeDecl type) circular [false];
+  eq TypeDecl.instanceOf(TypeDecl type) = type == this;
+  eq ClassDecl.instanceOf(TypeDecl type) = type.isSupertypeOfClassDecl(this);
+  eq InterfaceDecl.instanceOf(TypeDecl type) = type.isSupertypeOfInterfaceDecl(this);
+  eq ArrayDecl.instanceOf(TypeDecl type) = type.isSupertypeOfArrayDecl(this);
+  eq PrimitiveType.instanceOf(TypeDecl type) = type.isSupertypeOfPrimitiveType(this);
+  eq NullType.instanceOf(TypeDecl type) = type.isSupertypeOfNullType(this);
+  eq VoidType.instanceOf(TypeDecl type) = type.isSupertypeOfVoidType(this);
   
-  eq ArrayDecl.instanceOf(TypeDecl typeDecl) {
-    //System.out.println("@@@ is " + fullName() + " an instance of " + typeDecl.fullName() + "?");
-    if(typeDecl == this) {
+  public boolean TypeDecl.isSupertypeOfClassDecl(ClassDecl type) {
+    return type == this;
+  }
+  public boolean ClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
+    if(super.isSupertypeOfClassDecl(type))
       return true;
-    }
-    else if(typeDecl instanceof ArrayDecl) {
-      ArrayDecl decl = (ArrayDecl)typeDecl;
-      //System.out.print("@@@ trying element types: ");
-      //System.out.println("is " + elementType().fullName() + " an instance of " + decl.elementType().fullName() + "?");
-      if(elementType().isReferenceType()) {
-        return dimension() == decl.dimension() && elementType().instanceOf(decl.elementType());
-      }
-      else {
-        return dimension() == decl.dimension() && elementType() == decl.elementType();
-      }
-    }
-    else if(typeDecl instanceof ClassDecl || typeDecl instanceof InterfaceDecl) {
-      if(hasSuperClass() && getSuperClass() != null) {
-        if(getSuperClass().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-      for(int i = 0; i < getNumImplements(); i++) {
-        if(getImplements(i).type().instanceOf(typeDecl)) {
-          return true;
-        }
-      }
-    }
+    return type.hasSuperClass() && type.getSuperClass() != null && type.getSuperClass().instanceOf(this);
+  }
+  public boolean InterfaceDecl.isSupertypeOfClassDecl(ClassDecl type) {
+    if(super.isSupertypeOfClassDecl(type))
+      return true;
+    for(int i = 0; i < type.getNumImplements(); i++)
+      if(type.getImplements(i).type().instanceOf(this))
+        return true;
+    return type.hasSuperClass() && type.getSuperClass() != null && type.getSuperClass().instanceOf(this);
+  }
+  
+  public boolean TypeDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+    return type == this;
+  }
+  public boolean ClassDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+    return isObject();
+  }
+  public boolean InterfaceDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+    if(super.isSupertypeOfInterfaceDecl(type))
+      return true;
+    for(int i = 0; i < type.getNumSuperInterfaceId(); i++)
+      if(type.getSuperInterfaceId(i).type().instanceOf(this))
+        return true;
     return false;
+  }
+
+  public boolean TypeDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+    return this == type;
+  }  
+  public boolean ClassDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+    if(super.isSupertypeOfArrayDecl(type))
+      return true;
+    return type.hasSuperClass() && type.getSuperClass() != null && type.getSuperClass().instanceOf(this);
+  }
+  public boolean InterfaceDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+    if(super.isSupertypeOfArrayDecl(type))
+      return true;
+    for(int i = 0; i < type.getNumImplements(); i++)
+      if(type.getImplements(i).type().instanceOf(this))
+        return true;
+    return false;
+  }  
+  public boolean ArrayDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+    if(type.elementType().isReferenceType())
+      return type.dimension() == dimension() && type.elementType().instanceOf(elementType());
+    else
+      return type.dimension() == dimension() && type.elementType() == elementType();
+  }  
+
+  public boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) {
+    return type == this;
+  }
+  public boolean PrimitiveType.isSupertypeOfPrimitiveType(PrimitiveType type) {
+    if(super.isSupertypeOfPrimitiveType(type))
+      return true;
+    return type.hasSuperClass() && type.getSuperClass().instanceOf(this);
+  }
+  
+  public boolean TypeDecl.isSupertypeOfNullType(NullType type) {
+    return false;
+  }
+  public boolean ReferenceType.isSupertypeOfNullType(NullType type) {
+    return true;
+  }
+  public boolean NullType.isSupertypeOfNullType(NullType type) {
+    return true;
+  }
+  
+  public boolean TypeDecl.isSupertypeOfVoidType(VoidType type) {
+    return false;
+  }
+  public boolean VoidType.isSupertypeOfVoidType(VoidType type) {
+    return true;
   }
   
 }
