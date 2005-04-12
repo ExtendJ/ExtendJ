@@ -1,5 +1,12 @@
 public class Generics11 {
   public static void main(String[] args) {
+    Collection<? extends Number> c = null;
+    Number n = c.first();
+    c.add(null);
+    Iterator<? extends Number> i = c.iterator();
+    Number o = c.iterator().next();
+    //Collection<? extends Integer> i = null;
+    //n = i;
     /*
     Collection<Object> c1 = null;
     printCollection(c1);
@@ -7,23 +14,34 @@ public class Generics11 {
     printCollection(c2);
     */
   }
+  
+  /*
   public static void printCollection(Collection<? extends Object> c) {
     for(Iterator<Object> iter = c.iterator(); iter.hasNext(); ) {
       Object o = iter.next();
     }
   }
+  */
+  /*
+  public static void printCollection(Collection<? extends Object> c) {
+    for(Iterator<Object> iter = c.iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+    }
+    c.add(null);
+  }
+  */
 }
-public interface Iterable<T> {
+interface Iterable<T> {
     Iterator<T> iterator();
 }
-
-public interface Iterator<E> {
+interface Iterator<E> {
     boolean hasNext();
     E next();
     void remove();
 }
 
-public interface Collection<E> extends Iterable<E> {
+interface Collection<E> extends Iterable<E> {
+    E first();
     Iterator<E> iterator();
     boolean add(E o);
     /*

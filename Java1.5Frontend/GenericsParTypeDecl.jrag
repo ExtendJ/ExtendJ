@@ -1,0 +1,89 @@
+aspect GenericsParTypeDecl {
+  eq ParTypeDecl.name() {
+    StringBuffer s = new StringBuffer();
+    s.append(super.name());
+    s.append("<");
+    for(int i = 0; i < getNumArgument(); i++) {
+      if(i != 0)
+        s.append(", ");
+      s.append(getArgument(i).type().fullName());
+    }
+    s.append(">");
+    return s.toString();
+  }
+
+  inh lazy TypeDecl ParTypeDecl.genericDecl();
+  eq Program.getCompilationUnit().genericDecl() = null;
+  eq GenericClassDecl.getParTypeDecl().genericDecl() = this;
+  eq GenericInterfaceDecl.getParTypeDecl().genericDecl() = this;
+  eq ParClassDecl.getBodyDecl(int index).genericDecl() {
+    if(getBodyDecl(index) instanceof MemberType) {
+      MemberType m = (MemberType)getBodyDecl(index);
+      return extractSingleType(genericDecl().remoteLookupType(m.getTypeDecl().name()));
+    }
+    return genericDecl();
+  }
+  eq ParInterfaceDecl.getBodyDecl(int index).genericDecl() {
+    if(getBodyDecl(index) instanceof MemberType) {
+      MemberType m = (MemberType)getBodyDecl(index);
+      return extractSingleType(genericDecl().remoteLookupType(m.getTypeDecl().name()));
+    }
+    return genericDecl();
+  }
+  
+  syn boolean BodyDecl.visibleTypeParameters() = true;
+  eq MethodDecl.visibleTypeParameters() = !isStatic();
+  eq FieldDeclaration.visibleTypeParameters() = !isStatic();
+  eq StaticInitializer.visibleTypeParameters() = false;
+  eq MemberType.visibleTypeParameters() = !isStatic();
+  
+  public Access TypeDecl.createTypeVariableAccess() {
+    return createQualifiedAccess();
+    //throw new Error("Operation createTypeVariableAcess() is not supported by " + getClass().getName());
+  }
+  public Access TypeVariable.createTypeVariableAccess() {
+    return new TypeDot(enclosingType().createQualifiedAccess(), new TypeAccess(new List(), new IdUse(name())));
+  }
+
+  syn boolean TypeDecl.isTypeVariable() = false;
+  eq TypeVariable.isTypeVariable() = true;
+  eq ParClassDecl.isTypeVariable() {
+    for(int i = 0; i < getNumArgument(); i++)
+      if(getArgument(i).type().isTypeVariable())
+        return true;
+    return false;
+  }
+  eq ParInterfaceDecl.isTypeVariable() {
+    for(int i = 0; i < getNumArgument(); i++)
+      if(getArgument(i).type().isTypeVariable())
+        return true;
+    return false;
+  }
+  
+  public Access TypeVariable.createQualifiedAccess() {
+    return new TypeAccess(new List(), new IdUse(name()));
+  }
+
+  public Access ParTypeDecl.createQualifiedAccess() {
+    List packageList = new List();
+    List typeArgumentList = (List)getArgumentList().fullCopy();
+    if(isTopLevelType()) {
+      String[] strings = packageName().split("\\.");
+      for(int i = 0; i < strings.length; i++) {
+        if(!strings[i].equals(""))
+          packageList.add(new IdUse(strings[i]));
+      }
+    }
+    IdUse idUse = new IdUse(getIdDecl().getID());
+    if(!isTopLevelType()) {
+      return new TypeDot(
+        enclosingType().createQualifiedAccess(),
+        new ParameterizedTypeAccess(packageList, idUse, typeArgumentList)
+      );
+    }
+    else {
+      return new ParameterizedTypeAccess(packageList, idUse, typeArgumentList);
+    }
+  }
+}
+

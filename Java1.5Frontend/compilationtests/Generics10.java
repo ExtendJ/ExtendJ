@@ -28,16 +28,3 @@ class Seq<E> {
     }
   }
 }
-/*
-class SeqString {
-  String head;
-  SeqString tail;
-  SeqString();
-  boolean isEmpty();
-  SeqString(String head, SeqString tail)
-  class Zipper<T> {
-    Seq<Pair<SeqString, T>> zip(Seq<T> that);
-  }
-}
-*/
-  

@@ -1,0 +1,359 @@
+import java.util.*;
+
+aspect GenericMethodsInference {
+  syn boolean MethodAccess.nonParMethodAccess() = true;
+  eq ParMethodAccess.nonParMethodAccess() = false;
+
+  inh TypeDecl MethodAccess.typeObject();
+
+  rewrite MethodAccess {
+    when(nonParMethodAccess() && decl() instanceof GenericMethodDecl)
+    to ParMethodAccess {
+      Collection arguments = computeConstraints();
+      List list = new List();
+      for(Iterator iter = arguments.iterator(); iter.hasNext(); ) {
+        TypeDecl typeDecl = (TypeDecl)iter.next();
+        if(typeDecl == null) typeDecl = typeObject();
+        list.add(typeDecl.createQualifiedAccess());
+      }
+      return new ParMethodAccess(
+        (List)getArgList().fullCopy(),
+        (IdUse)getIdUse().fullCopy(),
+        list
+      );
+    }
+  }
+
+  private Collection MethodAccess.computeConstraints() {
+    System.err.println("\n\n\nCompute Constraints");
+    GenericMethodDecl decl = (GenericMethodDecl)decl();
+    Constraints c = new Constraints();
+    for(int i = 0; i < decl.getNumTypeParameter(); i++) {
+      TypeVariable T = decl.getTypeParameter(i);
+      c.addTypeVariable(T);
+    }
+    
+    for(int i = 0; i < getNumArg(); i++) {
+      TypeDecl F = decl.getParameter(i).type();
+      TypeDecl A = getArg(i).type();
+      System.err.println("Processing argument " + i + ", Formal: " + F.fullName() + ", Argument: " + A.fullName());
+      System.out.println("Is Argument " + A.getClass().getName() + " subtype of Formal " + F.getClass().getName() + "? " + A.instanceOf(F));
+      if(A == F) {
+        c.constraintEqual(A, F);
+      }
+      else if(A.methodInvocationConversionTo(F)) {
+        System.err.println("Assign convertible to");
+        c.convertibleTo(A, F);
+      }
+      else if(F.methodInvocationConversionTo(A)) {
+        System.err.println("Assign convertible from");
+        c.convertibleFrom(A, F);
+      }
+    }
+    
+    c.printConstraints();
+    System.err.println("Resolving equality constraints");
+    c.resolveEqualityConstraints();
+    c.printConstraints();
+
+    System.err.println("Resolving supertype constraints");
+    c.resolveSupertypeConstraints();
+    c.printConstraints();
+
+    System.err.println("Resolving unresolved type arguments");
+    c.resolveBounds();
+    c.printConstraints();
+
+    System.err.println("Arguments: ");
+    for(Iterator iter = c.typeArguments().iterator(); iter.hasNext(); ) {
+      TypeDecl t = (TypeDecl)iter.next();
+      System.err.println("  " + (t != null ? t.fullName() : "Unresolved"));
+    }
+
+    System.err.println("End Compute Constraints\n\n");
+    return c.typeArguments();
+  }
+
+  class Constraints {
+    static class ConstraintSet {
+      public ArrayList supertypeConstraints = new ArrayList(4);
+      public ArrayList subtypeConstraints = new ArrayList(4);
+      public ArrayList equaltypeConstraints = new ArrayList(4);
+      public TypeDecl typeArgument;
+    }
+    private Collection typeVariables;
+    private Map constraintsMap;
+
+    public Constraints() {
+      typeVariables = new ArrayList(4);
+      constraintsMap = new HashMap();
+    }
+
+    public void addTypeVariable(TypeVariable T) {
+      if(!typeVariables.contains(T)) {
+        typeVariables.add(T);
+        constraintsMap.put(T, new ConstraintSet());
+      }
+    }
+
+    public void printConstraints() {
+      System.err.println("Current constraints:");
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        for(Iterator i2 = set.supertypeConstraints.iterator(); i2.hasNext(); ) {
+          TypeDecl U = (TypeDecl)i2.next();
+          System.err.println("  " + T.fullName() + " :> " + U.fullName());
+        }
+        for(Iterator i2 = set.subtypeConstraints.iterator(); i2.hasNext(); ) {
+          TypeDecl U = (TypeDecl)i2.next();
+          System.err.println("  " + T.fullName() + " <: " + U.fullName());
+        }
+        for(Iterator i2 = set.equaltypeConstraints.iterator(); i2.hasNext(); ) {
+          TypeDecl U = (TypeDecl)i2.next();
+          System.err.println("  " + T.fullName() + " = " + U.fullName());
+        }
+      }
+    }
+
+    
+    public void resolveBounds() {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        if(set.typeArgument == null) {
+          if(T.getNumTypeBound() == 1)
+            set.typeArgument = T.getTypeBound(0).type();
+          else
+            throw new Error("Not supported for multiple bounds yet");
+        }
+      }
+    }
+
+    public void resolveEqualityConstraints() {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        Collection equalityConstraints = set.equaltypeConstraints;
+        boolean done = false;
+        for(Iterator i2 = equalityConstraints.iterator(); !done && i2.hasNext(); ) {
+          TypeDecl U = (TypeDecl)i2.next();
+          if(!typeVariables.contains(U)) {
+            replaceEqualityConstraints(T, U);   // replace equality constraints for other type variables
+            set.equaltypeConstraints.clear();
+            set.equaltypeConstraints.add(U);    // make U is the only equality constraint for T
+            set.typeArgument = U;
+            done = true;                        // continue on next type variable
+          }
+          else if(T == U) {
+            i2.remove();                        // discard constraint
+          }
+          else {
+            replaceAllConstraints(T, U);         // rewrite all constraints involving T to use U instead
+            done = true;                        // continue on next type variable
+          }
+          
+        }
+      }
+    }
+
+    public void replaceEqualityConstraints(TypeDecl before, TypeDecl after) {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        replaceConstraints(set.equaltypeConstraints, before, after);
+      }
+    }
+    
+    public void replaceAllConstraints(TypeDecl before, TypeDecl after) {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        replaceConstraints(set.supertypeConstraints, before, after);
+        replaceConstraints(set.subtypeConstraints, before, after);
+        replaceConstraints(set.equaltypeConstraints, before, after);
+      }
+    }
+    
+    private void replaceConstraints(ArrayList constraints, TypeDecl before, TypeDecl after) {
+      for(ListIterator i2 = constraints.listIterator(); i2.hasNext(); ) {
+        TypeDecl U = (TypeDecl)i2.next();
+        if(U == before) //  TODO: fix parameterized type
+          i2.set(after);
+      }
+    }
+    
+    public void resolveSupertypeConstraints() {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        if(!set.supertypeConstraints.isEmpty()) {
+          TypeDecl EC = (TypeDecl)set.supertypeConstraints.get(0);
+          for(Iterator i2 = set.supertypeConstraints.iterator(); i2.hasNext(); ) {
+            TypeDecl U = (TypeDecl)i2.next();
+            TypeDecl ST = U;
+            TypeDecl EST = ST.erasure();
+            EC = intersect(EC, EST);
+          }
+          TypeDecl MEC = EC;
+          System.err.println(" MEC(" + T.fullName() + ") = " + MEC.fullName());
+          set.typeArgument = MEC;
+        }
+      }
+    }
+
+    // operates only on erased types. does it matter? (no type variables, no partypedecl)
+    private TypeDecl intersect(TypeDecl t1, TypeDecl t2) {
+      if(t1.instanceOf(t2))
+        return t1;
+      else if(t2.instanceOf(t1))
+        return t2;
+      else {
+        Set set = new HashSet();
+        for(Iterator iter = directSupertypes(t1).iterator(); iter.hasNext(); ) {
+          TypeDecl t1Super = (TypeDecl)iter.next();
+          set.add(intersect(t1Super, t2));
+        }
+        if(set.isEmpty())
+          throw new Error("Empty intersection of " + t1.fullName() + " and " + t2.fullName());
+        TypeDecl lowestType = (TypeDecl)set.iterator().next();
+        for(Iterator iter = set.iterator(); iter.hasNext(); ) {
+          TypeDecl type = (TypeDecl)iter.next();
+          if(type.instanceOf(lowestType))
+            lowestType = type;
+          else if(!lowestType.instanceOf(type))
+            throw new Error("Several leaf types in intersection, " + lowestType.fullName() + " and " + type.fullName());
+        }
+        return lowestType;
+      }
+    }
+
+    private Set directSupertypes(TypeDecl t) {
+      if(t instanceof ClassDecl) {
+        ClassDecl type = (ClassDecl)t;
+        Set set = new HashSet();
+        if(type.hasSuperClass())
+          set.add(type.getSuperClass());
+        for(int i = 0; i < type.getNumImplements(); i++)
+          set.add(type.getImplements(i).type());
+        return set;
+      }
+      else if(t instanceof InterfaceDecl) {
+        InterfaceDecl type = (InterfaceDecl)t;
+        Set set = new HashSet();
+        for(int i = 0; i < type.getNumSuperInterfaceId(); i++)
+          set.add(type.getSuperInterfaceId(i).type());
+        return set;
+      }
+      else if(t instanceof TypeVariable) {
+        TypeVariable type = (TypeVariable)t;
+        Set set = new HashSet();
+        for(int i = 0; i < type.getNumTypeBound(); i++)
+          set.add(type.getTypeBound(i).type());
+        return set;
+      }
+      else
+        throw new Error("Operation not supported for " + t.fullName() + ", " + t.getClass().getName());
+    }
+
+    public Collection typeArguments() {
+      ArrayList list = new ArrayList(typeVariables.size());
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        list.add(set.typeArgument);
+      }
+      return list;
+    }
+
+    private void addSupertypeConstraint(TypeDecl T, TypeDecl A) {
+      ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+      set.supertypeConstraints.add(A);
+      System.out.println(T.name() + " :> " + A.fullName());
+    }
+    private void addSubtypeConstraint(TypeDecl T, TypeDecl A) {
+      ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+      set.subtypeConstraints.add(A);
+      System.out.println(T.name() + " <: " + A.fullName());
+    }
+    private void addEqualConstraint(TypeDecl T, TypeDecl A) {
+      ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+      set.equaltypeConstraints.add(A);
+      System.out.println(T.name() + " = " + A.fullName());
+    }
+    
+    public void convertibleTo(TypeDecl A, TypeDecl F) {
+      if(A.isPrimitive()) {
+        // TODO: box and apply reursively on result
+      }
+      else if(typeVariables.contains(F)) {
+        addSupertypeConstraint(F, A);
+      }
+      else if(F.isArrayDecl()) {
+        TypeDecl U = ((ArrayDecl)F).componentType();
+        if(A.isArrayDecl()) {
+          TypeDecl V = ((ArrayDecl)A).componentType();
+          convertibleTo(V, U);
+        }
+        else if(A.isTypeVariable()) {
+          TypeVariable t = (TypeVariable)A;
+          for(int i = 0; i < t.getNumTypeBound(); i++) {
+            TypeDecl typeBound = t.getTypeBound(i).type();
+            if(typeBound.isArrayDecl() && ((ArrayDecl)typeBound).componentType().isReferenceType()) {
+              TypeDecl V = ((ArrayDecl)typeBound).componentType();
+              convertibleTo(V, U);
+            }
+          }
+        }
+      }
+      // TODO: Bullet 4-6 (GenericTypes and Wildcards)
+    }
+    public void convertibleFrom(TypeDecl A, TypeDecl F) {
+      if(typeVariables.contains(F)) {
+        addSubtypeConstraint(F, A);
+      }
+      else if(F.isArrayDecl()) {
+        TypeDecl U = ((ArrayDecl)F).componentType();
+        if(A.isArrayDecl()) {
+          TypeDecl V = ((ArrayDecl)A).componentType();
+          convertibleFrom(V, U);
+        }
+        else if(A.isTypeVariable()) {
+          TypeVariable t = (TypeVariable)A;
+          for(int i = 0; i < t.getNumTypeBound(); i++) {
+            TypeDecl typeBound = t.getTypeBound(i).type();
+            if(typeBound.isArrayDecl() && ((ArrayDecl)typeBound).componentType().isReferenceType()) {
+              TypeDecl V = ((ArrayDecl)typeBound).componentType();
+              convertibleFrom(V, U);
+            }
+          }
+        }
+      }
+      // TODO: Bullet 4-6 (GenericTypes and Wildcards)
+      
+    }
+    public void constraintEqual(TypeDecl A, TypeDecl F) {
+      if(typeVariables.contains(F)) {
+        addEqualConstraint(F, A);
+      }
+      else if(F.isArrayDecl()) {
+        TypeDecl U = ((ArrayDecl)F).componentType();
+        if(A.isArrayDecl()) {
+          TypeDecl V = ((ArrayDecl)A).componentType();
+          constraintEqual(V, U);
+        }
+        else if(A.isTypeVariable()) {
+          TypeVariable t = (TypeVariable)A;
+          for(int i = 0; i < t.getNumTypeBound(); i++) {
+            TypeDecl typeBound = t.getTypeBound(i).type();
+            if(typeBound.isArrayDecl() && ((ArrayDecl)typeBound).componentType().isReferenceType()) {
+              TypeDecl V = ((ArrayDecl)typeBound).componentType();
+              constraintEqual(V, U);
+            }
+          }
+        }
+      }
+      // TODO: Bullet 4-6 (GenericTypes and Wildcards)
+    }
+  }
+}

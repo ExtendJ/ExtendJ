@@ -1,0 +1,55 @@
+ExprStmt explicit_constructor_invocation =
+		type_arguments.a THIS LPAREN argument_list_opt.l RPAREN SEMICOLON 
+		{:  return new ExprStmt(new ParConstructorAccess(l, new IdUse("this"), a));  :}
+	|	type_arguments.a SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON 
+		{:  return new ExprStmt(new ParSuperConstructorAccess(l, new IdUse("super"), a));  :}
+	|	primary.p DOT type_arguments.a SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON 
+		{:  return new ExprStmt(new Dot(p, new ParSuperConstructorAccess(l, new IdUse("super"), a))); :}
+	|	name.n DOT type_arguments.a SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON 
+		{:  return new ExprStmt(new Dot(n, new ParSuperConstructorAccess(l, new IdUse("super"), a))); :}
+	;
+	
+Access method_invocation =
+		primary.p DOT type_arguments.a IDENTIFIER.id LPAREN argument_list_opt.l RPAREN 
+		{: return new Dot(p, new ParParseMethodName(new IdUse(id), l, a));  :}
+	|	name.n DOT type_arguments.a IDENTIFIER.id LPAREN argument_list_opt.l RPAREN 
+		{: return new Dot(n, new ParParseMethodName(new IdUse(id), l, a));  :}
+	|	SUPER DOT type_arguments.a IDENTIFIER.id LPAREN argument_list_opt.l RPAREN 
+		{: return new Dot(new SuperAccess(new List(), new IdUse("super")), 
+		                    new ParParseMethodName(new IdUse(id), l, a));  :}
+	|	name.n DOT.d1 SUPER DOT.d2 type_arguments.a IDENTIFIER.id LPAREN argument_list_opt.l RPAREN 
+		{: return new Dot(new Dot(n, new SuperAccess(new List(), new IdUse("super"))),
+                            new ParParseMethodName(new IdUse(id), l, a));  :}
+	;
+
+MethodDecl method_header =
+		modifiers_opt.m LT type_parameter_list_1.l type.t par_method_declarator.d throws_opt.tl 
+		{:  d.setModifiers(m); d.setTypeAccess(t); d.setExceptionList(tl); 
+		   d.setTypeParameterList(l); return d;  :}
+	|	modifiers_opt.m LT type_parameter_list_1.l VOID par_method_declarator.d throws_opt.tl 
+		{:  d.setModifiers(m); d.setTypeAccess(new ParseName(new IdUse("void")));
+		   d.setExceptionList(tl); d.setTypeParameterList(l); return d;  :}
+	;
+
+ConstructorDecl constructor_declaration =
+		modifiers_opt.m LT type_parameter_list_1.l IDENTIFIER.id LPAREN formal_parameter_list_opt.pl RPAREN throws_opt.tl generic_constructor_body.b 
+		{:  b.setModifiers(m); b.setIdDecl(new IdDecl(id)); b.setParameterList(pl); b.setExceptionList(tl);  
+		   b.setTypeParameterList(l); return b; :}
+	;
+
+GenericConstructorDecl generic_constructor_body =
+		LBRACE explicit_constructor_invocation.c
+			block_statements.l RBRACE                           {: return new GenericConstructorDecl(null, null, null, null, new Opt(c), new Block(l), null, null); :}
+	|	LBRACE explicit_constructor_invocation.c RBRACE       {: return new GenericConstructorDecl(null, null, null, null, new Opt(c), new Block(new List()), null, null); :}
+	|	LBRACE block_statements.l RBRACE                      {: return new GenericConstructorDecl(null, null, null, null, new Opt(), new Block(l), null, null); :}
+	|	LBRACE RBRACE                                         {: return new GenericConstructorDecl(null, null, null, null, new Opt(), new Block(new List()), null, null); :}
+	;
+
+
+   
+GenericMethodDecl par_method_declarator =
+		IDENTIFIER.id LPAREN formal_parameter_list_opt.p RPAREN 
+		{: return new GenericMethodDecl(null, null, new IdDecl(id), p, new List(), null, new Opt(), null, new List()); :}
+	|	par_method_declarator.m LBRACK RBRACK {: m.addEmptyBracket(new EmptyBracket()); return m; :}
+	;
+

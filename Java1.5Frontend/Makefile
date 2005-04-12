@@ -3,9 +3,10 @@ COMPILER = $(PWD)/../Java1.5Frontend
 
 FILES = StaticImports.ast StaticImports.jrag \
         EnhancedFor.ast EnhancedFor.jrag EnhancedForToBytecode.jrag \
-        Generics.ast Generics.jrag GenericsPrettyPrint.jrag 
+        Generics.ast Generics.jrag GenericTypeVariables.jrag GenericsParTypeDecl.jrag GenericsPrettyPrint.jrag \
+        GenericMethods.ast GenericMethods.jrag GenericMethodsInference.jrag
         
-PARSEFILES = EnhancedFor.parser StaticImports.parser Generics.parser
+PARSEFILES = EnhancedFor.parser StaticImports.parser Generics.parser GenericMethods.parser
 
 export EXTERNALJRAGFILES += $(addprefix $(COMPILER)/, $(FILES))
 export EXTERNALPARSERFILES += $(addprefix $(COMPILER)/, $(PARSEFILES))

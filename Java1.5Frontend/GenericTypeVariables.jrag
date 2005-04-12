@@ -1,0 +1,165 @@
+aspect GenericTypeVariables {
+  
+  // The bounds of a type variable should be resolved to type names
+  eq TypeVariable.getTypeBound().nameType() = NameType.TYPE_NAME;
+
+  rewrite TypeVariable {
+		when (getNumTypeBound() == 0)
+    to TypeVariable {
+			addTypeBound(
+        new TypeAccess(
+				  new List().add(new IdUse("java")).add(new IdUse("lang")), 
+				  new IdUse("Object")
+        )
+      );
+			return this;
+		}
+	}    
+
+  public void TypeVariable.nameCheck() {
+    if(extractSingleType(lookupType(name())) != this)
+      error("*** Semantic Error: type variable " + name() + " is multiply declared");
+  }
+
+  
+}
+
+aspect GenericTypeVariablesMembers {
+  eq TypeVariable.methods(String name) {
+    Collection list = new HashSet();
+    for(int i = 0; i < getNumTypeBound(); i++) {
+      for(Iterator iter = getTypeBound(i).type().methods(name).iterator(); iter.hasNext(); ) {
+        MethodDecl decl = (MethodDecl)iter.next();
+        if(!decl.isPrivate())
+          list.add(decl);
+      }
+    }
+    return list;
+  }
+  
+  eq TypeVariable.fields() {
+    ArrayList list = new ArrayList();
+    for(int i = 0; i < getNumTypeBound(); i++) {
+      for(Iterator iter = getTypeBound(i).type().fields().iterator(); iter.hasNext(); ) {
+        FieldDeclaration decl = (FieldDeclaration)iter.next();
+        if(!decl.isPrivate() && !list.contains(decl))
+          list.add(decl);
+      }
+    }
+    return list;
+  }
+
+}
+
+aspect GenricTypeVariablesTypeAnalysis {
+
+  public void TypeVariable.typeCheck() {
+    if(!getTypeBound(0).type().isClassDecl() && !getTypeBound(0).type().isInterfaceDecl()) {
+      error(errorPrefix() + "the first type bound must be a class or interface type which " + 
+        getTypeBound(0).type().fullName() + " is not");
+    }
+    for(int i = 1; i < getNumTypeBound(); i++) {
+      if(!getTypeBound(i).type().isInterfaceDecl()) {
+        error(errorPrefix() + "type bound " + i + " must be an interface type which " + 
+          getTypeBound(i).type().fullName() + " is not");
+      }
+    }
+    HashSet typeSet = new HashSet();
+    for(int i = 0; i < getNumTypeBound(); i++) {
+      TypeDecl type = getTypeBound(i).type();
+      TypeDecl erasure = type.erasure();
+      if(typeSet.contains(erasure)) {
+        if(type != erasure) {
+          error(errorPrefix() + "the erasure " + erasure.fullName() + " of typebound " + getTypeBound(i) + " is multiply declared in " + this);
+        }
+        else {
+          error(errorPrefix() + type.fullName() + " is multiply declared in " + this);
+        }
+      }
+      typeSet.add(erasure);
+    }
+
+    for(int i = 0; i < getNumTypeBound(); i++) {
+      TypeDecl type = getTypeBound(i).type();
+      for(Iterator iter = type.methods().iterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        for(int j = i+1; j < getNumTypeBound(); j++) {
+          TypeDecl destType = getTypeBound(j).type();
+          for(Iterator destIter = destType.methods(m.name()).iterator(); destIter.hasNext(); ) {
+            MethodDecl n = (MethodDecl)destIter.next();
+            if(m.sameSignature(n) && m.type() != n.type()) {
+              error(errorPrefix() + "the two bounds, " + type.name() + " and " + destType.name() + ", in type variable " + name() + 
+                " have a method " + m.signature() + " with conflicting return types " + m.type().name() + " and " + n.type().name());
+            }
+          }
+        }
+      }
+    }
+
+    
+  }
+  
+  
+  
+  eq TypeVariable.instanceOf(TypeDecl type) = type.isSupertypeOfTypeVariable(this);
+  public boolean TypeVariable.isSupertypeOfClassDecl(ClassDecl type) {
+    return true;
+  //  return super.isSupertypeOfClassDecl(type);
+    /*
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(!type.instanceOf(getTypeBound(i).type())) {
+        return false;
+      }
+    return true;
+    */
+  }
+  /*
+  public boolean TypeVariable.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+    return super.isSupertypeOfInterfaceDecl(type);
+  }
+  public boolean TypeVariable.isSupertypeOfArrayDecl(ArrayDecl type) {
+    return super.isSupertypeOfArrayDecl(type);
+  }
+  */
+  public boolean TypeDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+    //System.err.print("  is " + type.fullName() + " a subtype of " + fullName() + "? ");
+    if(type == this) {
+      //System.err.println("yes");
+      return true;
+    }
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this)) {
+        //System.err.println("yes");
+        return true;
+      }
+    //System.err.println("no");
+    return false;
+    //return type == this;
+  }
+  /*
+  public boolean ClassDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+    if(super.isSupertypeOfTypeVariable(type))
+      return true;
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this))
+        return true;
+    return false;
+  }
+  public boolean InterfaceDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+    if(super.isSupertypeOfTypeVariable(type))
+      return true;
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this))
+        return true;
+    return false;
+  }
+  public boolean TypeVariable.isSupertypeOfTypeVariable(TypeVariable type) {
+    if(super.isSupertypeOfTypeVariable(type))
+      return true;
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this))
+        return true;
+    return false;
+  }
+  */
+}

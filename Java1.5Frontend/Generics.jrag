@@ -12,7 +12,6 @@ aspect Generics {
     return "*** Semantic Error at " + location() + ": ";
   }
 
-
   interface GenericTypeDecl {
     syn boolean isGenericType();
     int getNumTypeParameter();
@@ -23,88 +22,165 @@ aspect Generics {
   GenericClassDecl implements GenericTypeDecl;
   GenericInterfaceDecl implements GenericTypeDecl;
   
+  syn boolean TypeDecl.isGenericType() = false;
+  eq GenericTypeDecl.isGenericType() = true;
+
   interface ParTypeDecl {
     syn String name();
     int getNumArgument();
     Access getArgument(int index);
+    int getNumTypeParameter();
+    TypeVariable getTypeParameter(int index);
     syn boolean isParameterizedType();
+    syn boolean isRawType();
     
   }
   ParClassDecl implements ParTypeDecl;
   ParInterfaceDecl implements ParTypeDecl;
   
-  syn boolean TypeDecl.isGenericType() = false;
-  eq GenericTypeDecl.isGenericType() = true;
-  
   syn boolean TypeDecl.isParameterizedType() = false;
   eq ParTypeDecl.isParameterizedType() = true;
 
-  eq ParTypeDecl.name() {
-    StringBuffer s = new StringBuffer();
-    s.append(super.name());
-    s.append("<");
-    for(int i = 0; i < getNumArgument(); i++) {
-      if(i != 0)
-        s.append(", ");
-      s.append(getArgument(i).type().fullName());
-    }
-    s.append(">");
-    return s.toString();
-  }
+  syn boolean TypeDecl.isRawType() = false;
+  eq ParClassDecl.isRawType() = false;
+  eq ParInterfaceDecl.isRawType() = false;
+  eq RawClassDecl.isRawType() = true;
+  eq RawInterfaceDecl.isRawType() = true;
+}
 
-  eq TypeVariable.instanceOf(TypeDecl type) = type.isSupertypeOfTypeVariable(this);
+aspect GenericsTypeAnalysis {
 
-  public boolean TypeVariable.isSupertypeOfClassDecl(ClassDecl type) {
-    for(int i = 0; i < getNumTypeBound(); i++)
-      if(!type.instanceOf(getTypeBound(i).type()))
-        return false;
-    return true;
-  }
-  public boolean TypeVariable.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
-    return super.isSupertypeOfInterfaceDecl(type);
-  }
-  public boolean TypeVariable.isSupertypeOfArrayDecl(ArrayDecl type) {
-    return super.isSupertypeOfArrayDecl(type);
-  }
-  public boolean TypeDecl.isSupertypeOfTypeVariable(TypeVariable type) {
-    return type == this;
-  }
-  public boolean ClassDecl.isSupertypeOfTypeVariable(TypeVariable type) {
-    if(super.isSupertypeOfTypeVariable(type))
-      return true;
-    return type.getTypeBound(0).type().isClassDecl() && type.getTypeBound(0).type().instanceOf(this);
-  }
-  public boolean InterfaceDecl.isSupertypeOfTypeVariable(TypeVariable type) {
-    if(super.isSupertypeOfTypeVariable(type))
-      return true;
-    for(int i = 0; i < type.getNumTypeBound(); i++)
-      if(type.getTypeBound(i).type().instanceOf(this))
-        return true;
+  eq WildcardExtendsType.instanceOf(TypeDecl type) = type.isSupertypeOfWildcardExtends(this);
+  public boolean TypeDecl.isSupertypeOfWildcardExtends(WildcardExtendsType type) {
     return false;
   }
-  public boolean TypeVariable.isSupertypeOfTypeVariable(TypeVariable type) {
-    if(super.isSupertypeOfTypeVariable(type))
-      return true;
-    for(int i = 0; i < type.getNumTypeBound(); i++)
-      if(type.getTypeBound(i).type().instanceOf(this))
-        return true;
-    return false;
+  public boolean WildcardExtendsType.isSupertypeOfWildcardExtends(WildcardExtendsType type) {
+    return type.extendsType().instanceOf(extendsType());
   }
-
+  public boolean TypeVariable.isSupertypeOfWildcardExtends(WildcardExtendsType type) {
+    return type.extendsType().instanceOf(this);
+  }
+  public boolean WildcardExtendsType.isSupertypeOfTypeVariable(TypeVariable type) {
+    return type.instanceOf(extendsType());
+  }
   
-  inh lazy TypeDecl ParClassDecl.genericDecl();
-  inh lazy TypeDecl ParInterfaceDecl.genericDecl();
-  eq GenericClassDecl.getParTypeDecl().genericDecl() = this;
-  eq GenericInterfaceDecl.getParTypeDecl().genericDecl() = this;
-  eq ParClassDecl.getBodyDecl(int index).genericDecl() {
-    if(getBodyDecl(index) instanceof MemberType) {
-      MemberType m = (MemberType)getBodyDecl(index);
-      return extractSingleType(genericDecl().remoteLookupType(m.getTypeDecl().name()));
-    }
-    return genericDecl();
+  eq WildcardSuperType.instanceOf(TypeDecl type) = type.isSupertypeOfWildcardSuper(this);
+  public boolean TypeDecl.isSupertypeOfWildcardSuper(WildcardSuperType type) {
+    return false;
   }
-  eq Program.getCompilationUnit().genericDecl() = null;
+  public boolean WildcardSuperType.isSupertypeOfWildcardSuper(WildcardSuperType type) {
+    return type.superType().instanceOf(superType());
+  }
+  public boolean TypeVariable.isSupertypeOfWildcardSuper(WildcardSuperType type) {
+    return type.superType().instanceOf(this);
+  }
+  public boolean WildcardSuperType.isSupertypeOfTypeVariable(TypeVariable type) {
+    return type.instanceOf(superType());
+  }
+  
+  syn boolean TypeDecl.isWildcard() = false;
+  eq WildcardType.isWildcard() = true;
 
+  syn boolean TypeDecl.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl instanceof WildcardExtendsType) {
+      WildcardExtendsType other = (WildcardExtendsType)typeDecl;
+      return instanceOf(other.extendsType());
+    }
+    else if(typeDecl instanceof WildcardSuperType) {
+      WildcardSuperType other = (WildcardSuperType)typeDecl;
+      return other.superType().instanceOf(this);
+    }
+    return false;
+  }
+  eq WildcardExtendsType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl instanceof WildcardExtendsType) {
+      WildcardExtendsType other = (WildcardExtendsType)typeDecl;
+      return extendsType().instanceOf(other.extendsType());
+    }
+    return false;
+  }
+  eq WildcardSuperType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl instanceof WildcardSuperType) {
+      WildcardSuperType other = (WildcardSuperType)typeDecl;
+      return other.superType().instanceOf(superType());
+    }
+    if(typeDecl instanceof WildcardExtendsType) {
+      return true; // Dragons?
+    }
+    return false;
+  }
+
+  eq ParTypeDecl.instanceOf(TypeDecl type) {
+    if(super.instanceOf(type))
+      return true;
+    if(type instanceof ParTypeDecl) {
+      ParTypeDecl typeDecl = (ParTypeDecl)type;
+      //System.err.println("Computing " + fullName() + " isSubtypeOf " + ((TypeDecl)typeDecl).fullName());
+      TypeDecl g1 = genericDecl();
+      TypeDecl g2 = typeDecl.genericDecl();
+      if(g1 == g2 && (isRawType() || type.isRawType()))
+        return true;
+      if(g1.instanceOf(g2)) {
+        //System.err.println("Checking type arguments");
+        if(getNumArgument() == typeDecl.getNumArgument()) {
+          for(int i = 0; i < getNumArgument(); i++) {
+            if(typeDecl.getArgument(i).type().isTypeVariable()) {
+              if(!getArgument(i).type().instanceOf(typeDecl.getArgument(i).type())) {
+                //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not subtypes");
+                return false;
+              }
+            }
+            else if(!getArgument(i).type().wildcardSubtype(typeDecl.getArgument(i).type())) {
+              //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not wildcard subtypes");
+              return false;
+            }
+          }
+          return true;
+        }
+        else {
+          //System.err.println("Number of type arguments does not match");
+        }
+      }
+      else {
+        //System.err.println("Generic type " + g1.fullName() + " is not an instanceof " + g2.fullName());
+      }
+    }
+    Object that = this;
+    if(that instanceof ParClassDecl) {
+      ParClassDecl p = (ParClassDecl)that;
+      if(p.hasSuperClass() && p.getSuperClass().instanceOf(type))
+        return true;
+      for(int i = 0; i < p.getNumImplements(); i++)
+        if(p.getImplements(i).type().instanceOf(type))
+          return true;
+    }
+    else if(that instanceof ParInterfaceDecl) {
+      ParInterfaceDecl p = (ParInterfaceDecl)that;
+      for(int i = 0; i < p.getNumSuperInterfaceId(); i++)
+        if(p.getSuperInterfaceId(i).type().instanceOf(type))
+          return true;
+    }
+    return false;
+  }
+  
+
+
+  eq ParameterizedTypeAccess.type() {
+    //System.err.println("Computing type for parameterized type access " + getIdUse().getID());
+    if(decl() instanceof GenericTypeDecl) {
+      GenericTypeDecl decl = (GenericTypeDecl)decl();
+      //System.err.println("  need to lookupParTypeDecl");
+      //dumpNoRewrite(2);
+      TypeDecl result = (TypeDecl)decl.lookupParTypeDecl(this);
+      //System.err.println(" type computed");
+      return result;
+    }
+    return decl();
+  }
+  
+}
+
+aspect GenericsErasure {
   syn TypeDecl TypeDecl.erasure() {
     if(!isNestedType())
       return this;
@@ -114,10 +190,9 @@ aspect Generics {
   eq ParInterfaceDecl.erasure() = genericDecl();
   eq TypeVariable.erasure() = getTypeBound(0).type().erasure(); // Skip last erasure?
   eq ArrayDecl.erasure() = getElementType().erasure();
+}
 
-  inh TypeDecl GenericClassDecl.typeThrowable();
-  inh TypeDecl GenericInterfaceDecl.typeThrowable();
-
+aspect GenericsTypeCheck {
   public void GenericClassDecl.typeCheck() {
     super.typeCheck();
     if(instanceOf(typeThrowable()))
@@ -128,6 +203,8 @@ aspect Generics {
     if(instanceOf(typeThrowable()))
       error(errorPrefix() + " generic interface " + fullName() + " may not directly or indirectly inherit java.lang.Throwable");
   }
+  inh TypeDecl GenericClassDecl.typeThrowable();
+  inh TypeDecl GenericInterfaceDecl.typeThrowable();
 
   public void ParameterizedTypeAccess.typeCheck() {
     super.typeCheck();
@@ -140,50 +217,46 @@ aspect Generics {
         error(errorPrefix() + decl.fullName() + " takes " + decl.getNumTypeParameter() + " type parameters, not " + getNumTypeArgument() + " as used in " + this);
       }
       else {
+        ParTypeDecl typeDecl = (ParTypeDecl)type();
         for(int i = 0; i < getNumTypeArgument(); i++) {
-          if(!getTypeArgument(i).type().instanceOf(decl.getTypeParameter(i))) {
+          //if(!getTypeArgument(i).type().instanceOf(decl.getTypeParameter(i))) {
+          //  error(errorPrefix() + "type argument " + i + " is of type " + getTypeArgument(i).type().fullName() 
+          //    + " which is not a subtype of " + decl.getTypeParameter(i));
+          //}
+          if(!typeDecl.getTypeParameter(i).validArgument(getTypeArgument(i).type())) {
+          //if(!getTypeArgument(i).type().instanceOf(typeDecl.getTypeParameter(i))) {
             error(errorPrefix() + "type argument " + i + " is of type " + getTypeArgument(i).type().fullName() 
-              + " which is not a subtype of " + decl.getTypeParameter(i));
+              + " which is not a valid argument to type parameter " + typeDecl.getTypeParameter(i));
           }
         }
       }
     }
   }
 
-  public void TypeVariable.typeCheck() {
-    if(!getTypeBound(0).type().isClassDecl() && !getTypeBound(0).type().isInterfaceDecl()) {
-      error(errorPrefix() + "the first type bound must be a class or interface type which " + 
-        getTypeBound(0).type().fullName() + " is not");
+  syn lazy boolean TypeVariable.validArgument(TypeDecl type) {
+    // here be dragons
+    if(type.isWildcard())
+      return true;
+    if(type instanceof TypeVariable) {
+      type = type.erasure();
     }
-    for(int i = 1; i < getNumTypeBound(); i++) {
-      if(!getTypeBound(i).type().isInterfaceDecl()) {
-        error(errorPrefix() + "type bound " + i + " must be an interface type which " + 
-          getTypeBound(i).type().fullName() + " is not");
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(!type.instanceOf(getTypeBound(i).type())) {
+        return false;
       }
-    }
-    HashSet typeSet = new HashSet();
-    for(int i = 0; i < getNumTypeBound(); i++) {
-      TypeDecl type = getTypeBound(i).type();
-      TypeDecl erasure = type.erasure();
-      if(typeSet.contains(erasure)) {
-        if(type != erasure) {
-          error(errorPrefix() + "the erasure " + erasure.fullName() + " of typebound " + getTypeBound(i) + " is multiply declared in " + this);
-        }
-        else {
-          error(errorPrefix() + type.fullName() + " is multiply declared in " + this);
-        }
-      }
-      typeSet.add(erasure);
-    }
+    return true;
   }
 
-  // The bounds of a type variable should be resolved to type names
-  eq TypeVariable.getTypeBound().nameType() = NameType.TYPE_NAME;
+}
+
+aspect GenericsNameBinding {
+
   eq ParClassDecl.getArgument().nameType() = NameType.TYPE_NAME;
   eq ParInterfaceDecl.getArgument().nameType() = NameType.TYPE_NAME;
 
   // Type arguments lookup types in unqualified scope and not in remote type when using dot notation
   eq ParameterizedTypeAccess.getTypeArgument().lookupType(String name) = unqualifiedScope().lookupType(name);
+  eq ParTypeAccess.getTypeArgument().lookupType(String name) = unqualifiedScope().lookupType(name);
 
   eq GenericClassDecl.getParTypeDecl().isNestedType() = isNestedType();
   eq GenericClassDecl.getParTypeDecl().enclosingType() = enclosingType();
@@ -195,36 +268,31 @@ aspect Generics {
   eq GenericInterfaceDecl.getTypeParameter().isNestedType() = true;
   eq GenericInterfaceDecl.getTypeParameter().enclosingType() = this;
 
-  eq GenericInterfaceDecl.getSuperInterfaceId().lookupType(String name) {
-    TypeCollection c = TypeCollection.emptyCollection();
+  public TypeCollection GenericTypeDecl.addTypeVariables(TypeCollection c, String name) {
     for(int i = 0; i < getNumTypeParameter(); i++) {
       TypeVariable p = getTypeParameter(i);
       if(p.name().equals(name)) {
         c = c.add(p);
       }
     }
+    return c;
+  }
+
+  eq GenericInterfaceDecl.getSuperInterfaceId().lookupType(String name) {
+    TypeCollection c = TypeCollection.emptyCollection();
+    c = addTypeVariables(c, name);
     if(!c.isEmpty()) return c;
     return lookupType(name);
   }
   eq GenericClassDecl.getSuperClassAccess().lookupType(String name) {
     TypeCollection c = TypeCollection.emptyCollection();
-    for(int i = 0; i < getNumTypeParameter(); i++) {
-      TypeVariable p = getTypeParameter(i);
-      if(p.name().equals(name)) {
-        c = c.add(p);
-      }
-    }
+    c = addTypeVariables(c, name);
     if(!c.isEmpty()) return c;
     return lookupType(name);
   }
   eq GenericClassDecl.getImplements().lookupType(String name) {
     TypeCollection c = TypeCollection.emptyCollection();
-    for(int i = 0; i < getNumTypeParameter(); i++) {
-      TypeVariable p = getTypeParameter(i);
-      if(p.name().equals(name)) {
-        c = c.add(p);
-      }
-    }
+    c = addTypeVariables(c, name);
     if(!c.isEmpty()) return c;
     return lookupType(name);
   }
@@ -232,12 +300,7 @@ aspect Generics {
 
   eq GenericTypeDecl.getTypeParameter().lookupType(String name) {
     TypeCollection c = localLookupType(name);
-    for(int i = 0; i < getNumTypeParameter(); i++) {
-      TypeVariable p = getTypeParameter(i);
-      if(p.name().equals(name)) {
-        c = c.add(p);
-      }
-    }
+    c = addTypeVariables(c, name);
     if(!c.isEmpty())
       return c;
     c = lookupType(name);
@@ -256,14 +319,8 @@ aspect Generics {
   }
   eq GenericTypeDecl.getBodyDecl(int index).lookupType(String name) {
     TypeCollection c = localLookupType(name);
-    if(getBodyDecl(index).visibleTypeParameters()) {
-      for(int i = 0; i < getNumTypeParameter(); i++) {
-        TypeVariable p = getTypeParameter(i);
-        if(p.name().equals(name)) {
-          c = c.add(p);
-        }
-      }
-    }
+    if(getBodyDecl(index).visibleTypeParameters())
+      c = addTypeVariables(c, name);
     if(!c.isEmpty())
       return c;
     c = lookupType(name);
@@ -283,286 +340,16 @@ aspect Generics {
   }
 
   public TypeCollection GenericTypeDecl.remoteLookupType(String name) {
-    TypeCollection c = localLookupType(name);
-    for(int i = 0; i < getNumTypeParameter(); i++) {
-      TypeVariable p = getTypeParameter(i);
-      if(p.name().equals(name)) {
-        c = c.add(p);
-      }
-    }
-    return c;
-  }
-
-  syn boolean BodyDecl.visibleTypeParameters() = true;
-  eq MethodDecl.visibleTypeParameters() = !isStatic();
-  eq FieldDeclaration.visibleTypeParameters() = !isStatic();
-  eq StaticInitializer.visibleTypeParameters() = false;
-  eq MemberType.visibleTypeParameters() = !isStatic();
-  
-  
-  public TypeCollection ParTypeDecl.localLookupType(String name) {
-    TypeCollection c = super.localLookupType(name);
-    for(int i = 0; i < getNumTypeParameter(); i++) {
-      TypeVariable p = getTypeParameter(i);
-      if(p.name().equals(name)) {
-        // Replace parameter type with argument type
-        if(getArgument(i) instanceof Wildcard) {
-          System.err.println("Processing wildcard type in " + fullName());
-          c = c.add(typeObject());
-        }
-        else {
-          c = c.add(getArgument(i).type());
-        }
-      }
-    }
-    return c;
-  }
-
-
-  syn lazy ParTypeDecl GenericTypeDecl.lookupParTypeDecl(ParameterizedTypeAccess p);
-  eq GenericClassDecl.lookupParTypeDecl(ParameterizedTypeAccess p) {
-    ParClassDecl typeDecl = null;
-    for(int i = 0; i < getNumParTypeDecl(); i++) {
-      ParClassDecl decl = getParTypeDecl(i);
-      boolean match = true;
-      if(decl.getNumArgument() == p.getNumTypeArgument()) {
-        for(int j = 0; j < decl.getNumArgument(); j++) {
-          if(decl.getArgument(j).type() != p.getTypeArgument(j).type())
-            match = false;
-        }
-      }
-      else {
-        match = false;
-      }
-      if(match)
-        typeDecl = decl;
-    }
-    if(typeDecl == null) {
-      // build parameterized type decl using arguments from distant type access
-      typeDecl = new ParClassDecl();
-      addParTypeDecl(typeDecl);
-      typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-      typeDecl.setIdDecl((IdDecl)getIdDecl().fullCopy());
-      typeDecl.setSuperClassAccessOpt((Opt)getSuperClassAccessOpt().fullCopy());
-      typeDecl.setImplementsList((List)getImplementsList().fullCopy());
-      typeDecl.setArgumentList((List)p.getTypeArgumentList().fullCopy());
-      typeDecl.setTypeParameterList((List)getTypeParameterList().fullCopy());
-    }
-    return typeDecl;
-  }
-  eq GenericInterfaceDecl.lookupParTypeDecl(ParameterizedTypeAccess p) {
-    ParInterfaceDecl typeDecl = null;
-    for(int i = 0; i < getNumParTypeDecl(); i++) {
-      ParInterfaceDecl decl = getParTypeDecl(i);
-      boolean match = true;
-      if(decl.getNumArgument() == p.getNumTypeArgument()) {
-        for(int j = 0; j < decl.getNumArgument(); j++) {
-          if(decl.getArgument(j).type() != p.getTypeArgument(j).type())
-            match = false;
-        }
-      }
-      else {
-        match = false;
-      }
-      if(match)
-        typeDecl = decl;
-    }
-    if(typeDecl == null) {
-      // build parameterized type decl using arguments from distant type access
-      typeDecl = new ParInterfaceDecl();
-      addParTypeDecl(typeDecl);
-      typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-      typeDecl.setIdDecl((IdDecl)getIdDecl().fullCopy());
-      typeDecl.setSuperInterfaceIdList((List)getSuperInterfaceIdList().fullCopy());
-      typeDecl.setArgumentList((List)p.getTypeArgumentList().fullCopy());
-      typeDecl.setTypeParameterList((List)getTypeParameterList().fullCopy());
-    }
-    return typeDecl;
-  }
-
-  syn boolean TypeDecl.isTypeVariable() = false;
-  eq TypeVariable.isTypeVariable() = true;
-
-  syn lazy boolean MethodDecl.usesTypeVariable() {
-    if(type().isTypeVariable())
-      return true;
-    for(int i = 0; i < getNumParameter(); i++)
-      if(getParameter(i).type().isTypeVariable())
-        return true;
-    for(int i = 0; i < getNumException(); i++)
-      if(getException(i).type().isTypeVariable())
-        return true;
-    return false;
-  }
-
-
-  private MethodDecl ParTypeDecl.parameterize(MethodDecl m) {
-    //if(!m.usesTypeVariable())
-    //  return m;
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl decl = (MethodDecl)getBodyDecl(i);
-        if(decl.getIdDecl().getID().equals(m.getIdDecl().getID()))      // Add better detection to match m and decl
-          return decl;
-      }
-    }
-    MethodDecl decl = new MethodDecl(
-      (Modifiers)m.getModifiers().fullCopy(),
-      (Access)m.getTypeAccess().fullCopy(),
-      (IdDecl)m.getIdDecl().fullCopy(),
-      (List)m.getParameterList().fullCopy(),
-      (List)m.getEmptyBracketList().fullCopy(),
-      (List)m.getExceptionList().fullCopy(),
-      new Opt(new Block())
-    );
-    addBodyDecl(decl);
-    System.err.println("Building " + decl.signature() + " in " + fullName());
-
-    if(decl.getTypeAccess() instanceof Wildcard) {
-      System.err.println("Detected wildcard return type replacing with object");
-      decl.setTypeAccess(typeObject().createQualifiedAccess());
-    }
-    
-    return decl;
-  }
-  
-  public Access TypeVariable.createQualifiedAccess() {
-    return new TypeAccess(new List(), new IdUse(name()));
-  }
-
-  eq ParTypeDecl.methods(String name) {
-    Collection methods = genericDecl().methods(name);
-    Collection c = new ArrayList(methods.size());
-    for(Iterator iter = methods.iterator(); iter.hasNext(); )
-      c.add(parameterize((MethodDecl)iter.next()));
-    return c;
-  }
-
-  eq ParTypeDecl.types(String name) {
-    Collection c = new ArrayList(1);
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MemberType) {
-        MemberType m = (MemberType)getBodyDecl(i);
-        if(m.getTypeDecl().name().equals(name))
-          c.add(m.getTypeDecl());
-      }
-    }
+    // a type variable may be used in extends and implements clauses
+    // type variable may then be used qualified when instantiating extends and implements clauses
+    // this will result in remote lookups of the type variables
+    // therefore they alone must be considered and not include localLookupType that
+    // will result in a circularity
+    TypeCollection c = TypeCollection.emptyCollection();
+    c = addTypeVariables(c, name);
     if(!c.isEmpty())
       return c;
-    Collection types = genericDecl().types(name);
-    for(Iterator iter = types.iterator(); iter.hasNext(); ) {
-      TypeDecl t = (TypeDecl)iter.next();
-      TypeDecl decl = (TypeDecl)t.fullCopy();
-      if(t instanceof ClassDecl) {
-        addBodyDecl(
-          new MemberClass(
-            (ClassDecl)decl
-          )
-        );
-        c.add(decl);
-      }
-      else if(t instanceof InterfaceDecl) {
-        addBodyDecl(
-          new MemberInterface(
-            (InterfaceDecl)decl
-          )
-        );
-        c.add(decl);
-      }
-    }
-    return c;
-  }
-  
-  private boolean ParClassDecl.buildConstructors = true;
-  private void ParClassDecl.buildConstructors() {
-    if(!buildConstructors)
-      return;
-    buildConstructors = false;
-    TypeDecl g = genericDecl();
-    for(int i = 0; i < g.getNumBodyDecl(); i++) {
-      if(g.getBodyDecl(i) instanceof ConstructorDecl) {
-        ConstructorDecl c = (ConstructorDecl)g.getBodyDecl(i);
-        ConstructorDecl decl = new ConstructorDecl(
-          (Modifiers)c.getModifiers().fullCopy(),
-          (IdDecl)c.getIdDecl().fullCopy(),
-          (List)c.getParameterList().fullCopy(),
-          (List)c.getExceptionList().fullCopy(),
-          new Opt(),
-          new Block()
-        );
-        addBodyDecl(decl);
-        /*
-        for(int j = 0; j < decl.getNumParameter(); j++) {
-          Parameter p = decl.getParameter(j);
-          p.setTypeAccess(p.getTypeAccess().type().createQualifiedAccess());
-        }
-        */
-      }
-    }
-  }
-    
-  public ArrayList ParClassDecl.findConstructor(List argList, TypeDecl typeDecl) {
-    buildConstructors();
-    return super.findConstructor(argList, typeDecl);
-  }
-
-  private boolean ParTypeDecl.buildFields = true;
-  private void ParTypeDecl.buildFields() {
-    if(!buildFields)
-      return;
-    buildFields = false;
-    Collection fields = genericDecl().fields();
-    System.err.println("Adding fields to paramterized class decl " + fullName() + " from " + genericDecl().fullName());
-    for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
-      FieldDeclaration f = (FieldDeclaration)iter.next();
-      FieldDeclaration decl = new FieldDeclaration(
-        (Modifiers)f.getModifiers().fullCopy(),
-        (Access)f.getTypeAccess().fullCopy(),
-        (IdDecl)f.getIdDecl().fullCopy(),
-        new Opt()
-      );
-      addBodyDecl(decl);
-      /*
-      f.setTypeAccess(f.getTypeAccess().type().createQualifiedAccess());
-      */
-    }
-  }
-
-  eq ParTypeDecl.fields() {
-    buildFields();
-    return super.fields();
-  }
-
-  eq TypeVariable.methods(String name) {
-    Collection list = new LinkedList();
-    for(int i = 1; i < getNumTypeBound(); i++) {
-      for(Iterator iter = getTypeBound(i).type().methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate())
-          list.add(decl);
-      }
-    }
-    if(getTypeBound(0).type().isClassDecl()) {
-      for(Iterator iter = getTypeBound(0).type().methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessableFrom(this)) {
-          for(Iterator i2 = list.iterator(); i2.hasNext(); ) {
-            MethodDecl m = (MethodDecl)i2.next();
-            if(decl.sameSignature(m) && !decl.isAbstract())
-              i2.remove();
-          }
-          list.add(decl);
-        }
-      }
-    }
-    else {
-      for(Iterator iter = getTypeBound(0).type().methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate())
-          list.add(decl);
-      }
-    }
-    return list;
+    return localLookupType(name);
   }
 
   public void ParClassDecl.errorCheck(Collection collection) {
@@ -572,14 +359,16 @@ aspect Generics {
     // Disable error check for ParClassDecl which is an instanciated GenericClassDecl
   }
 
-  eq ParameterizedTypeAccess.type() {
-    if(decl() instanceof GenericTypeDecl) {
-      GenericTypeDecl decl = (GenericTypeDecl)decl();
-      return (TypeDecl)decl.lookupParTypeDecl(this);
-    }
-    return decl();
+  syn boolean Wildcard.isExactWildcard() = true;
+  eq WildcardExtends.isExactWildcard() = false;
+  eq WildcardSuper.isExactWildcard() = false;
+  rewrite Wildcard {
+    when(isExactWildcard())
+    to Wildcard new WildcardExtends(typeObject().createQualifiedAccess());
   }
-  
+  inh TypeDecl Wildcard.typeObject();
+
+
   rewrite ParTypeAccess {
     when(getTypeAccess() instanceof TypeAccess)
     to TypeAccess {
@@ -601,21 +390,478 @@ aspect Generics {
   eq SuperAccess.isExactTypeAccess() = false;
   eq ParameterizedTypeAccess.isExactTypeAccess() = false;
   eq RawTypeAccess.isExactTypeAccess() = false;
+
+  /*
   rewrite TypeAccess {
     when(isExactTypeAccess() && decl().isGenericType())
     to RawTypeAccess new RawTypeAccess(getPackageList(), getIdUse());
   }
+  */
 
-  rewrite TypeVariable {
-		when (getNumTypeBound() == 0)
-    to TypeVariable {
-			addTypeBound(
-        new TypeAccess(
-				  new List().add(new IdUse("java")).add(new IdUse("lang")), 
-				  new IdUse("Object")
-        )
-      );
-			return this;
-		}
-	}    
+
+  syn boolean TypeAccess.isRaw() {
+    if(!decl().isGenericType())
+      return false;
+    if(getParent() instanceof ParTypeAccess)
+      return false;
+    if(!(getParent() instanceof AbstractDot))
+      return true;
+    AbstractDot d = (AbstractDot)getParent();
+    if(d.isThisAccess())
+      return false;
+    if(d.isTypeAccess() && d.type().isTypeVariable())
+      return false;
+    return true;
+  }
+
+  rewrite TypeAccess {
+    when(isExactTypeAccess() && isRaw())
+    to ParameterizedTypeAccess {
+      GenericTypeDecl decl = (GenericTypeDecl)decl();
+      List list = new List();
+      for(int i = 0; i < decl.getNumTypeParameter(); i++)
+        list.add(decl.getTypeParameter(i).erasure().createQualifiedAccess());
+      return new RawTypeAccess(getPackageList(), getIdUse(), list);
+    }
+  }
+
+  syn boolean ParameterizedTypeAccess.isRawAccess() = false;
+  eq RawTypeAccess.isRawAccess() = true;
+
+}
+aspect LookupParTypeDecl {
+  syn lazy TypeDecl GenericTypeDecl.lookupParTypeDecl(ParameterizedTypeAccess p) {
+    ParTypeDecl typeDecl = null;
+    for(int i = 0; i < getNumParTypeDecl() && typeDecl == null; i++) {
+      ParTypeDecl decl = getParTypeDecl(i);
+      boolean match = true;
+      if(decl.getNumArgument() == p.getNumTypeArgument()) {
+        for(int j = 0; j < decl.getNumArgument(); j++) {
+          if(decl.getArgument(j).type() != p.getTypeArgument(j).type())
+            match = false;
+        }
+      }
+      else {
+        match = false;
+      }
+      if(match)
+        typeDecl = decl;
+    }
+    if(typeDecl == null) {
+      //System.err.println("Building paramterized version of " + fullName() + " with parameters: ");
+      //p.dumpNoRewrite(2);
+      typeDecl = (ParTypeDecl)p(p);
+    }
+    return (TypeDecl)typeDecl;
+  }
+  
+  public Access TypeDecl.substitute(ParTypeDecl parTypeDecl) {
+    return createQualifiedAccess();
+  }
+  public Access TypeVariable.substitute(ParTypeDecl parTypeDecl) {
+    TypeDecl typeDecl = this;
+    //System.err.println("Searching for substitution for variable " + this);
+    GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
+    //System.err.println("  searching candidate class " + g.fullName());
+    for(int i = 0; i < g.getNumTypeParameter(); i++) {
+      if(g.getTypeParameter(i) == typeDecl) {
+        //System.err.println("  found variable as parameter " + i);
+        typeDecl = parTypeDecl.getArgument(i).type();
+        return typeDecl.createTypeVariableAccess();
+      }
+    }
+    return typeDecl.createQualifiedAccess();
+  }
+  
+  public Access TypeDecl.substituteReturnType(ParTypeDecl parTypeDecl) {
+    return createQualifiedAccess();
+  }
+  inh TypeDecl TypeVariable.typeObject();
+  
+  public Access TypeVariable.substituteReturnType(ParTypeDecl parTypeDecl) {
+    TypeDecl typeDecl = this;
+    //System.err.println("Searching for substitution for variable " + name());
+    GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
+    for(int i = 0; i < g.getNumTypeParameter(); i++) {
+      if(g.getTypeParameter(i) == typeDecl) {
+        //System.err.println("  found variable as parameter " + i);
+        //parTypeDecl.getArgument(i).dumpNoRewrite(2);
+        typeDecl = parTypeDecl.getArgument(i).type();
+        //System.err.println("  computed type of argument");
+        if(typeDecl instanceof WildcardExtendsType) {
+          WildcardExtendsType t = (WildcardExtendsType)typeDecl;
+          return t.extendsType().createQualifiedAccess();
+        }
+        else if(typeDecl instanceof WildcardSuperType) {
+          return typeObject().createQualifiedAccess();
+        }
+        return typeDecl.createTypeVariableAccess();
+      }
+    }
+    return typeDecl.createQualifiedAccess();
+  }
+  public Access TypeDecl.substituteParameterType(ParTypeDecl parTypeDecl) {
+    return createQualifiedAccess();
+  }
+
+  inh TypeDecl TypeVariable.typeNull();
+  public Access TypeVariable.substituteParameterType(ParTypeDecl parTypeDecl) {
+    TypeDecl typeDecl = this;
+    //System.err.println("Searching for substitution for variable " + this);
+    GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
+    //System.err.println("  searching candidate class " + g.fullName());
+    for(int i = 0; i < g.getNumTypeParameter(); i++) {
+      if(g.getTypeParameter(i) == typeDecl) {
+        //System.err.println("  found variable as parameter " + i);
+        typeDecl = parTypeDecl.getArgument(i).type();
+        if(typeDecl instanceof WildcardExtendsType) {
+          return typeNull().createQualifiedAccess();
+        }
+        else if(typeDecl instanceof WildcardSuperType) {
+          WildcardSuperType t = (WildcardSuperType)typeDecl;
+          return t.superType().createQualifiedAccess();
+        }
+        return typeDecl.createTypeVariableAccess();
+      }
+    }
+    return typeDecl.createQualifiedAccess();
+  }
+  
+  public Access Access.substitute(ParTypeDecl parTypeDecl) {
+    // can find context
+    return type().substitute(parTypeDecl);
+  }
+  public Access ParameterizedTypeAccess.substitute(ParTypeDecl parTypeDecl) {
+    // can find context
+    return new ParameterizedTypeAccess((List)getPackageList().fullCopy(), (IdUse)getIdUse().fullCopy(),
+      getTypeArgumentList().substitute(parTypeDecl));
+  }
+  
+  public Access Access.substituteReturnType(ParTypeDecl parTypeDecl) {
+    // can find context
+    return type().substituteReturnType(parTypeDecl);
+  }
+  public Access ParameterizedTypeAccess.substituteReturnType(ParTypeDecl parTypeDecl) {
+    // can find context
+    return new ParameterizedTypeAccess((List)getPackageList().fullCopy(), (IdUse)getIdUse().fullCopy(),
+      getTypeArgumentList().substitute(parTypeDecl));
+  }
+  
+  public Access Access.substituteParameterType(ParTypeDecl parTypeDecl) {
+    // can find context
+    return type().substituteParameterType(parTypeDecl);
+  }
+  public Access ParameterizedTypeAccess.substituteParameterType(ParTypeDecl parTypeDecl) {
+    // can find context
+    return new ParameterizedTypeAccess((List)getPackageList().fullCopy(), (IdUse)getIdUse().fullCopy(),
+      getTypeArgumentList().substitute(parTypeDecl));
+  }
+
+
+  public List List.substitute(ParTypeDecl parTypeDecl) {
+    // can find context
+    List list = new List();
+    for(int i = 0; i < getNumChild(); i++) {
+      ASTNode node = getChild(i);
+      if(node instanceof Access) {
+        Access a = (Access)node;
+        list.add(a.substitute(parTypeDecl));
+      }
+      else if(node instanceof ParameterDeclaration) {
+        // this is always parameters
+        ParameterDeclaration p = (ParameterDeclaration)node;
+        list.add(
+          new ParameterDeclaration(
+            (Modifiers)p.getModifiers().fullCopy(),
+            p.getTypeAccess().substituteParameterType(parTypeDecl),
+            (IdDecl)p.getIdDecl().fullCopy()
+          )
+        );
+      }
+      else if(node instanceof TypeVariable) {
+        TypeVariable tv = (TypeVariable)node;
+        list.add(
+          new TypeVariable(
+            (Modifiers)tv.getModifiers().fullCopy(),
+            (IdDecl)tv.getIdDecl().fullCopy(),
+            (List)tv.getBodyDeclList().fullCopy(),
+            tv.getTypeBoundList().substitute(parTypeDecl)
+          )
+        );
+      }
+      else {
+        throw new Error("Can only substitute lists of access nodes but node number " + i + " is of type " + node.getClass().getName());
+      }
+    }
+    return list;
+  }
+
+  public TypeDecl TypeDecl.p(ParameterizedTypeAccess params) {
+    throw new Error("Operation p not supported for " + getClass().getName());
+  }
+
+  protected List GenericTypeDecl.createArgumentList(ParameterizedTypeAccess params) {
+    List list = new List();
+    for(int i = 0; i < params.getNumTypeArgument(); i++) {
+      TypeDecl arg = params.getTypeArgument(i).type();
+      if(arg.isTypeVariable()) {
+        list.add(arg.createTypeVariableAccess());
+      }
+      else {
+        list.add(arg.createQualifiedAccess());
+      }
+    }
+    return list;
+  }
+  
+  public TypeDecl GenericClassDecl.p(ParameterizedTypeAccess params) {
+    // build parameterized type decl using arguments from distant type access
+    ParClassDecl typeDecl = params.isRawAccess() ? new RawClassDecl() : new ParClassDecl();
+    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    typeDecl.setIdDecl((IdDecl)getIdDecl().fullCopy());
+    
+    addParTypeDecl(typeDecl);
+
+    //System.err.print("Building instantiation of " + name() + " with arguments: ");
+    //for(int i = 0; i < params.getNumTypeArgument(); i++) {
+    //  System.out.print(params.getTypeArgument(i) + ", ");
+    //}
+    //System.out.println();
+      
+    
+    typeDecl.setArgumentList(createArgumentList(params));
+    //System.err.println("Begin substituting type parameter list");
+    typeDecl.setTypeParameterList(getTypeParameterList().substitute(typeDecl));
+    //System.err.println("End substituting type parameter list");
+
+    
+    //System.err.println("ParTypeDecl added to GenericClassDecl");
+    
+    if(hasSuperClass()) {
+      typeDecl.setSuperClassAccess(getSuperClassAccess().substitute(typeDecl));
+    }
+    //System.err.println("SuperClassAccess substituted");
+    //typeDecl.setSuperClassAccessOpt((Opt)getSuperClassAccessOpt().fullCopy());
+    typeDecl.setImplementsList(getImplementsList().substitute(typeDecl));
+    //typeDecl.setImplementsList((List)getImplementsList().fullCopy());
+    //System.err.println("ImplementsList substituted");
+
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      //System.err.println("Substituting bodydecl " + i + " of type " + getBodyDecl(i).getClass().getName());
+      typeDecl.addBodyDecl(getBodyDecl(i).p(typeDecl));
+    }
+    //System.err.println("BodyDeclList substituted");
+    //System.err.print("End instantiation of " + name() + " with arguments: ");
+    for(int i = 0; i < params.getNumTypeArgument(); i++) {
+      System.out.print(params.getTypeArgument(i) + ", ");
+    }
+    System.out.println();
+    return typeDecl;
+  }
+  public TypeDecl GenericInterfaceDecl.p(ParameterizedTypeAccess params) {
+    // build parameterized type decl using arguments from distant type access
+    ParInterfaceDecl typeDecl = params.isRawAccess() ? new RawInterfaceDecl() : new ParInterfaceDecl();
+    addParTypeDecl(typeDecl);
+    typeDecl.setArgumentList(createArgumentList(params));
+    typeDecl.setTypeParameterList(getTypeParameterList().substitute(typeDecl));
+    
+    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    typeDecl.setIdDecl((IdDecl)getIdDecl().fullCopy());
+    typeDecl.setSuperInterfaceIdList(getSuperInterfaceIdList().substitute(typeDecl));
+    
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      typeDecl.addBodyDecl(getBodyDecl(i).p(typeDecl));
+    }
+    return typeDecl;
+  }
+  
+  public BodyDecl BodyDecl.p(ParTypeDecl parTypeDecl) {
+    throw new Error("Operation p not supported for " + getClass().getName());
+  }
+  public BodyDecl MethodDecl.p(ParTypeDecl parTypeDecl) {
+    MethodDecl m = new MethodDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      getTypeAccess().substituteReturnType(parTypeDecl),
+      (IdDecl)getIdDecl().fullCopy(),
+      getParameterList().substitute(parTypeDecl),
+      new List(),
+      getExceptionList().substitute(parTypeDecl),
+      new Opt()
+    );
+    return m;
+  }
+  public BodyDecl ConstructorDecl.p(ParTypeDecl parTypeDecl) {
+    ConstructorDecl c = new ConstructorDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      (IdDecl)getIdDecl().fullCopy(),
+      getParameterList().substitute(parTypeDecl),
+      getExceptionList().substitute(parTypeDecl),
+      new Opt(),
+      new Block()
+    );
+    return c;
+  }
+
+  protected String ASTNode.dumpString() {
+    return getClass().getName();
+  }
+  protected String IdUse.dumpString() {
+    return super.dumpString() + "[" + getID() + "]";
+  }
+  protected String ArrayNameAccess.dumpString() {
+    return super.dumpString() + ", dimension: " + getDimension();
+  }
+  protected void ASTNode.dumpNoRewrite(int indent) {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < indent; i++)
+      s.append("  ");
+    s.append(dumpString());
+    System.out.println(s.toString());
+    for(int i = 0; i < getNumChild(); i++) {
+      getChildNoTransform(i).dumpNoRewrite(indent+1);
+    }
+  }
+
+  // Check that this does not interfere with name analysis for fields
+  // of array types.... in Resolve unbiguous names
+  rewrite ArrayNameDot {
+    when(((ArrayNameAccess)getRight()).getDimension() == 0)
+    to Access getLeft();
+  }
+  
+  public BodyDecl FieldDeclaration.p(ParTypeDecl parTypeDecl) {
+    FieldDeclaration f = new FieldDeclaration(
+      (Modifiers)getModifiers().fullCopy(),
+      getTypeAccess().substituteReturnType(parTypeDecl),
+      (IdDecl)getIdDecl().fullCopy(),
+      new Opt()
+    );
+    return f;
+  }
+  public BodyDecl MemberClass.p(ParTypeDecl parTypeDecl) {
+    return new MemberClass((ClassDecl)getClassDecl().p(parTypeDecl));
+  }
+  public ClassDecl ClassDecl.p(ParTypeDecl parTypeDecl) {
+    ClassDecl c = new ClassDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      (IdDecl)getIdDecl().fullCopy(),
+      (Opt)getSuperClassAccessOpt().fullCopy(),
+      getImplementsList().substitute(parTypeDecl),
+      new List()
+    );
+    for(int i = 0; i < getNumBodyDecl(); i++)
+      c.addBodyDecl(getBodyDecl(i).p(parTypeDecl));
+    return c;
+  }
+  public ClassDecl GenericClassDecl.p(ParTypeDecl parTypeDecl) {
+    GenericClassDecl c = new GenericClassDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      (IdDecl)getIdDecl().fullCopy(),
+      (Opt)getSuperClassAccessOpt().fullCopy(),
+      getImplementsList().substitute(parTypeDecl),
+      new List(),
+      (List)getTypeParameterList().fullCopy(),
+      new List(),
+      new Opt()
+    );
+    for(int i = 0; i < getNumBodyDecl(); i++)
+      c.addBodyDecl(getBodyDecl(i).p(parTypeDecl));
+    return c;
+  }
+  
+  public BodyDecl MemberInterface.p(ParTypeDecl parTypeDecl) {
+    return new MemberInterface((InterfaceDecl)getInterfaceDecl().p(parTypeDecl));
+  }
+  public InterfaceDecl InterfaceDecl.p(ParTypeDecl parTypeDecl) {
+    InterfaceDecl c = new InterfaceDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      (IdDecl)getIdDecl().fullCopy(),
+      getSuperInterfaceIdList().substitute(parTypeDecl),
+      new List()
+    );
+    for(int i = 0; i < getNumBodyDecl(); i++)
+      c.addBodyDecl(getBodyDecl(i).p(parTypeDecl));
+    return c;
+  }
+  public InterfaceDecl GenericInterfaceDecl.p(ParTypeDecl parTypeDecl) {
+    GenericInterfaceDecl c = new GenericInterfaceDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      (IdDecl)getIdDecl().fullCopy(),
+      getSuperInterfaceIdList().substitute(parTypeDecl),
+      new List(),
+      (List)getTypeParameterList().fullCopy(),
+      new List(),
+      new Opt()
+    );
+    for(int i = 0; i < getNumBodyDecl(); i++)
+      c.addBodyDecl(getBodyDecl(i).p(parTypeDecl));
+    return c;
+  }
+
+  syn lazy CompilationUnit Program.wildcards() {
+    CompilationUnit cu = new CompilationUnit(
+      new List().add(new IdDecl("wildcards")),
+      new List(),
+      new List()
+    );
+    addCompilationUnit(cu);
+    return cu;
+  }
+
+  syn boolean TypeDecl.matches(Wildcard wildcard) = false;
+  eq WildcardType.matches(Wildcard wildcard) = wildcard.matches(this);
+  eq WildcardExtendsType.matches(Wildcard wildcard) = wildcard.matchesExtends(this);
+  eq WildcardSuperType.matches(Wildcard wildcard) = wildcard.matchesSuper(this);
+
+  syn boolean Wildcard.matches(WildcardType type) = true;
+  eq WildcardExtends.matches(WildcardType type) = false;
+  eq WildcardSuper.matches(WildcardType type) = false;
+  
+  syn boolean Wildcard.matchesExtends(WildcardExtendsType type) = false;
+  eq WildcardExtends.matchesExtends(WildcardExtendsType type) = type.extendsType() == getAccess().type();
+  syn TypeDecl WildcardExtendsType.extendsType() = getAccess().type();
+  
+  syn boolean Wildcard.matchesSuper(WildcardSuperType type) = false;
+  eq WildcardSuper.matchesSuper(WildcardSuperType type) = type.superType() == getAccess().type();
+  syn TypeDecl WildcardSuperType.superType() = getAccess().type();
+
+  public TypeDecl Wildcard.buildTypeDecl() {
+    return new WildcardType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      new IdDecl("?"),
+      new List()
+    );
+  }
+  public TypeDecl WildcardExtends.buildTypeDecl() {
+    return new WildcardExtendsType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      new IdDecl("? extends " + getAccess().type().fullName()),
+      new List(),
+      getAccess().type().createQualifiedAccess()
+    );
+  }
+  public TypeDecl WildcardSuper.buildTypeDecl() {
+    return new WildcardSuperType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      new IdDecl("? super " + getAccess().type().fullName()),
+      new List(),
+      getAccess().type().createQualifiedAccess()
+    );
+  }
+  
+  syn lazy TypeDecl Program.lookupWildcard(Wildcard wildcard) {
+    CompilationUnit cu = wildcards();
+    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
+      TypeDecl typeDecl = cu.getTypeDecl(i);
+      if(typeDecl.matches(wildcard))
+        return typeDecl;
+    }
+    TypeDecl decl = wildcard.buildTypeDecl();
+    cu.addTypeDecl(decl);
+    return decl;
+  }
+  eq Program.getCompilationUnit().lookupWildcard(Wildcard wildcard) = lookupWildcard(wildcard);
+  inh TypeDecl Wildcard.lookupWildcard(Wildcard wildcard);
+
+  eq Wildcard.type() = lookupWildcard(this);
 }
