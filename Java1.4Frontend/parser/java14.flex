@@ -283,20 +283,20 @@ SingleCharacter = [^\r\n\'\\]
 }
 
 <CHARLITERAL> {
-  {SingleCharacter}\'            { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character(yytext().charAt(0))); }
+  {SingleCharacter}\'            { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character(yytext().charAt(0)).toString()); }
 
   /* escape sequences */
-  "\\b"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\b'));}
-  "\\t"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\t'));}
-  "\\n"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\n'));}
-  "\\f"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\f'));}
-  "\\r"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\r'));}
-  "\\\""\'                       { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\"'));}
-  "\\'"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\''));}
-  "\\\\"\'                       { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\\')); }
+  "\\b"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\b').toString());}
+  "\\t"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\t').toString());}
+  "\\n"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\n').toString());}
+  "\\f"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\f').toString());}
+  "\\r"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\r').toString());}
+  "\\\""\'                       { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\"').toString());}
+  "\\'"\'                        { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\'').toString());}
+  "\\\\"\'                       { yybegin(YYINITIAL); return newSymbol(Terminals.CHARACTER_LITERAL, new Character('\\').toString()); }
   \\[0-3]?{OctDigit}?{OctDigit}\' { yybegin(YYINITIAL);
 			                              int val = Integer.parseInt(yytext().substring(1,yylength()-1),8);
-			                            return newSymbol(Terminals.CHARACTER_LITERAL, new Character((char)val)); }
+			                            return newSymbol(Terminals.CHARACTER_LITERAL, new Character((char)val).toString()); }
 
   /* error cases */
   \\.                            { throw new RuntimeException("Illegal escape sequence \""+yytext()+"\""); }

@@ -22,6 +22,10 @@ ASTFILES = java.ast
 PARSERFILES = parser/java14.parser
 PARSERFILES += $(EXTERNALPARSERFILES)
 
+ifndef SCANNER
+  SCANNER = parser/java14.flex
+endif
+
 # -- Name of the start nonterminal for the abstract syntax tree --
 STARTSYMBOL=Program
 
@@ -54,7 +58,7 @@ $(BUILDDIR)/$(PACKAGE)/$(NODEPREFIX)$(STARTSYMBOL).java:	$(ASTFILES) $(JRAGFILES
 test:	$(HANDWRITTENJAVA:java=class)
 	$(TESTSCRIPTS)
 
-$(BUILDDIR)/parser/JavaScanner.java: parser/java14.flex
+$(BUILDDIR)/parser/JavaScanner.java: $(SCANNER)
 	$(JFLEXCOMPILER) -d $(BUILDDIR)/parser $^
 
 $(BUILDDIR)/parser/UnicodeEscapes.java: parser/unicode.flex
