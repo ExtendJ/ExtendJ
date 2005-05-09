@@ -173,7 +173,7 @@ aspect CodeGeneration {
       else if(v instanceof FieldDeclaration) {
         FieldDeclaration f = (FieldDeclaration)v;
         if(!v.isStatic() && !va.isQualified()) {
-          addBytecode(Bytecode.ALOAD_0);
+          f.emitLoadThisFrom(this, va.hostType());
         }
         if(f.isPrivate() && va.hostType().findVariable(va.getIdUse()).isEmpty()) {
           f.emitInvokeAccessor(this);
@@ -204,6 +204,27 @@ aspect CodeGeneration {
           int indexLo = index & 0xff;
           add(indexHi).add(indexLo);
         } while (enclosing != targetDecl);
+      }
+    }
+    public void emitLoad(SuperAccess t) {
+      TypeDecl targetDecl = t.decl();
+      TypeDecl hostType = t.hostType();
+      if(hostType.instanceOf(targetDecl))
+        addBytecode(Bytecode.ALOAD_0);
+      else {
+        addBytecode(Bytecode.ALOAD_0);
+        TypeDecl enclosing = hostType;
+        do {
+          addBytecode(Bytecode.GETFIELD, 0);
+          String classname = enclosing.constantPoolName();
+          enclosing = enclosing.enclosingType();
+          String desc = enclosing.typeDescriptor();
+          String name = "this$0";
+          int index = constantPool().addFieldref(classname, name, desc);
+          int indexHi = index >> 8;
+          int indexLo = index & 0xff;
+          add(indexHi).add(indexLo);
+        } while (!enclosing.instanceOf(targetDecl));
       }
     }
 
@@ -479,6 +500,9 @@ aspect CodeGeneration {
         case Bytecode.ISHL:
         case Bytecode.ISHR:
         case Bytecode.IUSHR:
+        case Bytecode.LSHL:
+        case Bytecode.LSHR:
+        case Bytecode.LUSHR:
         case Bytecode.IAND:
         case Bytecode.IOR:
         case Bytecode.IXOR:
@@ -528,9 +552,6 @@ aspect CodeGeneration {
         case Bytecode.DDIV:
         case Bytecode.LREM:
         case Bytecode.DREM:
-        case Bytecode.LSHL:
-        case Bytecode.LSHR:
-        case Bytecode.LUSHR:
         case Bytecode.LAND:
         case Bytecode.LOR:
         case Bytecode.LXOR:
@@ -803,6 +824,7 @@ aspect CodeGeneration {
   public void FloatType.emitReturn(CodeGeneration gen) {gen.addBytecode(Bytecode.FRETURN);}
   public void DoubleType.emitReturn(CodeGeneration gen) {gen.addBytecode(Bytecode.DRETURN);}
   public void ReferenceType.emitReturn(CodeGeneration gen) {gen.addBytecode(Bytecode.ARETURN);}
+  public void NullType.emitReturn(CodeGeneration gen) {gen.addBytecode(Bytecode.ARETURN);}
 
   // Fix to use interface Variable
   public void ASTNode.emitPreInc(CodeGeneration gen, int i,boolean resultNeeded) {
@@ -821,6 +843,28 @@ aspect CodeGeneration {
     if(resultNeeded)
       emitLoad(gen);
   }
+  
+  public void FieldDeclaration.emitLoadThisFrom(CodeGeneration gen, TypeDecl typeDecl) {
+    if(!isStatic()) {
+      gen.addBytecode(Bytecode.ALOAD_0);
+      if(!typeDecl.hasField(name())) {
+        TypeDecl enclosing = typeDecl;
+        do {
+          gen.addBytecode(Bytecode.GETFIELD, 0);
+          String classname = enclosing.constantPoolName();
+          enclosing = enclosing.enclosingType();
+          String desc = enclosing.typeDescriptor();
+          String name = "this$0";
+          int index = gen.constantPool().addFieldref(classname, name, desc);
+          int indexHi = index >> 8;
+          int indexLo = index & 0xff;
+          gen.add(indexHi).add(indexLo);
+        } while (!enclosing.hasField(name()));
+      }
+    }
+  }
+
+  
   public void FieldDeclaration.emitPreInc(CodeGeneration gen, int i, boolean resultNeeded) {
     if(!isStatic())
       gen.emitDup();
@@ -911,15 +955,15 @@ aspect CodeGeneration {
     VariableDeclaration decl = (VariableDeclaration)decl();
     decl.emitStore(gen);
   }
+  public void ParamVarAccess.emitStore(CodeGeneration gen) {
+    LocalVar v = (LocalVar)decl();
+    v.type().emitStore(gen, v.localNum());
+  }
 
   public void VariableDeclaration.emitStore(CodeGeneration gen) {
     type().emitStore(gen, localNum());
   }
 
-  public void ParamVarAccess.emitStore(CodeGeneration gen) {
-    LocalVar v = (LocalVar)decl();
-    v.type().emitStore(gen, v.localNum());
-  }
 
   inh TypeDecl TryStmt.typeThrowable();
 
@@ -1092,6 +1136,9 @@ aspect CodeGeneration {
   public void ReferenceType.emitLoad(CodeGeneration gen, int pos) {
     gen.emitLoadReference(pos);
   }
+  public void NullType.emitLoad(CodeGeneration gen, int pos) {
+    gen.emitLoadReference(pos);
+  }
   syn byte TypeDecl.arrayLoad() { 
     throw new Error("Cannot create array load for TypeDecl");
   }
@@ -1152,6 +1199,9 @@ aspect CodeGeneration {
     else gen.addBytecode(Bytecode.DSTORE).add(pos);
   }
   public void ReferenceType.emitStore(CodeGeneration gen, int pos) {
+    gen.emitStoreReference(pos);
+  }
+  public void NullType.emitStore(CodeGeneration gen, int pos) {
     gen.emitStoreReference(pos);
   }
 
@@ -1237,6 +1287,20 @@ aspect CodeGeneration {
       }
       gen.add(indexHi).add(indexLo);
     }
+  }
+  
+  public void MethodDecl.emitInvokeSpecial(CodeGeneration gen) {
+    String classname = hostType().constantPoolName();
+    String      desc = descName();
+    String      name = getIdDecl().getID();
+    int index = gen.constantPool().addMethodref(classname, name, desc);
+    int indexHi = index >> 8;
+    int indexLo = index & 0xff;
+    int size = type().size() - 1;
+    for(int i = 0; i < getNumParameter(); i++)
+      size -= getParameter(i).type().size();
+    gen.addBytecode(Bytecode.INVOKESPECIAL, size);
+    gen.add(indexHi).add(indexLo);
   }
 
   public void FieldDeclaration.emitInvokeAccessor(CodeGeneration gen) {
@@ -1337,7 +1401,7 @@ aspect CodeGeneration {
   }
 
   public void ValArrayInstanceExpr.emitNew(CodeGeneration gen) {
-    gen.addBytecode(Bytecode.NEWARRAY).add(type().atype());
+    gen.addBytecode(Bytecode.NEWARRAY).add(getTypeAccess().type().atype());
   }
   public static final int ValArrayInstanceExpr.T_BOOLEAN = 4;
   public static final int ValArrayInstanceExpr.T_CHAR = 5;
@@ -1794,13 +1858,16 @@ void IntegralType.ushr(CodeGeneration gen) {gen.addBytecode(Bytecode.IUSHR);}
 void TypeDecl.bitand(CodeGeneration gen) {error();}
 void LongType.bitand(CodeGeneration gen) {gen.addBytecode(Bytecode.LAND);}
 void IntegralType.bitand(CodeGeneration gen) {gen.addBytecode(Bytecode.IAND);}
+void BooleanType.bitand(CodeGeneration gen) {gen.addBytecode(Bytecode.IAND);}
 
 void TypeDecl.bitor(CodeGeneration gen) {error();}
 void LongType.bitor(CodeGeneration gen) {gen.addBytecode(Bytecode.LOR);}
 void IntegralType.bitor(CodeGeneration gen) {gen.addBytecode(Bytecode.IOR);}
+void BooleanType.bitor(CodeGeneration gen) {gen.addBytecode(Bytecode.IOR);}
 
 void TypeDecl.bitxor(CodeGeneration gen) {error();}
 void LongType.bitxor(CodeGeneration gen) {gen.addBytecode(Bytecode.LXOR);}
 void IntegralType.bitxor(CodeGeneration gen) {gen.addBytecode(Bytecode.IXOR);}
+void BooleanType.bitxor(CodeGeneration gen) {gen.addBytecode(Bytecode.IXOR);}
 
 }

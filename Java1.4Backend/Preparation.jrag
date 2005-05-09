@@ -1,11 +1,20 @@
 aspect Preparation {
+
+  // 0.5 s
+
+/*
+  protected boolean MethodAccess.isExactMethodAccess() { return true; }
+  protected boolean StaticMethodAccess.isExactMethodAccess() { return false; }
+  protected boolean VirtualMethodAccess.isExactMethodAccess() { return false; }
   rewrite MethodAccess {
-    when (decl().isStatic() && !(this instanceof StaticMethodAccess))
+    when (isExactMethodAccess() && decl().isStatic())
       to MethodAccess new StaticMethodAccess(getArgList(), getIdUse());
-    when (!decl().isStatic() && !(this instanceof VirtualMethodAccess))
+    when (isExactMethodAccess() && !decl().isStatic())
       to MethodAccess new VirtualMethodAccess(getArgList(), getIdUse());
   }
+  */
 
+  // ~0 s
   rewrite VariableDeclaration {
     when (!duringVariableDeclaration() && !duringResolveAmbiguousNames() &&hasAbstractVarInit() && getAbstractVarInit() instanceof ArrayInit)
     to VariableDeclaration {
@@ -27,6 +36,8 @@ aspect Preparation {
   /*
    * separate declaration and initalization
    */
+
+/*
   rewrite VariableDeclaration in Block.getStmt() {
     when (!duringVariableDeclaration() && !duringResolveAmbiguousNames() && hasAbstractVarInit() && getAbstractVarInit() instanceof VarInit) 
     to List {
@@ -38,40 +49,79 @@ aspect Preparation {
       return new List().add(v).add(assign);
     }
   }
+  */
 
+  // 1 s
+  protected boolean VarAccess.isExactVarAccess() { return true; }
+  protected boolean StaticFieldAccess.isExactVarAccess() { return false; }
+  protected boolean FieldAccess.isExactVarAccess() { return false; }
+  protected boolean LocalVarAccess.isExactVarAccess() { return false; }
+  protected boolean ParamVarAccess.isExactVarAccess() { return false; }
   rewrite VarAccess {
-    when (decl().isClassVariable() && !(this instanceof StaticFieldAccess))
+    when(isExactVarAccess())
+    to VarAccess {
+      Variable decl = decl();
+      if(decl.isClassVariable())
+        return new StaticFieldAccess(getIdUse());
+      else if(decl.isInstanceVariable())
+        return new FieldAccess(getIdUse());
+      else if(decl.isLocalVariable())
+        return new LocalVarAccess(getIdUse());
+      else if(decl.isMethodParameter() || decl.isConstructorParameter())
+        return new ParamVarAccess(getIdUse());
+      else if(decl instanceof ParameterDeclaration) 
+        return new ParamVarAccess(getIdUse());
+      else
+        throw new Error("Could not specialize VarAccess that binds to " + decl.getClass().getName());
+    }
+    
+    /*
+    when (isExactVarAccess() && decl().isClassVariable())
     to VarAccess new StaticFieldAccess(getIdUse());
-    when (decl().isInstanceVariable() && !(this instanceof FieldAccess))
+    when (isExactVarAccess() && decl().isInstanceVariable())
     to VarAccess new FieldAccess(getIdUse());
-    when (decl().isLocalVariable() && !(this instanceof LocalVarAccess))
+    when (isExactVarAccess() && decl().isLocalVariable())
     to VarAccess new LocalVarAccess(getIdUse());
-    when (decl().isMethodParameter() && !(this instanceof ParamVarAccess))
+    when (isExactVarAccess() && decl().isMethodParameter())
     to VarAccess new ParamVarAccess(getIdUse());
+    */
+    
   } 
 
+
+/*
+  protected boolean AssignSimpleExpr.isExactAssignSimpleExpr() { return true; }
+  protected boolean ArrayAssignSimpleExpr.isExactAssignSimpleExpr() { return false; }
+  protected boolean StaticFieldAssignSimpleExpr.isExactAssignSimpleExpr() { return false; }
+  protected boolean FieldAssignSimpleExpr.isExactAssignSimpleExpr() { return false; }
+  protected boolean LocalVarAssignSimpleExpr.isExactAssignSimpleExpr() { return false; }
   rewrite AssignSimpleExpr {
-    when (getDest() instanceof ArrayDot 
-        && !(this instanceof ArrayAssignSimpleExpr))
-    to AssignSimpleExpr new ArrayAssignSimpleExpr(getDest(), getSource());
-    when ((getDest() instanceof StaticFieldAccess || getDest() instanceof FieldDot 
-          && ((FieldDot) getDest()).getRight() instanceof StaticFieldAccess)
-        && !(this instanceof StaticFieldAssignSimpleExpr))
-    to AssignSimpleExpr new StaticFieldAssignSimpleExpr(getDest(), getSource());
-    when ((getDest() instanceof FieldAccess || getDest() instanceof FieldDot 
-          && ((FieldDot) getDest()).getRight() instanceof FieldAccess)
-        && !(this instanceof FieldAssignSimpleExpr))
-    to AssignSimpleExpr new FieldAssignSimpleExpr(getDest(), getSource());
-    when (getDest() instanceof LocalVarAccess
-        && !(this instanceof LocalVarAssignSimpleExpr)) 
+    when (isExactAssignSimpleExpr() && getDest() instanceof LocalVarAccess)
     to AssignSimpleExpr new LocalVarAssignSimpleExpr(getDest(), getSource());
+    when (isExactAssignSimpleExpr() && (getDest() instanceof FieldAccess || getDest() instanceof FieldDot 
+          && ((FieldDot) getDest()).getRight() instanceof FieldAccess))
+    to AssignSimpleExpr new FieldAssignSimpleExpr(getDest(), getSource());
+    when (isExactAssignSimpleExpr() && (getDest() instanceof StaticFieldAccess || getDest() instanceof FieldDot 
+          && ((FieldDot) getDest()).getRight() instanceof StaticFieldAccess))
+    to AssignSimpleExpr new StaticFieldAssignSimpleExpr(getDest(), getSource());
+    when (isExactAssignSimpleExpr() && getDest() instanceof ArrayDot)
+    to AssignSimpleExpr new ArrayAssignSimpleExpr(getDest(), getSource());
   }
+*/
 
   // add implicit this to method invocations
+
+/*
+  syn boolean VirtualMethodAccess.canBeQualified() {
+    TypeDecl t = hostType();
+    while(t != null && !t.hasMethod(name()))
+      t = t.enclosingType();
+    return t != null;
+  }
   rewrite VirtualMethodAccess {
-    when(!isQualified() && !decl().hostType().isUnknown())
+    when(!isQualified() && canBeQualified())
     to MethodDot {
-      TypeDecl t = decl().hostType();
+      TypeDecl t = hostType();
       while(!t.hasMethod(name()))
         t = t.enclosingType();
       return new MethodDot(
@@ -86,12 +136,15 @@ aspect Preparation {
           );
     }
   }
+  */
 
+
+/*
   // add implicit this to field access
   rewrite FieldAccess {
-    when (decl().isInstanceVariable() && !isQualified() && !decl().hostType().isUnknown())
+    when (!isQualified())
     to InstanceFieldDot {
-      TypeDecl t = decl().hostType();
+      TypeDecl t = hostType();
       while(t.findVariable(getIdUse()).isEmpty())
         t = t.enclosingType();
       return new InstanceFieldDot(
@@ -106,16 +159,18 @@ aspect Preparation {
           );
     }
   }
+  */
 
   rewrite ArrayInstanceExpr {
-    when ((type().elementType().isReferenceType()
-          || type().dimension() > 1) && !(this instanceof RefArrayInstanceExpr))
+    when (!(this instanceof RefArrayInstanceExpr) && (type().elementType().isReferenceType()
+          || type().dimension() > 1))
       to ArrayInstanceExpr new RefArrayInstanceExpr(getTypeAccess(), getDimsList(), getArrayInitOpt());
-    when ((type().elementType().isPrimitiveType()
-          && type().dimension() == 1) && !(this instanceof ValArrayInstanceExpr))
+    when (!(this instanceof ValArrayInstanceExpr) && (type().elementType().isPrimitiveType()
+          && type().dimension() == 1))
       to ArrayInstanceExpr new ValArrayInstanceExpr(getTypeAccess(), getDimsList(), getArrayInitOpt());
   }
 
+  /*
   rewrite AssignMulExpr {
     to AssignSimpleExpr new AssignSimpleExpr((Expr)getDest().fullCopy(), new MulExpr(getDest(), getSource()));
   }
@@ -149,4 +204,5 @@ aspect Preparation {
   rewrite AssignOrExpr {
     to AssignSimpleExpr new AssignSimpleExpr((Expr)getDest().fullCopy(), new OrBitwiseExpr(getDest(), getSource()));
   }
+  */
 }

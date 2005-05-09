@@ -11,12 +11,53 @@ aspect GenerateClassfile {
     }
 
     public void CompilationUnit.generateClassfile() {
-	for(int i = 0; i < getNumTypeDecl(); i++)
+	for(int i = 0; i < getNumTypeDecl(); i++) {
 	    getTypeDecl(i).generateClassfile();
+            getTypeDecl(i).clearClassfile();
+        }
+    }
+
+    public void MethodDecl.clearMethod() {
+      attributes_computed = false;
+      attributes_value = null;
+    }
+    
+    public void ConstructorDecl.clearConstructor() {
+      attributes_computed = false;
+      attributes_value = null;
+    }
+
+    public void TypeDecl.clearClassfile() {
+      constantPool_computed = false;
+      constantPool();
+    }
+    public void ClassDecl.clearClassfile() {
+      super.clearClassfile();
+      for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
+        Object obj = iter.next();
+        if(obj instanceof MethodDecl) {
+          MethodDecl m = (MethodDecl) obj;
+          m.clearMethod();
+        }
+	else if(obj instanceof ConstructorDecl) {
+          ConstructorDecl m = (ConstructorDecl)obj;
+          m.clearConstructor();
+        }
+      }
+    }
+    public void InterfaceDecl.clearClassfile() {
+      super.clearClassfile();
+      for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
+        Object obj = iter.next();
+        if(obj instanceof MethodDecl) {
+          MethodDecl m = (MethodDecl) obj;
+          m.clearMethod();
+        }
+      }
     }
     
     public void InterfaceDecl.generateClassfile() {
-	String fileName = constantPoolName() + ".class";
+	String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
 	try {
 	    ConstantPool cp = constantPool();
 
@@ -42,6 +83,11 @@ aspect GenerateClassfile {
 		}
 	    }
 	    attributes();
+
+      File dest = new File(fileName);
+      File parentFile = dest.getParentFile();
+      if(parentFile != null)
+        parentFile.mkdirs();
 
 	    FileOutputStream f = new FileOutputStream(fileName);
 	    DataOutputStream out = new DataOutputStream(f);
@@ -105,7 +151,7 @@ aspect GenerateClassfile {
 
     public void ClassDecl.generateClassfile() {
       super.generateClassfile();
-	String fileName = constantPoolName() + ".class";
+	String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
 	try {
 	    ConstantPool cp = constantPool();
             //cp.addUtf8("Synthetic");
@@ -176,6 +222,10 @@ aspect GenerateClassfile {
 	    attributes();
 
             // Actual ClassFile generation
+      File dest = new File(fileName);
+      File parentFile = dest.getParentFile();
+      if(parentFile != null)
+        parentFile.mkdirs();
 	    FileOutputStream f = new FileOutputStream(fileName);
 	    DataOutputStream out = new DataOutputStream(f);
 	    out.writeInt(0xCAFEBABE);

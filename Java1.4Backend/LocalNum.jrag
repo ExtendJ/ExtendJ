@@ -1,19 +1,35 @@
 aspect LocalNum {
-  inh int VariableDeclaration.localNum();
-  inh int Stmt.localNum();
-  inh int Parameter.localNum();
+  inh lazy int VariableDeclaration.localNum();
+  inh lazy int Stmt.localNum();
+  inh lazy int Parameter.localNum();
 
   eq Program.getCompilationUnit(int index).localNum() = 0;
 
+  syn lazy int MethodDecl.offsetBeforeParameters() = isStatic() ? 0 : 1;
+  
+  syn lazy int MethodDecl.offsetAfterParameters() {
+    if(getNumParameter() == 0)
+      return offsetBeforeParameters();
+    return getParameter(getNumParameter()-1).localNum() + 
+           getParameter(getNumParameter()-1).type().size();
+  }
+  
   eq MethodDecl.getParameter(int index).localNum() {
     if(index == 0)
-      return isStatic() ? 0 : 1;
+      return offsetBeforeParameters();
     return getParameter(index-1).localNum() + getParameter(index-1).type().size();
   }
 
-  eq MethodDecl.getBlock().localNum() = getNumParameter() == 0 
-    ? isStatic() ? 0 : 1 
-    : getParameter(getNumParameter()-1).localNum() + getParameter(getNumParameter()-1).type().size();
+  inh lazy int ReturnStmt.resultSaveLocalNum();
+  eq MethodDecl.getBlock().resultSaveLocalNum() = offsetAfterParameters();
+  eq Program.getCompilationUnit().resultSaveLocalNum() {
+    throw new Error("Unsupported operation resultSaveLocalNum");
+  }
+
+  syn lazy int MethodDecl.resultOffset() = type().isVoid() ? 0 : 1;
+  
+  eq MethodDecl.getBlock().localNum() = offsetAfterParameters() + 
+      resultOffset();
 
   syn lazy int ConstructorDecl.localNumOfFirstParameter() {
     int i = 1;
@@ -42,6 +58,23 @@ aspect LocalNum {
     }
   }
 
+
+  eq ForStmt.getStmt().localNum() {
+    if(getNumInitStmt() == 0)
+      return localNum();
+    if(getInitStmt(getNumInitStmt()-1) instanceof VariableDeclaration)
+      return getInitStmt(getNumInitStmt()-1).localNum() + ((VariableDeclaration)getInitStmt(getNumInitStmt()-1)).type().size();
+    return getInitStmt(getNumInitStmt()-1).localNum();
+  }
+  
+  eq ForStmt.getInitStmt(int index).localNum() {
+    if(index == 0)
+      return localNum();
+    if(getInitStmt(index-1) instanceof VariableDeclaration)
+      return getInitStmt(index-1).localNum() + ((VariableDeclaration)getInitStmt(index-1)).type().size();
+    return getInitStmt(index-1).localNum();
+  }
+  
   eq Block.getStmt(int index).localNum() {
     if(index == 0)
       return localNum();

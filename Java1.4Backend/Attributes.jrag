@@ -116,13 +116,17 @@ aspect Attributes {
     int attributes_size = 0;
     Collection exceptions;
 
-    public CodeAttribute(CodeGeneration codeGen) {
+    public CodeAttribute(CodeGeneration codeGen, MethodDecl m) {
       ConstantPool c = codeGen.constantPool();
       attribute_name_index = c.addUtf8("Code");
       max_stack = codeGen.maxStackDepth();
-      if(codeGen.stackDepth() != 0)
-        //throw new Error("Stack depth grows in method... size: " + codeGen.stackDepth());
-        System.err.println("Stack depth grows in method... size: " + codeGen.stackDepth());
+      if(codeGen.stackDepth() != 0) {
+        //throw new Error("Stack depth grows in method " + m.signature() + " in class " + m.hostType().fullName() + "  ... size: " + codeGen.stackDepth());
+        if(m != null)
+          System.err.println("Stack depth grows in method " + m.signature() + " in class " + m.hostType().fullName() + "  ... size: " + codeGen.stackDepth());
+        else
+          System.err.println("Stack gepth grows in constructor");
+      }
       max_locals = codeGen.maxLocals();
       code_length = codeGen.pos();
       code = codeGen.toArray();
@@ -226,26 +230,26 @@ aspect Attributes {
   syn lazy Collection BodyDecl.attributes() = new ArrayList();
   eq FieldDeclaration.attributes() {
     ArrayList l = new ArrayList();
-    if(isStatic() && isFinal() && hasAbstractVarInit() && (type().isPrimitive() || type().isString()))
+    if(isStatic() && isFinal() && isConstant() && (type().isPrimitive() || type().isString()))
       l.add(new ConstantValueAttribute(hostType().constantPool(), this));
     return l;
   }
   eq MethodDecl.attributes() {
     ArrayList l = new ArrayList();
     if(isAbstract() || isNative()) return l;
-    l.add(new CodeAttribute(bytecodes(hostType().constantPool())));
+    l.add(new CodeAttribute(bytecodes(hostType().constantPool()), this));
     l.add(new ExceptionsAttribute(bytecodes(hostType().constantPool()), this));
     return l;
   }
   eq ConstructorDecl.attributes() {
     ArrayList l = new ArrayList();
-    l.add(new CodeAttribute(bytecodes(hostType().constantPool())));
+    l.add(new CodeAttribute(bytecodes(hostType().constantPool()), null));
     l.add(new ExceptionsAttribute(bytecodes(hostType().constantPool()), this));
     return l;
   }
   syn lazy Collection ClassDecl.clinit_attributes() {
     ArrayList l = new ArrayList();
-    l.add(new CodeAttribute(bytecodes(constantPool())));
+    l.add(new CodeAttribute(bytecodes(constantPool()), null));
     return l;
   }
 

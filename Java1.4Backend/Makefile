@@ -17,7 +17,7 @@ GenerateClassfile.jrag \
 InnerClasses.jrag
 
 
-JAVABACKENDFILES = GenerateBCodefile.java
+JAVABACKENDFILES = JavaCompiler.java
 
 export EXTERNALJRAGFILES += $(addprefix $(BACKEND)/, $(JRAGBACKENDFILES))
 export EXTERNALJAVAFILES += $(addprefix $(BACKEND)/, $(JAVABACKENDFILES))
@@ -31,3 +31,6 @@ all:
 
 clean:
 	$(MAKE) -C $(JAVAGRAMMAR) clean 
+
+jar: all
+	jar -cmf manifest JavaCompiler.jar `find . -name "*.class"` `find . -name "*.spec"`
