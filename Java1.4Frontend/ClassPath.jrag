@@ -7,13 +7,20 @@ aspect ClassPath {
     private boolean isSource = false;
     private long age;
 
-    public static Object[] classPath = null;
-    public static Object[] javaPath = null;
+    public static java.util.ArrayList classPath = null;
 
     private static HashSet packages = new HashSet();
 
-    private void initPaths() {
-      if(classPath == null || javaPath == null) {
+    public static void pushClassPath(String name) {
+      initPaths();
+      classPath.add(new File(name));
+    }
+    public static void popClassPath() {
+      classPath.remove(classPath.size()-1);
+    }
+
+    private static void initPaths() {
+      if(classPath == null) {
         //System.err.println("Initializing class paths");
         String bootClassPath = System.getProperty("sun.boot.class.path");
         if (bootClassPath == null) {
@@ -31,12 +38,7 @@ aspect ClassPath {
         }
         bootClassPath += File.pathSeparator + ".";
         String[] classPaths = bootClassPath.split(File.pathSeparator);
-        javaPath = path.split(File.pathSeparator);
-        //System.err.println("JavaPath: ");
-        //for(int i = 0; i < javaPath.length; i++)
-          //System.err.println("  " + javaPath[i]);
-        //System.err.println("ClassPath: ");
-        classPath = new Object[classPaths.length];
+        classPath = new java.util.ArrayList();
         for(int i = 0; i < classPaths.length; i++) {
           String s = (String)classPaths[i];
           //System.err.println("  " + s);
@@ -44,7 +46,7 @@ aspect ClassPath {
           if(f.isFile()) {
             try {
               ZipFile zip = new ZipFile(f);
-              classPath[i] = zip;
+              classPath.add(zip);
               for (Enumeration e = zip.entries() ; e.hasMoreElements() ;) {
                 ZipEntry entry = (ZipEntry)e.nextElement();
                 String pathName = new File(entry.getName()).getParent();
@@ -55,7 +57,7 @@ aspect ClassPath {
             }
           }
           else if(f.isDirectory()) {
-            classPath[i] = f;
+            classPath.add(f);
           }
         }
       }
@@ -66,8 +68,8 @@ aspect ClassPath {
       if(packages.contains(name)) {
         return true;
       }
-      for(int i = 0; i < classPath.length; i++) {
-        Object o = classPath[i];
+      for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
+        Object o = iter.next();
         if(o instanceof File) {
           File classFile = new File((File)o, name);
           if(classFile.isDirectory()) {
@@ -93,8 +95,8 @@ aspect ClassPath {
       isSource = false;
       age = 0;
       try {
-        for(int i = 0; i < classPath.length; i++) {
-          Object o = classPath[i];
+        for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
+          Object o = iter.next();
           if(o instanceof ZipFile) {
             ZipFile zip = (ZipFile)o;
             ZipEntry zipEntry;

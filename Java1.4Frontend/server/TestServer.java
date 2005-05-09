@@ -5,7 +5,6 @@ import AST.*;
 import java.io.*;
 import java.net.*;
 import java.util.*;
-import parser.JavaCompiler;
 
 class TestServer {
 
@@ -44,14 +43,16 @@ class TestServer {
         }
         else {
           String path = msg;
-          Program.path[0] = msg;
+          ClassFile.pushClassPath(msg);
           msg = in.readLine();
           boolean error = false;
           String errorMessage = "";
           while (!msg.equals("end")) {
+            msg = msg.substring(0, msg.length()-5);
             System.out.println("Processing: " + msg);
             try {
-              CompilationUnit cu = JavaCompiler.parse(path + msg);
+              CompilationUnit cu = new ClassFile(msg).getCompilationUnit();
+              //CompilationUnit cu = JavaCompiler.parse(path + msg);
               for(int k = 0; k < cu.getNumTypeDecl(); k++) {
                 String name = ((TypeDecl)cu.getTypeDeclListNoTransform().getChildNoTransform(k)).fullName();
                 for(int i = 0; i < program.getNumCompilationUnit(); i++) {
@@ -100,6 +101,7 @@ class TestServer {
           out.println(error ? "error:" + errorMessage : "ok");
           out.flush();
           System.out.println("Done");
+          ClassFile.popClassPath();
         }
         out.close();
         in.close();
