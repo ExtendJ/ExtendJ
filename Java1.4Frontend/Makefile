@@ -15,7 +15,7 @@ LIB=
 HANDWRITTENJAVA=$(MAIN) $(LIB)
 
 # -- Jrag files
-JRAGFILES=PrettyPrint.jadd TypeAnalysis.jrag LookupVariable.jrag LookupType.jrag LookupMethod.jrag DeclareBeforeUse.jrag ResolveAmbiguousNames.jrag Helper.jrag PrimitiveTypes.jrag  VariableDeclaration.jrag ErrorCheck.jrag TypeCheck.jrag AccessControl.jrag ExceptionHandling.jrag LookupLabel.jrag UnreachableStatements.jrag DefiniteAssignment.jrag ConstantExpression.jrag NameCheck.jrag Modifiers.jrag ClassPath.jrag UpdateRemoteAttributeWrites.jadd
+JRAGFILES=PrettyPrint.jadd TypeAnalysis.jrag LookupVariable.jrag LookupType.jrag LookupMethod.jrag DeclareBeforeUse.jrag ResolveAmbiguousNames.jrag Helper.jrag PrimitiveTypes.jrag  VariableDeclaration.jrag ErrorCheck.jrag TypeCheck.jrag AccessControl.jrag ExceptionHandling.jrag LookupLabel.jrag UnreachableStatements.jrag DefiniteAssignment.jrag ConstantExpression.jrag NameCheck.jrag Modifiers.jrag ClassPath.jrag UpdateRemoteAttributeWrites.jadd Options.jadd
 
 ASTFILES = java.ast
 
