@@ -8,12 +8,12 @@ class JavaPrettyPrinter {
 
   public static void main(String args[]) {
     Program program = new Program();
-    program.addOptionDescription("-classpath", true);
-    program.addOptionDescription("-sourcepath", true);
-    program.addOptionDescription("-bootclasspath", true);
-    program.addOptionDescription("-extdirs", true);
-    program.addOptionDescription("-d", true);
-    program.addOptionDescription("-verbose", false);
+    program.addKeyValueOption("-classpath");
+    program.addKeyValueOption("-sourcepath");
+    program.addKeyValueOption("-bootclasspath");
+    program.addKeyValueOption("-extdirs");
+    program.addKeyValueOption("-d");
+    program.addKeyOption("-verbose");
     
     program.addOptions(args);
     Collection files = program.files();

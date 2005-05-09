@@ -1,6 +1,16 @@
 import java.util.*;
 
 aspect Options {
+  static class Option {
+    public String name;
+    public boolean hasValue;
+    public boolean isCollection;
+    public Option(String name, boolean hasValue, boolean isCollection) {
+      this.name = name;
+      this.hasValue = hasValue;
+      this.isCollection = isCollection;
+    }
+  }
   private static Map Program.options = new HashMap();
   private static Map Program.optionDescriptions = new HashMap();
 
@@ -8,11 +18,34 @@ aspect Options {
   public static Collection Program.files() {
     return files;
   }
+
+  public static void Program.addKeyOption(String name) {
+    if(optionDescriptions.containsKey(name))
+      throw new Error("Command line definition error: option description for " + name + " is multiply declared");
+    optionDescriptions.put(name, new Option(name, false, false));
+  }
+  
+  public static void Program.addKeyValueOption(String name) {
+    if(optionDescriptions.containsKey(name))
+      throw new Error("Command line definition error: option description for " + name + " is multiply declared");
+    optionDescriptions.put(name, new Option(name, true, false));
+  }
+  
+  public static void Program.addKeyCollectionOption(String name) {
+    if(optionDescriptions.containsKey(name))
+      throw new Error("Command line definition error: option description for " + name + " is multiply declared");
+    optionDescriptions.put(name, new Option(name, true, true));
+  }
  
   public static void Program.addOptionDescription(String name, boolean value) {
     if(optionDescriptions.containsKey(name))
       throw new Error("Command line definition error: option description for " + name + " is multiply declared");
-    optionDescriptions.put(name, Boolean.valueOf(value));
+    optionDescriptions.put(name, new Option(name, value, false));
+  }
+  public static void Program.addOptionDescription(String name, boolean value, boolean isCollection) {
+    if(optionDescriptions.containsKey(name))
+      throw new Error("Command line definition error: option description for " + name + " is multiply declared");
+    optionDescriptions.put(name, new Option(name, value, isCollection));
   }
   
   public static void Program.addOptions(String[] args) {
@@ -21,21 +54,38 @@ aspect Options {
       if(arg.startsWith("-")) {
         if(!optionDescriptions.containsKey(arg))
           throw new Error("Command line argument error: option " + arg + " is not defined");
-        if(options.containsKey(arg))
+        Option o = (Option)optionDescriptions.get(arg);
+        
+        if(!o.isCollection && options.containsKey(arg))
           throw new Error("Command line argument error: option " + arg + " is multiply defined");
         
-        boolean hasValue = ((Boolean)optionDescriptions.get(arg)).booleanValue();
-        
-        String value = null;
-        if(hasValue) {
+        if(o.hasValue && !o.isCollection) {
+          String value = null;
           if(i + 1 > args.length - 1)
             throw new Error("Command line argument error: value missing for key " + arg);
           value = args[i+1];
           if(value.startsWith("-"))
             throw new Error("Command line argument error: value missing for key " + arg);
           i++;
+          options.put(arg, value);
         }
-        options.put(arg, value);
+        else if(o.hasValue && o.isCollection) {
+          String value = null;
+          if(i + 1 > args.length - 1)
+            throw new Error("Command line argument error: value missing for key " + arg);
+          value = args[i+1];
+          if(value.startsWith("-"))
+            throw new Error("Command line argument error: value missing for key " + arg);
+          i++;
+          Collection c = (Collection)options.get(arg);
+          if(c == null)
+            c = new ArrayList();
+          c.add(value);
+          options.put(arg, c);
+        }
+        else {
+          options.put(arg, null);
+        }
       }
       else {
         files.add(arg);
@@ -52,5 +102,10 @@ aspect Options {
     if(!hasValueForOption(name))
       throw new Error("Command line argument error: key " + name + " does not have a value");
     return (String)options.get(name);
+  }
+  public static Collection Program.getValueCollectionForOption(String name) {
+    if(!hasValueForOption(name))
+      throw new Error("Command line argument error: key " + name + " does not have a value");
+    return (Collection)options.get(name);
   }
 }
