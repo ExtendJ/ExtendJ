@@ -45,7 +45,7 @@ class JavaPrettyPrinter {
     }
     parseTime = System.currentTimeMillis() - parseTime;
     long rewriteAndUpdateTime = System.currentTimeMillis();
-    program.updateRemoteAttributeWrites(files.size());
+    program.updateRemoteAttributeCollections(files.size());
     rewriteAndUpdateTime = System.currentTimeMillis() - rewriteAndUpdateTime;
     program.prettyPrint(files.size());
     long errorCheckTime = System.currentTimeMillis();
