@@ -384,7 +384,20 @@ aspect CreateBCode {
   }
 
   public void ConstructorAccess.createBCode(CodeGeneration gen) {
-    gen.addBytecode(Bytecode.ALOAD_0);
+    ConstructorDecl c = decl();
+    int index = 0;
+    // this
+    gen.emitLoadReference(index++);
+    // this$0
+    if(c.hostType().isInnerType())
+      gen.emitLoadReference(index++);
+    // this$val
+    for(Iterator iter = c.hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      v.type().emitLoad(gen, index);
+      index += v.type().size();
+    }
+    // args
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // MethodInvocationConversion
@@ -979,11 +992,15 @@ aspect CreateBCode {
 
   public void WhileStmt.createBCode(CodeGeneration gen) {
     gen.addLabel(cond_label(gen));
-    getCondition().createBCode(gen);
-    gen.emitCompare(Bytecode.IFEQ, end_label(gen));
+    if(canCompleteNormally()) {
+      getCondition().createBCode(gen);
+      gen.emitCompare(Bytecode.IFEQ, end_label(gen));
+    }
     getStmt().createBCode(gen);
     gen.emitGoto(cond_label(gen));
-    gen.addLabel(end_label(gen));
+    if(canCompleteNormally()) {
+      gen.addLabel(end_label(gen));
+    }
   }
 
   syn lazy int DoStmt.begin_label(CodeGeneration gen) = gen.label();

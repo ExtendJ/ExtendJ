@@ -43,7 +43,7 @@ class JavaCompiler {
         return;
       }
     }
-    program.updateRemoteAttributeWrites(files.size());
+    program.updateRemoteAttributeCollections(files.size());
     if(!program.errorCheck(files.size())) {
       program.generateClassfile(files.size());
     }
