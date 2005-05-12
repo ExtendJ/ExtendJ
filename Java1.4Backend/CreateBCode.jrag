@@ -265,9 +265,9 @@ aspect CreateBCode {
     TypeDecl source = getSource().type();
     if(dest.isString()) {
       getDest().createAssignLoadDest(gen);
-      dest.emitStringConv(gen);
+      dest.emitStringConv(gen);  // String conversion
       getSource().createBCode(gen);
-      source.emitStringConv(gen);
+      source.emitStringConv(gen); // String conversion
       dest.add(gen);
       if(needsPush()) {
         getDest().createAssignSimplePush(gen);
@@ -622,14 +622,56 @@ aspect CreateBCode {
     gen.emitOperation(this);
   }
   
+
+  syn lazy TypeDecl TypeDecl.stringPromotion() = this;
+  eq ReferenceType.stringPromotion() = typeObject();
+  eq NullType.stringPromotion() = typeObject();
+  eq ByteType.stringPromotion() = typeInt();
+  eq ShortType.stringPromotion() = typeInt();
+
+
+  syn boolean ASTNode.isStringAdd() = false;
+  eq AddExpr.isStringAdd() = type().isString();
+  
+  syn boolean AddExpr.firstStringAddPart() = !getLeftOperand().isStringAdd() && type().isString();
+  syn boolean AddExpr.lastStringAddPart() = !getParent().isStringAdd();
+
   public void AddExpr.createBCode(CodeGeneration gen) {
     if(type().isString()) {
-      TypeDecl type = type();
-      getLeftOperand().createBCode(gen);
-      getLeftOperand().type().emitStringConv(gen); // String conversion
-      getRightOperand().createBCode(gen);
-      getRightOperand().type().emitStringConv(gen); // String conversion
-      gen.emitOperation(this);
+      TypeDecl stringBuffer = lookupType("java.lang", "StringBuffer");
+      String classname = stringBuffer.constantPoolName();
+      String desc;
+      int index;
+      TypeDecl argumentType;
+      if(firstStringAddPart()) {
+        stringBuffer.emitNew(gen); // new StringBuffer
+        gen.emitDup();             // dup
+        desc = "()V";
+        index = gen.constantPool().addMethodref(classname, "<init>", desc);
+        gen.addBytecode(Bytecode.INVOKESPECIAL, -1);
+        gen.add(index >> 8).add(index & 0xff);  // invokespecial StringBuffer()
+        getLeftOperand().createBCode(gen); // left
+        argumentType = getLeftOperand().type().stringPromotion();
+        desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
+        index = gen.constantPool().addMethodref(classname, "append", desc);
+        gen.addBytecode(Bytecode.INVOKEVIRTUAL, -argumentType.size());
+        gen.add(index >> 8).add(index & 0xff);  // StringBuffer.append
+      }
+      else {
+        getLeftOperand().createBCode(gen);
+      }
+      getRightOperand().createBCode(gen); // right
+      argumentType = getRightOperand().type().stringPromotion();
+      desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
+      index = gen.constantPool().addMethodref(classname, "append", desc);
+      gen.addBytecode(Bytecode.INVOKEVIRTUAL, -argumentType.size());
+      gen.add(index >> 8).add(index & 0xff);  // StringBuffer.append
+      if(lastStringAddPart()) {
+        desc = "()" + type().typeDescriptor();
+        index = gen.constantPool().addMethodref(classname, "toString", desc);
+        gen.addBytecode(Bytecode.INVOKEVIRTUAL, 0);
+        gen.add(index >> 8).add(index & 0xff);  // StringBuffer.toString
+      }
     }
     else {
       super.createBCode(gen);
