@@ -10,7 +10,7 @@ class CONSTANT_Info {
 		
 	}
 	public Expr expr() {
-		return null;
+    throw new Error("CONSTANT_info.expr() should not be computed for " + getClass().getName());
 	}
 	public Expr exprAsBoolean() {
 		return expr();
