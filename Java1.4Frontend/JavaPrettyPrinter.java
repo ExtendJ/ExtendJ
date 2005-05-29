@@ -24,8 +24,8 @@ class JavaPrettyPrinter {
     initParseTime = System.currentTimeMillis() - initParseTime;
     long parseTime = System.currentTimeMillis();
     for(Iterator iter = files.iterator(); iter.hasNext(); ) {
+      String name = (String)iter.next();
       try {
-        String name = (String)iter.next();
         Reader reader = new FileReader(name);
         JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
         CompilationUnit unit = ((Program)parser.parse(scanner)).getCompilationUnit(0);
@@ -37,6 +37,11 @@ class JavaPrettyPrinter {
         //long parse = System.currentTimeMillis();
         program.addCompilationUnit(unit);
         //program.parseTime += System.currentTimeMillis() - parse;
+      } catch (Error e) {
+        System.err.println(name + ": " + e.getMessage());
+        System.exit(1);
+      } catch (RuntimeException e) {
+        System.err.println(name + ": " + e.getMessage());
       } catch (IOException e) {
       } catch (Exception e) {
         System.err.println(e);
@@ -52,6 +57,7 @@ class JavaPrettyPrinter {
     if(program.errorCheck(files.size())) {
       errorCheckTime = System.currentTimeMillis() - errorCheckTime;
       //long code = System.currentTimeMillis() - start - program.parseTime;
+      /*
       System.err.println("InitParser: " + initParseTime);
       System.err.println("Parse: " + parseTime);
       System.err.println("ClassFileReadTime: " + program.classFileReadTime);
@@ -59,12 +65,13 @@ class JavaPrettyPrinter {
       System.err.println("Print time: " + program.printTime);
       System.err.println("Error check time: " + errorCheckTime);
       System.err.println("Number of files: " + files.size());
-      
+      */
       System.exit(1);
       
     }
     errorCheckTime = System.currentTimeMillis() - errorCheckTime;
     //long code = System.currentTimeMillis() - start - program.parseTime;
+    /*
     System.err.println("InitParser: " + initParseTime);
     System.err.println("Parse: " + parseTime);
     System.err.println("ClassFileReadTime: " + program.classFileReadTime);
@@ -72,6 +79,7 @@ class JavaPrettyPrinter {
     System.err.println("Print time: " + program.printTime);
     System.err.println("Error check time: " + errorCheckTime);
     System.err.println("Number of files: " + files.size());
+    */
   }
 
   

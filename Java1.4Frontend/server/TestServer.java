@@ -48,53 +48,55 @@ class TestServer {
           boolean error = false;
           String errorMessage = "";
           while (!msg.equals("end")) {
-            msg = msg.substring(0, msg.length()-5);
-            System.out.println("Processing: " + msg);
-            try {
-              CompilationUnit cu = new ClassFile(msg).getCompilationUnit();
-              //CompilationUnit cu = JavaCompiler.parse(path + msg);
-              for(int k = 0; k < cu.getNumTypeDecl(); k++) {
-                String name = ((TypeDecl)cu.getTypeDeclListNoTransform().getChildNoTransform(k)).fullName();
-                for(int i = 0; i < program.getNumCompilationUnit(); i++) {
-                  CompilationUnit unit = program.getCompilationUnit(i);
-                  for(int j = 0; j < unit.getNumTypeDecl(); j++) {
-                    if(unit.getTypeDecl(j).fullName().equals(name)) {
-                      program = new Program();
+            if(msg.length() > 5) {
+              msg = msg.substring(0, msg.length()-5);
+              System.out.println("Processing: " + msg);
+              try {
+                CompilationUnit cu = new ClassFile(msg).getCompilationUnit();
+                //CompilationUnit cu = JavaCompiler.parse(path + msg);
+                for(int k = 0; k < cu.getNumTypeDecl(); k++) {
+                  String name = ((TypeDecl)cu.getTypeDeclListNoTransform().getChildNoTransform(k)).fullName();
+                  for(int i = 0; i < program.getNumCompilationUnit(); i++) {
+                    CompilationUnit unit = program.getCompilationUnit(i);
+                    for(int j = 0; j < unit.getNumTypeDecl(); j++) {
+                      if(unit.getTypeDecl(j).fullName().equals(name)) {
+                        program = new Program();
+                      }
                     }
                   }
                 }
-              }
-              program.addCompilationUnit(cu);
-              String prettyPrint = cu.toString();
-              Collection collection = new LinkedList();
-              cu.errorCheck(collection);
+                program.addCompilationUnit(cu);
+                String prettyPrint = cu.toString();
+                Collection collection = new LinkedList();
+                cu.errorCheck(collection);
 
-              System.out.println("Errors:");
-              for(Iterator iter = collection.iterator(); iter.hasNext(); ) {
-                String s = (String)iter.next();
-                System.out.println(s);
-                if(!s.equals(""))
-                  error = true;
+                System.out.println("Errors:");
+                for(Iterator iter = collection.iterator(); iter.hasNext(); ) {
+                  String s = (String)iter.next();
+                  System.out.println(s);
+                  if(!s.equals(""))
+                    error = true;
+                }
               }
-            }
-            catch (FileNotFoundException e) {
-              System.err.println(e);
-              error = false;
-            }
-            catch (IOException e) {
-              e.printStackTrace();
-              error = true;
-            }
-            catch (Error e) {
-              System.err.println(e);
-              e.printStackTrace();
-              error = true;
-            }
-            catch (Exception e) {
-              errorMessage = msg + ":" + e.toString().substring(e.toString().indexOf(':')+2);
-              System.err.println(e.toString().substring(e.toString().indexOf(':')+2));
-              e.printStackTrace();
-              error = true;
+              catch (FileNotFoundException e) {
+                System.err.println(e);
+                error = false;
+              }
+              catch (IOException e) {
+                e.printStackTrace();
+                error = true;
+              }
+              catch (Error e) {
+                System.err.println(e);
+                e.printStackTrace();
+                error = true;
+              }
+              catch (Exception e) {
+                errorMessage = msg + ":" + e.toString().substring(e.toString().indexOf(':')+2);
+                System.err.println(e.toString().substring(e.toString().indexOf(':')+2));
+                e.printStackTrace();
+                error = true;
+              }
             }
             msg = in.readLine();
           }

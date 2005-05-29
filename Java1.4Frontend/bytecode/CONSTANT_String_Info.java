@@ -1,6 +1,7 @@
 package bytecode;
 
-
+import AST.Expr;
+import AST.StringLiteral;
 
 class CONSTANT_String_Info extends CONSTANT_Info {
 	public int string_index;
@@ -11,8 +12,8 @@ class CONSTANT_String_Info extends CONSTANT_Info {
 	}
 
   public Expr expr() {
-    CONSTANT_Utf8_info i = p.constantPool[string_index];
-    return i.string;
+    CONSTANT_Utf8_Info i = (CONSTANT_Utf8_Info)p.constantPool[string_index];
+    return new StringLiteral(i.string);
   }
 
 	public String toString() {
