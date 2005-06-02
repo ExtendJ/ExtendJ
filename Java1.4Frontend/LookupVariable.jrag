@@ -1,35 +1,43 @@
 import java.util.*;
 
 aspect VariableScope {
-  inh ArrayList TypeDecl.lookupVariable(IdUse idUse);
-  inh ArrayList BodyDecl.lookupVariable(IdUse idUse);
-  inh ArrayList Block.lookupVariable(IdUse idUse);
-  inh ArrayList SwitchStmt.lookupVariable(IdUse idUse);
-  inh ArrayList ForStmt.lookupVariable(IdUse idUse);
-  inh ArrayList Expr.lookupVariable(IdUse idUse);
-  inh ArrayList Catch.lookupVariable(IdUse idUse);
-  inh ArrayList VariableDeclaration.lookupVariable(IdUse idUse);
-  inh ArrayList ParameterDeclaration.lookupVariable(IdUse idUse);
+  inh lazy Collection TypeDecl.lookupVariable(String name);
+  inh Collection BodyDecl.lookupVariable(String name);
+  inh lazy Collection Block.lookupVariable(String name);
+  inh lazy Collection SwitchStmt.lookupVariable(String name);
+  inh lazy Collection ForStmt.lookupVariable(String name);
+  inh Collection Expr.lookupVariable(String name);
+  inh lazy Collection Catch.lookupVariable(String name);
+  inh Collection VariableDeclaration.lookupVariable(String name);
+  inh Collection ParameterDeclaration.lookupVariable(String name);
   
-  private static final ArrayList Program.emptyVariableList = new ArrayList(0);
-  eq Program.getCompilationUnit().lookupVariable(IdUse idUse) = emptyVariableList;
+  protected static final Collection ASTNode.emptyVariableList = new ArrayList(0);
+  protected static Collection ASTNode.newVariableList() {
+    return new ArrayList(1);
+  }
+
+  eq Program.getCompilationUnit().lookupVariable(String name) = emptyVariableList;
 
   // 6.5.6.1
-  eq TypeDecl.getBodyDecl(int i).lookupVariable(IdUse idUse) {
-    ArrayList list = new ArrayList(1);
-    list.addAll(findVariable(idUse));
+  eq TypeDecl.getBodyDecl(int i).lookupVariable(String name) {
+    Collection list = newVariableList();
+    list.addAll(findVariable(name));
     if(list.isEmpty() && (isNestedType() || isAnonymous()))
-      list.addAll(lookupVariable(idUse));
-    if(getBodyDecl(i).filterInstanceMember()) {
+      list.addAll(lookupVariable(name));
+    if(getBodyDecl(i).filterInstanceMember() || (isAnonymous() && inExplicitConstructorInvocation()) ) {
       for(Iterator iter = list.iterator(); iter.hasNext(); ) {
         Variable v = (Variable)iter.next();
         if(v.isInstanceVariable())
           iter.remove();
       }
     }
-    if(!list.isEmpty())
+    if(!list.isEmpty()) {
+
+
+      
       return list;
-    return topLevelType().lookupVariable(idUse); // Fix to handle static imports
+    }
+    return topLevelType().lookupVariable(name); // Fix to handle static imports
   }
   syn boolean BodyDecl.filterInstanceMember() = false;
   eq StaticInitializer.filterInstanceMember() = true;
@@ -38,66 +46,90 @@ aspect VariableScope {
   eq MemberType.filterInstanceMember() = isStatic();
 
 
-  eq MethodDecl.getBlock().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
-  eq MethodDecl.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq MethodDecl.getBlock().lookupVariable(String name) = localLookupVariable(name);
+  eq MethodDecl.getParameter().lookupVariable(String name) = localLookupVariable(name);
 
-  eq ConstructorDecl.getBlock().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
-  eq ConstructorDecl.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq ConstructorDecl.getBlock().lookupVariable(String name) = localLookupVariable(name);
+  eq ConstructorDecl.getParameter().lookupVariable(String name) = localLookupVariable(name);
 
-  eq Block.getStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq Block.getStmt(int index).lookupVariable(String name) {
+    Collection list = localLookupVariable(name);
+    for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(declaredBeforeUse(v, index)) {
+        Collection result = newVariableList();
+        result.add(v);
+        return result;
+      }
+    }
+    return lookupVariable(name);
+  }
 
-  eq SwitchStmt.getCase().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq SwitchStmt.getCase(int index).lookupVariable(String name) {
+    Collection list = localLookupVariable(name);
+    for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(declaredBeforeUse(v, index)) {
+        Collection result = newVariableList();
+        result.add(v);
+        return result;
+      }
+    }
+    return lookupVariable(name);
+  }
   
-  eq ForStmt.getInitStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
-  eq ForStmt.getCondition().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
-  eq ForStmt.getUpdateStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
-  eq ForStmt.getStmt().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq ForStmt.getInitStmt().lookupVariable(String name) = localLookupVariable(name);
+  eq ForStmt.getCondition().lookupVariable(String name) = localLookupVariable(name);
+  eq ForStmt.getUpdateStmt().lookupVariable(String name) = localLookupVariable(name);
+  eq ForStmt.getStmt().lookupVariable(String name) = localLookupVariable(name);
 
-  eq Catch.getBlock().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
-  eq Catch.getParameter().lookupVariable(IdUse idUse) = localLookupVariable(idUse);
+  eq Catch.getBlock().lookupVariable(String name) = localLookupVariable(name);
+  eq Catch.getParameter().lookupVariable(String name) = localLookupVariable(name);
   
-  eq MethodAccess.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
-  eq ParseMethodName.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
-  eq ConstructorAccess.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
-  eq SuperConstructorAccess.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
-  eq ArrayAccess.getExpr().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
-  eq ParseArray.getDims().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq MethodAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
+  eq ParseMethodName.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
+  eq ConstructorAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
+  eq SuperConstructorAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
+  eq ArrayAccess.getExpr().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
+  eq ParseArray.getDims().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
 
-  eq ClassInstanceExpr.getArg().lookupVariable(IdUse idUse) = unqualifiedScope().lookupVariable(idUse);
+  eq ClassInstanceExpr.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
 
-  eq AbstractDot.getRight().lookupVariable(IdUse idUse) = getLeft().isPackageAccess() ? unknownType().lookupVariable(idUse) : getLeft().type().findVariable(idUse); // TODO: Check lookupVariable
+  eq AbstractDot.getRight().lookupVariable(String name) = getLeft().isPackageAccess() ? unknownType().lookupVariable(name) : getLeft().type().findVariable(name); // TODO: Check lookupVariable
 
 
-  eq ConstructorDecl.getConstructorInvocation().lookupVariable(IdUse idUse) {
+  eq ConstructorDecl.getConstructorInvocation().lookupVariable(String name) {
     for(int i = 0; i < getNumParameter(); i++) {
       Variable v = (Variable)getParameter(i);
-      if(v.name().equals(idUse.getID())) {
-        ArrayList list = new ArrayList();
+      if(v.name().equals(name)) {
+        Collection list = newVariableList();
         list.add(v);
         return list;
       }
     }
     TypeDecl hostType = hostType();
-    ArrayList list = new ArrayList(1);
-    list.addAll(hostType.findVariable(idUse));
+    Collection list = newVariableList();
+    list.addAll(hostType.findVariable(name));
     if(!list.isEmpty()) {
       removeInstanceVariables(list);
     }
     else {
       if(hostType.isNestedType() || hostType.isAnonymous()) {
-        list.addAll(hostType.lookupVariable(idUse));
+        list.addAll(hostType.lookupVariable(name));
         //removeInstanceVariables(list);
       }
-      if(idUse.hostType().isAnonymous() && idUse.hostType().inExplicitConstructorInvocation())
+      /*
+      if(name.hostType().isAnonymous() && name.hostType().inExplicitConstructorInvocation())
         removeInstanceVariables(list);
+      */
     }
     return list;
   }
   inh TypeDecl IdUse.hostType();
 /*
-  eq ClassInstanceExpr.getTypeDecl().lookupVariable(IdUse idUse) {
-    ArrayList list = new ArrayList(1);
-    list.addAll(lookupVariable(idUse));
+  eq ClassInstanceExpr.getTypeDecl().lookupVariable(String name) {
+    Collection list = newVariableList();
+    list.addAll(lookupVariable(name));
     if(!list.isEmpty()) {
       //removeInstanceVariables(list);
     }
@@ -105,7 +137,8 @@ aspect VariableScope {
   }
 */
   
-  public void ConstructorDecl.removeInstanceVariables(Collection c) {
+  //public void ConstructorDecl.removeInstanceVariables(Collection c) {
+  public void ASTNode.removeInstanceVariables(Collection c) {
     for(Iterator iter = c.iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
       if(v.isInstanceVariable())
@@ -113,6 +146,7 @@ aspect VariableScope {
     }
   }
   
+  /*
   public void ConstructorDecl.keepClassVariables(Collection c) {
     for(Iterator iter = c.iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
@@ -120,6 +154,7 @@ aspect VariableScope {
         iter.remove();
     }
   }
+  */
 
   public TypeDecl TypeDecl.subclassWithinBody(TypeDecl typeDecl) {
     if(instanceOf(typeDecl))
@@ -162,13 +197,13 @@ aspect VariableScope {
   }
 
   // 15.11.1
-  eq FieldDot.getRight().lookupVariable(IdUse idUse) {
+  eq FieldDot.getRight().lookupVariable(String name) {
     // 6.5.6.2
     if(getLeft().isPackageAccess())
-      return unknownType().lookupVariable(idUse);
+      return unknownType().lookupVariable(name);
     else if(getLeft().isTypeAccess()) {
-      ArrayList c = new ArrayList(1);
-      c.addAll(getLeft().type().findVariable(idUse));
+      Collection c = newVariableList();
+      c.addAll(getLeft().type().findVariable(name));
       if(getLeft().type().isClassDecl()) {
         keepAccessableFields(c);
         if(c.size() == 1)
@@ -181,9 +216,9 @@ aspect VariableScope {
       }
     }
     else {
-      ArrayList c = new ArrayList(1);
+      Collection c = newVariableList();
       if(getLeft().type().accessableFrom(hostType())) {
-        c.addAll(getLeft().type().findVariable(idUse));
+        c.addAll(getLeft().type().findVariable(name));
         keepAccessableFields(c);
       }
       return c;
@@ -194,7 +229,7 @@ aspect VariableScope {
 aspect VariableScopePropagation {
   
   interface VariableScope {
-    public ArrayList lookupVariable(IdUse idUse);
+    public Collection lookupVariable(String name);
   }
   
   Catch implements VariableScope;
@@ -216,8 +251,8 @@ aspect VariableScopePropagation {
   inh Variable TypeDecl.illegalField();
   
   syn lazy Collection VarAccess.decls() {
-    Collection c = new ArrayList(1);
-    c.addAll(lookupVariable(getIdUse()));
+    Collection c = newVariableList();
+    c.addAll(lookupVariable(getIdUse().getID()));
     
     /*
     for(Iterator iter = c.iterator(); iter.hasNext(); ) {
@@ -287,20 +322,20 @@ aspect VariableScopePropagation {
 
 aspect LookupVariable {
   
-  syn ArrayList TypeDecl.findVariable(IdUse idUse) {
-    ArrayList list = new ArrayList();
+  syn lazy Collection TypeDecl.findVariable(String name) {
+    Collection list = newVariableList();
     for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
       FieldDeclaration decl = (FieldDeclaration)iter.next();
-      if(decl.getIdDecl().getID().equals(idUse.getID())) {
+      if(decl.getIdDecl().getID().equals(name)) {
         list.add(decl);
       }
     }
     return list;
   }
 
-  syn boolean TypeDecl.hasField(String name) = findVariable(name) != illegalField();
+  syn lazy boolean TypeDecl.hasField(String name) = findVariable(name) != illegalField();
   
-  public FieldDeclaration TypeDecl.findVariable(String name) {
+  public FieldDeclaration TypeDecl.findSingleVariable(String name) {
     for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
       FieldDeclaration decl = (FieldDeclaration)iter.next();
       if(decl.getIdDecl().getID().equals(name))
@@ -309,8 +344,8 @@ aspect LookupVariable {
     return (FieldDeclaration)illegalField();
   }
   
-  public  ArrayList TypeDecl.findVariable(IdDecl idDecl) {
-    ArrayList list = new ArrayList();
+  public  Collection TypeDecl.findVariable(IdDecl idDecl) {
+    Collection list = newVariableList();
     for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
       FieldDeclaration decl = (FieldDeclaration)iter.next();
       if(decl.getIdDecl().getID().equals(idDecl.getID()))
@@ -319,14 +354,14 @@ aspect LookupVariable {
     return list;
   }
   
-  syn ArrayList TypeDecl.localLookupVariable(IdUse idUse) {
-    ArrayList v = findVariable(idUse);
+  syn lazy Collection TypeDecl.localLookupVariable(String name) {
+    Collection v = findVariable(name);
     if(v.isEmpty()) {
       if(isInnerType() || isAnonymous()) {
-        return lookupVariable(idUse);
+        return lookupVariable(name);
       }
       else if(isNestedType() && isStatic()) {
-        ArrayList w = lookupVariable(idUse);
+        Collection w = lookupVariable(name);
         for(Iterator iter = w.iterator(); iter.hasNext(); ) {
           Variable var = (Variable)iter.next();
           if(var.isStatic())
@@ -337,91 +372,91 @@ aspect LookupVariable {
     return v;
   }
   
-  syn ArrayList Block.localLookupVariable(IdUse idUse) {
+  syn lazy Collection Block.localLookupVariable(String name) {
     for(int i = 0; i < getNumStmt(); i++) {
       if(getStmt(i) instanceof Variable) {
         Variable v = (Variable)getStmt(i);
-        if(v.name().equals(idUse.getID())) {
-          if(declaredBeforeUse(v, idUse)) {
-            ArrayList list = new ArrayList();
+        if(v.name().equals(name)) {
+          //if(declaredBeforeUse(v, name)) {
+            Collection list = newVariableList();
             list.add(v);
             return list;
-          }
+          //}
         }
       }
     }
-    return lookupVariable(idUse);
+    return emptyVariableList;
   }
 
-  syn ArrayList SwitchStmt.localLookupVariable(IdUse idUse) {
+  syn lazy Collection SwitchStmt.localLookupVariable(String name) {
     for(int i = 0; i < getNumCase(); i++) {
       Case c = getCase(i);
       for(int j = 0; j < c.getNumStmt(); j++) {
         if(c.getStmt(j) instanceof Variable) {
           Variable v = (Variable)c.getStmt(j);
-          if(v.name().equals(idUse.getID()) && declaredBeforeUse(v, idUse)) {
-            ArrayList list = new ArrayList();
+          if(v.name().equals(name) /*&& declaredBeforeUse(v, name)*/) {
+            Collection list = newVariableList();
             list.add(v);
             return list;
           }
         }
       }
     }
-    return lookupVariable(idUse);
+    return emptyVariableList;
   }
 
-  syn ArrayList Catch.localLookupVariable(IdUse idUse) {
+  syn lazy Collection Catch.localLookupVariable(String name) {
     Variable v = (Variable)getParameter();
-    if(v.name().equals(idUse.getID())) {
-      ArrayList list = new ArrayList();
+    if(v.name().equals(name)) {
+      Collection list = newVariableList();
       list.add(v);
       return list;
     }
-    return lookupVariable(idUse);
+    return lookupVariable(name);
   }
 
-  syn ArrayList MethodDecl.localLookupVariable(IdUse idUse) {
+  syn lazy Collection MethodDecl.localLookupVariable(String name) {
     for(int i = 0; i < getNumParameter(); i++) {
       Variable v = (Variable)getParameter(i);
-      if(v.name().equals(idUse.getID())) {
-        ArrayList list = new ArrayList();
+      if(v.name().equals(name)) {
+        Collection list = newVariableList();
         list.add(v);
         return list;
       }
     }
-    return lookupVariable(idUse);
+    return lookupVariable(name);
   }
 
-  syn ArrayList ConstructorDecl.localLookupVariable(IdUse idUse) {
+  syn lazy Collection ConstructorDecl.localLookupVariable(String name) {
     for(int i = 0; i < getNumParameter(); i++) {
       Variable v = (Variable)getParameter(i);
-      if(v.name().equals(idUse.getID())) {
-        ArrayList list = new ArrayList();
+      if(v.name().equals(name)) {
+        Collection list = newVariableList();
         list.add(v);
         return list;
       }
     }
-    return lookupVariable(idUse);
+    return lookupVariable(name);
   }
   
-  syn ArrayList ForStmt.localLookupVariable(IdUse idUse) {
+  syn lazy Collection ForStmt.localLookupVariable(String name) {
     for(int i = 0; i < getNumInitStmt(); i++) {
       if(getInitStmt(i) instanceof Variable) {
         Variable v = (Variable)getInitStmt(i);
-        if(v.name().equals(idUse.getID())) {
-          ArrayList list = new ArrayList();
+        if(v.name().equals(name)) {
+          Collection list = newVariableList();
           list.add(v);
           return list;
         }
       }
     }
-    return lookupVariable(idUse);
+    return lookupVariable(name);
   }
 }
 
 aspect Fields {
-  syn lazy ArrayList TypeDecl.fields() {
-    ArrayList list = new ArrayList();
+  syn lazy Collection TypeDecl.fields() {
+    Collection list = new ArrayList();
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
@@ -432,7 +467,7 @@ aspect Fields {
   }
 
   eq ClassDecl.fields() {
-    ArrayList list = new ArrayList();
+    Collection list = new ArrayList();
     HashSet set = new HashSet();
     for(int i = 0; i < getNumImplements(); i++) {
       for(Iterator iter = getImplements(i).type().fields().iterator(); iter.hasNext(); ) {
@@ -453,7 +488,8 @@ aspect Fields {
       if(getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
         Set hides = hidesVariable(decl);
-        for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
+        //for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
+        for(Iterator iter = list.iterator(); iter.hasNext(); ) {
           FieldDeclaration f = (FieldDeclaration)iter.next();
           if(hides.contains(f))
             iter.remove();
@@ -466,7 +502,7 @@ aspect Fields {
   }
   
   eq InterfaceDecl.fields() {
-    ArrayList list = new ArrayList();
+    Collection list = new ArrayList();
     HashSet set = new HashSet();
     for(int i = 0; i < getNumSuperInterfaceId(); i++) {
       for(Iterator iter = getSuperInterfaceId(i).type().fields().iterator(); iter.hasNext(); ) {
@@ -481,7 +517,8 @@ aspect Fields {
       if(getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
         Set hides = hidesVariable(decl);
-        for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
+        //for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
+        for(Iterator iter = list.iterator(); iter.hasNext(); ) {
           FieldDeclaration f = (FieldDeclaration)iter.next();
           if(hides.contains(f))
             iter.remove();
@@ -495,7 +532,7 @@ aspect Fields {
 }
 
 aspect Hides {
-  syn HashSet TypeDecl.hidesVariable(Variable v) {
+  syn lazy HashSet TypeDecl.hidesVariable(Variable v) {
     return new HashSet();
   }
 
