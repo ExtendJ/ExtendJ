@@ -32,9 +32,6 @@ aspect VariableScope {
       }
     }
     if(!list.isEmpty()) {
-
-
-      
       return list;
     }
     return topLevelType().lookupVariable(name); // Fix to handle static imports
@@ -44,7 +41,6 @@ aspect VariableScope {
   eq FieldDeclaration.filterInstanceMember() = isStatic();
   eq MethodDecl.filterInstanceMember() = isStatic();
   eq MemberType.filterInstanceMember() = isStatic();
-
 
   eq MethodDecl.getBlock().lookupVariable(String name) = localLookupVariable(name);
   eq MethodDecl.getParameter().lookupVariable(String name) = localLookupVariable(name);
@@ -97,7 +93,6 @@ aspect VariableScope {
 
   eq AbstractDot.getRight().lookupVariable(String name) = getLeft().isPackageAccess() ? unknownType().lookupVariable(name) : getLeft().type().findVariable(name); // TODO: Check lookupVariable
 
-
   eq ConstructorDecl.getConstructorInvocation().lookupVariable(String name) {
     for(int i = 0; i < getNumParameter(); i++) {
       Variable v = (Variable)getParameter(i);
@@ -116,28 +111,11 @@ aspect VariableScope {
     else {
       if(hostType.isNestedType() || hostType.isAnonymous()) {
         list.addAll(hostType.lookupVariable(name));
-        //removeInstanceVariables(list);
       }
-      /*
-      if(name.hostType().isAnonymous() && name.hostType().inExplicitConstructorInvocation())
-        removeInstanceVariables(list);
-      */
     }
     return list;
   }
-  inh TypeDecl IdUse.hostType();
-/*
-  eq ClassInstanceExpr.getTypeDecl().lookupVariable(String name) {
-    Collection list = newVariableList();
-    list.addAll(lookupVariable(name));
-    if(!list.isEmpty()) {
-      //removeInstanceVariables(list);
-    }
-    return list;
-  }
-*/
   
-  //public void ConstructorDecl.removeInstanceVariables(Collection c) {
   public void ASTNode.removeInstanceVariables(Collection c) {
     for(Iterator iter = c.iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
@@ -146,16 +124,6 @@ aspect VariableScope {
     }
   }
   
-  /*
-  public void ConstructorDecl.keepClassVariables(Collection c) {
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-      Variable v = (Variable)iter.next();
-      if(!v.isClassVariable())
-        iter.remove();
-    }
-  }
-  */
-
   public TypeDecl TypeDecl.subclassWithinBody(TypeDecl typeDecl) {
     if(instanceOf(typeDecl))
       return this;
@@ -227,7 +195,6 @@ aspect VariableScope {
 }
 
 aspect VariableScopePropagation {
-  
   interface VariableScope {
     public Collection lookupVariable(String name);
   }
@@ -245,70 +212,11 @@ aspect VariableScopePropagation {
   eq ForStmt.getInitStmt().outerScope() = this;
   eq ForStmt.getStmt().outerScope() = this;
 
-  
   inh Variable Access.unknownField();
   inh Variable Access.illegalField();
   inh Variable TypeDecl.illegalField();
   
-  syn lazy Collection VarAccess.decls() {
-    Collection c = newVariableList();
-    c.addAll(lookupVariable(getIdUse().getID()));
-    
-    /*
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-      Variable v = (Variable)iter.next();
-      if(v instanceof FieldDeclaration) {
-        FieldDeclaration decl = (FieldDeclaration)v;
-        if(!decl.accessableFrom(hostType())) {
-          iter.remove();
-        }
-      }
-    }
-    */
-    /*
-    if(inStaticContext()) {
-      c = new ArrayList(c);
-      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-        Variable v = (Variable)iter.next();
-        if(!v.isStatic()) {
-          System.err.println("Removing non accessable field " + v.type().fullName() + " " + v.name() + " declared in " + v.hostType().fullName());
-          iter.remove();
-        }
-      }
-      if(c.isEmpty())
-        c.add(unknownField());
-    }*/
-    
-    /*
-    if(isQualified()) {
-      c = new ArrayList(c);
-      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-        FieldDeclaration f = (FieldDeclaration)iter.next(); // Safe since the name is qualified
-        AbstractDot dot = (AbstractDot)getParent();
-        if(f.isProtected() && !dot.getLeft().type().instanceOf(f.hostType())) {
-          System.err.println("Removing non accessable field " + f.type().fullName() + " " + f.name() + " declared in " + f.hostType().fullName());
-          iter.remove();
-        }
-      }
-      if(c.isEmpty())
-        c.add(unknownField());
-    }
-    if(isQualified()) {
-      c = new ArrayList(c);
-      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-        Variable v = (Variable)iter.next();
-        if(v instanceof FieldDeclaration && !((FieldDeclaration)v).accessableFrom(hostType())) {
-          System.err.println("Removing non accessable field " + v.type().fullName() + " " + v.name() + " declared in " + v.hostType().fullName());
-
-          iter.remove();
-        }
-      }
-      if(c.isEmpty())
-        c.add(unknownField());
-    }
-    */
-    return c;
-  }
+  syn lazy Collection VarAccess.decls() = lookupVariable(getIdUse().getID());
   syn lazy Variable VarAccess.decl() {
     Collection decls = decls();
     if(decls.size() == 1) {
@@ -316,9 +224,7 @@ aspect VariableScopePropagation {
     }
     return unknownField();
   }
-  
 }
-
 
 aspect LookupVariable {
   
@@ -333,7 +239,7 @@ aspect LookupVariable {
     return list;
   }
 
-  syn lazy boolean TypeDecl.hasField(String name) = findVariable(name) != illegalField();
+  syn lazy boolean TypeDecl.hasField(String name) = findSingleVariable(name) != illegalField();
   
   public FieldDeclaration TypeDecl.findSingleVariable(String name) {
     for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
@@ -344,7 +250,7 @@ aspect LookupVariable {
     return (FieldDeclaration)illegalField();
   }
   
-  public  Collection TypeDecl.findVariable(IdDecl idDecl) {
+  public Collection TypeDecl.findVariable(IdDecl idDecl) {
     Collection list = newVariableList();
     for(Iterator iter = fields().iterator(); iter.hasNext(); ) {
       FieldDeclaration decl = (FieldDeclaration)iter.next();
@@ -377,11 +283,9 @@ aspect LookupVariable {
       if(getStmt(i) instanceof Variable) {
         Variable v = (Variable)getStmt(i);
         if(v.name().equals(name)) {
-          //if(declaredBeforeUse(v, name)) {
-            Collection list = newVariableList();
-            list.add(v);
-            return list;
-          //}
+          Collection list = newVariableList();
+          list.add(v);
+          return list;
         }
       }
     }
@@ -394,7 +298,7 @@ aspect LookupVariable {
       for(int j = 0; j < c.getNumStmt(); j++) {
         if(c.getStmt(j) instanceof Variable) {
           Variable v = (Variable)c.getStmt(j);
-          if(v.name().equals(name) /*&& declaredBeforeUse(v, name)*/) {
+          if(v.name().equals(name)) {
             Collection list = newVariableList();
             list.add(v);
             return list;
@@ -488,7 +392,6 @@ aspect Fields {
       if(getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
         Set hides = hidesVariable(decl);
-        //for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
         for(Iterator iter = list.iterator(); iter.hasNext(); ) {
           FieldDeclaration f = (FieldDeclaration)iter.next();
           if(hides.contains(f))
@@ -517,7 +420,6 @@ aspect Fields {
       if(getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
         Set hides = hidesVariable(decl);
-        //for(ListIterator iter = list.listIterator(); iter.hasNext(); ) {
         for(Iterator iter = list.iterator(); iter.hasNext(); ) {
           FieldDeclaration f = (FieldDeclaration)iter.next();
           if(hides.contains(f))
@@ -574,6 +476,4 @@ aspect Hides {
     }
     return set;
   }
-    
 }
-
