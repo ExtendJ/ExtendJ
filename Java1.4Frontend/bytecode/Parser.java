@@ -8,11 +8,12 @@ public class Parser {
 	private DataInputStream is;
 	public CONSTANT_Class_Info classInfo;
 	public CONSTANT_Class_Info outerClassInfo;
-  private String name;
+  public String name;
 
-  public Parser(byte[] buffer, int size) {
-    this.is = new DataInputStream(new DummyInputStream(buffer, size));
-    this.name = "From InputStream";
+  public Parser(byte[] buffer, int size, String name) {
+    //this.is = new DataInputStream(new DummyInputStream(buffer, size));
+    this.is = new DataInputStream(new ByteArrayInputStream(buffer, 0, size));
+    this.name = name;
   }
   
 	public Parser(String name) {
@@ -400,6 +401,35 @@ public class Parser {
 	
 
 	public CONSTANT_Info[] constantPool = null;
+
+  private void checkLengthAndNull(int index) {
+    if(index >= constantPool.length) {
+      throw new Error("Trying to access element " + index  + " in constant pool of length " + constantPool.length);
+    }
+    if(constantPool[index] == null)
+      throw new Error("Unexpected null element in constant pool at index " + index);
+  }
+  public boolean validConstantPoolIndex(int index) {
+    return index < constantPool.length && constantPool[index] != null;
+  }
+  public CONSTANT_Info getCONSTANT_Info(int index) {
+    checkLengthAndNull(index);
+    return constantPool[index];
+  }
+  public CONSTANT_Utf8_Info getCONSTANT_Utf8_Info(int index) {
+    checkLengthAndNull(index);
+    CONSTANT_Info info = constantPool[index];
+    if(!(info instanceof CONSTANT_Utf8_Info))
+      throw new Error("Expected CONSTANT_Utf8_info at " + index + " in constant pool but found " + info.getClass().getName());
+    return (CONSTANT_Utf8_Info)info;
+  }
+  public CONSTANT_Class_Info getCONSTANT_Class_Info(int index) {
+    checkLengthAndNull(index);
+    CONSTANT_Info info = constantPool[index];
+    if(!(info instanceof CONSTANT_Class_Info))
+      throw new Error("Expected CONSTANT_Class_info at " + index + " in constant pool but found " + info.getClass().getName());
+    return (CONSTANT_Class_Info)info;
+  }
 
 	public void parseConstantPool() {
 		int count = u2();

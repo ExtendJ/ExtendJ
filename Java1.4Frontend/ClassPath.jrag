@@ -24,7 +24,8 @@ aspect ClassPath {
 
   class ClassFile {
     private boolean exists;
-    private static byte[] buf;
+    //private static byte[] buf; // caused problems with nested classes
+    private byte[] buf;
     private int size;
     private boolean isSource = false;
     private long age;
@@ -203,7 +204,9 @@ aspect ClassPath {
             if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
               //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
               size = (int)zipEntry.getSize();
-              fillBuf(zip.getInputStream(zipEntry), size);
+              InputStream is = zip.getInputStream(zipEntry);
+              fillBuf(is, size);
+              is.close();
               exists = true;
               isSource = true;
               age = zipEntry.getTime();
@@ -237,7 +240,9 @@ aspect ClassPath {
             if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
               //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
               size = (int)zipEntry.getSize();
-              fillBuf(zip.getInputStream(zipEntry), size);
+              InputStream is = zip.getInputStream(zipEntry);
+              fillBuf(is, size);
+              is.close();
               exists = true;
               isSource = false;
               age = zipEntry.getTime();
@@ -270,8 +275,9 @@ aspect ClassPath {
     private void fillBuf(InputStream is, int size) {
       int n = 0;
       try {
-        if(buf == null || buf.length < size)
-          buf = new byte[size];
+        //if(buf == null || buf.length < size) // caused problems with nested classes
+        //  buf = new byte[size];
+        buf = new byte[size];
         while (n < size)
           n = n + is.read(buf, n, size - n);
       }
@@ -293,14 +299,16 @@ aspect ClassPath {
 
     public CompilationUnit getCompilationUnit() throws Exception  {
       if(!isSource) {
-        CompilationUnit u = new bytecode.Parser(buffer(), size()).parse(null, null);
+        System.out.print("Loading .class file: " + fullName + " ");
+        CompilationUnit u = new bytecode.Parser(buffer(), size(), fullName).parse(null, null);
         u.setPathName(pathName);
         u.setRelativeName(relativeName + ".class");
         u.setFromSource(false);
-        System.out.println("Loaded .class file: " + fullName + " in " + (System.currentTimeMillis() - startTime) + " ms");
+        System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
         return u;
       } 
       else {
+        System.out.print("Loading .java file: " + fullName + " ");
         InputStream is = new ByteArrayInputStream(buffer(), 0, size());
         parser.JavaScanner scanner = new parser.JavaScanner(new parser.UnicodeEscapes(is));
         parser.JavaParser parser = new parser.JavaParser();
@@ -309,7 +317,7 @@ aspect ClassPath {
         u.setPathName(pathName);
         u.setRelativeName(relativeName + ".java");
         u.setFromSource(true);
-        System.out.println("Loaded .java file: " + fullName + " in " + (System.currentTimeMillis() - startTime) + " ms");
+        System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
         return u;
       }
     }
