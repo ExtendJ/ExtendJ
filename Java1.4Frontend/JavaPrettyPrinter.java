@@ -8,6 +8,7 @@ class JavaPrettyPrinter {
 
   public static void main(String args[]) {
     Program program = new Program();
+    program.initOptions();
     program.addKeyValueOption("-classpath");
     program.addKeyValueOption("-sourcepath");
     program.addKeyValueOption("-bootclasspath");

@@ -8,6 +8,32 @@ aspect Attributes {
     public void emit(DataOutputStream out) throws IOException {
       throw new Error("Emit not implemented for " + getClass().getName());
     }
+    public int size() {
+      throw new Error("size not supported for attribute " + getClass().getName());
+    }
+  }
+
+  class SourceFileAttribute extends Attribute {
+    int attribute_name_index;
+		int attribute_length;
+    int sourcefile_index;
+    String sourcefile;
+    
+    public SourceFileAttribute(ConstantPool p, String sourcefile) {
+			attribute_name_index = p.addUtf8("SourceFile");
+      attribute_length = 2;
+      sourcefile_index = p.addUtf8(sourcefile);
+      this.sourcefile = sourcefile;
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeChar(attribute_name_index);
+		  out.writeInt(attribute_length);
+		  out.writeChar(sourcefile_index);
+    }
+    public String toString() { return "SourceFile: " + sourcefile; }
+    public String toString(ConstantPool c) {
+      return toString();
+    }
   }
 
   class SyntheticAttribute extends Attribute {
@@ -25,6 +51,9 @@ aspect Attributes {
     public String toString() { return "Synthetic"; }
     public String toString(ConstantPool c) {
       return toString();
+    }
+    public int size() {
+      return 4;
     }
   }
 
@@ -104,7 +133,72 @@ aspect Attributes {
     }
   }
 
-   
+
+  class LocalVariableTableAttribute extends Attribute {
+    int attribute_name_index;
+    int attribute_length;
+    int local_variable_table_length;
+    Collection local_variable_table;
+    public LocalVariableTableAttribute(CodeGeneration gen) {
+      ConstantPool p = gen.constantPool();
+			attribute_name_index = p.addUtf8("LocalVariableTable");
+      local_variable_table = gen.localVariableTable;
+      local_variable_table_length = local_variable_table.size();
+      attribute_length = local_variable_table_length * 10 + 2;
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeChar(attribute_name_index);
+		  out.writeInt(attribute_length);
+		  out.writeChar(local_variable_table_length);
+      for(Iterator iter = local_variable_table.iterator(); iter.hasNext(); ) {
+        CodeGeneration.LocalVariableEntry e = (CodeGeneration.LocalVariableEntry)iter.next();
+        out.writeChar(e.start_pc);
+        out.writeChar(e.length);
+        out.writeChar(e.name_index);
+        out.writeChar(e.descriptor_index);
+        out.writeChar(e.index);
+      }
+    }
+    public String toString() { return "LocalVariableTable"; }
+    public String toString(ConstantPool c) {
+      return toString();
+    }
+    public int size() {
+      return attribute_length + 6;
+    }
+  }
+
+  class LineNumberTableAttribute extends Attribute {
+    int attribute_name_index;
+    int attribute_length;
+    int line_number_table_length;
+    Collection line_number_table;
+    public LineNumberTableAttribute(CodeGeneration gen) {
+      ConstantPool p = gen.constantPool();
+			attribute_name_index = p.addUtf8("LineNumberTable");
+      line_number_table = gen.lineNumberTable;
+      line_number_table_length = line_number_table.size();
+      attribute_length = line_number_table_length * 4 + 2;
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeChar(attribute_name_index);
+		  out.writeInt(attribute_length);
+		  out.writeChar(line_number_table_length);
+      for(Iterator iter = line_number_table.iterator(); iter.hasNext(); ) {
+        CodeGeneration.LineNumberEntry e = (CodeGeneration.LineNumberEntry)iter.next();
+        out.writeChar(e.start_pc);
+        out.writeChar(e.line_number);
+      }
+    }
+    public String toString() { return "LineNumberTable"; }
+    public String toString(ConstantPool c) {
+      return toString();
+    }
+    public int size() {
+      return attribute_length + 6;
+    }
+  }
+    
   class CodeAttribute extends Attribute {
     int attribute_name_index;
     int attribute_length;
@@ -113,9 +207,11 @@ aspect Attributes {
     int code_length;
     byte[] code;
     int exception_table_length = 0;
-    int attributes_size = 0;
     Collection exceptions;
 
+    int attributes_size = 0;
+    Collection attributes;
+    
     public CodeAttribute(CodeGeneration codeGen, MethodDecl m) {
       ConstantPool c = codeGen.constantPool();
       attribute_name_index = c.addUtf8("Code");
@@ -132,6 +228,14 @@ aspect Attributes {
       code = codeGen.toArray();
       exceptions = codeGen.exceptions;
       exception_table_length = exceptions.size();
+      attributes = new ArrayList();
+      if(m == null || !m.getModifiers().isSynthetic()) {
+        attributes.add(new LineNumberTableAttribute(codeGen));
+        attributes.add(new LocalVariableTableAttribute(codeGen));
+      }
+      attributes_size = 0;
+      for(Iterator iter = attributes.iterator(); iter.hasNext(); )
+        attributes_size += ((Attribute)iter.next()).size();
       attribute_length = 12 + code_length + exception_table_length * 8 + attributes_size;
     }
 
@@ -150,7 +254,9 @@ aspect Attributes {
         out.writeChar(e.handler_pc);
         out.writeChar(e.catch_type);
       }
-      out.writeChar(0); // Attribute count
+      out.writeChar(attributes.size()); // Attribute count
+      for(Iterator iter = attributes.iterator(); iter.hasNext(); )
+        ((Attribute)iter.next()).emit(out);
     }
     public String toString() { return "Code"; }
     public String toString(ConstantPool c) {
@@ -218,6 +324,9 @@ aspect Attributes {
     }
   }
 
+  inh CompilationUnit TypeDecl.compilationUnit();
+  eq CompilationUnit.getTypeDecl(int i).compilationUnit() = this;
+
   syn lazy Collection TypeDecl.attributes() {
     Collection c = new ArrayList();
     Attribute a = new InnerClassesAttribute(this);
@@ -225,6 +334,13 @@ aspect Attributes {
       c.add(a);
     if(isSynthetic())
       c.add(new SyntheticAttribute(constantPool()));
+    if(compilationUnit().fromSource()) {
+      String relativeName = compilationUnit().relativeName();
+      if(relativeName != null) {
+        String[] strings = relativeName.split(java.io.File.separator);
+        c.add(new SourceFileAttribute(constantPool(), strings[strings.length-1]));
+      }
+    }
     return c;
   }
   syn lazy Collection BodyDecl.attributes() = new ArrayList();
@@ -239,15 +355,19 @@ aspect Attributes {
     if(isAbstract() || isNative()) return l;
     l.add(new CodeAttribute(bytecodes(hostType().constantPool()), this));
     l.add(new ExceptionsAttribute(bytecodes(hostType().constantPool()), this));
+    if(getModifiers().isSynthetic())
+      l.add(new SyntheticAttribute(hostType().constantPool()));
     return l;
   }
   eq ConstructorDecl.attributes() {
     ArrayList l = new ArrayList();
     l.add(new CodeAttribute(bytecodes(hostType().constantPool()), null));
     l.add(new ExceptionsAttribute(bytecodes(hostType().constantPool()), this));
+    if(getModifiers().isSynthetic())
+      l.add(new SyntheticAttribute(hostType().constantPool()));
     return l;
   }
-  syn lazy Collection ClassDecl.clinit_attributes() {
+  syn lazy Collection TypeDecl.clinit_attributes() {
     ArrayList l = new ArrayList();
     l.add(new CodeAttribute(bytecodes(constantPool()), null));
     return l;

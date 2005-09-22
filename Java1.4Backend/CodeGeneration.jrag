@@ -1,5 +1,42 @@
 aspect CodeGeneration {
+  public void ASTNode.setSourceLineNumber(int i) {
+    setStart(ASTNode.makePosition(i, 1));
+  }
+  
+  syn int ASTNode.sourceLineNumber() = getStart() != 0 ? getLine(getStart()) : -1;
+  eq ReturnStmt.sourceLineNumber() {
+    int num = super.sourceLineNumber();
+    if(num != -1)
+      return num;
+    if(hasResult()) {
+      num = getResult().findFirstSourceLineNumber();
+      if(num != -1)
+        return num;
+    }
+    return getLine(getParent().getParent().getEnd());
+  }
+  eq ExprStmt.sourceLineNumber() = getExpr().findFirstSourceLineNumber();
+  eq Access.sourceLineNumber() = findFirstSourceLineNumber();
 
+  protected int ASTNode.findFirstSourceLineNumber() {
+    if(getStart() != 0)
+      return getLine(getStart());
+    for(int i = 0; i < getNumChild(); i++) {
+      int num = getChild(i).findFirstSourceLineNumber();
+      if(num != -1)
+        return num;
+    }
+    return -1;
+  }
+
+
+  inh int VariableDeclaration.variableScopeEndLabel(CodeGeneration gen);
+  syn lazy int Block.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
+  eq Block.getStmt(int i).variableScopeEndLabel(CodeGeneration gen) = variableScopeEndLabel(gen);
+  syn lazy int ForStmt.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
+  eq ForStmt.getInitStmt(int i).variableScopeEndLabel(CodeGeneration gen) = variableScopeEndLabel(gen);
+  eq Program.getCompilationUnit(int i).variableScopeEndLabel(CodeGeneration gen) { throw new Error("variableScopeEndLabel not valid from here"); }
+  
   class CodeGeneration {
     private ByteArray bytes = new ByteArray();
     private ConstantPool constantPool;
@@ -12,7 +49,73 @@ aspect CodeGeneration {
     public ConstantPool constantPool() {
       return constantPool;
     }
+    
+    private static int variableScopeLabel = 1;
+    public int variableScopeLabel() {
+      return variableScopeLabel++;
+    }
+    public void addVariableScopeLabel(int label) {
+      Integer label_object = new Integer(label);
+      variableScopeLabelAddress.put(label_object, new Integer(pos()));
+      // Update all reference to this label
+      if(variableScopeLabelUses.containsKey(label_object)) {
+        ArrayList array = (ArrayList)variableScopeLabelUses.get(label_object);
+        for(Iterator iter = array.iterator(); iter.hasNext(); ) {
+          LocalVariableEntry e = (LocalVariableEntry)iter.next();
+          e.length = pos() - e.start_pc;
+        }
+      }
+    } 
+    private HashMap variableScopeLabelAddress = new HashMap();
+    private HashMap variableScopeLabelUses = new HashMap();
 
+    class LocalVariableEntry {
+      int start_pc;
+      int length;
+      int name_index;
+      int descriptor_index;
+      int index;
+    }
+    public Collection localVariableTable = new ArrayList();
+    public void addLocalVariableEntryAtCurrentPC(String name, String typeDescriptor, int localNum, int variableScopeEndLabel) {
+      LocalVariableEntry e = new LocalVariableEntry();
+      e.start_pc = pos();
+      e.length = 0;
+      e.name_index = constantPool().addUtf8(name);
+      e.descriptor_index = constantPool().addUtf8(typeDescriptor);
+      e.index = localNum;
+      localVariableTable.add(e);
+      Integer label_object = new Integer(variableScopeEndLabel);
+      if(!variableScopeLabelUses.containsKey(label_object))
+        variableScopeLabelUses.put(label_object, new ArrayList());
+      Collection c = (Collection)variableScopeLabelUses.get(label_object);
+      c.add(e);
+    }
+
+    // at each variable declaration and parameter declaration
+    // inh int VariableDeclaration.variableScopeEndLabel(CodeGeneration gen); 
+    // addLocalVariableEntryAtCurrentPC(this, variableScopeEndLabel());
+    // syn lazy int Block.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
+    //  Block.createBCode() { ... gen.addLabel(variableScopeLabel());
+    
+    
+
+    
+
+    class LineNumberEntry {
+      int start_pc;
+      int line_number;
+    }
+    public Collection lineNumberTable = new ArrayList();
+    public void addLineNumberEntryAtCurrentPC(ASTNode node) {
+      LineNumberEntry e = new LineNumberEntry();
+      e.start_pc = pos();
+      e.line_number = node.sourceLineNumber();
+      if(e.line_number != -1 && e.line_number != 65535)
+        lineNumberTable.add(e);
+    }
+
+    
     public Collection exceptions = new ArrayList();
     public void addException(int start_pc, int end_pc, int handler_pc, int catch_type) {
       ExceptionEntry e = new ExceptionEntry();
@@ -20,7 +123,8 @@ aspect CodeGeneration {
       e.end_pc = end_pc;
       e.handler_pc = handler_pc;
       e.catch_type = catch_type;
-      exceptions.add(e);
+      if(e.start_pc != e.end_pc)
+        exceptions.add(e);
     }
     class ExceptionEntry {
       int start_pc;
@@ -109,7 +213,8 @@ aspect CodeGeneration {
       else if(pos == 1) addBytecode(Bytecode.ASTORE_1);
       else if(pos == 2) addBytecode(Bytecode.ASTORE_2);
       else if(pos == 3) addBytecode(Bytecode.ASTORE_3);
-      else addBytecode(Bytecode.ASTORE).add(pos);
+      else if(pos < 256) addBytecode(Bytecode.ASTORE).add(pos);
+      else addBytecode(Bytecode.WIDE).addBytecode(Bytecode.ASTORE).add(pos >> 8).add(pos & 0xff);
     }
     public void emitLoadReference(int pos) {
       maxLocals = Math.max(maxLocals, pos+1);
@@ -117,7 +222,8 @@ aspect CodeGeneration {
       else if(pos == 1) addBytecode(Bytecode.ALOAD_1);
       else if(pos == 2) addBytecode(Bytecode.ALOAD_2);
       else if(pos == 3) addBytecode(Bytecode.ALOAD_3);
-      else addBytecode(Bytecode.ALOAD).add(pos);
+      else if(pos < 256) addBytecode(Bytecode.ALOAD).add(pos);
+      else addBytecode(Bytecode.WIDE).addBytecode(Bytecode.ALOAD).add(pos >> 8).add(pos & 0xff);
     }
 
     public void emitReturn(MethodDecl m) {
@@ -171,15 +277,19 @@ aspect CodeGeneration {
         emitLoadFrom(v, va.hostType());
       }
       else if(v instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration)v;
-        if(!v.isStatic() && !va.isQualified()) {
-          f.emitLoadThisFrom(this, va.hostType());
-        }
-        if(f.isPrivate() && !va.hostType().hasField(v.name())) {
-          f.emitInvokeAccessor(this);
-        }
-        else {
-          f.emitLoad(this);
+        try {
+          FieldDeclaration f = (FieldDeclaration)v;
+          if(!v.isStatic() && !va.isQualified()) {
+            f.emitLoadThisFrom(this, va.hostType());
+          }
+          if(f.isPrivate() && !va.hostType().hasField(v.name())) {
+            f.emitInvokeAccessor(this);
+          }
+          else {
+            f.emitLoad(this);
+          }
+        } catch (Error e) {
+          throw new Error(e.getMessage() + ", could not emitLoad for " + va);
         }
       }
       else throw new Error("VarAccess.createBCode(): does not support this kind of variable:"+v.getClass().getName());
@@ -251,6 +361,9 @@ aspect CodeGeneration {
 
     public void emitDup() {
       bytes.addBytecode(Bytecode.DUP);
+    }
+    public void emitDup2() {
+      bytes.addBytecode(Bytecode.DUP2);
     }
 
     public void emitPop() {
@@ -830,18 +943,42 @@ aspect CodeGeneration {
   public void ASTNode.emitPreInc(CodeGeneration gen, int i,boolean resultNeeded) {
   }
   public void VariableDeclaration.emitPreInc(CodeGeneration gen, int i, boolean resultNeeded) {
-    if(i > 127 || i < -128)
-      throw new Error("The constant value cannot be handled by IINC:" + i);
-    gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
-    if(resultNeeded)
+    TypeDecl t = type();
+    if(t.isInt() || t.isShort() || t.isChar() || t.isByte()) {
+      if(i < 256)
+        gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
+      else
+        gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.IINC).add(localNum() >> 8).add(localNum() & 0xff).add(i >> 8).add(i & 0xff);
+      if(resultNeeded)
+        emitLoad(gen);
+    }
+    else {
       emitLoad(gen);
+      t.emitPushConstant(gen, i);
+      t.add(gen);
+      if(resultNeeded)
+        t.emitDup(gen);
+      emitStore(gen);
+    }
   }
   public void ParameterDeclaration.emitPreInc(CodeGeneration gen, int i, boolean resultNeeded) {
-    if(i > 127 || i < -128)
-      throw new Error("The constant value cannot be handled by IINC:" + i);
-    gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
-    if(resultNeeded)
+    TypeDecl t = type();
+    if(t.isInt() || t.isShort() || t.isChar() || t.isByte()) {
+      if(i < 256)
+        gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
+      else
+        gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.IINC).add(localNum() >> 8).add(localNum() & 0xff).add(i >> 8).add(i & 0xff);
+      if(resultNeeded)
+        emitLoad(gen);
+    }
+    else {
       emitLoad(gen);
+      t.emitPushConstant(gen, i);
+      t.add(gen);
+      if(resultNeeded)
+        t.emitDup(gen);
+      emitStore(gen);
+    }
   }
   
   public void FieldDeclaration.emitLoadThisFrom(CodeGeneration gen, TypeDecl typeDecl) {
@@ -853,6 +990,9 @@ aspect CodeGeneration {
           gen.addBytecode(Bytecode.GETFIELD, 0);
           String classname = enclosing.constantPoolName();
           enclosing = enclosing.enclosingType();
+          if(enclosing == null) {
+            throw new Error("Error accessing " + name() + " in " + hostType().fullName() + " from " + typeDecl.fullName());
+          }
           String desc = enclosing.typeDescriptor();
           String name = "this$0";
           int index = gen.constantPool().addFieldref(classname, name, desc);
@@ -863,7 +1003,6 @@ aspect CodeGeneration {
       }
     }
   }
-
   
   public void FieldDeclaration.emitPreInc(CodeGeneration gen, int i, boolean resultNeeded) {
     if(!isStatic())
@@ -899,12 +1038,36 @@ aspect CodeGeneration {
   public void VariableDeclaration.emitPostInc(CodeGeneration gen, int i, boolean resultNeeded) {
     if(resultNeeded)
       emitLoad(gen);
-    gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
+    TypeDecl t = type();
+    if(t.isInt() || t.isShort() || t.isChar() || t.isByte()) {
+      if(i < 256)
+        gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
+      else
+        gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.IINC).add(localNum() >> 8).add(localNum() & 0xff).add(i >> 8).add(i & 0xff);
+    }
+    else {
+      emitLoad(gen);
+      t.emitPushConstant(gen, i);
+      t.add(gen);
+      emitStore(gen);
+    }
   }
   public void ParameterDeclaration.emitPostInc(CodeGeneration gen, int i, boolean resultNeeded) {
     if(resultNeeded)
       emitLoad(gen);
-    gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
+    TypeDecl t = type();
+    if(t.isInt() || t.isShort() || t.isChar() || t.isByte()) {
+      if(i < 256)
+        gen.addBytecode(Bytecode.IINC).add(localNum()).add(i);
+      else
+        gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.IINC).add(localNum() >> 8).add(localNum() & 0xff).add(i >> 8).add(i & 0xff);
+    }
+    else {
+      emitLoad(gen);
+      t.emitPushConstant(gen, i);
+      t.add(gen);
+      emitStore(gen);
+    }
   }
   public void FieldDeclaration.emitPostInc(CodeGeneration gen, int i, boolean resultNeeded) {
     if(!isStatic())
@@ -983,7 +1146,10 @@ aspect CodeGeneration {
     int num = localNum()+1;
     gen.emitStoreReference(num);
     getFinally().createBCode(gen);
-    gen.addBytecode(Bytecode.RET).add(num);
+    if(num < 256)
+      gen.addBytecode(Bytecode.RET).add(num);
+    else
+      gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.RET).add(num >> 8).add(num & 0xff);
   }
 
   public void SynchronizeStmt.emitMonitorEnter(CodeGeneration gen) {
@@ -1107,7 +1273,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.ILOAD_1);
     else if(pos == 2) gen.addBytecode(Bytecode.ILOAD_2);
     else if(pos == 3) gen.addBytecode(Bytecode.ILOAD_3);
-    else gen.addBytecode(Bytecode.ILOAD).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.ILOAD).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.ILOAD).add(pos >> 8).add(pos & 0xff);
   }
   public void LongType.emitLoad(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -1115,7 +1282,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.LLOAD_1);
     else if(pos == 2) gen.addBytecode(Bytecode.LLOAD_2);
     else if(pos == 3) gen.addBytecode(Bytecode.LLOAD_3);
-    else gen.addBytecode(Bytecode.LLOAD).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.LLOAD).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.LLOAD).add(pos >> 8).add(pos & 0xff);
   }
   public void FloatType.emitLoad(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
@@ -1123,7 +1291,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.FLOAD_1);
     else if(pos == 2) gen.addBytecode(Bytecode.FLOAD_2);
     else if(pos == 3) gen.addBytecode(Bytecode.FLOAD_3);
-    else gen.addBytecode(Bytecode.FLOAD).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.FLOAD).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.FLOAD).add(pos >> 8).add(pos & 0xff);
   }
   public void DoubleType.emitLoad(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -1131,7 +1300,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.DLOAD_1);
     else if(pos == 2) gen.addBytecode(Bytecode.DLOAD_2);
     else if(pos == 3) gen.addBytecode(Bytecode.DLOAD_3);
-    else gen.addBytecode(Bytecode.DLOAD).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.DLOAD).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.DLOAD).add(pos >> 8).add(pos & 0xff);
   }
   public void ReferenceType.emitLoad(CodeGeneration gen, int pos) {
     gen.emitLoadReference(pos);
@@ -1172,7 +1342,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.ISTORE_1);
     else if(pos == 2) gen.addBytecode(Bytecode.ISTORE_2);
     else if(pos == 3) gen.addBytecode(Bytecode.ISTORE_3);
-    else gen.addBytecode(Bytecode.ISTORE).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.ISTORE).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.ISTORE).add(pos >> 8).add(pos & 0xff);
   }
   public void LongType.emitStore(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -1180,7 +1351,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.LSTORE_1);
     else if(pos == 2) gen.addBytecode(Bytecode.LSTORE_2);
     else if(pos == 3) gen.addBytecode(Bytecode.LSTORE_3);
-    else gen.addBytecode(Bytecode.LSTORE).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.LSTORE).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.LSTORE).add(pos >> 8).add(pos & 0xff);
   }
   public void FloatType.emitStore(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
@@ -1188,7 +1360,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.FSTORE_1);
     else if(pos == 2) gen.addBytecode(Bytecode.FSTORE_2);
     else if(pos == 3) gen.addBytecode(Bytecode.FSTORE_3);
-    else gen.addBytecode(Bytecode.FSTORE).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.FSTORE).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.FSTORE).add(pos >> 8).add(pos & 0xff);
   }
   public void DoubleType.emitStore(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -1196,7 +1369,8 @@ aspect CodeGeneration {
     else if(pos == 1) gen.addBytecode(Bytecode.DSTORE_1);
     else if(pos == 2) gen.addBytecode(Bytecode.DSTORE_2);
     else if(pos == 3) gen.addBytecode(Bytecode.DSTORE_3);
-    else gen.addBytecode(Bytecode.DSTORE).add(pos);
+    else if(pos < 256) gen.addBytecode(Bytecode.DSTORE).add(pos);
+    else gen.addBytecode(Bytecode.WIDE).addBytecode(Bytecode.DSTORE).add(pos >> 8).add(pos & 0xff);
   }
   public void ReferenceType.emitStore(CodeGeneration gen, int pos) {
     gen.emitStoreReference(pos);
@@ -1212,7 +1386,12 @@ aspect CodeGeneration {
   public void ASTNode.emitLoad(CodeGeneration gen) {
     throw new Error("Variable.emitLoad: cannot generate code for: " + getClass().getName());
   }
+
   public void FieldDeclaration.emitLoad(CodeGeneration gen) {
+    emitLoad(gen, hostType());
+  }
+  
+  public void FieldDeclaration.emitLoad(CodeGeneration gen, TypeDecl typeDecl) {
     if(hostType().isArrayDecl() && name().equals("length")) {
       gen.addBytecode(Bytecode.ARRAYLENGTH);
       return;
@@ -1221,7 +1400,7 @@ aspect CodeGeneration {
       gen.addBytecode(Bytecode.GETSTATIC, type().size());
     else
       gen.addBytecode(Bytecode.GETFIELD, type().size() - 1);
-    String classname = hostType().constantPoolName();
+    String classname = typeDecl.constantPoolName();
     String      desc = type().typeDescriptor();
     String      name = getIdDecl().getID();
     int index = gen.constantPool().addFieldref(classname, name, desc);
@@ -1263,7 +1442,10 @@ aspect CodeGeneration {
       int indexHi = index >> 8;
       int indexLo = index & 0xff;
       gen.add(indexHi).add(indexLo);
-      gen.add(getNumParameter() + 1);
+      int numArg = 1; // instance
+      for(int i = 0; i < getNumParameter(); i++)
+        numArg += getParameter(i).type().size();
+      gen.add(numArg);
       gen.add(0);
     }
     else {
@@ -1431,16 +1613,24 @@ aspect CodeGeneration {
   public void RefArrayInstanceExpr.emitNew(CodeGeneration gen) {
     //int dim = getNumDims();
     int dim = actualDims();
+    // kind of array creation depends on actualDims()
+    // type of array depends on getNumDims()
+    // array of dimension 1 has special syntax
     if(dim == 1 || hasArrayInit()) {
-      //String n = getTypeAccess().type().constantPoolName();
-      String n = lookupArray(getTypeAccess().type(), dim).typeDescriptor();
+      // ANEWARRAY
+      String n;
+      if(!getTypeAccess().type().isPrimitive() && (getNumDims() - 1) == 0)
+        n = getTypeAccess().type().constantPoolName();
+      else
+        n = lookupArray(getTypeAccess().type(), getNumDims()-1).typeDescriptor();
       int index = gen.constantPool().addClass(n);
       int indexHi = index >> 8;
       int indexLo = index & 0xff;
       gen.addBytecode(Bytecode.ANEWARRAY).add(indexHi).add(indexLo);
     }
     else {
-      String n = lookupArray(getTypeAccess().type(), dim).typeDescriptor();
+      // MULTINEWARRAY
+      String n = lookupArray(getTypeAccess().type(), getNumDims()).typeDescriptor();
       int index = gen.constantPool().addClass(n);
       int indexHi = index >> 8;
       int indexLo = index & 0xff;
@@ -1755,6 +1945,9 @@ void TypeDecl.byteToThis(CodeGeneration gen) {
 }
 void IntegralType.byteToThis(CodeGeneration gen) {
 }
+void CharType.byteToThis(CodeGeneration gen) {
+  gen.addBytecode(Bytecode.I2C);
+}
 void FloatType.byteToThis(CodeGeneration gen) {
   gen.addBytecode(Bytecode.I2F);
 }
@@ -1769,6 +1962,12 @@ void TypeDecl.charToThis(CodeGeneration gen) {
 }
 void IntegralType.charToThis(CodeGeneration gen) {
 }
+void ByteType.charToThis(CodeGeneration gen) {
+  gen.addBytecode(Bytecode.I2B);
+}
+void ShortType.charToThis(CodeGeneration gen) {
+  gen.addBytecode(Bytecode.I2S);
+}
 void FloatType.charToThis(CodeGeneration gen) {
   gen.addBytecode(Bytecode.I2F);
 }
@@ -1782,6 +1981,12 @@ void TypeDecl.shortToThis(CodeGeneration gen) {
   throw new Error("shortToThis not implemented for " + getClass().getName());      
 }
 void IntegralType.shortToThis(CodeGeneration gen) {
+}
+void ByteType.shortToThis(CodeGeneration gen) {
+  gen.addBytecode(Bytecode.I2B);
+}
+void CharType.shortToThis(CodeGeneration gen) {
+  gen.addBytecode(Bytecode.I2C);
 }
 void FloatType.shortToThis(CodeGeneration gen) {
   gen.addBytecode(Bytecode.I2F);

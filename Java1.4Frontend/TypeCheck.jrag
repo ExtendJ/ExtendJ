@@ -231,8 +231,8 @@ aspect TypeCheck {
   }
 
   public void ArrayAccess.typeCheck() {
-    if(!getExpr().type().instanceOf(typeInt()))
-      error("array index may not be of type " + getExpr().type().name());
+    if(!getExpr().type().unaryNumericPromotion().isInt())
+      error("array index must be int after unary numeric promotion which " + getExpr().type().fullName() + " is not");
   }
 
   public void ArrayDot.typeCheck() {
@@ -266,6 +266,36 @@ aspect TypeCheck {
           "The type of the left hand side, \"" + 
           left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
           right.fullName() + "\".\n");
+    }
+  }
+
+  public void RelationalExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(left.isNumericType() && !right.isNumericType()) {
+      error("The type \"" + right.fullName() + "\" of the right hand side is not numeric");
+    }
+    else if(!left.isNumericType() && right.isNumericType()) {
+      error("The type \"" + left.fullName() + "\" of the left hand side is not numeric");
+    }
+    else if(!left.isNumericType() && !right.isNumericType()) {
+      error("Neither the type \"" + left.fullName() + "\" of the left hand side, nor the type \"" + 
+            right.fullName() + "\" of the right hand side is numeric");
+    }
+  }
+
+  public void LogicalExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(left.isBoolean() && !right.isBoolean()) {
+      error("The type \"" + right.fullName() + "\" of the right hand side is not boolean");
+    }
+    else if(!left.isBoolean() && right.isBoolean()) {
+      error("The type \"" + left.fullName() + "\" of the left hand side is not boolean");
+    }
+    else if(!left.isBoolean() && !right.isBoolean()) {
+      error("Neither the type \"" + left.fullName() + "\" of the left hand side, nor the type \"" + 
+            right.fullName() + "\" of the right hand side is boolean");
     }
   }
 
@@ -435,8 +465,19 @@ aspect TypeCheck {
   public void IfStmt.typeCheck() {
     TypeDecl cond = getCondition().type();
     if(!cond.isBoolean()) {
-      error("" + cond.name() + " " + getCondition() + 
-          " in " + this + " is not a boolean expression\n");
+      error("the type of \"" + getCondition() + "\" is " + cond.name() + " which is not boolean");
+    }
+  }
+  public void WhileStmt.typeCheck() {
+    TypeDecl cond = getCondition().type();
+    if(!cond.isBoolean()) {
+      error("the type of \"" + getCondition() + "\" is " + cond.name() + " which is not boolean");
+    }
+  }
+  public void DoStmt.typeCheck() {
+    TypeDecl cond = getCondition().type();
+    if(!cond.isBoolean()) {
+      error("the type of \"" + getCondition() + "\" is " + cond.name() + " which is not boolean");
     }
   }
 
@@ -601,6 +642,15 @@ aspect TypeCheck {
     if(hasExpr() && (type() == illegalType() || !decl().hostType().isInnerType()))
       error("*** The instantiation of " + type().fullName() + " is not an inner class of the qualifying type " + getExpr().type().fullName());
     */
+  }
+
+  public void ArrayInstanceExpr.typeCheck() {
+    super.typeCheck();
+    for(int i = 0; i < getNumDims(); i++) {
+      if(getDims(i).hasExpr() && !getDims(i).getExpr().type().unaryNumericPromotion().isInt())
+        error("The type of dimension " + i + " which is " + getDims(i).getExpr().type().fullName() +
+              " is not int after unary numeric promotion");
+    }
   }
 
   public void QuestionColonExpr.typeCheck() {

@@ -59,8 +59,16 @@ aspect GenerateClassfile {
   public void InterfaceDecl.generateClassfile() {
     super.generateClassfile();
     String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
+    if(Program.verbose()) System.out.println("Writing class file to " + fileName);
     try {
       ConstantPool cp = constantPool();
+      
+      if(hasClinit()) {
+        cp.addUtf8("<clinit>");
+        cp.addUtf8("()V");
+        clinit_attributes();
+      }
+
       File dest = new File(fileName);
       File parentFile = dest.getParentFile();
       if(parentFile != null)
@@ -103,18 +111,21 @@ aspect GenerateClassfile {
           ((Attribute)itera.next()).emit(out);
       }
       Collection methods = bcMethods();
-      out.writeChar(methods.size());
+      out.writeChar(methods.size() + (hasClinit() ? 1 : 0));
       for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
         Object obj = iter.next();
         if(obj instanceof MethodDecl) {
           MethodDecl m = (MethodDecl) obj;
-          out.writeChar(m.flags());
-          out.writeChar(cp.addUtf8(m.getIdDecl().getID())); // name()
-          out.writeChar(cp.addUtf8(m.descName()));
-          out.writeChar(m.attributes().size());
-          for(Iterator itera = m.attributes().iterator(); itera.hasNext();)
-            ((Attribute)itera.next()).emit(out);
+          m.generateMethod(out, cp);
         }
+      }
+      if(hasClinit()) {
+        out.writeChar(Modifiers.ACC_STATIC);
+        out.writeChar(cp.addUtf8("<clinit>"));
+        out.writeChar(cp.addUtf8("()V"));
+        out.writeChar(clinit_attributes().size());
+        for(Iterator itera = clinit_attributes().iterator(); itera.hasNext();)
+          ((Attribute)itera.next()).emit(out);
       }
       out.writeChar(attributes().size());
       for(Iterator itera = attributes().iterator(); itera.hasNext();)
@@ -129,6 +140,7 @@ aspect GenerateClassfile {
   public void ClassDecl.generateClassfile() {
     super.generateClassfile();
     String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
+    if(Program.verbose()) System.out.println("Writing class file to " + fileName);
     try {
       ConstantPool cp = constantPool();
       //cp.addUtf8("Synthetic");
@@ -170,27 +182,8 @@ aspect GenerateClassfile {
       }
 
       for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
-        Object obj = iter.next();
-        if(obj instanceof MethodDecl) {
-          MethodDecl m = (MethodDecl) obj;
-          cp.addUtf8(m.getIdDecl().getID()); // name()
-          cp.addUtf8(m.descName());
-          m.attributes();
-          if(m.needsAccessor()) {
-            cp.addUtf8("access$" + m.accessorIndex());
-            cp.addUtf8(m.accessorDescName());
-            m.accessorAttributes();
-          }
-        } else {
-          ConstructorDecl m = (ConstructorDecl) obj;
-          cp.addUtf8("<init>");
-          cp.addUtf8(m.descName());
-          m.attributes();
-          if(m.needsAccessor()) {
-            cp.addUtf8(m.accessorDescName());
-            m.accessorAttributes();
-          }
-        }
+        BodyDecl decl = (BodyDecl)iter.next();
+        decl.touchMethod(cp);
       }
       if(hasClinit()) {
         cp.addUtf8("<clinit>");
@@ -305,9 +298,30 @@ aspect GenerateClassfile {
     if(needsAccessor())
       emitAccessor(cp, out);
   }
+  
+  public void BodyDecl.touchMethod(ConstantPool cp) {
+  }
+  public void MethodDecl.touchMethod(ConstantPool cp) {
+    cp.addUtf8(getIdDecl().getID()); // name()
+    cp.addUtf8(descName());
+    attributes();
+    if(needsAccessor()) {
+      cp.addUtf8("access$" + accessorIndex());
+      cp.addUtf8(accessorDescName());
+      accessorAttributes();
+    }
+  }
+  public void ConstructorDecl.touchMethod(ConstantPool cp) {
+    cp.addUtf8("<init>");
+    cp.addUtf8(descName());
+    attributes();
+    if(needsAccessor()) {
+      cp.addUtf8(accessorDescName());
+      accessorAttributes();
+    }
+  }
 
   public void CPInfo.emit(DataOutputStream out) throws IOException {
-
   }
 
   public void ConstantClass.emit(DataOutputStream out) throws IOException {

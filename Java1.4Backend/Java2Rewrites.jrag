@@ -1,0 +1,233 @@
+aspect Java2Rewrites {
+  // add check for no errors
+  
+
+  syn String TypeDecl.primitiveClassName() {
+    throw new Error("primitiveClassName not supported for " + name() + " of type " + getClass().getName());
+  }
+  eq ByteType.primitiveClassName() = "Byte";
+  eq CharType.primitiveClassName() = "Character";
+  eq ShortType.primitiveClassName() = "Short";
+  eq IntType.primitiveClassName() = "Integer";
+  eq LongType.primitiveClassName() = "Long";
+  eq FloatType.primitiveClassName() = "Float";
+  eq DoubleType.primitiveClassName() = "Double";
+  eq BooleanType.primitiveClassName() = "Boolean";
+  eq VoidType.primitiveClassName() = "Void";
+  
+  syn String TypeDecl.referenceClassName() {
+    throw new Error("referenceClassName not supported for " + name() + " of type " + getClass().getName());
+  }
+  //eq ReferenceType.referenceClassName() = fullName();
+  eq ReferenceType.referenceClassName() = constantPoolName().replace('/', '.');
+  eq ArrayDecl.referenceClassName() = typeDescriptor().replace('/', '.');
+
+  syn String TypeDecl.referenceClassFieldName() {
+    throw new Error("referenceClassFieldName not supported for " + name() + " of type " + getClass().getName());
+  }
+  eq ReferenceType.referenceClassFieldName() = "class$" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
+  eq ArrayDecl.referenceClassFieldName() = "array" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
+  
+  rewrite ClassDot {
+    when(getLeft().type().isPrimitiveType() || getLeft().type().isVoid())
+    to Access {
+      return new Dot(
+        lookupType("java.lang", getLeft().type().primitiveClassName()).createQualifiedAccess(),
+        new VarAccess(new IdUse("TYPE"))
+      );
+    }
+
+    when(getLeft().type().isReferenceType())
+    to Access {
+      // For each non primitive type name used in a .class expression 
+      // a static field is created that holds a cached value of the mapping to .class name.
+      // BoundFieldAccess is used to bypass name binding
+      
+      // add field to hold cached result as a side-effect
+      FieldDeclaration f = hostType().createStaticClassField(getLeft().type().referenceClassFieldName());
+      // add method to perform lookup as a side-effect
+      MethodDecl m = hostType().createStaticClassMethod();
+      return new QuestionColonExpr(
+        new NEExpr(
+          new BoundFieldAccess(f),
+          new NullLiteral("null")
+        ),
+        new BoundFieldAccess(f),
+        new AssignSimpleExpr(
+          new BoundFieldAccess(f),
+          new MethodAccess(
+            new List().add(new StringLiteral(getLeft().type().referenceClassName())),
+            new IdUse(m.name())
+          )
+        )
+      );
+    }
+  }
+
+  inh TypeDecl AssertStmt.hostType();
+
+  rewrite AssertStmt {
+    to Stmt {
+      // add field to hold cached result as a side-effect
+      FieldDeclaration f = hostType().createStaticClassField(hostType().referenceClassFieldName());
+      FieldDeclaration assertionsDisabled = hostType().createAssertionsDisabled();
+      Expr condition = getfirst();
+      List args = new List();
+      if(hasExpr())
+        args.add(getExpr());
+      return new IfStmt(
+        new LogNotExpr(
+          new ParExpr(
+            new OrLogicalExpr(
+              new BoundFieldAccess(assertionsDisabled),
+              condition
+            )
+          )
+        ),
+        new ThrowStmt(
+          new ClassInstanceExpr(
+            lookupType("java.lang", "AssertionError").createQualifiedAccess(),
+            args,
+            new Opt()
+          )
+        ),
+        new Opt()
+      );
+    }
+  }
+  
+  // lazily build a static field for assertionsDisabled 
+  private FieldDeclaration TypeDecl.createAssertionsDisabled = null;
+  public FieldDeclaration TypeDecl.createAssertionsDisabled() {
+    if(createAssertionsDisabled != null)
+      return createAssertionsDisabled;
+    // static final boolean $assertionsDisabled = !TypeName.class.desiredAssertionStatus();
+    FieldDeclaration createAssertionsDisabled = new FieldDeclaration(
+      new Modifiers(new List().add(new Modifier("static")).add(new Modifier("final"))),
+      new TypeAccess(new List(), new IdUse("boolean")),
+      new IdDecl("$assertionsDisabled"),
+      new Opt(
+        new VarInit(
+          new LogNotExpr(
+            new MethodDot(
+              new ClassDot(
+                new TypeAccess(new List(), new IdUse(name())),
+                new ClassAccess()
+              ),
+              new MethodAccess(
+                new List(),
+                new IdUse("desiredAssertionStatus")
+              )
+            )
+          )
+        )
+      )
+    );
+    addBodyDecl(createAssertionsDisabled);
+    return createAssertionsDisabled;
+  }
+
+  // lazily build a static field for each typename used in a .class expression
+  private HashMap TypeDecl.createStaticClassField = null;
+  public FieldDeclaration TypeDecl.createStaticClassField(String name) {
+    if(createStaticClassField == null)
+      createStaticClassField = new HashMap();
+    if(createStaticClassField.containsKey(name))
+      return (FieldDeclaration)createStaticClassField.get(name);
+    // static synthetic Class class$java$lang$String;
+    FieldDeclaration f = new FieldDeclaration(
+      new Modifiers(new List().add(new Modifier("static"))),
+      lookupType("java.lang", "Class").createQualifiedAccess(),
+      new IdDecl(name),
+      new Opt()
+    );
+    createStaticClassField.put(name, f);
+    addBodyDecl(f);
+    return f;
+  }
+
+  // lazily build a static class$ method in this type declaration
+  private MethodDecl TypeDecl.createStaticClassMethod = null;
+  public MethodDecl TypeDecl.createStaticClassMethod() {
+    if(createStaticClassMethod != null)
+      return createStaticClassMethod;
+    // static synthetic Class class$(String name) {
+    //   try {
+    //     return java.lang.Class.forName(name);
+    //   } catch(java.lang.ClassNotFoundException e) {
+    //     throw new java.lang.NoClassDefFoundError(e.getMessage());
+    //   }
+    // }
+    createStaticClassMethod = new MethodDecl(
+      new Modifiers(new List().add(new Modifier("static"))),
+      lookupType("java.lang", "Class").createQualifiedAccess(),
+      new IdDecl("class$"),
+      new List().add(
+        new ParameterDeclaration(
+          new Modifiers(new List()),
+          lookupType("java.lang", "String").createQualifiedAccess(),
+          new IdDecl("name")
+        )
+      ),
+      new List(),
+      new List(),
+      new Opt(
+        new Block(
+          new List().add(
+            new TryStmt(
+              new Block(
+                new List().add(
+                  new ReturnStmt(
+                    new Opt(
+                      new MethodDot(
+                        lookupType("java.lang", "Class").createQualifiedAccess(),
+                        new MethodAccess(
+                          new List().add(
+                            new VarAccess(new IdUse("name"))
+                          ),
+                          new IdUse("forName")
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              new List().add(
+                new Catch(
+                  new ParameterDeclaration(
+                    new Modifiers(new List()),
+                    lookupType("java.lang", "ClassNotFoundException").createQualifiedAccess(),
+                    new IdDecl("e")
+                  ),
+                  new Block(
+                    new List().add(
+                      new ThrowStmt(
+                        new ClassInstanceExpr(
+                          lookupType("java.lang", "NoClassDefFoundError").createQualifiedAccess(),
+                          new List().add(
+                            new MethodDot(
+                              new VarAccess(new IdUse("e")),
+                              new MethodAccess(
+                                new List(),
+                                new IdUse("getMessage")
+                              )
+                            )
+                          ),
+                          new Opt()
+                        )
+                      )
+                    )
+                  )
+                )
+              ),
+              new Opt()
+            )
+          )
+        )
+      )
+    );
+    addBodyDecl(createStaticClassMethod);
+    return createStaticClassMethod;
+  }
+  
+}
