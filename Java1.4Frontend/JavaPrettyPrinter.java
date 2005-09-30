@@ -15,9 +15,20 @@ class JavaPrettyPrinter {
     program.addKeyValueOption("-extdirs");
     program.addKeyValueOption("-d");
     program.addKeyOption("-verbose");
+    program.addKeyOption("-version");
+    program.addKeyOption("-help");
     
     program.addOptions(args);
     Collection files = program.files();
+    
+    if(program.hasOption("-version")) {
+      printVersion();
+      return;
+    }
+    if(program.hasOption("-help") || files.isEmpty()) {
+      printUsage();
+      return;
+    }
     
     long initParseTime = System.currentTimeMillis();
     program = new Program();
@@ -83,5 +94,24 @@ class JavaPrettyPrinter {
     */
   }
 
-  
+
+  protected static void printUsage() {
+    printVersion();
+    System.out.println(
+      "\nJavaPrettyPrinter\n\n" +
+      "Usage: java JavaPrettyPrinter <options> <source files>\n" +
+      "  -verbose                  Output messages about what the compiler is doing\n" +
+      "  -classpath <path>         Specify where to find user class files\n" +
+      "  -sourcepath <path>        Specify where to find input source files\n" + 
+      "  -bootclasspath <path>     Override location of bootstrap class files\n" + 
+      "  -extdirs <dirs>           Override location of installed extensions\n" +
+      "  -d <directory>            Specify where to place generated class files\n" +
+      "  -help                     Print a synopsis of standard options\n" +
+      "  -version                  Print version information\n"
+    );
+  }
+
+  protected static void printVersion() {
+    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20050930");
+  }
 }
