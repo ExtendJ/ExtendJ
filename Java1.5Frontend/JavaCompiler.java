@@ -8,20 +8,32 @@ class JavaCompiler {
 
   public static void main(String args[]) {
     Program program = new Program();
-    program.addOptionDescription("-classpath", true);
-    program.addOptionDescription("-sourcepath", true);
-    program.addOptionDescription("-bootclasspath", true);
-    program.addOptionDescription("-extdirs", true);
-    program.addOptionDescription("-d", true);
-    program.addOptionDescription("-verbose", false);
+    program.initOptions();    
+    program.addKeyValueOption("-classpath");
+    program.addKeyValueOption("-sourcepath");
+    program.addKeyValueOption("-bootclasspath");
+    program.addKeyValueOption("-extdirs");
+    program.addKeyValueOption("-d");
+    program.addKeyOption("-verbose");
+    program.addKeyOption("-version");
+    program.addKeyOption("-help");
     
     program.addOptions(args);
     Collection files = program.files();
     
+    if(program.hasOption("-version")) {
+      printVersion();
+      return;
+    }
+    if(program.hasOption("-help") || files.isEmpty()) {
+      printUsage();
+      return;
+    }
+    
     JavaParser parser = new JavaParser();
     for(Iterator iter = files.iterator(); iter.hasNext(); ) {
+      String name = (String)iter.next();
       try {
-        String name = (String)iter.next();
         Reader reader = new FileReader(name);
         JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
         CompilationUnit unit = ((Program)parser.parse(scanner)).getCompilationUnit(0);
@@ -30,17 +42,15 @@ class JavaCompiler {
         unit.setPathName(".");
       	reader.close();
         program.addCompilationUnit(unit);
-      } catch (FileNotFoundException e) {
-        e.printStackTrace();
-        return;
+      } catch (Error e) {
+        System.err.println(name + ": " + e.getMessage());
+        System.exit(1);
+      } catch (RuntimeException e) {
+        System.err.println(name + ": " + e.getMessage());
       } catch (IOException e) {
-        System.err.println(e);
-        e.printStackTrace();
-        return;
       } catch (Exception e) {
         System.err.println(e);
         e.printStackTrace();
-        return;
       }
     }
     program.updateRemoteAttributeCollections(files.size());
@@ -51,4 +61,25 @@ class JavaCompiler {
       System.exit(1);
     }
   }
+
+  protected static void printUsage() {
+    printVersion();
+    System.out.println(
+      "\nJavaCompiler\n\n" +
+      "Usage: java JavaCompiler <options> <source files>\n" +
+      "  -verbose                  Output messages about what the compiler is doing\n" +
+      "  -classpath <path>         Specify where to find user class files\n" +
+      "  -sourcepath <path>        Specify where to find input source files\n" + 
+      "  -bootclasspath <path>     Override location of bootstrap class files\n" + 
+      "  -extdirs <dirs>           Override location of installed extensions\n" +
+      "  -d <directory>            Specify where to place generated class files\n" +
+      "  -help                     Print a synopsis of standard options\n" +
+      "  -version                  Print version information\n"
+    );
+  }
+
+  protected static void printVersion() {
+    System.out.println("Java1.5Frontend (http://jastadd.cs.lth.se) Version R20050930");
+  }
+
 }

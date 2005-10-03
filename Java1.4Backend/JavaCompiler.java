@@ -28,11 +28,11 @@ class JavaCompiler {
     
     if(program.hasOption("-version")) {
       printVersion();
-      return;
+      return false;
     }
     if(program.hasOption("-help") || files.isEmpty()) {
       printUsage();
-      return;
+      return false;
     }
     
     JavaParser parser = new JavaParser();
