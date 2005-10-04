@@ -2,6 +2,7 @@ package bytecode;
 
 import AST.Access;
 import AST.ArrayTypeName;
+import AST.ArrayTypeAccess;
 import AST.Dims;
 import AST.Dot;
 import AST.IdDecl;
@@ -51,8 +52,10 @@ class TypeDescriptor {
 		case 'L':
 			return this.p.fromClassName(s.substring(1, s.length() - 1));
 		case '[':
-			return new Dot(type(s.substring(1)), new ArrayTypeName(
-					new List().add(new Dims(new Opt()))));
+      int i = 1;
+      while(s.charAt(i) == '[')
+        i++;
+			return new ArrayTypeAccess(type(s.substring(i)), i);
 		case 'V':
 			return new ParseName(new IdUse("void"));
 		default:
@@ -119,11 +122,10 @@ class TypeDescriptor {
 					new IdDecl("p" + l.getNumChild())));
 			return s2;
 		case '[':
-			Dot d = new Dot();
-			d.setRight(new ArrayTypeName(new List().add(new Dims(new Opt()))));
-			l.add(new ParameterDeclaration(new Modifiers(), d, new IdDecl("p"
-					+ l.getNumChild())));
-			return arrayTypeList(s.substring(1), d);
+      int i = 1;
+      while(s.charAt(i) == '[') i++;
+      ArrayTypeAccess typeAccess = new ArrayTypeAccess(null, i);
+			return arrayTypeList(s.substring(i), typeAccess);
 		default:
 			this.p.println("Error: unknown Type \"" + c + "\" in TypeDescriptor");
 		}
@@ -131,47 +133,42 @@ class TypeDescriptor {
 
 	}
 
-	public String arrayTypeList(String s, Dot dot) {
+	public String arrayTypeList(String s, ArrayTypeAccess typeAccess) {
 		char c = s.charAt(0);
 		switch (c) {
 		case 'B':
-			dot.setLeft(new ParseName(new IdUse("byte")));
+			typeAccess.setAccess(new ParseName(new IdUse("byte")));
 			return s.substring(1);
 		case 'C':
-			dot.setLeft(new ParseName(new IdUse("char")));
+			typeAccess.setAccess(new ParseName(new IdUse("char")));
 			return s.substring(1);
 		case 'D':
-			dot.setLeft(new ParseName(new IdUse("double")));
+			typeAccess.setAccess(new ParseName(new IdUse("double")));
 			return s.substring(1);
 		case 'F':
-			dot.setLeft(new ParseName(new IdUse("float")));
+			typeAccess.setAccess(new ParseName(new IdUse("float")));
 			return s.substring(1);
 		case 'I':
-			dot.setLeft(new ParseName(new IdUse("int")));
+			typeAccess.setAccess(new ParseName(new IdUse("int")));
 			return s.substring(1);
 		case 'J':
-			dot.setLeft(new ParseName(new IdUse("long")));
+			typeAccess.setAccess(new ParseName(new IdUse("long")));
 			return s.substring(1);
 		case 'S':
-			dot.setLeft(new ParseName(new IdUse("short")));
+			typeAccess.setAccess(new ParseName(new IdUse("short")));
 			return s.substring(1);
 		case 'Z':
-			dot.setLeft(new ParseName(new IdUse("boolean")));
+			typeAccess.setAccess(new ParseName(new IdUse("boolean")));
 			return s.substring(1);
 		case 'L':
 			//String[] strings = s.substring(1).split("\\;", 2);
-			//dot.setLeft(this.p.fromClassName(strings[0]));
+			//typeAccess.setAccess(this.p.fromClassName(strings[0]));
 			//return strings[1];
       int pos = s.indexOf(';');
       String s1 = s.substring(1, pos);
       String s2 = s.substring(pos+1, s.length());
-			dot.setLeft(this.p.fromClassName(s1));
+			typeAccess.setAccess(this.p.fromClassName(s1));
 			return s2;
-		case '[':
-			Dot d = new Dot();
-			dot.setLeft(d);
-			d.setRight(new ArrayTypeName(new List().add(new Dims(new Opt()))));
-			return arrayTypeList(s.substring(1), d);
 		default:
 			this.p.println("Error: unknown Type in TypeDescriptor");
 		}
