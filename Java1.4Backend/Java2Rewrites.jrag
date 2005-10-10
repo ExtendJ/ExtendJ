@@ -28,41 +28,72 @@ aspect Java2Rewrites {
   eq ReferenceType.referenceClassFieldName() = "class$" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
   eq ArrayDecl.referenceClassFieldName() = "array" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
   
-  rewrite ClassDot {
-    when(getLeft().type().isPrimitiveType() || getLeft().type().isVoid())
-    to Access {
-      return new Dot(
-        lookupType("java.lang", getLeft().type().primitiveClassName()).createQualifiedAccess(),
-        new VarAccess(new IdUse("TYPE"))
-      );
+  
+  public boolean Dot.shameLessTest() {
+    if(leftSide().type().isReferenceType() && rightSide().isClassAccess() && !leftSide().type().isUnknown()) {
+      FieldDeclaration f = hostType().createStaticClassField(leftSide().type().referenceClassFieldName());
+      // add method to perform lookup as a side-effect
+      MethodDecl m = hostType().createStaticClassMethod();
     }
+    return false;
+  }
+  
+  rewrite Dot {
+    /*
+    when((leftSide().type().isPrimitiveType() || leftSide().type().isVoid()) && rightSide().isClassAccess())
+    to Access {
+      Access access = lookupType("java.lang", leftSide().type().primitiveClassName()).createQualifiedAccess().qualifiesAccess(
+            new VarAccess(new IdUse("TYPE")));
 
-    when(getLeft().type().isReferenceType())
+      if(rightSide().hasNextAccess()) {
+        Access a = rightSide().nextAccess();
+        a = a.isLeftChildOfDot() ? (Access)a.getParent() : a;
+        return access.qualifiesAccess(a);
+      }
+      return access;
+    }*/
+    
+    when(shameLessTest())
+    to Access this;
+    /*
+    when(leftSide().type().isReferenceType() && rightSide().isClassAccess())
     to Access {
       // For each non primitive type name used in a .class expression 
       // a static field is created that holds a cached value of the mapping to .class name.
       // BoundFieldAccess is used to bypass name binding
       
       // add field to hold cached result as a side-effect
-      FieldDeclaration f = hostType().createStaticClassField(getLeft().type().referenceClassFieldName());
+      FieldDeclaration f = hostType().createStaticClassField(leftSide().type().referenceClassFieldName());
       // add method to perform lookup as a side-effect
       MethodDecl m = hostType().createStaticClassMethod();
-      return new QuestionColonExpr(
-        new NEExpr(
+      Expr e =
+        new QuestionColonExpr(
+          new NEExpr(
+            new BoundFieldAccess(f),
+            new NullLiteral("null")
+          ),
           new BoundFieldAccess(f),
-          new NullLiteral("null")
-        ),
-        new BoundFieldAccess(f),
-        new AssignSimpleExpr(
-          new BoundFieldAccess(f),
-          new MethodAccess(
-            new List().add(new StringLiteral(getLeft().type().referenceClassName())),
-            new IdUse(m.name())
+          new AssignSimpleExpr(
+            new BoundFieldAccess(f),
+            new BoundMethodAccess(
+              m.name(),
+              new List().add(new StringLiteral(leftSide().type().referenceClassName())),
+              m
+            )
           )
-        )
-      );
-    }
+        );
+      if(getRightNoTransform() instanceof Dot) {
+        Dot dot = (Dot)getRightNoTransform();
+        dot.setLeft(e);
+        return dot;
+      }
+      else
+        return e;
+    }*/
+    
   }
+
+  
 
   inh TypeDecl AssertStmt.hostType();
 
@@ -109,14 +140,12 @@ aspect Java2Rewrites {
       new Opt(
         new VarInit(
           new LogNotExpr(
-            new MethodDot(
-              new ClassDot(
-                new TypeAccess(new List(), new IdUse(name())),
-                new ClassAccess()
-              ),
-              new MethodAccess(
-                new List(),
-                new IdUse("desiredAssertionStatus")
+            new TypeAccess(new List(), new IdUse(name())).qualifiesAccess(
+              new ClassAccess().qualifiesAccess(
+                new MethodAccess(
+                  new List(),
+                  new IdUse("desiredAssertionStatus")
+                )
               )
             )
           )
@@ -140,7 +169,11 @@ aspect Java2Rewrites {
       lookupType("java.lang", "Class").createQualifiedAccess(),
       new IdDecl(name),
       new Opt()
-    );
+    ) {
+      public boolean isConstant() {
+        return true;
+      }
+    };
     createStaticClassField.put(name, f);
     addBodyDecl(f);
     return f;
@@ -179,8 +212,7 @@ aspect Java2Rewrites {
                 new List().add(
                   new ReturnStmt(
                     new Opt(
-                      new MethodDot(
-                        lookupType("java.lang", "Class").createQualifiedAccess(),
+                      lookupType("java.lang", "Class").createQualifiedAccess().qualifiesAccess(
                         new MethodAccess(
                           new List().add(
                             new VarAccess(new IdUse("name"))
@@ -205,8 +237,7 @@ aspect Java2Rewrites {
                         new ClassInstanceExpr(
                           lookupType("java.lang", "NoClassDefFoundError").createQualifiedAccess(),
                           new List().add(
-                            new MethodDot(
-                              new VarAccess(new IdUse("e")),
+                            new VarAccess(new IdUse("e")).qualifiesAccess(
                               new MethodAccess(
                                 new List(),
                                 new IdUse("getMessage")
@@ -225,7 +256,11 @@ aspect Java2Rewrites {
           )
         )
       )
-    );
+    ) {
+      public boolean isConstant() {
+        return true;
+      }
+    };
     addBodyDecl(createStaticClassMethod);
     return createStaticClassMethod;
   }

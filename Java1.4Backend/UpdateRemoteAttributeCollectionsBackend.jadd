@@ -35,15 +35,6 @@ aspect UpdateRemoteAttributeCollectionsFrontend {
    }
 
    
-  protected void ClassInstanceDot.updateRemoteAttributeCollectionsBackend() {
-    super.updateRemoteAttributeCollectionsBackend();   
-    // touch accessorIndex go force creation of private constructorAccessor
-    ClassInstanceExpr c = (ClassInstanceExpr)getRight();
-    if(c.decl().isPrivate() && c.type() != hostType()) {
-      c.decl().accessorIndex();
-    }
-  }
-  
   protected void ClassInstanceExpr.updateRemoteAttributeCollectionsBackend() {
     super.updateRemoteAttributeCollectionsBackend();   
     // touch accessorIndex go force creation of private constructorAccessor
@@ -52,7 +43,44 @@ aspect UpdateRemoteAttributeCollectionsFrontend {
     }
   }
 
-  
+  protected void ConstructorAccess.updateRemoteAttributeCollectionsBackend() {
+    super.updateRemoteAttributeCollectionsBackend();   
+    // touch accessorIndex go force creation of private constructorAccessor
+    if(decl().isPrivate() && decl().hostType() != hostType()) {
+      decl().accessorIndex();
+    }
+  }
+
+  protected void SuperConstructorAccess.updateRemoteAttributeCollectionsBackend() {
+    super.updateRemoteAttributeCollectionsBackend();   
+    // touch accessorIndex go force creation of private constructorAccessor
+    if(decl().isPrivate() && decl().hostType() != hostType()) {
+      decl().accessorIndex();
+    }
+  }
 
   
+  protected void VarAccess.updateRemoteAttributeCollectionsBackend() {
+    super.updateRemoteAttributeCollectionsBackend();
+    Variable v = decl();
+    if(v instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration)v;
+      if(f.isPrivate() && !hostType().hasField(v.name())) {
+        f.accessorIndex();
+        f.accessorWriteIndex();
+      }
+    }
+  }
+  
+  protected void MethodAccess.updateRemoteAttributeCollectionsBackend() {
+    super.updateRemoteAttributeCollectionsBackend();
+    MethodDecl m = decl();
+    if(m.isPrivate() && !hostType().hasMethod(name())) {
+      m.accessorIndex();
+    }
+    else if(!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
+      superAccessorTarget().createSuperAccessor(m);
+    }
+  }
+
 }

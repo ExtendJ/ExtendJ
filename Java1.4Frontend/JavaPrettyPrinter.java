@@ -62,10 +62,16 @@ class JavaPrettyPrinter {
     }
     parseTime = System.currentTimeMillis() - parseTime;
     long rewriteAndUpdateTime = System.currentTimeMillis();
+    if(Program.verbose())
+      System.out.println("Updating remote attribute collections");
     program.updateRemoteAttributeCollections(files.size());
     rewriteAndUpdateTime = System.currentTimeMillis() - rewriteAndUpdateTime;
+    if(Program.verbose())
+      System.out.println("Pretty printing source code");
     program.prettyPrint(files.size());
     long errorCheckTime = System.currentTimeMillis();
+    if(Program.verbose())
+      System.out.println("Error checking source code");
     if(program.errorCheck(files.size())) {
       errorCheckTime = System.currentTimeMillis() - errorCheckTime;
       //long code = System.currentTimeMillis() - start - program.parseTime;

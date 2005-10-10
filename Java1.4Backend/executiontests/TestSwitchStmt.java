@@ -1,4 +1,4 @@
-class TestSwitchStmt {
+public class TestSwitchStmt {
 /*	static int sw1(int i) {
 		int res = 0;
 		switch (i) {

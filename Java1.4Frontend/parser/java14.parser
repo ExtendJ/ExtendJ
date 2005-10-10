@@ -70,15 +70,15 @@ Access class_type =
 Access interface_type =
       class_or_interface_type.c {:  return c;  :};
 Access array_type =
-      primitive_type.t dims.d {:  return new Dot(t, new ArrayTypeName(d));  :}
-    |  name.n dims.d {:  return new Dot(n, new ArrayTypeName(d));  :};
+      primitive_type.t dims.d {:  return new ArrayTypeAccess(t, d.getNumChild()) /* t.qualifiesAccess(new ArrayTypeName(d))*/;  :}
+    |  name.n dims.d {:  return new ArrayTypeAccess(n, d.getNumChild()) /*n.qualifiesAccess(new ArrayTypeName(d))*/;  :};
 Access name =
       simple_name.s {:  return s;  :}
     |  qualified_name.q {:  return q;  :};
 Access simple_name =
       IDENTIFIER.i {:  return new ParseName(new IdUse(i));  :};
 Access qualified_name =
-      name.n DOT IDENTIFIER.i {:  return new Dot(n, new ParseName(new IdUse(i)));  :};
+      name.n DOT IDENTIFIER.i {:  return n.qualifiesAccess(new ParseName(new IdUse(i)));  :};
 List name_decl =
       simple_name_decl.s {:  return s;  :}
     |  qualified_name_decl.q {:  return q;  :};
@@ -249,8 +249,8 @@ ConstructorDecl constructor_body =
 ExprStmt explicit_constructor_invocation =
       THIS LPAREN argument_list_opt.l RPAREN SEMICOLON {:  return new ExprStmt(new ConstructorAccess(l, new IdUse("this")));  :}
     |  SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON {:  return new ExprStmt(new SuperConstructorAccess(l, new IdUse("super")));  :}
-    |  primary.p DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON {:  return new ExprStmt(new Dot(p, new SuperConstructorAccess(l, new IdUse("super"))));  :}
-    |  name.n DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON {:  return new ExprStmt(new Dot(n, new SuperConstructorAccess(l, new IdUse("super"))));  :};
+    |  primary.p DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON {:  return new ExprStmt(p.qualifiesAccess(new SuperConstructorAccess(l, new IdUse("super"))));  :}
+    |  name.n DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON {:  return new ExprStmt(n.qualifiesAccess(new SuperConstructorAccess(l, new IdUse("super"))));  :};
 InterfaceDecl interface_declaration =
       modifiers_opt.m INTERFACE IDENTIFIER.id extends_interfaces_opt.i interface_body.b {:  return new InterfaceDecl(
                                                                      m, new IdDecl(id), i, b
@@ -445,19 +445,19 @@ Expr primary_no_new_array =
     |  field_access.f {:  return f;  :}
     |  method_invocation.m {:  return m;  :}
     |  array_access.a {:  return a;  :}
-    |  name.n DOT THIS {:  return new ThisDot(n, new ThisAccess(new List(), new IdUse("this")));  :}
-    |  VOID DOT CLASS {: return new ClassDot(new ParseName(new IdUse("void")), new ClassAccess()); :}
-    |  primitive_type.n DOT CLASS {: return new ClassDot(n,  new ClassAccess()); :}
-    |  primitive_type.n dims.d DOT CLASS {: return new ClassDot(new Dot(n, new ArrayTypeName(d)), new ClassAccess()); :}
-    |  name.n DOT CLASS {:  return new ClassDot(n, new ClassAccess());  :}
-    |  name.n dims.d DOT CLASS {:  return new ClassDot(new Dot(n, new ArrayTypeName(d)), new ClassAccess());  :};
+    |  name.n DOT THIS {:  return n.qualifiesAccess(new ThisAccess(new List(), new IdUse("this")));  :}
+    |  VOID DOT CLASS {: return new ParseName(new IdUse("void")).qualifiesAccess(new ClassAccess()); :}
+    |  primitive_type.n DOT CLASS {: return n.qualifiesAccess(new ClassAccess()); :}
+    |  primitive_type.n dims.d DOT CLASS {: return new ArrayTypeAccess(n, d.getNumChild())/*n.qualifiesAccess(new ArrayTypeName(d))*/.qualifiesAccess(new ClassAccess()); :}
+    |  name.n DOT CLASS {:  return n.qualifiesAccess(new ClassAccess());  :}
+    |  name.n dims.d DOT CLASS {:  return new ArrayTypeAccess(n, d.getNumChild())/*n.qualifiesAccess(new ArrayTypeName(d))*/.qualifiesAccess(new ClassAccess());  :};
 Expr class_instance_creation_expression =
        NEW class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body_opt.b 
         {:  return new ClassInstanceExpr(t, l, b); :}
     |  primary.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
-        {:  return new Dot(n, new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b )); :}
+        {:  return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b )); :}
     |  name.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
-        {:  return new Dot(n, new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b)); :}
+        {:  return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b)); :}
     ;
 Opt subclass_body_opt =
         {: return new Opt(); :}
@@ -488,24 +488,20 @@ List dims =
       LBRACK RBRACK {:  return new List().add(new Dims(new Opt()));  :}
     |  dims.l LBRACK RBRACK {:  return l.add(new Dims(new Opt()));  :};
 Access field_access =
-      primary.p DOT IDENTIFIER.id {:  return new Dot(p, new ParseName(new IdUse(id)));  :}
-    |  SUPER DOT IDENTIFIER.id {:  return new Dot(
-         new SuperAccess(new List(), new IdUse("super")),
-         new ParseName(new IdUse(id))
-       );
+      primary.p DOT IDENTIFIER.id {:  return p.qualifiesAccess(new ParseName(new IdUse(id)));  :}
+    |  SUPER DOT IDENTIFIER.id {:  
+         return new SuperAccess(new List(), new IdUse("super")).qualifiesAccess(new ParseName(new IdUse(id)));
      :}
-    |  name.n DOT.leftdot SUPER DOT.rightdot IDENTIFIER.id {:  return new Dot(
-         new SuperDot(n, new SuperAccess(new List(), new IdUse("super"))),
-         new ParseName(new IdUse(id))
-       );
+    |  name.n DOT.leftdot SUPER DOT.rightdot IDENTIFIER.id {:
+         return n.qualifiesAccess(new SuperAccess(new List(), new IdUse("super"))).qualifiesAccess(new ParseName(new IdUse(id)));
      :};
 Access method_invocation =
       name.n LPAREN argument_list_opt.l RPAREN {:  
-                                                             if(n instanceof Dot) {    
-                                                               Dot d = (Dot)n; 
-                                                               ParseName pn = (ParseName)d.getRightNoTransform();
+                                                             if(n instanceof AbstractDot) {    
+                                                               AbstractDot d = (AbstractDot)n; 
+                                                               ParseName pn = (ParseName)d.extractLast();
                                                                IdUse idUse = pn.getIdUseNoTransform();
-                                                               d.setRight(new ParseMethodName(idUse, l));
+                                                               d.replaceLast(new ParseMethodName(idUse, l));
                                                                return d;
                                                              }
                                                              else {
@@ -515,15 +511,16 @@ Access method_invocation =
                                                              }
                                                                
                                                                 :}
-    |  primary.p DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN {:  return new Dot(p, new ParseMethodName(new IdUse(id), l));  :}
-    |  SUPER DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN {:  return new Dot(new SuperAccess(new List(), new IdUse("super")),
+    |  primary.p DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN {:  return p.qualifiesAccess(new ParseMethodName(new IdUse(id), l));  :}
+    |  SUPER DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN {:  return new SuperAccess(new List(), new IdUse("super")).qualifiesAccess(
                                                                                            new ParseMethodName(new IdUse(id), l));  :}
-    |  name.n DOT.leftdot SUPER DOT.rightdot IDENTIFIER.id LPAREN argument_list_opt.l RPAREN {:  return new Dot(new Dot(n, new SuperAccess(new List(), new IdUse("super"))),
-                                                                                           new ParseMethodName(new IdUse(id), l));  :};
+    |  name.n DOT.leftdot SUPER DOT.rightdot IDENTIFIER.id LPAREN argument_list_opt.l RPAREN {:  
+         return n.qualifiesAccess(new SuperAccess(new List(), new IdUse("super"))).qualifiesAccess(new ParseMethodName(new IdUse(id), l));
+       :};
 Access array_access =
-      name.n LBRACK expression.e RBRACK {:  return new Dot(n, new ParseArray(new List().add(new Dims(new Opt(e)))));  :}
-    |  primary_no_new_array.p LBRACK expression.e RBRACK {:  return new Dot(p, new ParseArray(new List().add(new Dims(new Opt(e)))));  :}
-    |  array_creation_init.a LBRACK expression.e RBRACK {:  return new Dot(a, new ParseArray(new List().add(new Dims(new Opt(e)))));  :};
+      name.n LBRACK expression.e RBRACK {:  return n.qualifiesAccess(new ParseArray(new List().add(new Dims(new Opt(e)))));  :}
+    |  primary_no_new_array.p LBRACK expression.e RBRACK {:  return p.qualifiesAccess(new ParseArray(new List().add(new Dims(new Opt(e)))));  :}
+    |  array_creation_init.a LBRACK expression.e RBRACK {:  return a.qualifiesAccess(new ParseArray(new List().add(new Dims(new Opt(e)))));  :};
 Expr postfix_expression =
       primary.p {:  return p;  :}
     |  name.n {:  return n;  :}
@@ -549,9 +546,9 @@ Expr unary_expression_not_plus_minus =
     |  NOT unary_expression.e {:  return new LogNotExpr(e);  :}
     |  cast_expression.e {:  return e;  :};
 Expr cast_expression =
-      LPAREN primitive_type.t dims_opt.d RPAREN unary_expression.e {:  return new CastExpr(new Dot(t, new ArrayTypeName(d)), e);  :}
+      LPAREN primitive_type.t dims_opt.d RPAREN unary_expression.e {:  return new CastExpr(new ArrayTypeAccess(t, d.getNumChild())/*t.qualifiesAccess(new ArrayTypeName(d))*/, e);  :}
     |  LPAREN name.n RPAREN unary_expression_not_plus_minus.e {:  return new CastExpr(n, e);  :}
-    |  LPAREN name.n dims.d RPAREN unary_expression_not_plus_minus.e {:  return new CastExpr(new Dot(n, new ArrayTypeName(d)), e);  :};
+    |  LPAREN name.n dims.d RPAREN unary_expression_not_plus_minus.e {:  return new CastExpr(new ArrayTypeAccess(n, d.getNumChild())/*n.qualifiesAccess(new ArrayTypeName(d))*/, e);  :};
 Expr multiplicative_expression =
       unary_expression.e {:  return e;  :}
     |  multiplicative_expression.e1 MULT unary_expression.e2 {:  return new MulExpr(e1, e2);  :}

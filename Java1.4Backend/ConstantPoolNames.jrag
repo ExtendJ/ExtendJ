@@ -27,6 +27,10 @@ aspect ConstantPoolNames {
     for (int i=0; i<getNumParameter(); i++)
       b.append(getParameter(i).type().typeDescriptor());
     b.append(")");
+    if(type().isUnknown()) {
+      getTypeAccess().dumpTree(2);
+      throw new Error("Error generating descName for " + signature() + ", did not expect unknown return type");
+    }
     b.append(type().typeDescriptor());
     return b.toString();
   }
@@ -68,8 +72,12 @@ aspect ConstantPoolNames {
     b.append("(");
     // this$0
     TypeDecl typeDecl = hostType();
-    if(typeDecl.isInnerType())
+    if(typeDecl.needsEnclosing())
       b.append(typeDecl.enclosingType().typeDescriptor());
+    if(typeDecl.needsSuperEnclosing()) {
+      TypeDecl superClass = ((ClassDecl)typeDecl).getSuperClass();
+      b.append(superClass.enclosingType().typeDescriptor());
+    }
     // args
     for (int i=0; i<getNumParameter(); i++)
       b.append(getParameter(i).type().typeDescriptor());
@@ -85,8 +93,12 @@ aspect ConstantPoolNames {
     b.append("(");
     // this$0
     TypeDecl typeDecl = hostType();
-    if(typeDecl.isInnerType())
+    if(typeDecl.needsEnclosing())
       b.append(typeDecl.enclosingType().typeDescriptor());
+    if(typeDecl.needsSuperEnclosing()) {
+      TypeDecl superClass = ((ClassDecl)typeDecl).getSuperClass();
+      b.append(superClass.enclosingType().typeDescriptor());
+    }
     // args
     for (int i=0; i<getNumParameter(); i++)
       b.append(getParameter(i).type().typeDescriptor());
@@ -102,26 +114,51 @@ aspect ConstantPoolNames {
 
 
   inh lazy String TypeDecl.destinationPath();
-  
-  eq CompilationUnit.getTypeDecl(int index).destinationPath() = destinationPath();
-  eq CompilationUnit.getImportDecl(int index).destinationPath() = destinationPath();
-  
- syn lazy String CompilationUnit.destinationPath() {
+  eq CompilationUnit.getTypeDecl(int index).destinationPath() {
     if(Program.hasValueForOption("-d")) {
       return Program.getValueForOption("-d");
     }
     else {
       if(fromSource()) {
-        String sourceName = relativeName();
+        String sourceName = relativeName();         // ex AST/Defines_AST_hello
+        // extract source path including package directories
+        String sourcePath = null;
+        if(sourceName.lastIndexOf(java.io.File.separator) == -1)
+          sourcePath = ".";
+        else
+          sourcePath = sourceName.substring(0, sourceName.lastIndexOf(java.io.File.separator));
+        //System.err.println("SourcePath: " + sourcePath);
+        String[] parts = packageName().split("\\.");
+        int k = parts.length - 1;
+        while(k >= 0 && !sourcePath.endsWith(parts[k])) {
+          //System.err.println(sourcePath + " does not end with " + parts[k]);
+          k--;
+        }
+        if(k >= 0) {
+          for(int i = k; i >= 0; i--) {
+            sourcePath = sourcePath.substring(0, sourcePath.lastIndexOf(parts[i]));
+            //System.err.println("new candidate is " + sourcePath);
+          }
+        }
+        if(sourcePath.equals(""))
+          sourcePath = ".";
+        //System.err.println("SourcePath after: " + sourcePath);
+        return sourcePath;
+        /*
+        // extract first part of package name
         String prefix;
-        int pos = packageName().indexOf('.');
+        int pos = packageName().indexOf('.');       // AST
         if(pos != -1)
           prefix = packageName().substring(0, pos-1);
         else
           prefix = packageName();
+        // add separator
+        prefix = prefix + java.io.File.separator;
+        // find last occurance
         pos = sourceName.lastIndexOf(prefix);
         if(pos > 0 && !packageName().equals(""))
           return sourceName.substring(0, pos-1);
+        */
       }
       if(pathName != null)
         return pathName;

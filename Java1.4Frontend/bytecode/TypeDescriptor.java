@@ -1,10 +1,7 @@
 package bytecode;
 
 import AST.Access;
-import AST.ArrayTypeName;
 import AST.ArrayTypeAccess;
-import AST.Dims;
-import AST.Dot;
 import AST.IdDecl;
 import AST.IdUse;
 import AST.List;
@@ -60,8 +57,9 @@ class TypeDescriptor {
 			return new ParseName(new IdUse("void"));
 		default:
 			this.p.println("Error: unknown type in TypeDescriptor");
+      throw new Error("Error: unknown Type in TypeDescriptor: " + s);
 		}
-		return null;
+		//return null;
 	}
 	
 	public List parameterList() {
@@ -125,11 +123,13 @@ class TypeDescriptor {
       int i = 1;
       while(s.charAt(i) == '[') i++;
       ArrayTypeAccess typeAccess = new ArrayTypeAccess(null, i);
+			l.add(new ParameterDeclaration(new Modifiers(), typeAccess, new IdDecl("p" + l.getNumChild())));
 			return arrayTypeList(s.substring(i), typeAccess);
 		default:
 			this.p.println("Error: unknown Type \"" + c + "\" in TypeDescriptor");
+      throw new Error("Error: unknown Type in TypeDescriptor: " + s);
 		}
-		return "";
+		//return "";
 
 	}
 
@@ -171,8 +171,9 @@ class TypeDescriptor {
 			return s2;
 		default:
 			this.p.println("Error: unknown Type in TypeDescriptor");
+      throw new Error("Error: unknown Type in TypeDescriptor: " + s);
 		}
-		return null;
+		//return null;
 	}
 
 	

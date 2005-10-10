@@ -13,47 +13,64 @@ aspect GenerateClassfile {
   public void CompilationUnit.generateClassfile() {
     for(int i = 0; i < getNumTypeDecl(); i++) {
       getTypeDecl(i).generateClassfile();
-      //getTypeDecl(i).clearClassfile();
+      getTypeDecl(i).clearClassfile();
     }
   }
 
-  public void MethodDecl.clearMethod() {
+  public void BodyDecl.clear() {
     attributes_computed = false;
     attributes_value = null;
   }
 
-  public void ConstructorDecl.clearConstructor() {
-    attributes_computed = false;
-    attributes_value = null;
+  public void MethodDecl.clear() {
+    super.clear();
+    bytecodes(hostType().constantPool()).clearCodeGeneration();
+    bytecodes_ConstantPool_values = null;
+    if(hasBlock()) {
+      getBlock().setParent(null);
+      setBlockOpt(new Opt());
+    }
+  }
+
+  public void ConstructorDecl.clear() {
+    super.clear();
+    bytecodes(hostType().constantPool()).clearCodeGeneration();
+    bytecodes_ConstantPool_values = null;
+    getBlock().setParent(null);
+    setBlock(new Block());
   }
 
   public void TypeDecl.clearClassfile() {
+    bytecodes(constantPool()).clearCodeGeneration();
+    attributes_computed = false;
+    attributes_value = null;
+    clinit_attributes_computed = false;
+    clinit_attributes_value = null;
     constantPool_computed = false;
     constantPool();
+    bytecodes_ConstantPool_values = null;
   }
   public void ClassDecl.clearClassfile() {
-    super.clearClassfile();
     for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
-      Object obj = iter.next();
-      if(obj instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl) obj;
-        m.clearMethod();
-      }
-      else if(obj instanceof ConstructorDecl) {
-        ConstructorDecl m = (ConstructorDecl)obj;
-        m.clearConstructor();
-      }
+      BodyDecl b = (BodyDecl)iter.next();
+      b.clear();
     }
+    for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
+      BodyDecl b = (BodyDecl)iter.next();
+      b.clear();
+    }
+    super.clearClassfile();
   }
   public void InterfaceDecl.clearClassfile() {
-    super.clearClassfile();
     for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
-      Object obj = iter.next();
-      if(obj instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl) obj;
-        m.clearMethod();
-      }
+      BodyDecl b = (BodyDecl)iter.next();
+      b.clear();
     }
+    for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
+      BodyDecl b = (BodyDecl)iter.next();
+      b.clear();
+    }
+    super.clearClassfile();
   }
 
   public void InterfaceDecl.generateClassfile() {
@@ -62,6 +79,7 @@ aspect GenerateClassfile {
     if(Program.verbose()) System.out.println("Writing class file to " + fileName);
     try {
       ConstantPool cp = constantPool();
+      cp.addClass("java.lang.Object");
       
       if(hasClinit()) {
         cp.addUtf8("<clinit>");
@@ -79,12 +97,10 @@ aspect GenerateClassfile {
       out.writeInt(0xCAFEBABE);
       out.writeChar(0);
       out.writeChar(48);
-      CPInfo last = cp.getCPInfo(cp.getNumCPInfo()-1);
-      int size = last.pos() + last.size();
-      out.writeChar(size);
-      for(int i = 0; i < cp.getNumCPInfo(); i++)
-        cp.getCPInfo(i).emit(out);
+      cp.emit(out);
       int flags = flags();
+      if(isNestedType())
+        flags = mangledFlags(flags);
       if(isInterfaceDecl())
         flags |= Modifiers.ACC_INTERFACE;
       out.writeChar(flags);
@@ -199,16 +215,14 @@ aspect GenerateClassfile {
       if(parentFile != null)
         parentFile.mkdirs();
       FileOutputStream f = new FileOutputStream(fileName);
-      DataOutputStream out = new DataOutputStream(f);
+      DataOutputStream out = new DataOutputStream(new BufferedOutputStream(f));
       out.writeInt(0xCAFEBABE);
       out.writeChar(0);
       out.writeChar(48);
-      CPInfo last = cp.getCPInfo(cp.getNumCPInfo()-1);
-      int size = last.pos() + last.size();
-      out.writeChar(size);
-      for(int i = 0; i < cp.getNumCPInfo(); i++)
-        cp.getCPInfo(i).emit(out);
+      cp.emit(out);
       int flags = flags();
+      if(isNestedType())
+        flags = mangledFlags(flags);
       flags |= Modifiers.ACC_SUPER;
       out.writeChar(flags);
       out.writeChar(cp.addClass(constantPoolName()));
@@ -321,69 +335,4 @@ aspect GenerateClassfile {
     }
   }
 
-  public void CPInfo.emit(DataOutputStream out) throws IOException {
-  }
-
-  public void ConstantClass.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Class);
-    //System.err.println("Emit: ConstantClass: " + addUtf8(getname()));
-    out.writeChar(addUtf8(getname()));
-  }
-
-  public void ConstantFieldref.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Fieldref);
-    out.writeChar(addClass(getclassname()));
-    out.writeChar(addNameAndType(getname(), gettype()));
-  }
-
-  public void ConstantMethodref.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Methodref);
-    //System.err.println("Emit: MethodRef: " + addClass(getclassname()) + ", " + addNameAndType(getname(), getdesc()));
-    out.writeChar(addClass(getclassname()));
-    out.writeChar(addNameAndType(getname(), getdesc()));
-  }
-
-  public void ConstantInterfaceMethodref.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_InterfaceMethodref);
-    out.writeChar(addClass(getclassname()));
-    out.writeChar(addNameAndType(getname(), getdesc()));
-  }
-
-  public void ConstantNameAndType.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_NameAndType);
-    //System.err.println("Emit: NameAndType: " + addUtf8(getname()) + ", " + addUtf8(gettype()));
-    out.writeChar(addUtf8(getname()));
-    out.writeChar(addUtf8(gettype()));
-  }
-
-  public void ConstantUtf8.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Utf8);
-    //System.err.println("Emit: ConstantUtf8: " + getname());
-    out.writeUTF(getname());
-  }
-
-  public void ConstantString.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_String);
-    out.writeChar(addUtf8(getval()));
-  }
-
-  public void ConstantInteger.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Integer);
-    out.writeInt(getval());
-  }
-
-  public void ConstantFloat.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Float);
-    out.writeFloat(getval());
-  }
-
-  public void ConstantLong.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Long);
-    out.writeLong(getval());
-  }
-
-  public void ConstantDouble.emit(DataOutputStream out) throws IOException {
-    out.writeByte(ConstantPool.CONSTANT_Double);
-    out.writeDouble(getval());
-  }
 }

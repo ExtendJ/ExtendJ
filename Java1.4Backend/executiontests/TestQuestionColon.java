@@ -1,4 +1,4 @@
-class TestQuestionColon {
+public class TestQuestionColon {
     public static void main(String[] args) {
       int i = 10;
       String s = i <= 10 ? "ok" : "NOT OK";

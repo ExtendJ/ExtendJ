@@ -1,4 +1,4 @@
-class TestThrows {
+public class TestThrows {
   static void t() throws NullPointerException {
     throw new NullPointerException();
   }

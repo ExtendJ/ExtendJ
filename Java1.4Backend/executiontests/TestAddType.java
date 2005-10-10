@@ -1,4 +1,4 @@
-class TestAddType {
+public class TestAddType {
     public static void main(String[] args) {
         byte b = 1;
         char c = 33;

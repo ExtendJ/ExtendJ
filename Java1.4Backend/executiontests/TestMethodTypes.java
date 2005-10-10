@@ -1,4 +1,4 @@
-class TestMethodTypes {
+public class TestMethodTypes {
   void f(int x, int y) {
     x = y;
   }

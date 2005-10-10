@@ -41,6 +41,11 @@ aspect NameCheck {
   }
   
   public void MethodAccess.nameCheck() {
+    if(isQualified() && qualifier().isPackageAccess())
+      error("The method " + decl().signature() + 
+          " can not be qualified by a package name.");
+    if(isQualified() && qualifier().isSuperAccess() && decl().isAbstract())
+      error("Invoking an abstract method thorugh super.method() is invalid");
     if(decl() == unknownMethod() && decls().size() <= 1) {
       StringBuffer s = new StringBuffer();
       s.append("no method named " + getIdUse().getID());
@@ -148,34 +153,6 @@ aspect NameCheck {
   eq SuperAccess.staticContext() = false;
   eq AbstractDot.staticContext() = getRight().staticContext();
   
-  syn VarAccess FieldDot.fieldAccess() = (VarAccess)getRight();
-  syn FieldDeclaration FieldDot.decl() = (FieldDeclaration)fieldAccess().decl();
-  
-  public void FieldDot.nameCheck() {
-    /*
-    if(getLeft().staticContext() && !decl().isStatic())
-      error("The field " + decl() + 
-          " is not static, and cannot be accessed in this static context.");
-    */
-  }
-  
-  public void MethodDot.nameCheck() {
-    /*
-    if(getLeft().staticContext() && !decl().isStatic())
-      error("The method " + decl().signature() + 
-          " is not static, and cannot be accessed in this static context.");
-    */
-    if(getLeft() instanceof PackageAccess || getLeft() instanceof PackageDot)
-      error("The method " + decl().signature() + 
-          " can not be qualified by a package name.");
-
-    if(getLeft().isSuperAccess() && decl().isAbstract())
-      error("Invoking an abstract method thorugh super.method() is invalid");
-  }
-
-  syn MethodAccess MethodDot.methodAccess() = (MethodAccess)getRight();
-  syn MethodDecl MethodDot.decl() = methodAccess().decl();
-
   public void ConstructorAccess.nameCheck() {
     super.nameCheck();
     if(decl() == illegalConstructor() && decls().size() <= 1)
@@ -200,28 +177,22 @@ aspect NameCheck {
     }
   }
     
-  /*
-  inh TypeDecl SuperConstructorAccess.hostInstance();
-  inh TypeDecl FieldDeclaration.hostInstance();
-  inh TypeDecl MethodDeclaration.hostInstance();
-  inh TypeDecl AbstractDot.hostInstance();
-  eq Program.getCompilationUnit().hostInstance() = null;
-  eq TypeDecl.getBodyDecl().hostInstance() = isInnerType() ? enclosingType() : null;
-  eq ConstructorDecl.getConstructorInvocation().hostInstance() = null;
-  eq FieldDeclaration.getAbstractVarInit().hostInstance() = isStatic() ? null : hostInstance();
-  eq MethodDeclaration.getBlock().hostInstance() = isStatic() ? null : hostInstance();
-  eq AbstractDot.getRight().hostInstance() {
-    if(getLeft().isVarAccess() || getLeft().isMethodAccess()) {
-      return getLeft().type();
-    }
-    return hostInstance();
-  }
-  */
+  
   public void SuperConstructorAccess.nameCheck() {
     super.nameCheck();
     // 8.8.5.1
     TypeDecl c = hostType();
     TypeDecl s = c.isClassDecl() && ((ClassDecl)c).hasSuperClass() ? ((ClassDecl)c).getSuperClass() : illegalType();
+    if(isQualified()) {
+      if(!s.isInnerType() || s.inStaticContext())
+        error("the super type " + s.fullName() + " of " + c.fullName() +
+           " is not an inner class");
+    
+      else if(!qualifier().type().instanceOf(s.enclosingType()))
+        error("The type of this primary expression, " +
+                qualifier().type().fullName() + " is not enclosing the super type, " + 
+                s.fullName() + ", of " + c.fullName());
+    }
     if(!isQualified() && s.isInnerType()) {
       if(!c.isInnerType()) {
         error("" + s.fullName() + " isStatic: " + s.isStatic() + ", enclosingType: " + s.enclosingType().fullName());
@@ -256,24 +227,8 @@ aspect NameCheck {
     */
   }
   
-  public void SuperConstructorDot.nameCheck() {
-    super.nameCheck();
-    // 8.8.5.1
-    TypeDecl c = hostType();
-    TypeDecl s = c.isClassDecl() && ((ClassDecl)c).hasSuperClass() ? ((ClassDecl)c).getSuperClass() : illegalType();
-    if(!s.isInnerType() || s.inStaticContext())
-      error("the super type " + s.fullName() + " of " + c.fullName() +
-           " is not an inner class");
-    
-     else if(!getLeft().type().instanceOf(s.enclosingType()))
-       error("The type of this primary expression, " +
-                getLeft().type().fullName() + " is not enclosing the super type, " + 
-                s.fullName() + ", of " + c.fullName());
-  }
 
   syn boolean TypeDecl.hasEnclosingType() = isInnerType() || !inStaticContext();
-
-  syn boolean Access.isQualified() = getParent() instanceof AbstractDot && ((AbstractDot)getParent()).getRight() == this;
 
   // 8.8.5.1
   inh boolean VarAccess.inExplicitConstructorInvocation();
@@ -288,16 +243,9 @@ aspect NameCheck {
   eq ConstructorAccess.getArg().inExplicitConstructorInvocation() = true;
   eq SuperConstructorAccess.getArg().inExplicitConstructorInvocation() = true;
 
-  inh boolean ThisDot.inExplicitConstructorInvocation();
-  eq ThisDot.getRight().inExplicitConstructorInvocation() = inExplicitConstructorInvocation() && !hostType().enclosedBy(getLeft().type());
-
 
   eq MethodAccess.getArg().inStaticContext() = unqualifiedScope().inStaticContext();
   inh boolean Expr.inStaticContext();
-  inh boolean VarAccess.inStaticContext();
-  inh boolean MethodAccess.inStaticContext();
-  inh boolean ThisAccess.inStaticContext();
-  inh boolean SuperAccess.inStaticContext();
   inh lazy boolean AbstractDot.inStaticContext();
   inh lazy boolean TypeDecl.inStaticContext();
   inh boolean ClassInstanceExpr.inStaticContext();
@@ -308,33 +256,28 @@ aspect NameCheck {
   eq FieldDeclaration.getAbstractVarInit().inStaticContext() = isStatic() || hostType().isInterfaceDecl();
   eq MethodDecl.getBlock().inStaticContext() = isStatic();
   eq AbstractDot.getRight().inStaticContext() {
-    if(getLeft() instanceof VarAccess || getLeft() instanceof FieldDot)
+    if(getLeft() instanceof VarAccess || getLeft().isFieldAccess())
       return false;
-    if(getLeft() instanceof MethodDot || getLeft() instanceof MethodAccess)
+    if(getLeft().isMethodAccess())
       return false;
-    if(getLeft() instanceof ArrayAccess || getLeft() instanceof ArrayDot)
+    if(getLeft().isArrayAccess())
       return false;
-    if(getLeft() instanceof ClassDot)
+    if(getLeft().isClassAccess())
       return false;
-    if(getLeft() instanceof SuperAccess || getLeft() instanceof SuperDot)
+    if(getLeft().isSuperAccess())
       return false;
-    if(getLeft() instanceof ThisAccess || getLeft() instanceof ThisDot)
+    if(getLeft().isThisAccess())
       return false;
     if(getLeft() instanceof ClassInstanceExpr)
       return false;
-    /*
-    if(!inStaticContext() && (getLeft() instanceof TypeAccess || getLeft() instanceof TypeDot) && 
-         getLeft().type().instanceOf(hostType()))
-      return false;
-    */
-    if(inStaticContext() || (getLeft() instanceof TypeAccess || getLeft() instanceof TypeDot))
+    if(inStaticContext() || getLeft().isTypeAccess())
       return true;
     return false;
   }
   eq ClassInstanceExpr.getTypeDecl().inStaticContext() = inStaticContext();
   
-  eq SuperDot.getRight().inStaticContext() = false;
-  eq ThisDot.getRight().inStaticContext() = false;
+  syn boolean ThisAccess.inStaticContext() = !isQualified() ? super.inStaticContext() : qualifier().inStaticContext();
+  syn boolean SuperAccess.inStaticContext() = !isQualified() ? super.inStaticContext() : qualifier().inStaticContext();
   
   eq SuperConstructorDot.getLeft().inStaticContext() = hostType().enclosedBy(getLeft().type()) ? false : true;
   eq MemberClass.getClassDecl().inStaticContext() = false;
@@ -345,34 +288,11 @@ aspect NameCheck {
       error("no type named " + name());
   }
   
-  public void TypeDot.nameCheck() {
-    ASTNode a = getLeft();
-    if(!(a instanceof TypeAccess) && !(a instanceof TypeDot) && !(a instanceof PackageAccess) && !(a instanceof PackageDot))
-      error("can not access the type named " + ((TypeAccess)getRight()).decl().fullName() + " in this context");
-  }
 
-  public void ThisDot.nameCheck() {
-    // 15.8.4
-    if(!hostType().isInnerTypeOf(getLeft().type()) && hostType() != getLeft().type())
-      error("qualified this must name an enclosing type: " + this);
-    if(inStaticContext()) {
-      error("*** Qualified this may not occur in static context");
-    }
-    super.nameCheck();
-  }
-  
-  public void SuperDot.nameCheck() {
-    //System.out.println("SuperDot.nameCheck(): hostType(): " + hostType().fullName() + ", leftType(): " + getLeft().type().fullName());
-    //if(!hostType().enclosedBy(getLeft().type()) && hostType() != getLeft().type())
-    if(!hostType().isInnerTypeOf(getLeft().type()) && hostType() != getLeft().type())
-      error("qualified super must name an enclosing type");
-    if(inStaticContext()) {
-      error("*** Qualified super may not occur in static context");
-    }
-    super.nameCheck();
-  }
   
   public void TypeAccess.nameCheck() {
+    if(isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess())
+      error("can not access the type named " + decl().fullName() + " in this context");
     if(decl() == unknownType() && decls().size() <= 1)
       error("no type named " + name());
     if(decls().size() > 1) {
@@ -390,8 +310,14 @@ aspect NameCheck {
     */
   }
 
-  
   public void SuperAccess.nameCheck() {
+    if(isQualified()) {
+      if(!hostType().isInnerTypeOf(qualifier().type()) && hostType() != qualifier().type())
+        error("qualified super must name an enclosing type");
+      if(inStaticContext()) {
+        error("*** Qualified super may not occur in static context");
+      }
+    }
     // 8.8.5.1
     if(inExplicitConstructorInvocation() && hostType().instanceOf(decl().hostType()) )
       error("super may not be accessed in an explicit constructor invocation");
@@ -401,6 +327,14 @@ aspect NameCheck {
   }
 
   public void ThisAccess.nameCheck() {
+    if(isQualified()) {
+      // 15.8.4
+      if(!hostType().isInnerTypeOf(qualifier().type()) && hostType() != qualifier().type())
+        error("qualified this must name an enclosing type: " + getParent());
+      if(inStaticContext()) {
+        error("*** Qualified this may not occur in static context");
+      }
+    }
     // 8.8.5.1
     if(inExplicitConstructorInvocation())
       error("this may not be accessed in an explicit constructor invocation");
@@ -410,12 +344,10 @@ aspect NameCheck {
   }
   
 
-  public void ClassDot.nameCheck() {
-    ASTNode a = getLeft();
-    if(!(a instanceof TypeAccess) && !(a instanceof TypeDot))
+  public void ClassAccess.nameCheck() {
+    if(isQualified() && !qualifier().isTypeAccess())
       error("class literal may only contain type names");
   }
-    
 
   public void VarAccess.nameCheck() {
     if(decl() == unknownField() && decls().size() <= 1)

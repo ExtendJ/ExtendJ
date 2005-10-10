@@ -20,9 +20,8 @@ aspect TypeCheck {
   }
 
   syn boolean Expr.isVariable() = false;
-  eq FieldDot.isVariable() = true;
+  eq AbstractDot.isVariable() = lastAccess().isVariable();
   eq VarAccess.isVariable() = true;
-  eq ArrayDot.isVariable() = true;
   eq ArrayAccess.isVariable() = true;
   eq ParExpr.isVariable() = getExpr().isVariable();
  
@@ -213,6 +212,8 @@ aspect TypeCheck {
 
   // 5.3 Method Invocation Conversion
   public void MethodAccess.typeCheck() {
+    if(isQualified() && decl().isAbstract() && qualifier().isSuperAccess())
+      error("may not access abstract methods in superclass");
     for(int i = 0; i < decl().getNumParameter(); i++) {
       TypeDecl exprType = getArg(i).type();
       TypeDecl parmType = decl().getParameter(i).type();
@@ -225,19 +226,11 @@ aspect TypeCheck {
   }
           
 
-  public void MethodDot.typeCheck() {
-    if(((MethodAccess)getRight()).decl().isAbstract() && getLeft() instanceof SuperAccess)
-      error("may not access abstract methods in superclass");
-  }
-
   public void ArrayAccess.typeCheck() {
+    if(isQualified() && !(qualifier().type().dimension() > 0) && !qualifier().type().isUnknown() && !qualifier().type().isIllegal())
+      error("the type " + qualifier().type().name() + " of the indexed element is not an array");
     if(!getExpr().type().unaryNumericPromotion().isInt())
       error("array index must be int after unary numeric promotion which " + getExpr().type().fullName() + " is not");
-  }
-
-  public void ArrayDot.typeCheck() {
-    if(!(getLeft().type().dimension() > 0) && !getLeft().type().isUnknown() && !getLeft().type().isIllegal())
-      error("the type " + getLeft().type().name() + " of the indexed element is not an array");
   }
 
   public void ArrayInit.typeCheck() {
@@ -256,6 +249,30 @@ aspect TypeCheck {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
     if(!left.instanceOf(right) && !right.instanceOf(left)) {
+      StringBuffer leftString = new StringBuffer();
+      getLeftOperand().toString(leftString);
+      StringBuffer rightString = new StringBuffer();
+      getRightOperand().toString(rightString);
+      StringBuffer thisString = new StringBuffer();
+      toString(thisString);
+      error("    " + thisString + "\n" + 
+          "The type of the left hand side, \"" + 
+          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.fullName() + "\".\n");
+    }
+  }
+  
+  public void ArithmeticExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    TypeDecl type = left.binaryNumericPromotion(right);
+    if(!left.isNumericType() && !left.isIllegal() && !left.isUnknown()) {
+      error("The type " + left.fullName() + " of the left hand side is not numeric");
+    }
+    if(!right.isNumericType() && !right.isIllegal() && !right.isUnknown()) {
+      error("The type " + right.fullName() + " of the right hand side is not numeric");
+    }
+    if(!type.isNumericType()) {
       StringBuffer leftString = new StringBuffer();
       getLeftOperand().toString(leftString);
       StringBuffer rightString = new StringBuffer();
@@ -350,28 +367,6 @@ aspect TypeCheck {
   }
 
 
-  public void ArithmeticExpr.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    if(!left.isNumericType() && !left.isIllegal() && !left.isUnknown()) {
-      error("The type " + left.fullName() + " of the left hand side is not numeric");
-    }
-    if(!right.isNumericType() && !right.isIllegal() && !right.isUnknown()) {
-      error("The type " + right.fullName() + " of the right hand side is not numeric");
-    }
-    if(!left.instanceOf(right) && !right.instanceOf(left)) {
-      StringBuffer leftString = new StringBuffer();
-      getLeftOperand().toString(leftString);
-      StringBuffer rightString = new StringBuffer();
-      getRightOperand().toString(rightString);
-      StringBuffer thisString = new StringBuffer();
-      toString(thisString);
-      error("    " + thisString + "\n" + 
-          "The type of the left hand side, \"" + 
-          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.fullName() + "\".\n");
-    }
-  }
 
   // String add implicit cast conversion
   public void AddExpr.typeCheck() {
@@ -518,20 +513,10 @@ aspect TypeCheck {
   }
 
 
-  public void ClassInstanceDot.typeCheck() {
-    super.typeCheck();
-    if(getLeft().isTypeAccess())
-      error("*** The expression in a qualified class instance expr must not be a type name");
-    // 15.9
-    if(!type().isInnerClass() && !((ClassDecl)type()).getSuperClass().isInnerClass()) {
-      error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
-    }
-  }
 
   inh TypeDecl SuperConstructorAccess.enclosingInstance();
   inh TypeDecl ClassInstanceExpr.enclosingInstance();
   inh TypeDecl TypeDecl.enclosingInstance();
-  eq SuperConstructorDot.getRight().enclosingInstance() = getLeft().type();
   eq Program.getCompilationUnit().enclosingInstance() = null;
   eq StaticInitializer.getBlock().enclosingInstance() = null;
   //eq InstanceInitializer.getBlock().enclosingInstance() = null;
@@ -548,6 +533,12 @@ aspect TypeCheck {
   eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = illegalType();
   
   public void ClassInstanceExpr.typeCheck() {
+    if(isQualified() && qualifier().isTypeAccess())
+      error("*** The expression in a qualified class instance expr must not be a type name");
+    // 15.9
+    if(isQualified() && !type().isInnerClass() && !((ClassDecl)type()).getSuperClass().isInnerClass()) {
+      error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
+    }
     if(!type().isClassDecl()) {
       error("*** Can only instantiate classes, which " + type().fullName() + " is not"); 
     }

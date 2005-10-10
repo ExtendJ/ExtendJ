@@ -62,9 +62,29 @@ aspect Attributes {
 		int attribute_length;
 		int constantvalue_index;
     public ConstantValueAttribute(ConstantPool p, FieldDeclaration f) {
-			attribute_name_index = p.addUtf8("ConstantValue");
+      attribute_name_index = p.addUtf8("ConstantValue");
       attribute_length = 2;
-      constantvalue_index = f.constantIndex(p);
+      constantvalue_index = 0;
+      if(f.isStatic() && f.isFinal() && f.hasAbstractVarInit() && f.getAbstractVarInit() instanceof VarInit) {
+        Expr e = ((VarInit)f.getAbstractVarInit()).getExpr();
+        if(f.type().isString())
+          constantvalue_index = p.addConstant(e.constant().stringValue());
+        else if(f.type() instanceof DoubleType) {
+          constantvalue_index = p.addConstant(e.constant().doubleValue());
+        }
+        else if(f.type() instanceof FloatType) {
+          constantvalue_index = p.addConstant(e.constant().floatValue());
+        }
+        else if(f.type() instanceof LongType) {
+          constantvalue_index = p.addConstant(e.constant().longValue());
+        }
+        else if(f.type().isIntegralType()) {
+          constantvalue_index = p.addConstant(e.constant().intValue());
+        }
+        else if(f.type().isBoolean()) {
+          constantvalue_index = p.addConstant(e.constant().booleanValue() ? 1 : 0);
+        }
+      }
     }
 	  public void emit(DataOutputStream out) throws IOException {
 		  out.writeChar(attribute_name_index);
@@ -87,17 +107,29 @@ aspect Attributes {
       int outer_class_info_index;
       int inner_name_index;
       int inner_class_access_flags;
+      public int hashCode() {
+        return inner_class_info_index;
+      }
+      public boolean equals(Object o) {
+        if(o instanceof Classes) {
+          Classes c = (Classes)o;
+          return inner_class_info_index == c.inner_class_info_index;
+        }
+        else
+          return super.equals(o);
+      }
     }
     int attribute_name_index;
     int attribute_length;
     Classes[] classes;
     public InnerClassesAttribute(TypeDecl typeDecl) {
       ConstantPool c = typeDecl.constantPool();
-      ArrayList list = new ArrayList();
+      HashSet list = new HashSet();
       typeDecl.collectInnerClasses(list, c, typeDecl);
       classes = new Classes[list.size()];
-      for(int i = 0; i < list.size(); i++)
-        classes[i] = (Classes)list.get(i);
+      int i = 0;
+      for(Iterator iter = list.iterator(); iter.hasNext(); i++)
+        classes[i] = (Classes)iter.next();
       if(classes.length != 0)
         attribute_name_index = c.addUtf8("InnerClasses");
       attribute_length = 2 + classes.length * 8;
