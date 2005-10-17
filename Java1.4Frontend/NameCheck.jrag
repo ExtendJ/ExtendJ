@@ -9,7 +9,7 @@ aspect NameCheck {
   }
 
   public void SingleTypeImportDecl.nameCheck() {
-    if(!getAccess().type().fullName().equals(fullName()))
+    if(!getAccess().type().fullName().equals(fullName()) && !getAccess().type().isUnknown())
       error("Single-type import " + fullName() + " is not the canonical name of type " + getAccess().type().fullName());
 
     //CompilationUnit cu = (CompilationUnit)getParent().getParent(); // FIXME
@@ -40,13 +40,16 @@ aspect NameCheck {
     throw new Error("Needs extra equation for methodHost()");
   }
   
+  syn boolean Expr.isUnknown() = type().isUnknown();
+  eq PackageAccess.isUnknown() = !hasPackage(packageName());
+  
   public void MethodAccess.nameCheck() {
-    if(isQualified() && qualifier().isPackageAccess())
+    if(isQualified() && qualifier().isPackageAccess() && !qualifier().isUnknown())
       error("The method " + decl().signature() + 
           " can not be qualified by a package name.");
     if(isQualified() && qualifier().isSuperAccess() && decl().isAbstract())
       error("Invoking an abstract method thorugh super.method() is invalid");
-    if(decl() == unknownMethod() && decls().size() <= 1) {
+    if(decl() == unknownMethod() && decls().size() <= 1 && (!isQualified() || !qualifier().isUnknown())) {
       StringBuffer s = new StringBuffer();
       s.append("no method named " + getIdUse().getID());
       s.append("(");
