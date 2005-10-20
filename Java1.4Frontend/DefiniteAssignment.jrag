@@ -74,13 +74,19 @@ aspect DefiniteAssignment {
       }
     }
   }
+
+  // final variables with a constant initializer are considered values and not variables
+  syn boolean VariableDeclaration.isBlankFinal() = isFinal() && (!hasAbstractVarInit() || !getAbstractVarInit().isConstant());
+  syn boolean VariableDeclaration.isValue() = isFinal() && hasAbstractVarInit() && getAbstractVarInit().isConstant();
   
   public void VarAccess.definiteAssignment() {
     if(isSource()) {
       if(decl() instanceof VariableDeclaration) {
         VariableDeclaration v = (VariableDeclaration)decl();
         //System.err.println("Is " + v + " final? " + v.isFinal() + ", DAbefore: " + isDAbefore(v));
-        if(v.isFinal()) {
+        if(v.isValue()) {
+        }
+        else if(v.isBlankFinal()) {
           if(!isDAbefore(v) /*&& !v.hasAbstractVarInit() && !v.getAbstractVarInit().isConstant()*/)
             error("Final variable " + v + " is not assigned before used");
         }
@@ -107,7 +113,7 @@ aspect DefiniteAssignment {
       // Blank final field
       if(v.isFinal() && v.isBlank() && !hostType().instanceOf(v.hostType()))
         error("The final variable is not a blank final in this context, so it may not be assigned.");
-      if(v.isFinal() && isQualified() && !(qualifier() instanceof ThisAccess))
+      if(v.isFinal() && isQualified() && (!qualifier().isThisAccess() || ((Access)qualifier()).isQualified()))
         error("the blank final field " + v.name() + " may only be assigned by simple name");
       
       // local variable or parameter
@@ -221,6 +227,7 @@ aspect DA {
 
   syn lazy boolean Stmt.checkReturnDA(Variable v) = true;
   eq Block.checkReturnDA(Variable v) {
+    System.err.println("checkReturnDA for block and variable " + v.name());
     for(int i = 0; i < getNumStmt(); i++)
       if(!getStmt(i).checkReturnDA(v))
         return false;
@@ -237,7 +244,7 @@ aspect DA {
     }
     return true;
   }
-  eq IfStmt.checkReturnDA(Variable v) = getThen().checkReturnDA(v) && (hasElse() ? getThen().checkReturnDA(v) : true);
+  eq IfStmt.checkReturnDA(Variable v) = getThen().checkReturnDA(v) && (hasElse() ? getElse().checkReturnDA(v) : true);
   eq WhileStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
   eq DoStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
   eq ForStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
@@ -253,6 +260,7 @@ aspect DA {
     return true;
   }
   eq ReturnStmt.checkReturnDA(Variable v) {
+    System.err.println("checkReturnDA for " + this);
     boolean result = hasResult() ? getResult().isDAafter(v) : isDAbefore(v);
     if(result) return true;
     
@@ -892,8 +900,11 @@ aspect DU {
     return true;
   }
   
-  syn boolean TryStmt.isDUafterFinally(Variable v) = getBlock().isDUafter(v);
+  syn boolean TryStmt.isDUafterFinally(Variable v) = getFinally().isDUafter(v);
   syn boolean SynchronizeStmt.isDUafterFinally(Variable v) = true;
+  
+  syn boolean TryStmt.isDAafterFinally(Variable v) = getFinally().isDAafter(v);
+  syn boolean SynchronizeStmt.isDAafterFinally(Variable v) = false;
   
   syn boolean BreakStmt.isDUtest(Variable v) {
     if(!isDUbefore(v))
@@ -902,7 +913,7 @@ aspect DU {
     Iterator i2 = breakReachedFinally().iterator();
     if(!i2.hasNext())
       return true;
-    
+
     while(i2.hasNext()) {
       FinallyHost f = (FinallyHost)i2.next();
       if(!f.isDUafterFinally(v))
@@ -938,7 +949,7 @@ aspect DU {
     
     while(i2.hasNext()) {
       FinallyHost f = (FinallyHost)i2.next();
-      if(!f.isDUafterFinally(v))
+      if(!f.isDAafterFinally(v))
         return false;
     }
     return true;
@@ -954,7 +965,7 @@ aspect DU {
     
     while(i2.hasNext()) {
       FinallyHost f = (FinallyHost)i2.next();
-      if(!f.isDUafterFinally(v))
+      if(!f.isDAafterFinally(v))
         return false;
     }
     return true;

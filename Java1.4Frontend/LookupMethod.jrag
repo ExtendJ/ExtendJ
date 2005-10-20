@@ -12,7 +12,7 @@ aspect ConstructScope {
   inh ArrayList SuperConstructorAccess.lookupSuperConstructor(ConstructorAccess a);
   eq TypeDecl.getBodyDecl().lookupSuperConstructor(ConstructorAccess a) = lookupSuperConstructor(a);
   syn ArrayList TypeDecl.lookupSuperConstructor(ConstructorAccess a) = new ArrayList(0);
-  eq ClassDecl.lookupSuperConstructor(ConstructorAccess a) = hasSuperClass() ? getSuperClass().lookupConstructor(a) : new ArrayList(0);
+  eq ClassDecl.lookupSuperConstructor(ConstructorAccess a) = hasSuperclass() ? superclass().lookupConstructor(a) : new ArrayList(0);
   eq InterfaceDecl.lookupSuperConstructor(ConstructorAccess a) = typeObject().lookupConstructor(a);
   eq Program.getCompilationUnit().lookupSuperConstructor(ConstructorAccess a) = Program.emptyConstructorList;
   eq AbstractDot.getRight().lookupSuperConstructor(ConstructorAccess a) = getLeft().type().lookupSuperConstructor(a);
@@ -524,11 +524,11 @@ aspect Overrides {
   eq ClassDecl.allMethods(String name) {
     HashSet set = new HashSet();
     set.addAll(localMethods(name));
-    if(hasSuperClass()) {
-      set.addAll(getSuperClass().allMethods(name));
+    if(hasSuperclass()) {
+      set.addAll(superclass().allMethods(name));
     }
-    for(int i = 0; i < getNumImplements(); i++) {
-      TypeDecl interfaceDecl = getImplements(i).type();
+    for(Iterator iter = interfacesIterator(); iter.hasNext(); ) {
+      TypeDecl interfaceDecl = (TypeDecl)iter.next();
       set.addAll(interfaceDecl.allMethods(name));
     }
     return set;
@@ -536,10 +536,10 @@ aspect Overrides {
   eq InterfaceDecl.allMethods(String name) {
     HashSet set = new HashSet();
     set.addAll(localMethods(name));
-    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-      TypeDecl typeDecl = getSuperInterfaceId(i).type();
-      if(!typeDecl.isClassDecl())
-        set.addAll(typeDecl.allMethods(name));
+    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
+      TypeDecl interfaceDecl = (TypeDecl)iter.next();
+      if(!interfaceDecl.isClassDecl())
+        set.addAll(interfaceDecl.allMethods(name));
     }
     return set;
   }
@@ -556,8 +556,8 @@ aspect Overrides {
     if(m.isStatic())
       return set;
  
-    if(hasSuperClass()) {
-      for(Iterator iter = getSuperClass().allMethods(name).iterator(); iter.hasNext(); ) {
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().allMethods(name).iterator(); iter.hasNext(); ) {
         MethodDecl methodDecl = (MethodDecl)iter.next();
         if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
           if(!methodDecl.isPrivate() && methodDecl.accessableFrom(m.hostType())) {
@@ -567,8 +567,8 @@ aspect Overrides {
       }
     }
     
-    for(int i = 0; i < getNumImplements(); i++) {
-      TypeDecl interfaceDecl = getImplements(i).type();
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl interfaceDecl = (TypeDecl)outerIter.next();
       set.addAll(interfaceDecl.overrides(m));
       for(Iterator iter = interfaceDecl.allMethods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
@@ -594,8 +594,8 @@ aspect Overrides {
       }
     }
     
-    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-      TypeDecl typeDecl = getSuperInterfaceId(i).type();
+    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
       if(!typeDecl.isClassDecl()) {
         for(Iterator iter = typeDecl.allMethods(name).iterator(); iter.hasNext(); ) {
           MethodDecl methodDecl = (MethodDecl)iter.next();
@@ -640,11 +640,11 @@ aspect Hides {
       }
     }
     
-    if(hasSuperClass()) {
-      set.addAll(getSuperClass().hides(m));
+    if(hasSuperclass()) {
+      set.addAll(superclass().hides(m));
     }
-    for(int i = 0; i < getNumImplements(); i++) {
-      TypeDecl interfaceDecl = getImplements(i).type();
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl interfaceDecl = (TypeDecl)outerIter.next();
       set.addAll(interfaceDecl.hides(m));
       for(Iterator iter = interfaceDecl.methods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
@@ -670,8 +670,9 @@ aspect Hides {
       }
     }
     
-    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-      set.addAll(getSuperInterfaceId(i).type().hides(m));
+    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      set.addAll(typeDecl.hides(m));
     }
     return set;
   }
@@ -736,10 +737,11 @@ aspect MethodDecl {
     TypeDecl hostType = hostType();
     if(hostType instanceof ClassDecl) {
       ClassDecl c = (ClassDecl)hostType;
-      if(c.hasSuperClass())
-        set.addAll(c.getSuperClass().hides(this));
-      for(int i = 0; i < c.getNumImplements(); i++) {
-        set.addAll(c.getImplements(i).type().hides(this));
+      if(c.hasSuperclass())
+        set.addAll(c.superclass().hides(this));
+      for(Iterator iter = c.interfacesIterator(); iter.hasNext(); ) {
+        TypeDecl type = (TypeDecl)iter.next();
+        set.addAll(type.hides(this));
       }
     }
     return set;
@@ -835,15 +837,16 @@ aspect LookupMethod {
   eq ClassDecl.methods(String name) {
     // 8.4.6
     Collection list = new LinkedList();
-    for(int i = 0; i < getNumImplements(); i++) {
-      for(Iterator iter = getImplements(i).type().methods(name).iterator(); iter.hasNext(); ) {
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
         if(!decl.isPrivate())
           list.add(decl);
       }
     }
-    if(hasSuperClass()) {
-      for(Iterator iter = getSuperClass().methods(name).iterator(); iter.hasNext(); ) {
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().methods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
         if(!decl.isPrivate() && decl.accessableFrom(this)) {
           for(Iterator i2 = list.iterator(); i2.hasNext(); ) {
@@ -870,8 +873,9 @@ aspect LookupMethod {
   eq InterfaceDecl.methods(String name) {
     // 9.4.1
     Collection list = new LinkedList();
-    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-      for(Iterator iter = getSuperInterfaceId(i).type().methods(name).iterator(); iter.hasNext(); ) {
+    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
         if(!decl.isPrivate() && (decl.isPublic() || !decl.hostType().isClassDecl()))
           list.add(decl);
@@ -914,11 +918,13 @@ aspect LookupMethod {
 
   eq ClassDecl.methodNames() {
     Set set = super.methodNames();
-    for(int i = 0; i < getNumImplements(); i++)
-      for(Iterator iter = getImplements(i).type().methodNames().iterator(); iter.hasNext(); )
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl type = (TypeDecl)outerIter.next();
+      for(Iterator iter = type.methodNames().iterator(); iter.hasNext(); )
         set.add(iter.next());
-    if(hasSuperClass())
-      for(Iterator iter = getSuperClass().methodNames().iterator(); iter.hasNext(); )
+    }
+    if(hasSuperclass())
+      for(Iterator iter = superclass().methodNames().iterator(); iter.hasNext(); )
         set.add(iter.next());
     return set;
     
@@ -926,9 +932,11 @@ aspect LookupMethod {
 
   eq InterfaceDecl.methodNames() {
     Set set = super.methodNames();
-    for(int i = 0; i < getNumSuperInterfaceId(); i++)
-      for(Iterator iter = getSuperInterfaceId(i).type().methodNames().iterator(); iter.hasNext(); )
+    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methodNames().iterator(); iter.hasNext(); )
         set.add(iter.next());
+    }
     return set;
   }
 }

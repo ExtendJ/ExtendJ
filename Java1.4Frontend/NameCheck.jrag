@@ -16,6 +16,10 @@ aspect NameCheck {
     //if(getAccess().type() != extractSingleType(cu.lookupType(getAccess().type().name())))
     //  error("Importing the same type " + getAccess().type().name() + " twice is illegal");
   }
+  public void TypeImportOnDemandDecl.nameCheck() {
+    if(getAccess().lastAccess().isTypeAccess() && !getAccess().type().fullName().equals(fullName()))
+      error("On demand type import " + fullName() + ".* is not the canonical name of type " + getAccess().type().fullName());
+  }
 
   public void CompilationUnit.nameCheck() {
     for(int i = 0; i < getNumImportDecl(); i++) {
@@ -48,7 +52,7 @@ aspect NameCheck {
       error("The method " + decl().signature() + 
           " can not be qualified by a package name.");
     if(isQualified() && qualifier().isSuperAccess() && decl().isAbstract())
-      error("Invoking an abstract method thorugh super.method() is invalid");
+      error("Invoking an abstract method through super.method() is invalid");
     if(decl() == unknownMethod() && decls().size() <= 1 && (!isQualified() || !qualifier().isUnknown())) {
       StringBuffer s = new StringBuffer();
       s.append("no method named " + getIdUse().getID());
@@ -185,7 +189,7 @@ aspect NameCheck {
     super.nameCheck();
     // 8.8.5.1
     TypeDecl c = hostType();
-    TypeDecl s = c.isClassDecl() && ((ClassDecl)c).hasSuperClass() ? ((ClassDecl)c).getSuperClass() : illegalType();
+    TypeDecl s = c.isClassDecl() && ((ClassDecl)c).hasSuperclass() ? ((ClassDecl)c).superclass() : illegalType();
     if(isQualified()) {
       if(!s.isInnerType() || s.inStaticContext())
         error("the super type " + s.fullName() + " of " + c.fullName() +
@@ -339,7 +343,7 @@ aspect NameCheck {
       }
     }
     // 8.8.5.1
-    if(inExplicitConstructorInvocation())
+    if(inExplicitConstructorInvocation() && hostType() == type())
       error("this may not be accessed in an explicit constructor invocation");
     // 8.4.3.2
     if(inStaticContext())
@@ -446,7 +450,8 @@ aspect NameCheck {
         error("local class named " + name() + " may not be redeclared as a local class in the same block");
     }
 
-    if(isNestedType() && hasPackage(fullName()))
+    //if(isNestedType() && hasPackage(fullName()))
+    if(!packageName().equals("") && hasPackage(fullName()))
       error("duplicate member class and package " + name());
     
     // 8.1 & 9.1
@@ -543,22 +548,25 @@ aspect NameCheck {
 
   public void ClassDecl.nameCheck() {
     super.nameCheck();
-    if(hasSuperClass() && !getSuperClassAccess().type().isClassDecl())
+    if(hasSuperClassAccess() && !getSuperClassAccess().type().isClassDecl())
       error("class may only inherit a class and not " + getSuperClassAccess().type().fullName());
-
+    if(isObject() && hasSuperClassAccess())
+      error("class Object may not have superclass");
+    if(isObject() && getNumImplements() != 0)
+      error("class Object may not implement interfaces");
+    if(hasSuperclass() && !superclass().accessableFrom(this))
+      error("a superclass must be accessable which " + superclass().name() + " is not");
     
-    //if(isCircular())
-    if(hasSuperClass() && getSuperClass() == illegalType())
+    if(isCircular())
       error("circular inheritance dependency in " + fullName()); 
 
   }
 
   public void InterfaceDecl.nameCheck() {
     super.nameCheck();
-    TypeDecl illegalDecl = illegalType();
     for(int i = 0; i < getNumSuperInterfaceId(); i++) {
       TypeDecl typeDecl = getSuperInterfaceId(i).type();
-      if(typeDecl == illegalDecl)
+      if(typeDecl.isCircular())
         error("circular inheritance dependency in " + fullName()); 
     }
   }

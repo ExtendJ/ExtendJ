@@ -28,62 +28,93 @@ aspect TypeName {
 }
 
 aspect SuperClasses {
-  syn lazy boolean PrimitiveType.hasSuperClass() {
-    return hasSuperClassAccess();
-  }
-  
-  syn lazy TypeDecl PrimitiveType.getSuperClass() {
-    return getSuperClassAccess().type();
+
+  public boolean ClassDecl.hasSuperclass() {
+    return !isObject();
   }
 
-  syn lazy boolean ClassDecl.hasSuperClass() {
-    return hasSuperClassAccess() && !isObject();
+  public ClassDecl ClassDecl.superclass() {
+    if(isObject())
+      return null;
+    if(hasSuperClassAccess() && !isCircular() && getSuperClassAccess().type().isClassDecl())
+      return (ClassDecl)getSuperClassAccess().type();
+    return (ClassDecl)typeObject();
   }
   
-  syn lazy TypeDecl ClassDecl.getSuperClass() {
-    return getSuperClassAccess().type();
+  public boolean PrimitiveType.hasSuperclass() {
+    return !isObject();
+  }
+
+  syn TypeDecl PrimitiveType.superclass() = getSuperClassAccess().type();
+  
+
+  public Iterator ClassDecl.interfacesIterator() {
+    return new Iterator() {
+      public boolean hasNext() {
+        computeNextCurrent();
+        return current != null;
+      }
+      public Object next() {
+        return current;
+      }
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
+      private int index = 0;
+      private TypeDecl current = null;
+      private void computeNextCurrent() {
+        current = null;
+        if(isObject())
+          return;
+        while(index < getNumImplements()) {
+          TypeDecl typeDecl = getImplements(index++).type();
+          if(!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
+            current = typeDecl;
+            return;
+          }
+        }
+      }
+    };
   }
   
-  rewrite ClassDecl {
-    when(!hasSuperClassAccess() && !isObject())
-    to ClassDecl {
-      setSuperClassAccess(
-          new TypeAccess(
-            new List().add(new IdUse("java")).add(new IdUse("lang")),
-            new IdUse("Object")
-          )
-      );
-      return this;
-    }
-    when(isObject() && (hasSuperClassAccess() || getNumImplements() != 0))
-    to ClassDecl {
-      setSuperClassAccessOpt(new Opt());
-      setImplementsList(new List());
-      return this;
-    }
+  public Iterator InterfaceDecl.superinterfacesIterator() {
+    return new Iterator() {
+      public boolean hasNext() {
+        computeNextCurrent();
+        return current != null;
+      }
+      public Object next() {
+        return current;
+      }
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
+      private int index = 0;
+      private TypeDecl current = null;
+      private void computeNextCurrent() {
+        current = null;
+        while(index < getNumSuperInterfaceId()) {
+          TypeDecl typeDecl = getSuperInterfaceId(index++).type();
+          if(!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
+            current = typeDecl;
+            return;
+          }
+        }
+        if(getNumSuperInterfaceId() == 0 && index == 0) {
+          current = typeObject();
+          index++;
+        }
+      }
+    };
   }
-  rewrite InterfaceDecl {
-    when(getNumSuperInterfaceId() == 0)
-    to InterfaceDecl {
-      addSuperInterfaceId(
-          new TypeAccess(
-            new List().add(new IdUse("java")).add(new IdUse("lang")),
-            new IdUse("Object")
-          )
-      );
-      return this;
-    }
-  }
+  
 }
 
 aspect Circularity {
   inh lazy TypeDecl TypeDecl.illegalType();
-  
-  syn lazy boolean TypeDecl.isCircular() = false;
-  /*
   syn lazy boolean TypeDecl.isCircular() circular [true] = false;
   eq ClassDecl.isCircular() {
-    return hasSuperClass() && getSuperClass().isCircular();
+    return hasSuperClassAccess() && getSuperClassAccess().type().isCircular();
   }
   eq InterfaceDecl.isCircular() {
     for(int i = 0; i < getNumSuperInterfaceId(); i++) {
@@ -92,37 +123,6 @@ aspect Circularity {
         return true;
     }
     return false;
-  }
-  */
-
-  rewrite ClassDecl {
-    when(!duringResolveAmbiguousNames() && isCircular())
-    to ClassDecl {
-      setSuperClassAccess(
-          new TypeAccess(
-            new List().add(new IdUse("primitive")),
-            new IdUse("Illegal")
-          )
-      );
-      return this;
-    }
-  }
-
-  rewrite InterfaceDecl {
-    when(!duringResolveAmbiguousNames() && checkAndRewriteSuperInterfaces())
-    to InterfaceDecl this;
-  }
-
-  private boolean InterfaceDecl.checkAndRewriteSuperInterfaces() {
-    boolean rewritten = false;
-    for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-      TypeDecl typeDecl = getSuperInterfaceId(i).type();
-      if(typeDecl.isCircular()) {
-        setSuperInterfaceId(illegalType().createQualifiedAccess(), i);
-        rewritten = true;
-      }
-    }
-    return rewritten;
   }
 }
 
@@ -147,7 +147,6 @@ aspect ImplicitConstructor {
       return this;
     }
   }
-    
   syn lazy boolean ClassDecl.noConstructor() {
     //for(int i = getNumBodyDecl()-1; i >= 0; i--) // Does not work since rewrite adds a list of nodes to the current position. Should use iterators instead
     for(int i = 0; i < getNumBodyDecl(); i++)
