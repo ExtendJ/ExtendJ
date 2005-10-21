@@ -129,7 +129,7 @@ SingleCharacter = [^\r\n\'\\]
   "catch"                        { return newSymbol(Terminals.CATCH); }
   "char"                         { return newSymbol(Terminals.CHAR); }
   "class"                        { return newSymbol(Terminals.CLASS); }
-/*  "const"                        { return newSymbol(Terminals.CONST); }*/
+  "const"                        { return newSymbol(Terminals.EOF); }
   "continue"                     { return newSymbol(Terminals.CONTINUE); }
   "do"                           { return newSymbol(Terminals.DO); }
   "double"                       { return newSymbol(Terminals.DOUBLE); }
@@ -149,7 +149,7 @@ SingleCharacter = [^\r\n\'\\]
   "long"                         { return newSymbol(Terminals.LONG); }
   "native"                       { return newSymbol(Terminals.NATIVE); }
   "new"                          { return newSymbol(Terminals.NEW); }
-/*  "goto"                         { return newSymbol(Terminals.GOTO); }*/
+  "goto"                         { return newSymbol(Terminals.EOF); }
   "if"                           { return newSymbol(Terminals.IF); }
   "public"                       { return newSymbol(Terminals.PUBLIC); }
   "short"                        { return newSymbol(Terminals.SHORT); }

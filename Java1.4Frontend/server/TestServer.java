@@ -87,8 +87,11 @@ class TestServer {
                 error = true;
               }
               catch (Error e) {
-                System.err.println(e);
+                errorMessage = msg + ".java:" + e.toString().substring(e.toString().indexOf(':')+2);
+                System.err.println(msg + ":" + e.toString().substring(e.toString().indexOf(':')+2));
                 e.printStackTrace();
+                //System.err.println(e);
+                //e.printStackTrace();
                 error = true;
               }
               catch (Exception e) {
