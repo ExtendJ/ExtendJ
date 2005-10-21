@@ -50,13 +50,21 @@ class JavaPrettyPrinter {
         program.addCompilationUnit(unit);
         //program.parseTime += System.currentTimeMillis() - parse;
       } catch (Error e) {
-        System.err.println(name + ": " + e.getMessage());
+        if(e.getMessage() != null) {
+          System.err.println(name + ": " + e.getMessage());
+          System.exit(1);
+        }
+        e.printStackTrace();
         System.exit(1);
       } catch (RuntimeException e) {
-        System.err.println(name + ": " + e.getMessage());
+        if(e.getMessage() != null) {
+          System.err.println(name + ": " + e.getMessage());
+          System.exit(1);
+        }
+        e.printStackTrace();
+        System.exit(1);
       } catch (IOException e) {
       } catch (Exception e) {
-        System.err.println(e);
         e.printStackTrace();
       }
     }

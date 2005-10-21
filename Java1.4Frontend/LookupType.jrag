@@ -529,7 +529,40 @@ aspect TypeScopePropagation {
   }
 
   public TypeCollection TypeDecl.remoteLookupType(String name) {
+    // should really include all types (inherited from both superclasses and interfaces) and let the caller remove
+    // not visible types using accesableFrom
     return localLookupType(name);
+  }
+  
+  public TypeCollection ClassDecl.remoteLookupType(String name) {
+    // should really include all types (inherited from both superclasses and interfaces) and let the caller remove
+    // not visible types using accesableFrom
+    TypeCollection c = TypeCollection.emptyCollection();
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i).declaresType(name)) {
+        c = c.add(getBodyDecl(i).type(name));
+      }
+    }
+    if(!c.isEmpty()) return c;
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl type = (TypeDecl)outerIter.next();
+      for(Iterator iter = type.types(name).iterator(); iter.hasNext(); ) {
+        TypeDecl decl = (TypeDecl)iter.next();
+        if(!decl.isPrivate() && decl.accessableFrom(this))
+          c = c.add(decl);
+      }
+    }
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().types(name).iterator(); iter.hasNext(); ) {
+        TypeDecl decl = (TypeDecl)iter.next();
+        if(!decl.isPrivate() && decl.accessableFrom(this)) {
+          c = c.add(decl);
+        }
+      }
+    }
+    if(c.isEmpty() && name().equals(name))
+      c = c.add(this);
+    return c;
   }
 
   public TypeCollection TypeDecl.localLookupType(String name) {
