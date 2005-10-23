@@ -5,8 +5,13 @@ import java.io.*;
 import parser.*;
 
 class JavaCompiler {
-
-  public static void main(String args[]) {
+  
+ public static void main(String args[]) {
+    if(!compile(args))
+      System.exit(1);
+  }
+  
+  public static boolean compile(String args[]) {
     Program program = new Program();
     program.initOptions();    
     program.addKeyValueOption("-classpath");
@@ -23,11 +28,11 @@ class JavaCompiler {
     
     if(program.hasOption("-version")) {
       printVersion();
-      return;
+      return false;
     }
     if(program.hasOption("-help") || files.isEmpty()) {
       printUsage();
-      return;
+      return false;
     }
     
     JavaParser parser = new JavaParser();
@@ -43,10 +48,17 @@ class JavaCompiler {
       	reader.close();
         program.addCompilationUnit(unit);
       } catch (Error e) {
-        System.err.println(name + ": " + e.getMessage());
-        System.exit(1);
+        if(e.getMessage() != null)
+          System.err.println(name + ": " + e.getMessage());
+        else
+          e.printStackTrace();
+        return false;
       } catch (RuntimeException e) {
-        System.err.println(name + ": " + e.getMessage());
+        if(e.getMessage() != null)
+          System.err.println(name + ": " + e.getMessage());
+        else
+          e.printStackTrace();
+        return false;
       } catch (IOException e) {
       } catch (Exception e) {
         System.err.println(e);
@@ -56,9 +68,10 @@ class JavaCompiler {
     program.updateRemoteAttributeCollections(files.size());
     if(!program.errorCheck(files.size())) {
       program.generateClassfile(files.size());
+      return true;
     }
     else {
-      System.exit(1);
+      return false;
     }
   }
 
