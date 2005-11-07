@@ -1,4 +1,37 @@
 aspect InnerClasses {
+
+  // The set of TypeDecls that has this TypeDecl as their directly enclosing TypeDecl.
+  // I.e., NestedTypes, InnerTypes, AnonymousClasses, LocalClasses.
+  private Collection TypeDecl.nestedTypes;
+  public Collection TypeDecl.nestedTypes() {
+    return nestedTypes != null ? nestedTypes : new HashSet();
+  }
+  public void TypeDecl.addNestedType(TypeDecl typeDecl) {
+    if(nestedTypes == null) nestedTypes = new HashSet();
+    nestedTypes.add(typeDecl);
+  }
+
+  // The set of nested TypeDecls that are accessed in this TypeDecl
+  private Collection TypeDecl.usedNestedTypes;
+  public Collection TypeDecl.usedNestedTypes() {
+    return usedNestedTypes != null ? usedNestedTypes : new HashSet();
+  }
+  public void TypeDecl.addUsedNestedType(TypeDecl typeDecl) {
+    if(usedNestedTypes == null) usedNestedTypes = new HashSet();
+    usedNestedTypes.add(typeDecl);
+  }
+  
+  // The set of local variables and parameters that this TypeDecl uses
+  // in its enclosing TypeDecls
+  private Set TypeDecl.usedEnclosingVariables;
+  public Set TypeDecl.usedEnclosingVariables() {
+    return usedEnclosingVariables != null ? usedEnclosingVariables : new HashSet();
+  }
+  public void TypeDecl.addUsedEnclosingVariable(Variable v) {
+    if(usedEnclosingVariables == null) usedEnclosingVariables = new HashSet();
+    usedEnclosingVariables.add(v);
+  }
+  
   int TypeDecl.constantPoolNameIndex = 1;
 
   syn lazy String TypeDecl.constantPoolName() {
@@ -32,6 +65,7 @@ aspect InnerClasses {
         collectEnclosingVariables(set, e.enclosingType());
       }
     }
+    //usedEnclosingVariables();
     if(isClassDecl()) {
       ClassDecl classDecl = (ClassDecl)this;
       if(classDecl.isNestedType() && classDecl.hasSuperclass())
@@ -65,10 +99,6 @@ aspect InnerClasses {
   syn lazy int FieldDeclaration.accessorWriteIndex() = accessorWriteIndex = hostType().accessorCounter++;
   private int FieldDeclaration.accessorWriteIndex = -1;
 
-  syn boolean MethodDecl.needsAccessor() = accessorIndex != -1;
-  syn lazy int MethodDecl.accessorIndex() = accessorIndex = hostType().accessorCounter++;
-  private int MethodDecl.accessorIndex = -1;
-
   syn boolean ConstructorDecl.needsAccessor() = accessorIndex != -1;
   private String ConstructorDecl.anonymousJavaName;
 
@@ -87,14 +117,18 @@ aspect InnerClasses {
           new List(),
           new List()
           );
+    hostType().addNestedType(classDecl);
+    // add as LocalClassDeclStmt
     getBlock().addStmt(new LocalClassDeclStmt(classDecl)); 
+    // force new subtree to be rewritten and final
+    // TODO: why is this necessary?
     LocalClassDeclStmt stmt = (LocalClassDeclStmt)getBlock().getStmt(getBlock().getNumStmt()-1);
     classDecl = stmt.getClassDecl();
     classDecl.toString(new StringBuffer());
 
     accessorIndex = hostType().accessorCounter++;
     anonymousJavaName = classDecl.typeDescriptor();
-    classDecl.generateClassfile();
+    //classDecl.generateClassfile();
     return accessorIndex;
   }
   private int ConstructorDecl.accessorIndex = -1;
@@ -103,12 +137,7 @@ aspect InnerClasses {
     int num = 0;
     for(Iterator iter = c.iterator(); iter.hasNext(); ) {
       Object o = iter.next();
-      if(o instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl)o;
-        if(m.needsAccessor())
-          num++;
-      }
-      else if(o instanceof ConstructorDecl) {
+      if(o instanceof ConstructorDecl) {
         ConstructorDecl m = (ConstructorDecl)o;
         if(m.needsAccessor())
           num++;
@@ -182,16 +211,83 @@ aspect InnerClasses {
     return list;
   }
 
-  public void MethodDecl.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
-    out.writeChar(Modifiers.ACC_STATIC);
-    out.writeChar(cp.addUtf8("access$" + accessorIndex()));
-    out.writeChar(cp.addUtf8(accessorDescName()));
-    out.writeChar(accessorAttributes().size());
-    for(Iterator iter = accessorAttributes().iterator(); iter.hasNext(); ) {
-      ((Attribute)iter.next()).emit(out);
-    }
+  /* Access to private methods in enclosing types:
+     The original MethodAccess is replaced with an access to an accessor method
+     built by createAccessor(). This method is built lazily and differs from
+     normal MethodDeclarations in the following ways:
+     1) The method in the class file should always be static and the signature
+        is thus changed to include a possible this reference as the first argument. 
+     2) The method is always invoked using INVOKESTATIC
+     3) The flags must indicate that the method is static and package private
+  */ 
+  public ASTNode MethodAccess.addPrivateMethodAccessor() {
+    // replace the method access with a bound access to the corresponding accessor
+    return replace(this).with(decl().createAccessor().createBoundAccess(getArgList()));
+  }
+  
+  syn lazy MethodDecl MethodDecl.createAccessor() {
+    int accessorIndex = hostType().accessorCounter++;
+    // add synthetic flag to modifiers
+    Modifiers modifiers = (Modifiers)getModifiers().fullCopy();
+    modifiers.addModifier(new Modifier("synthetic"));
+    // build accessor declaration
+    MethodDecl m = new MethodAccessorDecl(
+      modifiers,
+      type().createQualifiedAccess(),
+      new IdDecl("access$" + accessorIndex),
+      (List)getParameterList().fullCopy(),
+      new List(), // EmptyBracket*
+      (List)getExceptionList().fullCopy(),
+      new Opt(
+        new Block(
+          new List().add(
+            createAccessorStmt()
+          )
+        )
+      )
+    );
+    m.isFinal = true;
+    hostType().addBodyDecl(m);
+    return m;
+  }
+  
+  private Stmt MethodDecl.createAccessorStmt() {
+    List argumentList = new List();
+    for(int i = 0; i < getNumParameter(); i++)
+      argumentList.add(new VarAccess(new IdUse(getParameter(i).getIdDecl().getID())));
+    Access access = new MethodAccess(argumentList, new IdUse(name()));
+    if(!isStatic())
+      access = new ThisAccess(new List(), new IdUse("this")).qualifiesAccess(access);
+    return isVoid() ? (Stmt) new ExprStmt(access) : new ReturnStmt(new Opt(access));
+  }
+  
+  eq MethodAccessorDecl.descName() {
+    StringBuffer b = new StringBuffer();
+    b.append("(");
+    if(!isStatic())
+      b.append(hostType().typeDescriptor());
+    for (int i=0; i<getNumParameter(); i++)
+      b.append(getParameter(i).type().typeDescriptor());
+    b.append(")");
+    b.append(type().typeDescriptor());
+    return b.toString();
   }
 
+  public void MethodAccessorDecl.emitInvokeMethod(CodeGeneration gen, TypeDecl hostType) {
+    // compute operation stack height change
+    int size = type().size();
+    if(!isStatic())
+      size -= 1;
+    for(int i = 0; i < getNumParameter(); i++)
+      size -= getParameter(i).type().size();
+    // invoke method
+    int index = gen.constantPool().addMethodref(hostType().constantPoolName(), name(), descName());
+    gen.emit(Bytecode.INVOKESTATIC, size);
+    gen.add(index >> 8).add(index & 0xff);
+  }
+
+  eq MethodAccessorDecl.flags() = (super.flags() | Modifiers.ACC_STATIC) & (~Modifiers.ACC_PRIVATE);
+  
   public void ConstructorDecl.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
     out.writeChar(0);
     out.writeChar(cp.addUtf8("<init>"));
@@ -201,26 +297,6 @@ aspect InnerClasses {
       ((Attribute)iter.next()).emit(out);
     }
   }
-
-  public ArrayList MethodDecl.accessorAttributes() {
-    ConstantPool cp = hostType().constantPool();
-    ArrayList list = new ArrayList();
-    CodeGeneration gen = new CodeGeneration(cp);
-    int index = 0;
-    if(!isStatic())
-      gen.emitLoadReference(index++);
-    for(int i = 0; i < getNumParameter(); i++) {
-      getParameter(i).type().emitLoadLocal(gen, index);
-      index += getParameter(i).type().size();
-    }
-    emitInvokeMethod(gen, hostType());
-    type().emitReturn(gen);
-    CodeAttribute a = new CodeAttribute(gen, null);
-    list.add(a);
-    list.add(new SyntheticAttribute(cp));
-    return list;
-  }
-
 
   syn boolean ConstructorDecl.needsEnclosing() = hostType().needsEnclosing();
   syn boolean ConstructorDecl.needsSuperEnclosing() = hostType().needsSuperEnclosing();
@@ -282,43 +358,33 @@ aspect InnerClasses {
     return list;
   }
 
-  public void ASTNode.collectInnerClasses(HashSet list, ConstantPool c, TypeDecl typeDecl) {
-    for(int i = 0; i < getNumChild(); i++)
-      getChild(i).collectInnerClasses(list, c, typeDecl);
+  public Collection TypeDecl.innerClassesAttributeEntries() {
+     HashSet list = new HashSet();
+     ConstantPool c = constantPool();
+     list.add(createInnerClassesAttributeEntry(c));
+     for(Iterator iter = nestedTypes().iterator(); iter.hasNext(); ) {
+       TypeDecl typeDecl = (TypeDecl)iter.next();
+       list.add(typeDecl.createInnerClassesAttributeEntry(c));
+     }
+     for(Iterator iter = usedNestedTypes().iterator(); iter.hasNext(); ) {
+       TypeDecl typeDecl = (TypeDecl)iter.next();
+       list.add(typeDecl.createInnerClassesAttributeEntry(c));
+     }
+     return list;
   }
 
-  public void TypeAccess.collectInnerClasses(HashSet list, ConstantPool c, TypeDecl typeDecl) {
-    super.collectInnerClasses(list, c, typeDecl);
-    TypeDecl decl = type();
-    if(decl.isNestedType()) {
-      InnerClassesAttribute.Classes classes = new InnerClassesAttribute.Classes();
-      classes.inner_class_info_index = c.addClass(decl.constantPoolName());
-      classes.outer_class_info_index = !decl.isMemberType() ? 0 : c.addClass(decl.enclosingType().constantPoolName());
-      classes.inner_name_index = decl.isAnonymous() ? 0 : c.addUtf8(decl.name());
-      classes.inner_class_access_flags = decl.flags();
-      if(decl.isInterfaceDecl())
-        classes.inner_class_access_flags |= Modifiers.ACC_INTERFACE;
-      list.add(classes);
-    }
-  }
-  
-  public void TypeDecl.collectInnerClasses(HashSet list, ConstantPool c, TypeDecl typeDecl) {
-    if(isNestedType() && (typeDecl == this || typeDecl == enclosingType())) {
-      InnerClassesAttribute.Classes classes = new InnerClassesAttribute.Classes();
-      classes.inner_class_info_index = c.addClass(constantPoolName());
-      classes.outer_class_info_index = !typeDecl.isMemberType() ? 0 : c.addClass(enclosingType().constantPoolName());
-      classes.inner_name_index = isAnonymous() ? 0 : c.addUtf8(name());
-      classes.inner_class_access_flags = flags();
-      if(isInterfaceDecl())
-        classes.inner_class_access_flags |= Modifiers.ACC_INTERFACE;
-      list.add(classes);
-    }
-    if(typeDecl == this)
-      super.collectInnerClasses(list, c, typeDecl);
+  public InnerClassesAttribute.Classes TypeDecl.createInnerClassesAttributeEntry(ConstantPool c) {
+    InnerClassesAttribute.Classes classes = new InnerClassesAttribute.Classes();
+    classes.inner_class_info_index = c.addClass(constantPoolName());
+    classes.outer_class_info_index = !isMemberType() ? 0 : c.addClass(enclosingType().constantPoolName());
+    classes.inner_name_index = isAnonymous() ? 0 : c.addUtf8(name());
+    classes.inner_class_access_flags = flags();
+    if(isInterfaceDecl())
+      classes.inner_class_access_flags |= Modifiers.ACC_INTERFACE;
+    return classes;
   }
 
-
-
+/*
     public void MethodDecl.emitInvokeMethodAccessor(CodeGeneration gen, TypeDecl hostType) {
     String classname = hostType.constantPoolName();
     String      desc = accessorDescName();
@@ -334,6 +400,7 @@ aspect InnerClasses {
     gen.emit(Bytecode.INVOKESTATIC, size);
     gen.add(indexHi).add(indexLo);
   }
+  */
 
   public void ConstructorDecl.emitInvokeConstructorAccessor(CodeGeneration gen) {
     int size = -2; // take this and null (reference to anonymous class)

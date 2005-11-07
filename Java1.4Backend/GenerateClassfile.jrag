@@ -5,15 +5,19 @@ aspect GenerateClassfile {
       getCompilationUnit(i).generateClassfile();
   }
 
-  public void ASTNode.generateClassfile() {
-    for(int i = 0; i < getNumChild(); i++)
-      getChild(i).generateClassfile();
-  }
-
   public void CompilationUnit.generateClassfile() {
     for(int i = 0; i < getNumTypeDecl(); i++) {
       getTypeDecl(i).generateClassfile();
       getTypeDecl(i).clearClassfile();
+    }
+  }
+  
+  public void TypeDecl.generateClassfile() {
+    if(!nestedTypes().isEmpty()) {
+      for(Iterator iter = nestedTypes().iterator(); iter.hasNext(); ) {
+        TypeDecl typeDecl = (TypeDecl)iter.next();
+        typeDecl.generateClassfile();
+      }
     }
   }
 
@@ -299,8 +303,6 @@ aspect GenerateClassfile {
     out.writeChar(attributes().size());
     for(Iterator itera = attributes().iterator(); itera.hasNext();)
       ((Attribute)itera.next()).emit(out);
-    if(needsAccessor())
-      emitAccessor(cp, out);
   }
   public void ConstructorDecl.generateMethod(DataOutputStream out, ConstantPool cp) throws IOException {
     out.writeChar(flags());
@@ -319,11 +321,6 @@ aspect GenerateClassfile {
     cp.addUtf8(getIdDecl().getID()); // name()
     cp.addUtf8(descName());
     attributes();
-    if(needsAccessor()) {
-      cp.addUtf8("access$" + accessorIndex());
-      cp.addUtf8(accessorDescName());
-      accessorAttributes();
-    }
   }
   public void ConstructorDecl.touchMethod(ConstantPool cp) {
     cp.addUtf8("<init>");

@@ -67,6 +67,7 @@ class JavaCompiler {
     if(!program.errorCheck(files.size())) {
       if(Program.verbose())
         System.out.println("Generating class files");
+      program.java2Transformation(files.size());
       program.generateClassfile(files.size());
       return true;
     }
