@@ -4,17 +4,16 @@ aspect TypeCheck {
   }
 
   public void VariableDeclaration.typeCheck() {
-    if(hasAbstractVarInit()) {
-      TypeDecl right = getAbstractVarInit().type();
+    if(hasInit()) {
+      TypeDecl right = getInit().type();
       TypeDecl left = type();
-      //if(!right.assignConversionTo(left, getAbstractVarInit().isConstant())) {
-      if(!right.assignConversionTo(left, getAbstractVarInit() instanceof VarInit ? ((VarInit)getAbstractVarInit()).getExpr() : null)) { // DRAGONS
+      if(!right.assignConversionTo(left, getInit())) {
         StringBuffer s = new StringBuffer();
         toString(s);
         error("    " + s + "\n" + 
           "The type of the right sub-expression, \"" + 
-          right.fullName() + "\", is not assignable to the variable" +
-          ", of type \"" + left.fullName() + "\".\n");
+          right.typeName() + "\", is not assignable to the variable" +
+          ", of type \"" + left.typeName() + "\".\n");
       }
     }
   }
@@ -26,17 +25,17 @@ aspect TypeCheck {
   eq ParExpr.isVariable() = getExpr().isVariable();
  
   public void FieldDeclaration.typeCheck() {
-    if(hasAbstractVarInit()) {
-      TypeDecl source = getAbstractVarInit().type();
+    if(hasInit()) {
+      TypeDecl source = getInit().type();
       TypeDecl dest = type();
-      if(source.assignConversionTo(dest, getAbstractVarInit() instanceof VarInit ? ((VarInit)getAbstractVarInit()).getExpr() : null))
+      if(source.assignConversionTo(dest, getInit()))
         return;
       StringBuffer s = new StringBuffer();
       toString(s);
       error("    " + s + "\n" +
         "The type of the right sub-expression, \"" + 
-        source.fullName() + "\", is not assignable to the field" +
-        ", of type \"" + dest.fullName() + "\".\n");
+        source.typeName() + "\", is not assignable to the field" +
+        ", of type \"" + dest.typeName() + "\".\n");
     }
   }
 
@@ -52,8 +51,8 @@ aspect TypeCheck {
     toString(s);
     error("    " + s + "\n" +
         "The type of the right sub-expression, \"" + 
-        getSource().type().fullName() + "\", is not assignable to the variable" +
-        ", of type \"" + getDest().type().fullName() + "\".\n");
+        getSource().type().typeName() + "\", is not assignable to the variable" +
+        ", of type \"" + getDest().type().typeName() + "\".\n");
   }
   
   public void AssignExpr.typeCheck() {
@@ -70,8 +69,8 @@ aspect TypeCheck {
     toString(s);
     error("    " + s + "\n" +
         "The type of the right sub-expression, \"" + 
-        getSource().type().fullName() + "\", is not assignable to the variable" +
-        ", of type \"" + getDest().type().fullName() + "\".\n");
+        getSource().type().typeName() + "\", is not assignable to the variable" +
+        ", of type \"" + getDest().type().typeName() + "\".\n");
   }
 
   public void AssignMulExpr.typeCheck() {
@@ -108,8 +107,8 @@ aspect TypeCheck {
     toString(s);
     error("    " + s + "\n" +
         "The type of the right sub-expression, \"" + 
-        getSource().type().fullName() + "\", is not assignable to the variable" +
-        ", of type \"" + getDest().type().fullName() + "\".\n");
+        getSource().type().typeName() + "\", is not assignable to the variable" +
+        ", of type \"" + getDest().type().typeName() + "\".\n");
   }
   public void AssignMinusExpr.typeCheck() {
     if(sourceType().isBoolean() || getDest().type().isBoolean()) {
@@ -160,7 +159,7 @@ aspect TypeCheck {
     }
     else {
       error("Operator | only operates on integral and boolean types");
-      error("    not " + source.fullName() + " and " + dest.fullName());
+      error("    not " + source.typeName() + " and " + dest.typeName());
     }
   }
   public void AssignXorExpr.typeCheck() {
@@ -218,7 +217,7 @@ aspect TypeCheck {
       TypeDecl exprType = getArg(i).type();
       TypeDecl parmType = decl().getParameter(i).type();
       if(!exprType.methodInvocationConversionTo(parmType)) {
-        error("*The type " + exprType.fullName() + " of expr " +
+        error("*The type " + exprType.typeName() + " of expr " +
             getArg(i) + " is not compatible with the method parameter " +
             decl().getParameter(i));
       }
@@ -230,18 +229,15 @@ aspect TypeCheck {
     if(isQualified() && !(qualifier().type().dimension() > 0) && !qualifier().type().isUnknown() && !qualifier().type().isIllegal())
       error("the type " + qualifier().type().name() + " of the indexed element is not an array");
     if(!getExpr().type().unaryNumericPromotion().isInt())
-      error("array index must be int after unary numeric promotion which " + getExpr().type().fullName() + " is not");
+      error("array index must be int after unary numeric promotion which " + getExpr().type().typeName() + " is not");
   }
 
   public void ArrayInit.typeCheck() {
     TypeDecl initializerType = lookupArray(declType().elementType(), declType().dimension() - 1);
-    for(int i = 0; i < getNumAbstractVarInit(); i++) {
-      //if(!getAbstractVarInit(i).type().instanceOf(initializerType))
-      if(getAbstractVarInit(i) instanceof VarInit) {
-        Expr e = ((VarInit)getAbstractVarInit(i)).getExpr();
-        if(!e.type().assignConversionTo(initializerType, e))
-          error("the type " + e.type().name() + " of the initializer is not compatible with " + initializerType.name()); 
-      }
+    for(int i = 0; i < getNumInit(); i++) {
+      Expr e = getInit(i);
+      if(!e.type().assignConversionTo(initializerType, e))
+        error("the type " + e.type().name() + " of the initializer is not compatible with " + initializerType.name()); 
     }
   }
   
@@ -257,8 +253,8 @@ aspect TypeCheck {
       toString(thisString);
       error("    " + thisString + "\n" + 
           "The type of the left hand side, \"" + 
-          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.fullName() + "\".\n");
+          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.typeName() + "\".\n");
     }
   }
   
@@ -267,10 +263,10 @@ aspect TypeCheck {
     TypeDecl right = getRightOperand().type();
     TypeDecl type = left.binaryNumericPromotion(right);
     if(!left.isNumericType() && !left.isIllegal() && !left.isUnknown()) {
-      error("The type " + left.fullName() + " of the left hand side is not numeric");
+      error("The type " + left.typeName() + " of the left hand side is not numeric");
     }
     if(!right.isNumericType() && !right.isIllegal() && !right.isUnknown()) {
-      error("The type " + right.fullName() + " of the right hand side is not numeric");
+      error("The type " + right.typeName() + " of the right hand side is not numeric");
     }
     if(!type.isNumericType()) {
       StringBuffer leftString = new StringBuffer();
@@ -281,8 +277,8 @@ aspect TypeCheck {
       toString(thisString);
       error("    " + thisString + "\n" + 
           "The type of the left hand side, \"" + 
-          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.fullName() + "\".\n");
+          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.typeName() + "\".\n");
     }
   }
 
@@ -290,14 +286,14 @@ aspect TypeCheck {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
     if(left.isNumericType() && !right.isNumericType()) {
-      error("The type \"" + right.fullName() + "\" of the right hand side is not numeric");
+      error("The type \"" + right.typeName() + "\" of the right hand side is not numeric");
     }
     else if(!left.isNumericType() && right.isNumericType()) {
-      error("The type \"" + left.fullName() + "\" of the left hand side is not numeric");
+      error("The type \"" + left.typeName() + "\" of the left hand side is not numeric");
     }
     else if(!left.isNumericType() && !right.isNumericType()) {
-      error("Neither the type \"" + left.fullName() + "\" of the left hand side, nor the type \"" + 
-            right.fullName() + "\" of the right hand side is numeric");
+      error("Neither the type \"" + left.typeName() + "\" of the left hand side, nor the type \"" + 
+            right.typeName() + "\" of the right hand side is numeric");
     }
   }
 
@@ -305,14 +301,14 @@ aspect TypeCheck {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
     if(left.isBoolean() && !right.isBoolean()) {
-      error("The type \"" + right.fullName() + "\" of the right hand side is not boolean");
+      error("The type \"" + right.typeName() + "\" of the right hand side is not boolean");
     }
     else if(!left.isBoolean() && right.isBoolean()) {
-      error("The type \"" + left.fullName() + "\" of the left hand side is not boolean");
+      error("The type \"" + left.typeName() + "\" of the left hand side is not boolean");
     }
     else if(!left.isBoolean() && !right.isBoolean()) {
-      error("Neither the type \"" + left.fullName() + "\" of the left hand side, nor the type \"" + 
-            right.fullName() + "\" of the right hand side is boolean");
+      error("Neither the type \"" + left.typeName() + "\" of the left hand side, nor the type \"" + 
+            right.typeName() + "\" of the right hand side is boolean");
     }
   }
 
@@ -337,8 +333,8 @@ aspect TypeCheck {
       toString(thisString);
       error("    " + thisString + "\n" + 
           "The type of the left hand side, \"" + 
-          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.fullName() + "\".\n");
+          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.typeName() + "\".\n");
   }
 
   public void NEExpr.typeCheck() {
@@ -362,8 +358,8 @@ aspect TypeCheck {
       toString(thisString);
       error("    " + thisString + "\n" + 
           "The type of the left hand side, \"" + 
-          left.fullName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.fullName() + "\".\n");
+          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
+          right.typeName() + "\".\n");
   }
 
 
@@ -393,8 +389,8 @@ aspect TypeCheck {
     if(!referenceType.isReferenceType())
       error("The reference expression in instance of must be reference type");
     if(!relationalExpr.castingConversionTo(referenceType))
-      error("The type " + relationalExpr.fullName() + " of the relational expression " + 
-        getExpr() +  " can not be cast into the type " + referenceType.fullName());
+      error("The type " + relationalExpr.typeName() + " of the relational expression " + 
+        getExpr() +  " can not be cast into the type " + referenceType.typeName());
     if(getExpr().isTypeAccess())
       error("The relational expression " + getExpr() + " must not be a type name");
   }
@@ -406,8 +402,8 @@ aspect TypeCheck {
       StringBuffer s = new StringBuffer();
       toString(s);
       error("    " + s + "\n" +
-          "An expression of type \"" + expr.fullName() + 
-          "\" cannot be cast into type \"" + type.fullName() + "\".\n");
+          "An expression of type \"" + expr.typeName() + 
+          "\" cannot be cast into type \"" + type.typeName() + "\".\n");
     }
     if(!getTypeAccess().isTypeAccess()) {
       error("" + getTypeAccess() + " is not a type access in cast expression");
@@ -496,13 +492,13 @@ aspect TypeCheck {
   eq SwitchStmt.getCase().switchType() = getExpr().type();
 
   
-  public void SynchronizeStmt.typeCheck() {
+  public void SynchronizedStmt.typeCheck() {
     TypeDecl type = getExpr().type();
     if(!type.isReferenceType() || type.isNull())
       error("*** The type of the expression must be a reference");
   }
 
-  public void Catch.typeCheck() {
+  public void CatchClause.typeCheck() {
     if(!getParameter().type().instanceOf(typeThrowable()))
       error("*** The catch variable must extend Throwable");
   }
@@ -510,6 +506,49 @@ aspect TypeCheck {
   public void ThrowStmt.typeCheck() {
     if(!getExpr().type().instanceOf(typeThrowable()))
       error("*** The thrown expression must extend Throwable");
+  }
+
+  public void MethodDecl.typeCheck() {
+    // Thrown vs super class method see MethodDecl.nameCheck
+    // 8.4.4
+    TypeDecl exceptionType = typeThrowable();
+    for(int i = 0; i < getNumException(); i++) {
+      TypeDecl typeDecl = getException(i).type();
+      if(!typeDecl.instanceOf(exceptionType))
+        error(signature() + " throws non throwable type " + typeDecl.fullName());
+    }
+
+    // check returns
+    if(!isVoid() && hasBlock() && getBlock().canCompleteNormally())
+      error("the body of a non void method may not complete normally");
+
+  }
+  // 14.16
+  public void ReturnStmt.typeCheck() {
+    if(hasResult() && !hostBodyDecl().isVoid() && hostBodyDecl() instanceof MethodDecl) {
+      MethodDecl m = (MethodDecl)hostBodyDecl();
+      if(!getResult().type().assignConversionTo(m.type(), getResult()))
+        error("return value must be an instance of " + m.type().typeName() + " which " + getResult().type().typeName() + " is not");
+    }
+    // 8.4.5 8.8.5
+    if(hostBodyDecl().isVoid() && hasResult())
+      error("return stmt may not have an expression in void methods");
+    // 8.4.5
+    if(!hostBodyDecl().isVoid() && !hasResult())
+      error("return stmt must have an expression in non void methods");
+    if(hostBodyDecl() instanceof InstanceInitializer || hostBodyDecl() instanceof StaticInitializer)
+      error("Initializers may not return");
+
+  }
+
+  public void ConstructorDecl.typeCheck() {
+    // 8.8.4 (8.4.4)
+    TypeDecl exceptionType = typeThrowable();
+    for(int i = 0; i < getNumException(); i++) {
+      TypeDecl typeDecl = getException(i).type();
+      if(!typeDecl.instanceOf(exceptionType))
+        error(signature() + " throws non throwable type " + typeDecl.fullName());
+    }
   }
 
 
@@ -521,7 +560,7 @@ aspect TypeCheck {
   eq StaticInitializer.getBlock().enclosingInstance() = null;
   //eq InstanceInitializer.getBlock().enclosingInstance() = null;
   eq TypeDecl.getBodyDecl().enclosingInstance() {
-    if(getBodyDecl(childIndex) instanceof MemberType && !((MemberType)getBodyDecl(childIndex)).getTypeDecl().isInnerType())
+    if(getBodyDecl(childIndex) instanceof MemberTypeDecl && !((MemberTypeDecl)getBodyDecl(childIndex)).getTypeDecl().isInnerType())
       return null;
     if(getBodyDecl(childIndex) instanceof ConstructorDecl)
       return enclosingInstance();
@@ -532,6 +571,9 @@ aspect TypeCheck {
   inh TypeDecl ConstructorDecl.illegalType();
   eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = illegalType();
   
+
+  syn boolean ClassInstanceExpr.noEnclosingInstance() = isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
+  
   public void ClassInstanceExpr.typeCheck() {
     if(isQualified() && qualifier().isTypeAccess())
       error("*** The expression in a qualified class instance expr must not be a type name");
@@ -540,13 +582,13 @@ aspect TypeCheck {
       error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
     }
     if(!type().isClassDecl()) {
-      error("*** Can only instantiate classes, which " + type().fullName() + " is not"); 
+      error("*** Can only instantiate classes, which " + type().typeName() + " is not"); 
     }
     TypeDecl C = type();
     if(C.isInnerClass()) {
       TypeDecl enclosing = null;
       if(C.isAnonymous()) {
-        if(inStaticContext()) {
+        if(noEnclosingInstance()) {
           enclosing = null;
         }
         else {
@@ -561,7 +603,7 @@ aspect TypeCheck {
         if(C.inStaticContext()) {
           enclosing = null;
         }
-        else if(inStaticContext()) {
+        else if(noEnclosingInstance()) {
           enclosing = illegalType();
         }
         else {
@@ -570,8 +612,8 @@ aspect TypeCheck {
       }
       else if(C.isMemberType()) {
         if(!isQualified()) {
-          if(inStaticContext()) {
-            System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.fullName() + " is in a static context when instantiated in " + this);
+          if(noEnclosingInstance()) {
+            System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.typeName() + " is in a static context when instantiated in " + this);
             enclosing = illegalType();
           }
           else {
@@ -586,38 +628,38 @@ aspect TypeCheck {
         }
       }
       if(enclosing != null && !enclosing.instanceOf(type().enclosingType())) {
-        String msg = enclosing == null ? "None" : enclosing.fullName();
-        error("*** Can not instantiate " + type().fullName() + " with the enclosing instance " + msg + " due to incorrect enclosing instance");
+        String msg = enclosing == null ? "None" : enclosing.typeName();
+        error("*** Can not instantiate " + type().typeName() + " with the enclosing instance " + msg + " due to incorrect enclosing instance");
       }
       else if(!isQualified() && C.isMemberType() && inExplicitConstructorInvocation() && enclosing == hostType()) {
-        error("*** The innermost enclosing instance of type " + enclosing.fullName() + " is this which is not yet initialized here.");
+        error("*** The innermost enclosing instance of type " + enclosing.typeName() + " is this which is not yet initialized here.");
       }
       if(type().isAnonymous() && ((ClassDecl)type()).superclass().isInnerType()) {
         TypeDecl S = ((ClassDecl)type()).superclass();
         if(S.isLocalClass()) {
           if(S.inStaticContext()) {
           }
-          else if(inStaticContext()) {
-            error("*** No enclosing instance to class " + type().fullName() + " due to static context");
+          else if(noEnclosingInstance()) {
+            error("*** No enclosing instance to class " + type().typeName() + " due to static context");
           }
           else if(inExplicitConstructorInvocation())
-            error("*** No enclosing instance to superclass " + S.fullName() + " of " + type().fullName() + " since this is not initialized yet");
+            error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName() + " since this is not initialized yet");
         }
         else if(S.isMemberType()) {
           if(!isQualified()) {
             // 15.9.2 2nd paragraph
-            if(inStaticContext()) {
-              error("*** No enclosing instance to class " + type().fullName() + " due to static context");
+            if(noEnclosingInstance()) {
+              error("*** No enclosing instance to class " + type().typeName() + " due to static context");
             }
             else {
               TypeDecl nest = hostType();
               while(nest != null && !nest.instanceOf(S.enclosingType()))
                 nest = nest.enclosingType();
               if(nest == null) {
-                error("*** No enclosing instance to superclass " + S.fullName() + " of " + type().fullName());
+                error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName());
               }
               else if(inExplicitConstructorInvocation()) {
-                error("*** No enclosing instance to superclass " + S.fullName() + " of " + type().fullName() + " since this is not initialized yet");
+                error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName() + " since this is not initialized yet");
               }
             }
           }
@@ -635,16 +677,16 @@ aspect TypeCheck {
     */
   }
 
-  public void ArrayInstanceExpr.typeCheck() {
+  public void ArrayCreationExpr.typeCheck() {
     super.typeCheck();
     for(int i = 0; i < getNumDims(); i++) {
       if(getDims(i).hasExpr() && !getDims(i).getExpr().type().unaryNumericPromotion().isInt())
-        error("The type of dimension " + i + " which is " + getDims(i).getExpr().type().fullName() +
+        error("The type of dimension " + i + " which is " + getDims(i).getExpr().type().typeName() +
               " is not int after unary numeric promotion");
     }
   }
 
-  public void QuestionColonExpr.typeCheck() {
+  public void ConditionalExpr.typeCheck() {
     if(!getCondition().type().isBoolean())
       error("*** First expression must be a boolean in conditional operator");
     if(type() == illegalType()) {
@@ -663,7 +705,7 @@ aspect TypeCheck {
 
  }
 
- public void FPLiteral.typeCheck() {
+ public void FloatingPointLiteral.typeCheck() {
    if(!isZero() && constant().floatValue() == 0.0f)
      error("It is an error for nonzero floating-point " + getLITERAL() + " to round to zero");
    if(constant().floatValue() == Float.NEGATIVE_INFINITY || constant().floatValue() == Float.POSITIVE_INFINITY)
@@ -677,14 +719,6 @@ aspect TypeCheck {
      error("It is an error for floating-point " + getLITERAL() + " to round to an infinity");
  }
 
-  // 14.16
-  public void ReturnStmt.typeCheck() {
-    if(hasResult() && !hostBodyDecl().isVoid() && hostBodyDecl() instanceof MethodDecl) {
-      MethodDecl m = (MethodDecl)hostBodyDecl();
-      if(!getResult().type().assignConversionTo(m.type(), getResult()))
-        error("return value must be an instance of " + m.type().fullName() + " which " + getResult().type().fullName() + " is not");
-    }
-  }
  
 } 
 

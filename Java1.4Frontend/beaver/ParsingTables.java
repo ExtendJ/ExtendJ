@@ -19,6 +19,201 @@ import java.util.zip.InflaterInputStream;
  */
 public final class ParsingTables
 {
+	/** A table with all actions */
+	private final short[] actions;
+
+	/**
+	 * A table containing the lookahead for each entry in "actions" table.
+	 * Used to detect "collisions".
+	 */
+	final short[] lookaheads;
+
+	/**
+	 * For each state, the offset into "actions" table that is used to find action for a terminal
+	 * that has been fetched from the scanner.
+	 */
+	final int[] actn_offsets;
+
+	/**
+	 * For each state, the offset into "actions" table that is used to find a next parser's state
+	 * using a nonterminal that has been created by a reduced production.
+	 */
+	private final int[] goto_offsets;
+
+	/** Default action for each state */
+	private final short[] default_actions;
+
+	/**
+	 * A table with encoded production information.
+	 * <p/>
+	 * Each slot in this table is a "structure":
+	 * <pre>
+	 *   short lhs_symbol_id ; // Symbol on the left-hand side of the production
+	 *   short rhs_length    ; // Number of right-hand side symbols in the production
+	 * </pre>
+	 * where lhs_symbol_id uses high 16 bit of this structure, and rhs_length - lower 16 bits
+	 */
+	final int[] rule_infos;
+
+	/** ID of the "error" nonterminal */
+	final short error_symbol_id;
+
+	/** Indicates whether action tables were compressed. */
+	final boolean compressed;
+	
+	/** Number of terminal symbols. */
+	final int n_term;
+
+	public ParsingTables(Class impl_class)
+	{
+		this(getSpecAsResourceStream(impl_class));
+	}
+	
+	/**
+	 * Ensures that parser tables are loaded.
+	 *
+	 * @param impl_class class of the instance of the Parser
+	 */
+	public ParsingTables(String spec)
+	{
+		this(new ByteArrayInputStream(decode(spec)));
+	}
+	
+	private ParsingTables(InputStream in)
+	{
+		try
+		{
+			DataInputStream data = new DataInputStream(new InflaterInputStream(in));
+			try
+			{
+				int len = data.readInt();
+				actions = new short[len];
+				for (int i = 0; i < len; i++)
+				{
+					actions[i] = data.readShort();
+				}
+				lookaheads = new short[len];
+				for (int i = 0; i < len; i++)
+				{
+					lookaheads[i] = data.readShort();
+				}
+				
+				len = data.readInt();
+				actn_offsets = new int[len];
+				for (int i = 0; i < len; i++)
+				{
+					actn_offsets[i] = data.readInt();
+				}
+				goto_offsets = new int[len];
+				for (int i = 0; i < len; i++)
+				{
+					goto_offsets[i] = data.readInt();
+				}
+				
+				len = data.readInt();
+				compressed = len != 0;
+				if (compressed)
+				{
+					default_actions = new short[len];
+					for (int i = 0; i < len; i++)
+					{
+						default_actions[i] = data.readShort();
+					}
+				}
+				else
+				{
+					default_actions = null;
+				}
+				
+				int min_nt_id = Integer.MAX_VALUE;
+				len = data.readInt();
+				rule_infos = new int[len];
+				for (int i = 0; i < len; i++)
+				{
+					rule_infos[i] = data.readInt();
+					min_nt_id = Math.min(min_nt_id, rule_infos[i] >>> 16);
+				}
+				n_term = min_nt_id;
+				
+				error_symbol_id = data.readShort();
+			}
+			finally
+			{
+				data.close();
+			}
+		}
+		catch (IOException e)
+		{
+			throw new IllegalStateException("cannot initialize parser tables: " + e.getMessage());
+		}
+	}
+	
+	/**
+	 * Scans lookaheads expected in a given state for a terminal symbol.
+	 * Used in error recovery when an unexpected terminal is replaced with one that is expected.
+	 * 
+	 * @param state in which error occured
+	 * @return ID of the expected terminal symbol or -1 if there is none
+	 */
+	final short findFirstTerminal(int state)
+	{
+		int offset = actn_offsets[state];
+		for (short term_id = offset < 0 ? (short) -offset : 0; term_id < n_term; term_id++)
+		{
+			int index = offset + term_id;
+			if (index >= lookaheads.length)
+				break;
+			if (lookaheads[index] == term_id)
+				return term_id;
+		}
+		return -1;
+	}
+
+	/**
+	 * Find the appropriate action for a parser in a given state with a specified terminal look-ahead.
+	 *
+	 * @param state     of a parser
+	 * @param lookahead
+	 * @return parser action
+	 */
+	final short findParserAction(int state, short lookahead)
+	{
+		int index = actn_offsets[state];
+		if (index != UNUSED_OFFSET)
+		{
+			index += lookahead;
+			if (0 <= index && index < actions.length && lookaheads[index] == lookahead)
+			{
+				return actions[index];
+			}
+		}
+		return compressed ? default_actions[state] : 0;
+	}
+
+	/**
+	 * Find the appropriate action for a parser in a given state with a specified nonterminal look-ahead.
+	 * In this case the only possible outcomes are either a state to shift to or an accept action.
+	 *
+	 * @param state     of a parser
+	 * @param lookahead
+	 * @return parser action
+	 */
+	final short findNextState(int state, short lookahead)
+	{
+		int index = goto_offsets[state];
+		if (index != UNUSED_OFFSET)
+		{
+			index += lookahead;
+			if (0 <= index && index < actions.length && lookaheads[index] == lookahead)
+			{
+				return actions[index];
+			}
+		}
+		return compressed ? default_actions[state] : 0;
+	}
+
+	static final int UNUSED_OFFSET = Integer.MIN_VALUE;
+	
 	static byte[] decode(String spec)
 	{
 		char[] chars = spec.toCharArray();
@@ -80,169 +275,6 @@ public final class ParsingTables
 		if (spec_stream == null)
 			throw new IllegalStateException("parser specification not found");
 		return spec_stream;
-	}
-	
-	/** A table with all actions */
-	final short[] actions;
-
-	/**
-	 * A table containing the lookahead for each entry in "actions" table.
-	 * Used to detect "collisions".
-	 */
-	final short[] lookaheads;
-
-	/**
-	 * For each state, the offset into "actions" table that is used to find action for a terminal
-	 * that has been fetched from the scanner.
-	 */
-	final short[] actn_offsets;
-
-	/**
-	 * For each state, the offset into "actions" table that is used to find a next parser's state
-	 * using a nonterminal that has been created by a reduced production.
-	 */
-	final short[] goto_offsets;
-
-	/** Default action for each state */
-	final short[] default_actions;
-
-	/**
-	 * A table with encoded production information.
-	 * <p/>
-	 * Each slot in this table is a "structure":
-	 * <pre>
-	 *   short lhs_symbol_id ; // Symbol on the left-hand side of the production
-	 *   short rhs_length    ; // Number of right-hand side symbols in the production
-	 * </pre>
-	 * where lhs_symbol_id uses high 16 bit of this structure, and rhs_length - lower 16 bits
-	 */
-	final int[] rule_infos;
-
-	/** ID of the "error" nonterminal */
-	final short error_symbol_id;
-
-	/** Indicates whether action tables were compressed. */
-	final boolean compressed;
-	
-	/** Number of terminal symbols. */
-	final int n_term;
-	
-	public ParsingTables(Class impl_class)
-	{
-		this(getSpecAsResourceStream(impl_class));
-	}
-	
-	/**
-	 * Ensures that parser tables are loaded.
-	 *
-	 * @param impl_class class of the instance of the Parser
-	 */
-	public ParsingTables(String spec)
-	{
-		this(new ByteArrayInputStream(decode(spec)));
-	}
-	
-	private ParsingTables(InputStream in)
-	{
-		try
-		{
-			DataInputStream data = new DataInputStream(new InflaterInputStream(in));
-			try
-			{
-				short len = data.readShort();
-				actions = new short[len];
-				for (int i = 0; i < len; i++)
-					actions[i] = data.readShort();
-				lookaheads = new short[len];
-				for (int i = 0; i < len; i++)
-					lookaheads[i] = data.readShort();
-	
-				len = data.readShort();
-				actn_offsets = new short[len];
-				for (int i = 0; i < len; i++)
-					actn_offsets[i] = data.readShort();
-				goto_offsets = new short[len];
-				for (int i = 0; i < len; i++)
-					goto_offsets[i] = data.readShort();
-				
-				boolean has_default_actions = false;
-				default_actions = new short[len];
-				for (int i = 0; i < len; i++)
-					if ((default_actions[i] = data.readShort()) != 0)
-						has_default_actions = true;
-				compressed = has_default_actions;
-	
-				int min_nt_id = Integer.MAX_VALUE;
-				len = data.readShort();
-				rule_infos = new int[len];
-				for (int i = 0; i < len; i++)
-					min_nt_id = Math.min(min_nt_id, (rule_infos[i] = data.readInt()) >>> 16);
-				n_term = min_nt_id;
-				
-				error_symbol_id = data.readShort();
-			}
-			finally
-			{
-				data.close();
-			}
-		}
-		catch (IOException e)
-		{
-			throw new IllegalStateException("cannot initialize parser tables: " + e.getMessage());
-		}
-	}
-	
-	final short findFirstTerminal(int state)
-	{
-		int offset = actn_offsets[state];
-		for (short term_id = offset < 0 ? (short) -offset : 0; term_id < n_term; term_id++)
-		{
-			int index = offset + term_id;
-			if (index >= lookaheads.length)
-				break;
-			if (lookaheads[index] == term_id)
-				return term_id;
-		}
-		return -1;
-	}
-
-	/**
-	 * Find the appropriate action for a parser in a given state with a specified terminal look-ahead.
-	 *
-	 * @param state     of a parser
-	 * @param lookahead
-	 * @return parser action
-	 */
-	final short findParserAction(int state, short lookahead)
-	{
-		int index = actn_offsets[state];
-		if (index != Short.MAX_VALUE)
-		{
-			index += lookahead;
-			if (0 <= index && index < actions.length && lookaheads[index] == lookahead)
-				return actions[index];
-		}
-		return default_actions[state];
-	}
-
-	/**
-	 * Find the appropriate action for a parser in a given state with a specified nonterminal look-ahead.
-	 * In this case the only possible outcomes are either a state to shift to or an accept action.
-	 *
-	 * @param state     of a parser
-	 * @param lookahead
-	 * @return parser action
-	 */
-	final short findNextState(int state, short lookahead)
-	{
-		int index = goto_offsets[state];
-		if (index != Short.MAX_VALUE)
-		{
-			index += lookahead;
-			if (0 <= index && index < actions.length && lookaheads[index] == lookahead)
-				return actions[index];
-		}
-		return default_actions[state];
 	}
 }
 

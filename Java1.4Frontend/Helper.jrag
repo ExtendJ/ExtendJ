@@ -1,5 +1,80 @@
 import java.util.*;
 
+aspect Names {
+  // simple names
+  syn String ParseName.name() = getIdUse().getID();
+  syn String PackageOrTypeAccess.name() = getIdUse().getID();
+  syn String AmbiguousAccess.name() = getIdUse().getID();
+  syn String VarAccess.name() = getIdUse().getID();
+  syn String MethodAccess.name() = getIdUse().getID();
+  syn String ConstructorAccess.name() = "this";
+  syn String SuperConstructorAccess.name() = "super";
+  syn String TypeAccess.name() = getIdUse().getID();
+  
+  syn String PackageAccess.name() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++)
+      s.append(getPackage(i).getID() + ".");
+    return s.toString();
+  }
+  
+  syn String TypeAccess.packageName() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++) {
+      if(i > 0) s.append(".");
+      s.append(getPackage(i).getID());
+    }
+    return s.toString();
+  }
+  
+  syn String PackageAccess.packageName() {
+    StringBuffer s = new StringBuffer();
+    if(hasPrevExpr() && prevExpr().isPackageAccess()) {
+      s.append(((PackageAccess)prevExpr()).packageName());
+      s.append(".");
+    }
+    for(int i = 0; i < getNumPackage(); i++) {
+      if(i > 0) s.append(".");
+      s.append(getPackage(i).getID());
+    }
+    return s.toString();
+  }
+
+
+  // human readable qualified names
+  syn String TypeAccess.nameWithPackage() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++)
+      s.append(getPackage(i).getID() + ".");
+    s.append(name());
+    return s.toString();
+  }
+
+  syn String SingleTypeImportDecl.typeName() {
+    Access a = getAccess().lastAccess();
+    String name = a.isTypeAccess() ? ((TypeAccess)a).nameWithPackage() : "";
+    while(a.hasPrevExpr() && a.prevExpr() instanceof Access) {
+      Access pred = (Access)a.prevExpr();
+      if(pred.isTypeAccess())
+        name = ((TypeAccess)pred).nameWithPackage() + "." + name;
+      a = pred;
+    }
+    return name;
+  }
+  syn String TypeImportOnDemandDecl.typeName() {
+    Access a = getAccess().lastAccess();
+    String name = a.isTypeAccess() ? ((TypeAccess)a).nameWithPackage() : "";
+    while(a.hasPrevExpr() && a.prevExpr() instanceof Access) {
+      Access pred = (Access)a.prevExpr();
+      if(pred.isTypeAccess())
+        name = ((TypeAccess)pred).nameWithPackage() + "." + name;
+      a = pred;
+    }
+    return name;
+  }
+
+}
+
 aspect TypeName {
   syn String TypeDecl.name() = getIdDecl().getID();
 
@@ -9,6 +84,14 @@ aspect TypeName {
       return name();
     return packageName + "." + name();
   }
+
+  syn lazy String TypeDecl.typeName() {
+    String packageName = packageName();
+    if(packageName.equals("") || packageName.equals("primitive"))
+      return name();
+    return packageName + "." + name();
+  }
+  eq ArrayDecl.typeName() = componentType().typeName() + "[]";
 
   inh lazy String TypeDecl.packageName();
   eq CompilationUnit.getTypeDecl().packageName() = packageName();
@@ -100,10 +183,6 @@ aspect SuperClasses {
             return;
           }
         }
-        if(getNumSuperInterfaceId() == 0 && index == 0) {
-          current = typeObject();
-          index++;
-        }
       }
     };
   }
@@ -161,9 +240,9 @@ aspect ImplicitConstructor {
     to ConstructorDecl {
       setConstructorInvocation(
         new ExprStmt(
-        new SuperConstructorAccess(new List(), new IdUse("super"))
-        )
-      );
+          new SuperConstructorAccess(new List(), "super")
+          )
+        );
       return this;
     }
   }
@@ -188,22 +267,18 @@ aspect AnonymousClasses {
   
   public Access TypeDecl.createQualifiedAccess() {
     if(isLocalClass() || isAnonymous()) {
-      return new TypeAccess(new List(), new IdUse(name()));
+      return new TypeAccess(name());
     }
     else if(!isTopLevelType()) {
-      return enclosingType().createQualifiedAccess().qualifiesAccess(new TypeAccess(new List(), new IdUse(name())));
+      return enclosingType().createQualifiedAccess().qualifiesAccess(new TypeAccess(name()));
     }
     else {
-      String[] strings = fullName().split("\\.");
-      List list = new List();
-      for(int i = 0; i < strings.length - 1; i++)
-        list.add(new IdUse(strings[i]));
-      return new TypeAccess(list, new IdUse(strings[strings.length-1]));
+      return new TypeAccess(packageName(), name());
     }
   }
 
   public Access PrimitiveType.createQualifiedAccess() {
-    return new TypeAccess(new List().add(new IdUse("primitive")), new IdUse(name()));
+    return new TypeAccess("primitive", name());
   }
   
   protected static int ASTNode.anonymousIndex = 0;
@@ -222,7 +297,6 @@ aspect AnonymousClasses {
   }
 
   rewrite AnonymousDecl {
-    //when(!duringResolveAmbiguousNames() && !duringVariableDeclaration() && !duringHelper() && noConstructor())
     when(noConstructor())
     to AnonymousDecl {
       setModifiers(new Modifiers(new List().add(new Modifier("final"))));
@@ -230,16 +304,16 @@ aspect AnonymousClasses {
       ConstructorDecl constructor = (ConstructorDecl)constructorDecl().fullCopy();
       addBodyDecl(constructor);
 
-      getIdDecl().setID("Anonymous" + anonymousIndex++);
-      constructor.setIdDecl((IdDecl)getIdDecl().fullCopy());
+      String name = "Anonymous" + anonymousIndex++;
+      setIdDecl(new IdDecl(name));
+      constructor.setIdDecl(new IdDecl(name));
 
       List parameterList = new List();
       for(int i = 0; i < constructorDecl().getNumParameter(); i++) {
         parameterList.add(
           new ParameterDeclaration(
-            new Modifiers(new List()),
             constructorDecl().getParameter(i).type().createQualifiedAccess(),
-            new IdDecl(constructorDecl().getParameter(i).getIdDecl().getID())
+            constructorDecl().getParameter(i).name()
           )
         );
       }
@@ -247,12 +321,10 @@ aspect AnonymousClasses {
       
       List argList = new List();
       for(int i = 0; i < constructor.getNumParameter(); i++)
-        argList.add(new VarAccess(new IdUse(constructor.getParameter(i).getIdDecl().getID())));
+        argList.add(new VarAccess(constructor.getParameter(i).name()));
       constructor.setConstructorInvocation(
         new ExprStmt(
-          new SuperConstructorAccess(
-            argList, new IdUse("super")
-          )
+          new SuperConstructorAccess(argList, "super")
         )
       );
       constructor.setBlock(new Block());
@@ -266,7 +338,6 @@ aspect AnonymousClasses {
         else if(getBodyDecl(i) instanceof FieldDeclaration) {
           FieldDeclaration f = (FieldDeclaration)getBodyDecl(i);
           if(f.isInstanceVariable()) {
-            //System.err.println(f.name() + " in anonymous class " + fullName() + " may throw exceptions");
             set.addAll(f.exceptions());
           }
         }

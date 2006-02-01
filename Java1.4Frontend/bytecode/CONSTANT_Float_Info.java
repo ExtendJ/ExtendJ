@@ -1,7 +1,7 @@
 package bytecode;
 
 import AST.Expr;
-import AST.FPLiteral;
+import AST.FloatingPointLiteral;
 
 
 class CONSTANT_Float_Info extends CONSTANT_Info {
@@ -17,6 +17,6 @@ class CONSTANT_Float_Info extends CONSTANT_Info {
 	}
 
 	public Expr expr() {
-		return new FPLiteral(Float.toString(value));
+		return new FloatingPointLiteral(Float.toString(value));
 	}
 }

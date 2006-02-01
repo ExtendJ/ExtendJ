@@ -3,8 +3,6 @@ import java.util.*;
 aspect AccessTypes {
   syn boolean Expr.isTypeAccess() = false;
   eq TypeAccess.isTypeAccess() = true;
-  eq ThisAccess.isTypeAccess() = false;
-  eq SuperAccess.isTypeAccess() = false;
   eq AbstractDot.isTypeAccess() = getRight().isTypeAccess();
 
   syn boolean Expr.isMethodAccess() = false;
@@ -45,51 +43,43 @@ aspect AccessTypes {
 }
 
 aspect QualifiedNames {
-  syn boolean Expr.isLeftChildOfDot() = getParent() instanceof AbstractDot && ((AbstractDot)getParent()).getLeft() == this;
-  syn boolean Expr.isRightChildOfDot() = getParent() instanceof AbstractDot && ((AbstractDot)getParent()).getRight() == this;
+  syn boolean Expr.isLeftChildOfDot() = hasParentDot() && parentDot().getLeft() == this;
+  syn boolean Expr.isRightChildOfDot() = hasParentDot() && parentDot().getRight() == this;
   
   syn boolean Access.isQualified() = hasPrevExpr();
-  eq AbstractDot.isQualified() = getParent() instanceof AbstractDot;
+  eq AbstractDot.isQualified() = hasParentDot();
 
   syn Expr Access.qualifier() = prevExpr();
   
   syn Expr AbstractDot.leftSide() = getLeft();
-  
-  syn Access AbstractDot.rightSide() = getRightNoTransform() instanceof AbstractDot ? (Access)((AbstractDot)getRightNoTransform()).getLeft() : (Access)getRight();
-  public void AbstractDot.setRightSide(Access access) {
-    if(getRightNoTransform() instanceof AbstractDot) {
-      AbstractDot dot = (AbstractDot)getRightNoTransform();
-      dot.setLeft(access);
-    }
-    else
-      setRight(access);
-  }
+  syn Access AbstractDot.rightSide() = getRight/*NoTransform*/() instanceof AbstractDot ? (Access)((AbstractDot)getRight/*NoTransform*/()).getLeft() : (Access)getRight();
 
   syn Access Access.lastAccess() = this;
   eq AbstractDot.lastAccess() = getRight().lastAccess();
 
-  syn Access Expr.nextAccess() = ((AbstractDot)getParent()).nextAccess();
+  syn AbstractDot Expr.parentDot() = getParent() instanceof AbstractDot ? (AbstractDot)getParent() : null;
+  syn boolean Expr.hasParentDot() = parentDot() != null;
+
+  syn Access Expr.nextAccess() = parentDot().nextAccess();
   syn boolean Expr.hasNextAccess() = isLeftChildOfDot();
   
   syn Access AbstractDot.nextAccess() = rightSide();
+  
   syn Expr AbstractDot.prevExpr() = leftSide();
-    
   syn Expr Access.prevExpr() {
     if(isLeftChildOfDot()) {
-      AbstractDot dot = (AbstractDot)getParent();
-      if(dot.isRightChildOfDot())
-        return ((AbstractDot)dot.getParent()).leftSide();
+      if(parentDot().isRightChildOfDot())
+        return parentDot().parentDot().leftSide();
     }
     else if(isRightChildOfDot())
-      return ((AbstractDot)getParent()).leftSide();
+      return parentDot().leftSide();
     throw new Error(this + " does not have a previous expression");
   }
 
   syn boolean AbstractDot.hasPrevExpr() = true;
   syn boolean Access.hasPrevExpr() {
     if(isLeftChildOfDot()) {
-      AbstractDot dot = (AbstractDot)getParent();
-      if(dot.isRightChildOfDot())
+      if(parentDot().isRightChildOfDot())
         return true;
     }
     else if(isRightChildOfDot())
@@ -97,12 +87,12 @@ aspect QualifiedNames {
     return false;
   }
 
-
   public Dot Expr.qualifiesAccess(Access access) {
     Dot dot = new Dot(this, access);
     dot.lastDot = dot;
     return dot;
   }
+  
   public Dot Dot.lastDot = null;
   public Dot Dot.qualifiesAccess(Access access) {
     if(lastDot == null) {
@@ -117,9 +107,21 @@ aspect QualifiedNames {
     return this;
   }
   
+  // Used when replacing pairs from a list to concatenate the result to the tail of the current location.
+  private Expr Dot.qualifyTailWith(Expr expr) {
+    if(getRight/*NoTransform*/() instanceof AbstractDot) {
+      AbstractDot dot = (AbstractDot)getRight/*NoTransform*/();
+      return expr.qualifiesAccess(dot.getRight/*NoTransform*/());
+    }
+    return expr;
+  }
+
+
+  // These are used by the parser to extract the last name which
+  // will be replaced by a method name
   public Access AbstractDot.extractLast() {
     return getRightNoTransform();
-  }
+ }
   public void AbstractDot.replaceLast(Access access) {
     setRight(access);
   }
@@ -133,273 +135,73 @@ aspect QualifiedNames {
 }
 
 aspect NameResolution {
-  class NameType {
-    private NameType() {
-      super();
-    }
-    public static NameType NO_NAME = new NameType();
-    public static NameType PACKAGE_NAME = new NameType();
-    public static NameType TYPE_NAME = new NameType();
-    public static NameType PACKAGE_OR_TYPE_NAME = new NameType();
-    public static NameType AMBIGUOUS_NAME = new NameType();
-    public static NameType METHOD_NAME = new NameType();
-    public static NameType ARRAY_TYPE_NAME = new NameType();
-    public static NameType ARRAY_READ_NAME = new NameType();
-    public static NameType EXPRESSION_NAME = new NameType();
-  }
-}
-
-// 6.5 Determining the Meaning of a Name
-aspect NameResolution {
-  
-  inh NameType Access.nameType();
-  syn NameType Access.predNameType();
-  
-  eq AbstractDot.getLeft().nameType() = getRightNoTransform().predNameType();
-  eq AbstractDot.predNameType() = getLeftNoTransform() instanceof Access ? ((Access)getLeftNoTransform()).predNameType() : NameType.NO_NAME;
-  
-  eq Access.predNameType() {
-    NameType type = nameType();
-    if(type == NameType.PACKAGE_NAME) return NameType.PACKAGE_NAME;
-    else if(type == NameType.TYPE_NAME) return NameType.PACKAGE_OR_TYPE_NAME;
-    else if(type == NameType.PACKAGE_OR_TYPE_NAME) return NameType.PACKAGE_OR_TYPE_NAME;
-    else if(type == NameType.EXPRESSION_NAME) return NameType.AMBIGUOUS_NAME;
-    else if(type == NameType.AMBIGUOUS_NAME) return NameType.AMBIGUOUS_NAME;
-    return NameType.AMBIGUOUS_NAME;
-  }
-  
-  eq ClassAccess.predNameType() = NameType.TYPE_NAME;
-  eq ThisAccess.predNameType() = NameType.TYPE_NAME;
-  eq SuperAccess.predNameType() = NameType.TYPE_NAME;
-  
-  eq MethodAccess.predNameType() = NameType.AMBIGUOUS_NAME;
-
-  eq ClassInstanceExpr.predNameType() = NameType.AMBIGUOUS_NAME;
-  eq ClassInstanceExpr.getAccess().nameType() = NameType.TYPE_NAME;
-  eq ClassInstanceExpr.getTypeDecl().nameType() = NameType.TYPE_NAME;
-  eq ClassInstanceExpr.getArg().nameType() = NameType.AMBIGUOUS_NAME;
  
-  eq TypeAccess.predNameType() = NameType.PACKAGE_OR_TYPE_NAME;
-
-  eq PackageAccess.predNameType() = NameType.PACKAGE_NAME;
-  
-  eq Program.getCompilationUnit().nameType() = NameType.NO_NAME;
-  
-  eq CompilationUnit.getImportDecl().nameType() = NameType.PACKAGE_NAME;
-  eq SingleTypeImportDecl.getAccess().nameType() = NameType.TYPE_NAME;
-  eq TypeImportOnDemandDecl.getAccess().nameType() = NameType.PACKAGE_OR_TYPE_NAME;
-  
-  eq ClassDecl.getSuperClassAccess().nameType() = NameType.TYPE_NAME;
-  eq ClassDecl.getImplements().nameType() = NameType.TYPE_NAME;
-  eq InterfaceDecl.getSuperInterfaceId().nameType() = NameType.TYPE_NAME;
-
-  eq FieldDecl.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq FieldDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq MethodDecl.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq MethodDecl.getParameter().nameType() = NameType.TYPE_NAME;
-  eq ConstructorDecl.getParameter().nameType() = NameType.TYPE_NAME;
-  eq MethodDecl.getException().nameType() = NameType.TYPE_NAME;
-  eq ConstructorDecl.getException().nameType() = NameType.TYPE_NAME;
-  eq VarDeclStmt.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq VariableDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq Catch.getParameter().nameType() = NameType.TYPE_NAME;
-  eq ArrayInstanceExpr.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq CastExpr.getTypeAccess().nameType() = NameType.TYPE_NAME;
-  eq InstanceOfExpr.getTypeAccess().nameType() = NameType.TYPE_NAME;
-
-  eq Block.getStmt().nameType() = NameType.EXPRESSION_NAME; // FIXME
-  eq ConstructorDecl.getConstructorInvocation().nameType() = NameType.EXPRESSION_NAME;
-  eq Case.getStmt().nameType() = NameType.EXPRESSION_NAME; // FIXME
-  eq TypeDecl.getBodyDecl().nameType() = NameType.EXPRESSION_NAME; // FIXME
-
-  rewrite ParseName {
-    to Access {
-      NameType type = nameType();
-      if(type == NameType.PACKAGE_NAME) {
-        //System.out.println("ParseName " + getIdUse() + " -> PackageAccess");
-        return new PackageAccess(new List().add(getIdUse()));
-      }
-      else if(type == NameType.TYPE_NAME) {
-        //System.out.println("ParseName " + getIdUse() + " -> TypeAccess");
-        return new TypeAccess(new List(), getIdUse());
-      }
-      else if(type == NameType.PACKAGE_OR_TYPE_NAME) {
-        //System.out.println("ParseName " + getIdUse() + " -> PackageOrTypeAccess");
-        return new PackageOrTypeAccess(getIdUse());
-      }
-      else if(type == NameType.AMBIGUOUS_NAME) {
-        //System.out.println("ParseName " + getIdUse() + " -> AmbiguousAccess");
-        return new AmbiguousAccess(getIdUse());
-      }
-      else if(type == NameType.EXPRESSION_NAME) {
-        //System.out.println("ParseName " + getIdUse() + " -> AmbiguousAccess");
-        return new AmbiguousAccess(getIdUse());
-      }
-      throw new Error("Could not find NameType for ParseName node " + getIdUse().getID());
-    }
-  }
-  
-
-  // remove redundant ArrayTypeAcceses
-  rewrite ArrayTypeAccess {
-    when(getDimension() == 0)
-    to Access getAccess();
-  }
-
-  // Split a ParseArray group into multiple ArrayAccesses
-  rewrite Dot {
-    when(leftSide() instanceof ParseArray)
-    to Access {
-      ParseArray left = (ParseArray)getLeft();
-      Access next = getRightNoTransform();
-      
-      for(int i = left.getNumDims() - 1; i >= 0; i--) {
-        next = new ArrayAccess(left.getDims(i).getExpr()).qualifiesAccess(next); // DRAGONS: Dims may not have expr
-      }
-      //System.out.println("Split a group of Parse Array into several ArrayAccesses");
-      return next;
-    }
-    when(leftSide() instanceof ASTNode && getRightNoTransform() instanceof ParseArray)
-    to Access {
-      ParseArray right = (ParseArray)getRight();
-      Access next = new ArrayAccess(right.getDims(right.getNumDims() - 1).getExpr());
-      for(int i = right.getNumDims() - 2; i >= 0; i--) {
-        next = new ArrayAccess(right.getDims(i).getExpr()).qualifiesAccess(next); // DRAGONS: Dims may not have expr
-      }
-      setRight(next);
-      //System.out.println("Split a group of Parse Array into several ArrayAccesses");
-      return this;
-    }
-  }
-
-  rewrite ParseMethodName {
-    to Access new MethodAccess(getArgList(), getIdUse());
-  }
-
   // Resolve Package or Type name
   rewrite PackageOrTypeAccess {
-    when(!lookupType(getIdUse().getID()).isEmpty())
-    to Access {
-      //System.out.println("PackageOrTypeAccess " + getIdUse().getID() + " -> TypeAccess");
-      return new TypeAccess(new List(), getIdUse());
+    when(!lookupType(name()).isEmpty())
+    to Access new TypeAccess(name());
+    when(hasPackage(name()))
+    to Access new PackageAccess(name());
+    /*
+    when(!duringSyntacticClassification())
+    to Access{
+      if(!lookupType(name()).isEmpty())
+        return new TypeAccess(name());
+      else
+        return new PackageAccess(name());
     }
-    to Access {
-      //System.out.println("PackageOrTypeAccess " + getIdUse().getID() + " -> PackageAccess");
-      return new PackageAccess(new List().add(getIdUse()));
-    }
+    */
   }
 
   // Resolve Ambiguous name
   rewrite AmbiguousAccess {
-    when(!duringHelper())
+    when(!lookupVariable(name()).isEmpty())
+    to Access new VarAccess(name());
+    when(!lookupType(name()).isEmpty())
+    to Access new TypeAccess(name());
+    when(hasPackage(name()))
+    to Access new PackageAccess(name());
+    /*
+    when(!duringSyntacticClassification())
     to Access {
-      String name = getIdUse().getID();
-      if(!lookupVariable(name).isEmpty()) {
-        //System.out.println("AmbiguousAccess " + name + " -> VarAccess");
-        return new VarAccess(getIdUse());
+      if(!lookupVariable(name()).isEmpty()) {
+        return new VarAccess(name());
       }
-      else if(!lookupType(name).isEmpty()) {
-        //System.out.println("AmbiguousAccess " + name + " -> TypeAccess");
-        return new TypeAccess(new List(), getIdUse());
+      else if(!lookupType(name()).isEmpty()) {
+        return new TypeAccess(name());
       }
       else {
-        //System.out.println("AmbiguousAccess " + name + " -> PackageAccess");
-        return new PackageAccess(new List().add(getIdUse()));
+        return new PackageAccess(name());
       }
     }
+    */
   }
 
   // combine two package access into one node
   rewrite Dot {
-    when(leftSide().isPackageAccess() && rightSide().isPackageAccess())
-    to AbstractDot {
+    when(/*!duringSyntacticClassification() &&*/ leftSide().isPackageAccess() && rightSide().isPackageAccess())
+    to Access {
       PackageAccess left = (PackageAccess)leftSide();
       PackageAccess right = (PackageAccess)rightSide();
-      //System.out.println("Combining two PackageAccesses into one");
       for(int i = 0; i < right.getNumPackage(); i++)
         left.addPackage(right.getPackage(i));
-      setRightSide(left);
-      return getRightNoTransform();
+      return qualifyTailWith(left);
     }
   }
         
   // combine PackageAccess + TypeAccess into one qualified TypeAccess
   rewrite Dot {
-    when(leftSide().isPackageAccess() && !((PackageAccess)leftSide()).hasPrevExpr() && rightSide().isTypeAccess())
+    when(/*!duringSyntacticClassification() &&*/ leftSide().isPackageAccess() && !((PackageAccess)leftSide()).hasPrevExpr() && rightSide().isTypeAccess())
     to Access {
       PackageAccess left = (PackageAccess)leftSide();
       TypeAccess right = (TypeAccess)rightSide();
       right.setPackageList(left.getPackageList());
-      //System.out.println("Adding package information to " + right.getIdUse().getID());
-      return getRightNoTransform();
+      return qualifyTailWith(right);
     }
   }
 
-}
-
-
-aspect AccessDeclarationAndTypes {
-  eq MethodAccess.getArg().nameType() = NameType.EXPRESSION_NAME;
-  eq ParseMethodName.getArg().nameType() = NameType.EXPRESSION_NAME;
-  eq ConstructorAccess.getArg().nameType() = NameType.EXPRESSION_NAME;
-  eq ArrayAccess.getExpr().nameType() = NameType.EXPRESSION_NAME;
-  eq ParseArray.getDims().nameType() = NameType.EXPRESSION_NAME;
-
-
-  syn String PackageAccess.packageName() {
-    StringBuffer s = new StringBuffer();
-    if(hasPrevExpr() && prevExpr().isPackageAccess()) {
-      //System.out.println("Adding packageName prefix from previous expr " + prevExpr().packageName());
-      s.append(((PackageAccess)prevExpr()).packageName());
-      s.append(".");
-    }
-    for(int i = 0; i < getNumPackage(); i++) {
-      if(i > 0) s.append(".");
-      s.append(getPackage(i).getID());
-    }
-    return s.toString();
-  }
-  
-  syn String TypeAccess.packageName() {
-    StringBuffer s = new StringBuffer();
-    for(int i = 0; i < getNumPackage(); i++) {
-      if(i > 0) s.append(".");
-      s.append(getPackage(i).getID());
-    }
-    return s.toString();
-  }
-  
-  syn String VarAccess.name() = getIdUse().getID();
-  syn String MethodAccess.name() = getIdUse().getID();
-  syn String ConstructorAccess.name() = decl().getIdDecl().getID();
-  syn String TypeAccess.name() {
-    StringBuffer s = new StringBuffer();
-    for(int i = 0; i < getNumPackage(); i++)
-      s.append(getPackage(i).getID() + ".");
-    s.append(getIdUse().getID());
-    return s.toString();
-  }
-
-  syn String SingleTypeImportDecl.fullName() {
-    Access a = getAccess().lastAccess();
-    String name = a.isTypeAccess() ? ((TypeAccess)a).name() : "";
-    while(a.hasPrevExpr() && a.prevExpr() instanceof Access) {
-      Access pred = (Access)a.prevExpr();
-      if(pred.isTypeAccess())
-        name = ((TypeAccess)pred).name() + "." + name;
-      a = pred;
-    }
-    return name;
-  }
-  syn String TypeImportOnDemandDecl.fullName() {
-    Access a = getAccess().lastAccess();
-    String name = a.isTypeAccess() ? ((TypeAccess)a).name() : "";
-    while(a.hasPrevExpr() && a.prevExpr() instanceof Access) {
-      Access pred = (Access)a.prevExpr();
-      if(pred.isTypeAccess())
-        name = ((TypeAccess)pred).name() + "." + name;
-      a = pred;
-    }
-    return name;
+  rewrite ArrayTypeAccess {
+    when(getDimension() == 0)
+    to Access getAccess();
   }
 }

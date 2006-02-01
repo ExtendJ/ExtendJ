@@ -9,16 +9,12 @@ aspect NameCheck {
   }
 
   public void SingleTypeImportDecl.nameCheck() {
-    if(!getAccess().type().fullName().equals(fullName()) && !getAccess().type().isUnknown())
-      error("Single-type import " + fullName() + " is not the canonical name of type " + getAccess().type().fullName());
-
-    //CompilationUnit cu = (CompilationUnit)getParent().getParent(); // FIXME
-    //if(getAccess().type() != extractSingleType(cu.lookupType(getAccess().type().name())))
-    //  error("Importing the same type " + getAccess().type().name() + " twice is illegal");
+    if(!getAccess().type().typeName().equals(typeName()) && !getAccess().type().isUnknown())
+      error("Single-type import " + typeName() + " is not the canonical name of type " + getAccess().type().typeName());
   }
   public void TypeImportOnDemandDecl.nameCheck() {
-    if(getAccess().lastAccess().isTypeAccess() && !getAccess().type().fullName().equals(fullName()))
-      error("On demand type import " + fullName() + ".* is not the canonical name of type " + getAccess().type().fullName());
+    if(getAccess().lastAccess().isTypeAccess() && !getAccess().type().typeName().equals(typeName()))
+      error("On demand type import " + typeName() + ".* is not the canonical name of type " + getAccess().type().typeName());
   }
 
   public void CompilationUnit.nameCheck() {
@@ -37,9 +33,17 @@ aspect NameCheck {
     }
   }
 
+  public void AmbiguousAccess.nameCheck() {
+    error("ambiguous name " + name() + " is used in " + enclosingStmt());
+  }
+  
+  public void PackageOrTypeAccess.nameCheck() {
+    error("packageortype name " + name() + " is used in " + enclosingStmt());
+  }
+
   inh String MethodAccess.methodHost();
-  eq TypeDecl.getBodyDecl().methodHost() = fullName();
-  eq AbstractDot.getRight().methodHost() = getLeft().type().fullName();
+  eq TypeDecl.getBodyDecl().methodHost() = typeName();
+  eq AbstractDot.getRight().methodHost() = getLeft().type().typeName();
   eq Program.getCompilationUnit().methodHost() {
     throw new Error("Needs extra equation for methodHost()");
   }
@@ -55,14 +59,13 @@ aspect NameCheck {
       error("Invoking an abstract method through super.method() is invalid");
     if(decl() == unknownMethod() && decls().size() <= 1 && (!isQualified() || !qualifier().isUnknown())) {
       StringBuffer s = new StringBuffer();
-      s.append("no method named " + getIdUse().getID());
+      s.append("no method named " + name());
       s.append("(");
       for(int i = 0; i < getNumArg(); i++) {
         if(i != 0)
           s.append(", ");
-        s.append(getArg(i).type().fullName());
+        s.append(getArg(i).type().typeName());
       }
-      //s.append(")" + " in " + hostType().fullName() + " matches " + this);
       s.append(")" + " in " + methodHost() + " matches " + this);
       error(s.toString());
     }
@@ -77,43 +80,24 @@ aspect NameCheck {
         s.append("several most specific methods for " + this + "\n");
         for(MethodCollection.MethodIterator iter = decls().iterator(); iter.hasNext(); ) {
           MethodDecl m = (MethodDecl)iter.next();
-          s.append("    " + m.signature() + " in " + m.hostType().fullName() + "\n");
+          s.append("    " + m.signature() + " in " + m.hostType().typeName() + "\n");
         }
         error(s.toString());
       }
        
     }
-    // 8.8.5.1
-    /*
-    if(!decl().isStatic() && inExplicitConstructorInvocation() && !isQualified() && hostType().instanceOf(decl().hostType()))
-      error("instance method " + decl().signature() + " may not be accessed in an explicit constructor invocation");
-    */
-    /*
-    if(!decl().isStatic() && inStaticContext())
-      error("instance method " + decl().signature() + " may not be accessed in a static context");
-    */
-
-    // 8.5.2
-    /*
-    if(!isQualified() && !decl().isStatic() && hostType().isClassDecl() && !hostType().isInnerTypeOf(decl().hostType()) && !hostType().methods().contains(decl())) {
-      StringBuffer s = new StringBuffer();
-      s.append("a static class must not acccess non-static method of the enclosing class");
-      s.append(", illegal access to " + decl().signature() + " in " + decl().hostType().fullName() + " from " + hostType().fullName());
-      error(s.toString());
-    }*/
-
   }
 
 
   public void ConstructorDecl.nameCheck() {
     super.nameCheck();
     // 8.8
-    if(!hostType().name().equals(getIdDecl().getID()))
-      error("constructor " + getIdDecl().getID() +" does not have the same name as the simple name of the host class " + hostType().name());
+    if(!hostType().name().equals(name()))
+      error("constructor " + name() +" does not have the same name as the simple name of the host class " + hostType().name());
     
     // 8.8.2
     if(hostType().lookupConstructor(this) != this)
-      error("constructor with signature " + signature() + " is multiply declared in type " + hostType().fullName());
+      error("constructor with signature " + signature() + " is multiply declared in type " + hostType().typeName());
 
     if(circularThisInvocation(this))
       error("The constructor " + signature() + " may not directly or indirectly invoke itself");
@@ -132,14 +116,12 @@ aspect NameCheck {
     }
     return false;
   }
-  
-
 
   public void MethodDecl.nameCheck() {
     // 8.4
     // 8.4.2
     if(!hostType().localLookupMethod(this).contains(this))
-      error("method with signature " + signature() + " is multiply declared in type " + hostType().fullName());
+      error("method with signature " + signature() + " is multiply declared in type " + hostType().typeName());
     // 8.4.3.4
     if(isNative() && hasBlock())
       error("native methods must have an empty semicolon body");
@@ -149,21 +131,12 @@ aspect NameCheck {
     // 8.4.5
     if(!hasBlock() && !(isNative() || isAbstract()))
       error("only abstract and native methods may have an empty semicolon body");
-    // 8.4.5
-    if(!isVoid() && hasBlock() && getBlock().canCompleteNormally())
-      error("the body of a non void method may not complete normally");
   }
 
-  syn boolean Expr.staticContext() = false;
-  eq TypeAccess.staticContext() = true;
-  eq ThisAccess.staticContext() = false;
-  eq SuperAccess.staticContext() = false;
-  eq AbstractDot.staticContext() = getRight().staticContext();
-  
   public void ConstructorAccess.nameCheck() {
     super.nameCheck();
     if(decl() == illegalConstructor() && decls().size() <= 1)
-      error("no constructor named " + getIdUse().getID());
+      error("no constructor named " + name());
     if(decls().size() > 1) {
       error("several most specific constructors for " + this);
       for(Iterator iter = decls().iterator(); iter.hasNext(); ) {
@@ -175,7 +148,7 @@ aspect NameCheck {
   public void ClassInstanceExpr.nameCheck() {
     super.nameCheck();
     if(decl() == illegalConstructor() && decls().size() <= 1)
-      error("can not instantiate " + type().fullName() + " no matching constructor found in " + type().fullName());
+      error("can not instantiate " + type().typeName() + " no matching constructor found in " + type().typeName());
     else if(decls().size() > 1) {
       error("several most specific constructors found");
       for(Iterator iter = decls().iterator(); iter.hasNext(); ) {
@@ -192,50 +165,22 @@ aspect NameCheck {
     TypeDecl s = c.isClassDecl() && ((ClassDecl)c).hasSuperclass() ? ((ClassDecl)c).superclass() : illegalType();
     if(isQualified()) {
       if(!s.isInnerType() || s.inStaticContext())
-        error("the super type " + s.fullName() + " of " + c.fullName() +
+        error("the super type " + s.typeName() + " of " + c.typeName() +
            " is not an inner class");
     
       else if(!qualifier().type().instanceOf(s.enclosingType()))
         error("The type of this primary expression, " +
-                qualifier().type().fullName() + " is not enclosing the super type, " + 
-                s.fullName() + ", of " + c.fullName());
+                qualifier().type().typeName() + " is not enclosing the super type, " + 
+                s.typeName() + ", of " + c.typeName());
     }
     if(!isQualified() && s.isInnerType()) {
       if(!c.isInnerType()) {
-        error("" + s.fullName() + " isStatic: " + s.isStatic() + ", enclosingType: " + s.enclosingType().fullName());
+        error("" + s.typeName() + " isStatic: " + s.isStatic() + ", enclosingType: " + s.enclosingType().typeName());
 
-        error("no enclosing instance for " + s.fullName() + " when accessed in " + this);
-      }
-        /*
-      if(s.isLocalClass()) {
-        TypeDecl o = s.enclosingType();
-        if(!o.localLookupType(c.name()).contains(c))
-          error("" + c.fullName() + " is not a member of the enclosing type " + o.fullName());
-      }
-      else if(s.isInnerType()) {
-        TypeDecl o = s.enclosingType();
-        if(!c.localLookupType(o.name()).contains(o))
-          error("" + o.fullName() + " is not a member of the enclosing type " + c.fullName());
-      }
-      */
-    }
-    /*
-    if(s.isInnerType() && !s.inStaticContext() && !s.isLocalClass() && !isQualified()) {
-      if(enclosingInstance() == null) {
-        error("no enclosing class to " + c.fullName() + " with respect to the super class " + s.fullName() + " specified");
-      }
-      else {
-        if(s.isLocal
-        if(!c.enclosedBy(s.enclosingType())) {
-      //else if(!enclosingInstance().instanceOf(s.enclosingType())) {
-        error("the current enclosing class " + enclosingInstance().fullName() + " does not equal the enclosing class " + s.enclosingType().fullName() + " with respect to the super class " + s.fullName() + ", error in " + this);
+        error("no enclosing instance for " + s.typeName() + " when accessed in " + this);
       }
     }
-    */
   }
-  
-
-  syn boolean TypeDecl.hasEnclosingType() = isInnerType() || !inStaticContext();
 
   // 8.8.5.1
   inh boolean VarAccess.inExplicitConstructorInvocation();
@@ -245,85 +190,49 @@ aspect NameCheck {
   inh boolean ClassInstanceExpr.inExplicitConstructorInvocation();
   inh lazy boolean TypeDecl.inExplicitConstructorInvocation();
   eq Program.getCompilationUnit().inExplicitConstructorInvocation() = false;
-  //eq Block.getStmt().inExplicitConstructorInvocation() = false;
 
   eq ConstructorAccess.getArg().inExplicitConstructorInvocation() = true;
   eq SuperConstructorAccess.getArg().inExplicitConstructorInvocation() = true;
 
 
-  eq MethodAccess.getArg().inStaticContext() = unqualifiedScope().inStaticContext();
-  inh boolean Expr.inStaticContext();
-  inh lazy boolean AbstractDot.inStaticContext();
+  inh boolean Expr.inStaticContext(); // SuperAccess, ThisAccess, ClassInstanceExpr, MethodAccess
   inh lazy boolean TypeDecl.inStaticContext();
-  inh boolean ClassInstanceExpr.inStaticContext();
+  
   eq Program.getCompilationUnit().inStaticContext() = false;
   eq TypeDecl.getBodyDecl().inStaticContext() = isStatic() || inStaticContext();
   eq StaticInitializer.getBlock().inStaticContext() = true;
   eq InstanceInitializer.getBlock().inStaticContext() = false;
-  eq FieldDeclaration.getAbstractVarInit().inStaticContext() = isStatic() || hostType().isInterfaceDecl();
+  eq FieldDeclaration.getInit().inStaticContext() = isStatic() || hostType().isInterfaceDecl();
   eq MethodDecl.getBlock().inStaticContext() = isStatic();
-  eq AbstractDot.getRight().inStaticContext() {
-    Expr expr = getLeft();
-    while(expr instanceof ParExpr || expr instanceof CastExpr) {
-      if(expr instanceof ParExpr)
-        expr = ((ParExpr)expr).getExpr();
-      else if(expr instanceof CastExpr)
-        expr = ((CastExpr)expr).getExpr();
-    }
-    if(expr instanceof StringLiteralExpr)
-      return false;
-    if(expr instanceof VarAccess || expr.isFieldAccess())
-      return false;
-    if(expr.isMethodAccess())
-      return false;
-    if(expr.isArrayAccess())
-      return false;
-    if(expr.isClassAccess())
-      return false;
-    if(expr.isSuperAccess())
-      return false;
-    if(expr.isThisAccess())
-      return false;
-    if(expr instanceof ClassInstanceExpr)
-      return false;
-    if(inStaticContext() || expr.isTypeAccess())
-      return true;
-    return false;
-  }
-  eq ClassInstanceExpr.getTypeDecl().inStaticContext() = inStaticContext();
-  
-  syn boolean ThisAccess.inStaticContext() = !isQualified() ? super.inStaticContext() : qualifier().inStaticContext();
-  syn boolean SuperAccess.inStaticContext() = !isQualified() ? super.inStaticContext() : qualifier().inStaticContext();
-  
-  eq SuperConstructorDot.getLeft().inStaticContext() = hostType().enclosedBy(getLeft().type()) ? false : true;
-  eq MemberClass.getClassDecl().inStaticContext() = false;
   eq ConstructorDecl.getBlock().inStaticContext() = false;
-    
+  eq MemberClassDecl.getClassDecl().inStaticContext() = false;
+  
+  eq ClassInstanceExpr.getTypeDecl().inStaticContext() = isQualified() ?
+    qualifier().staticContextQualifier() : inStaticContext();
+
+  syn boolean Expr.staticContextQualifier() = false;
+  eq ParExpr.staticContextQualifier() = getExpr().staticContextQualifier();
+  eq CastExpr.staticContextQualifier() = getExpr().staticContextQualifier();
+  eq AbstractDot.staticContextQualifier() = lastAccess().staticContextQualifier();
+  eq TypeAccess.staticContextQualifier() = true;
+  
   public void ArrayTypeAccess.nameCheck() {
     if(decl().elementType() == unknownType())
       error("no type named " + name());
   }
   
-
-  
   public void TypeAccess.nameCheck() {
     if(isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess())
-      error("can not access the type named " + decl().fullName() + " in this context");
+      error("can not access the type named " + decl().typeName() + " in this context");
     if(decl() == unknownType() && decls().size() <= 1)
       error("no type named " + name());
     if(decls().size() > 1) {
       error("several types named " + name());
       for(TypeCollection.TypeIterator iter = decls().iterator(); iter.hasNext(); ) {
         TypeDecl t = (TypeDecl)iter.next();
-        error("    " + t.fullName());
+        error("    " + t.typeName());
       }
     }
-    /* Not sure about this one
-    if(!isQualified() && hostType().isStatic() && !decl().isTopLevelType() && !decl().isStatic() && !hostType().isInnerTypeOf(decl().hostType()) && !hostType().instanceOf(decl().enclosingType())) {
-      System.out.println("HostType: " + hostType().fullName() + ", Decl: " + decl().fullName() + ", Decl.enclosingType(): " + decl().enclosingType().fullName());
-      error("the static class " + hostType().fullName() + " must not acccess the non-static type " + decl().fullName() + " of the enclosing class");
-    }
-    */
   }
 
   public void SuperAccess.nameCheck() {
@@ -367,41 +276,29 @@ aspect NameCheck {
 
   public void VarAccess.nameCheck() {
     if(decl() == unknownField() && decls().size() <= 1)
-      error("no field named " + getIdUse().getID());
+      error("no field named " + name());
     if(decls().size() > 1) {
-      error("several fields named " + getIdUse().getID());
+      error("several fields named " + name());
       for(Iterator iter = decls().iterator(); iter.hasNext(); ) {
         Variable v = (Variable)iter.next();
-        error("    " + v.type().fullName() + "." + v.name() + " declared in " + v.hostType().fullName());
+        error("    " + v.type().typeName() + "." + v.name() + " declared in " + v.hostType().typeName());
       }
        
     }
       
     // 8.8.5.1
-    if(inExplicitConstructorInvocation() && !isQualified() && decl().isInstanceVariable() && hostType() == decl().hostType())
-      error("instance variable " + getIdUse() + " may not be accessed in an explicit constructor invocation");
-    /*
-    if(inStaticContext() && decl().isInstanceVariable())
-      error("instance variable " + getIdUse() + " may not be accessed in a static context");
-    */
+    if(inExplicitConstructorInvocation() && !isQualified() && decl().isInstanceVariable() && hostType() ==  decl().hostType())
+      error("instance variable " + name() + " may not be accessed in an explicit constructor invocation");
 
     Variable v = decl();
     if(!v.isFinal() && !v.isClassVariable() && !v.isInstanceVariable() && v.hostType() != hostType())
       error("A parameter/variable used but not declared in an inner class must be declared final");
 
-    // 8.5,2
-    /*
-    if(!isQualified() && !decl().isStatic() && !hostType().isInnerTypeOf(decl().hostType()) && !hostType().instanceOf(decl().hostType())) {
-      if(!(hostType().isAnonymous() && decl().isFinal()))
-        error("a static class must not acccess non-static variable of the enclosing class");
-    }
-    */
-     
     // 8.3.2.3
     if((decl().isInstanceVariable() || decl().isClassVariable()) && !isQualified()) {
-      if(!hostType().declaredBeforeUse(decl(), getIdUse())) {
+      if(!hostType().declaredBeforeUse(decl(), this)) {
         if(inSameInitializer() && !simpleAssignment() && inDeclaringClass()) {
-          BodyDecl b = getIdUse().closestBodyDecl(hostType());
+          BodyDecl b = closestBodyDecl(hostType());
           error("variable " + decl().name() + " is used in " + b + " before it is declared");
         }
       }
@@ -409,7 +306,8 @@ aspect NameCheck {
 
   }
 
-  public BodyDecl IdUse.closestBodyDecl(TypeDecl t) {
+  // find the bodydecl declared in t in which this construct is nested
+  public BodyDecl VarAccess.closestBodyDecl(TypeDecl t) {
     ASTNode node = this;
     while(!(node.getParent().getParent() instanceof Program) && node.getParent().getParent() != t) {
       node = node.getParent();
@@ -419,9 +317,8 @@ aspect NameCheck {
     return null;
   }
 
-
   syn boolean VarAccess.inSameInitializer() {
-    BodyDecl b = getIdUse().closestBodyDecl(decl().hostType());
+    BodyDecl b = closestBodyDecl(decl().hostType());
     if(b == null) return false;
     if(b instanceof FieldDeclaration && ((FieldDeclaration)b).isStatic() == decl().isStatic())
       return true;
@@ -450,7 +347,7 @@ aspect NameCheck {
       error("duplicate member " + name() + " in compilation unit");
   
     if(!isTopLevelType() && !isAnonymous() && !isLocalClass() && extractSingleType(enclosingType().remoteLookupType(name())) != this)
-      error("duplicate member type " + name() + " in type " + enclosingType().fullName());
+      error("duplicate member type " + name() + " in type " + enclosingType().typeName());
 
     // 14.3
     if(isLocalClass()) {
@@ -459,8 +356,7 @@ aspect NameCheck {
         error("local class named " + name() + " may not be redeclared as a local class in the same block");
     }
 
-    //if(isNestedType() && hasPackage(fullName()))
-    if(!packageName().equals("") && hasPackage(fullName()))
+    if(!packageName().equals("") && hasPackage(typeName()))
       error("duplicate member class and package " + name());
     
     // 8.1 & 9.1
@@ -474,13 +370,12 @@ aspect NameCheck {
 
       for(Iterator i2 = overrides(m).iterator(); i2.hasNext(); ) {
         MethodDecl decl = (MethodDecl)i2.next();
-        //System.out.println("Overriden");
         // 8.4.6.1
         if(!m.isStatic() && decl.isStatic())
           error("an instance method may not override a static method");
         // 8.4.6.3
         if(m.type() != decl.type())
-          error("the return type of method " + m.signature() + " in " + m.hostType().fullName() + " does not match the return type of method " + decl.signature() + " in " + decl.hostType().fullName() + " and may thus not be overriden");
+          error("the return type of method " + m.signature() + " in " + m.hostType().typeName() + " does not match the return type of method " + decl.signature() + " in " + decl.hostType().typeName() + " and may thus not be overriden");
         // 8.4.4
         for(int i = 0; i < m.getNumException(); i++) {
           Access e = m.getException(i);
@@ -490,7 +385,8 @@ aspect NameCheck {
               found = true;
           }
           if(!found && e.type().isUncheckedException())
-            error("may not throw more checked exceptions than overridden method");
+            error(m.signature() + " in " + m.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
+             decl.signature() + " in " + decl.hostType().typeName());
         }
         // 8.4.6.3
         if(decl.isPublic() && !m.isPublic())
@@ -502,13 +398,12 @@ aspect NameCheck {
         if((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate())
           error("overriding access modifier error");
         if(decl.isFinal())
-          error("method " + m.signature() + " in " + hostType().fullName() + " can not override final method " + decl.signature() + " in " + decl.hostType().fullName());
+          error("method " + m.signature() + " in " + hostType().typeName() + " can not override final method " + decl.signature() + " in " + decl.hostType().typeName());
         
       }
       
       for(Iterator i2 = hides(m).iterator(); i2.hasNext(); ) {
         MethodDecl decl = (MethodDecl)i2.next();
-        //System.out.println("Hidden");
         // 8.4.6.2
         if(m.isStatic() && !decl.isStatic())
           error("a static method may not hide an instance method");
@@ -528,15 +423,15 @@ aspect NameCheck {
         }
         // 8.4.6.3
         if(decl.isPublic() && !m.isPublic())
-          error("hiding access modifier error: public method " + decl.signature() + " in " + decl.hostType().fullName() + " is hidden by non public method " + m.signature() + " in " + m.hostType().fullName());
+          error("hiding access modifier error: public method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non public method " + m.signature() + " in " + m.hostType().typeName());
         // 8.4.6.3
         if(decl.isProtected() && !(m.isPublic() || m.isProtected()))
-          error("hiding access modifier error: protected method " + decl.signature() + " in " + decl.hostType().fullName() + " is hidden by non (public|protected) method " + m.signature() + " in " + m.hostType().fullName());
+          error("hiding access modifier error: protected method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non (public|protected) method " + m.signature() + " in " + m.hostType().typeName());
         // 8.4.6.3
         if((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate())
-          error("hiding access modifier error: default method " + decl.signature() + " in " + decl.hostType().fullName() + " is hidden by private method " + m.signature() + " in " + m.hostType().fullName());
+          error("hiding access modifier error: default method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by private method " + m.signature() + " in " + m.hostType().typeName());
         if(decl.isFinal())
-          error("method " + m.signature() + " in " + hostType().fullName() + " can not hide final method " + decl.signature() + " in " + decl.hostType().fullName());
+          error("method " + m.signature() + " in " + hostType().typeName() + " can not hide final method " + decl.signature() + " in " + decl.hostType().typeName());
       }
 
       if(m.hostType() != this) {
@@ -558,16 +453,16 @@ aspect NameCheck {
   public void ClassDecl.nameCheck() {
     super.nameCheck();
     if(hasSuperClassAccess() && !getSuperClassAccess().type().isClassDecl())
-      error("class may only inherit a class and not " + getSuperClassAccess().type().fullName());
+      error("class may only inherit a class and not " + getSuperClassAccess().type().typeName());
     if(isObject() && hasSuperClassAccess())
       error("class Object may not have superclass");
     if(isObject() && getNumImplements() != 0)
       error("class Object may not implement interfaces");
-    if(hasSuperclass() && !superclass().accessableFrom(this))
-      error("a superclass must be accessable which " + superclass().name() + " is not");
+    if(hasSuperclass() && !superclass().accessibleFrom(this))
+      error("a superclass must be accessible which " + superclass().name() + " is not");
     
     if(isCircular())
-      error("circular inheritance dependency in " + fullName()); 
+      error("circular inheritance dependency in " + typeName()); 
 
   }
 
@@ -576,7 +471,7 @@ aspect NameCheck {
     for(int i = 0; i < getNumSuperInterfaceId(); i++) {
       TypeDecl typeDecl = getSuperInterfaceId(i).type();
       if(typeDecl.isCircular())
-        error("circular inheritance dependency in " + fullName()); 
+        error("circular inheritance dependency in " + typeName()); 
     }
   }
 
@@ -591,11 +486,11 @@ aspect NameCheck {
   public void FieldDeclaration.nameCheck() {
     super.nameCheck();
     // 8.3
-    Collection list = hostType().findVariable(getIdDecl());
+    Collection list = hostType().lookupMemberField(name());
     for(Iterator iter = list.iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
       if(v != this && v.hostType() == hostType())
-        error("field named " + name() + " is multiply declared in type " + hostType().fullName());
+        error("field named " + name() + " is multiply declared in type " + hostType().typeName());
     }
 
     if(isBlank() && isFinal() && isClassVariable()) {
@@ -616,7 +511,7 @@ aspect NameCheck {
         
       }
       if(!found)
-        error("blank final class variable " + name() + " in " + hostType().fullName() + " is not definitely assigned in static initializer");
+        error("blank final class variable " + name() + " in " + hostType().typeName() + " is not definitely assigned in static initializer");
 
     }
     if(isBlank() && isFinal() && isInstanceVariable()) {
@@ -638,21 +533,19 @@ aspect NameCheck {
         if(typeDecl.getBodyDecl(i) instanceof ConstructorDecl) {
           ConstructorDecl c = (ConstructorDecl)typeDecl.getBodyDecl(i);
           if(!c.isDAafter(this)) {
-            error("blank final instance variable " + name() + " in " + hostType().fullName() + " is not definitely assigned after " + c.signature());
+            error("blank final instance variable " + name() + " in " + hostType().typeName() + " is not definitely assigned after " + c.signature());
           }
         }
       }
     }
     if(isBlank() && hostType().isInterfaceDecl()) {
-            error("variable  " + name() + " in " + hostType().fullName() + " which is an interface must have an initializer");
+            error("variable  " + name() + " in " + hostType().typeName() + " which is an interface must have an initializer");
     }
   }
 
   
   public void VariableDeclaration.nameCheck() {
-    //IdUse idUse = new IdUse(getIdDecl().getID()); // Dragons
-    //idUse.setParent(this);
-    Collection decls = outerScope().lookupVariable(getIdDecl().getID());
+    Collection decls = outerScope().lookupVariable(name());
     for(Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable)iter.next();
       if(var instanceof VariableDeclaration) {
@@ -672,7 +565,7 @@ aspect NameCheck {
       for(int i = 0; i < block.getNumStmt(); i++) {
         if(block.getStmt(i) instanceof Variable) {
           Variable v = (Variable)block.getStmt(i);
-          if(v.name().equals(getIdDecl().getID()) && v != this) {
+          if(v.name().equals(name()) && v != this) {
      	    error("duplicate declaration of local variable " + name());
           }
 	}
@@ -681,9 +574,7 @@ aspect NameCheck {
   }
   
   public void ParameterDeclaration.nameCheck() {
-    //IdUse idUse = new IdUse(getIdDecl().getID()); // Dragons
-    //idUse.setParent(this);
-    Collection decls = outerScope().lookupVariable(getIdDecl().getID());
+    Collection decls = outerScope().lookupVariable(name());
     for(Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable)iter.next();
       if(var instanceof VariableDeclaration) {
@@ -699,16 +590,13 @@ aspect NameCheck {
     }
 
     // 8.4.1  
-    if(!/*varScope().*/lookupVariable(name()).contains(this)) {
+    if(!lookupVariable(name()).contains(this)) {
       error("duplicate declaration of parameter " + name());
     }
   }
-
   
-
-  
-  public void LabelStmt.nameCheck() {
-    LabelStmt stmt = lookupLabel(getLabel().getID());
+  public void LabeledStmt.nameCheck() {
+    LabeledStmt stmt = lookupLabel(getLabel().getID());
     if(stmt != null) {
       if(stmt.enclosingBodyDecl() == enclosingBodyDecl()) {
         error("Labels can not shadow labels in the same member");
@@ -716,44 +604,45 @@ aspect NameCheck {
     }
   }
   
+  inh boolean BreakStmt.insideLoop();
+  inh boolean ContinueStmt.insideLoop();
+
+  eq TypeDecl.getBodyDecl(int i).insideLoop() = false;
+  eq ForStmt.getStmt().insideLoop() = true;
+  eq WhileStmt.getStmt().insideLoop() = true;
+  eq DoStmt.getStmt().insideLoop() = true;
+  
+  inh boolean BreakStmt.insideSwitch();
+  eq TypeDecl.getBodyDecl(int i).insideSwitch() = false;
+  eq SwitchStmt.getCase(int i).insideSwitch() = true;
 
   public void BreakStmt.nameCheck() {
-    if(targetStmt() == null) {
-      if(hasLabel())
+    if(!hasLabel() && !insideLoop() && !insideSwitch())
+      error("break outside switch or loop");
+    else if(hasLabel()) {
+      LabeledStmt label = lookupLabel(getLabel().getID());
+      if(label == null)
         error("labeled break must have visible matching label");
-      else
-        error("plain break must occur in a loop statement of switch");
     }
   }
   
   public void ContinueStmt.nameCheck() {
-    if(targetStmt() == null) {
-      if(hasLabel())
+    if(!insideLoop())
+      error("continue outside loop");
+    else if(hasLabel()) {
+      LabeledStmt label = lookupLabel(getLabel().getID());
+      if(label == null)
         error("labeled continue must have visible matching label");
-      else
-        error("plain continue must occur in a loop statement");
+      else if(!label.getStmt().continueLabel())
+        error(getLabel().getID() + " is not a loop label");
     }
-    if(hasLabel() && targetStmt() != null && !targetStmt().isLoop() && !(targetStmt() instanceof TryStmt))
-      error("***A label targeted by continue must have a loop as its statment");
   }
+
+  syn boolean Stmt.continueLabel() = false;
+  eq ForStmt.continueLabel() = true;
+  eq WhileStmt.continueLabel() = true;
+  eq DoStmt.continueLabel() = true;
   
-  syn boolean Stmt.isLoop() = false;
-  eq ForStmt.isLoop() = true;
-  eq WhileStmt.isLoop() = true;
-  eq DoStmt.isLoop() = true;
-
-
-  public void ReturnStmt.nameCheck() {
-    // 8.4.5 8.8.5
-    if(hostBodyDecl().isVoid() && hasResult())
-      error("return stmt may not have an expression in void methods");
-    // 8.4.5
-    if(!hostBodyDecl().isVoid() && !hasResult())
-      error("return stmt must have an expression in non void methods");
-    if(hostBodyDecl() instanceof InstanceInitializer || hostBodyDecl() instanceof StaticInitializer)
-      error("Initializers may not return");
-  }
-
   public void ConstCase.nameCheck() {
     if(getValue().isConstant() && bind(this) != this) {
       error("constant expression " + getValue() + " is multiply declared in two case statements");
@@ -786,6 +675,4 @@ aspect NameCheck {
     return getValue().constant().intValue() == ((ConstCase)c).getValue().constant().intValue();
   }
   eq DefaultCase.constValue(Case c) = c instanceof DefaultCase;
-  
-
 }

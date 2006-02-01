@@ -87,7 +87,7 @@ aspect ConstantExpression {
       " not supported for type " + getClass().getName()); 
   }
 
-  syn lazy Constant VarAccess.constant() = decl().getAbstractVarInit().constant();
+  syn lazy Constant VarAccess.constant() = decl().getInit().constant();
   eq AbstractDot.constant() = lastAccess().constant();
   eq CastExpr.constant() = type().cast(getExpr().constant());
   eq ParExpr.constant() = getExpr().constant();
@@ -113,14 +113,9 @@ aspect ConstantExpression {
   eq XorBitwiseExpr.constant() = type().xorBitwise(getLeftOperand().constant(), getRightOperand().constant());
   eq OrBitwiseExpr.constant() = type().orBitwise(getLeftOperand().constant(), getRightOperand().constant());
 
-  eq QuestionColonExpr.constant() = type().questionColon(getCondition().constant(), getTrueExpr().constant(),getFalseExpr().constant());
+  eq ConditionalExpr.constant() = type().questionColon(getCondition().constant(), getTrueExpr().constant(),getFalseExpr().constant());
   
-  syn lazy Constant AbstractVarInit.constant() { throw new UnsupportedOperationException(); }
-  eq VarInit.constant() = getExpr().constant();
-  
-  eq StringLiteralExpr.constant() = getStringLiteral().constant();
-
-  syn lazy boolean FPLiteral.isZero() {
+  syn lazy boolean FloatingPointLiteral.isZero() {
     String s = getLITERAL();
     for(int i = 0; i < s.length(); i++) {
       char c = s.charAt(i);
@@ -173,7 +168,7 @@ aspect ConstantExpression {
       }
       x *= radix;
       x += c;
-      if(x < oldx)
+      if(x < oldx && radix == 10)
         throw new NumberFormatException("");
       oldx = x;
     }
@@ -225,7 +220,7 @@ aspect ConstantExpression {
       return c;
     }
   }
-  eq FPLiteral.constant() {
+  eq FloatingPointLiteral.constant() {
     try {
       return new Constant(Float.parseFloat(getLITERAL()));
     }
@@ -246,7 +241,7 @@ aspect ConstantExpression {
     }
   }
   eq BooleanLiteral.constant() = new Constant(Boolean.valueOf(getLITERAL()).booleanValue());
-  eq CharLiteral.constant() = new Constant(getLITERAL().charAt(0));
+  eq CharacterLiteral.constant() = new Constant(getLITERAL().charAt(0));
   eq StringLiteral.constant() = new Constant(getLITERAL());
   
   syn Constant TypeDecl.cast(Constant c) {
@@ -412,11 +407,9 @@ aspect ConstantExpression {
 	  return false;
   } 
   
-  syn lazy boolean AbstractVarInit.representableIn(TypeDecl t);
-  eq VarInit.representableIn(TypeDecl t) = getExpr().representableIn(t);
   eq ArrayInit.representableIn(TypeDecl t) {
-    for(int i = 0; i < getNumAbstractVarInit(); i++)
-      if(!getAbstractVarInit(i).representableIn(t))
+    for(int i = 0; i < getNumInit(); i++)
+      if(!getInit(i).representableIn(t))
         return false;
     return true;
   }
@@ -424,11 +417,10 @@ aspect ConstantExpression {
   // isConstant()
   
   syn boolean MemberDecl.isConstant() = false;
-  eq FieldDeclaration.isConstant() = isFinal() && hasAbstractVarInit() && getAbstractVarInit().isConstant() && (type().isPrimitive() || type().isString());
+  eq FieldDeclaration.isConstant() = isFinal() && hasInit() && getInit().isConstant() && (type().isPrimitive() || type().isString());
   syn lazy boolean Expr.isConstant() = false;
   eq Literal.isConstant() = true;
   eq NullLiteral.isConstant() = false;
-  eq StringLiteralExpr.isConstant() = getStringLiteral().isConstant();
   eq CastExpr.isConstant() = getExpr().isConstant() &&
     (getTypeAccess().type().isPrimitive() || getTypeAccess().type().isString());
   eq PlusExpr.isConstant() = getOperand().isConstant();
@@ -437,7 +429,7 @@ aspect ConstantExpression {
   eq LogNotExpr.isConstant() = getOperand().isConstant();
   eq Binary.isConstant() = getLeftOperand().isConstant() && getRightOperand().isConstant();
   eq InstanceOfExpr.isConstant() = false;
-  eq QuestionColonExpr.isConstant() = getCondition().isConstant() && getTrueExpr().isConstant() && getFalseExpr().isConstant();
+  eq ConditionalExpr.isConstant() = getCondition().isConstant() && getTrueExpr().isConstant() && getFalseExpr().isConstant();
   eq ParExpr.isConstant() = getExpr().isConstant();
   eq AbstractDot.isConstant() = lastAccess().isConstant();
 
@@ -446,12 +438,9 @@ aspect ConstantExpression {
   
   eq VarAccess.isConstant() {
     Variable v = decl();
-    boolean result = v.isFinal() && v.hasAbstractVarInit() && v.getAbstractVarInit().isConstant() && (v.type().isPrimitive() || v.type().isString());
+    boolean result = v.isFinal() && v.hasInit() && v.getInit().isConstant() && (v.type().isPrimitive() || v.type().isString());
     return result && (!isQualified() || (isQualified() && qualifier().isTypeAccess()));
   }
-
-  syn boolean AbstractVarInit.isConstant() = false;
-  eq VarInit.isConstant() = getExpr().isConstant();
 
   syn boolean Expr.isTrue() = isConstant() && type().isBoolean() &&  constant().booleanValue();
   syn boolean Expr.isFalse() = isConstant() && type().isBoolean() && !constant().booleanValue();
@@ -473,7 +462,7 @@ aspect ConstantExpression {
   }
 
   syn char Expr.constantCharValue() = 0;
-  eq CharLiteral.constantCharValue() = getLITERAL().charAt(0);
+  eq CharacterLiteral.constantCharValue() = getLITERAL().charAt(0);
   
   eq LogNotExpr.constant() = new Constant(!getOperand().constant().booleanValue());
   eq EQExpr.constant() = new Constant(binaryNumericPromotedType().eqIsTrue(left(), right()));

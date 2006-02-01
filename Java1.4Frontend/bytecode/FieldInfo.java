@@ -4,8 +4,6 @@ import AST.BodyDecl;
 import AST.FieldDeclaration;
 import AST.IdDecl;
 import AST.Opt;
-import AST.VarInit;
-
 
 class FieldInfo {
 	private Parser p;
@@ -35,10 +33,10 @@ class FieldInfo {
 		);
 		if(attributes.constantValue() != null)
 			if(fieldDescriptor.isBoolean()) {
-				f.setAbstractVarInit(new VarInit(attributes.constantValue().exprAsBoolean()));
+				f.setInit(attributes.constantValue().exprAsBoolean());
 			}
 			else {
-				f.setAbstractVarInit(new VarInit(attributes.constantValue().expr()));
+				f.setInit(attributes.constantValue().expr());
 			}
 		return f;
 	}

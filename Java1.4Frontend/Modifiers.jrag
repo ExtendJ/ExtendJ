@@ -127,7 +127,7 @@ aspect Modifiers {
       s.append("" + name() + " is not declared abstract but contains abstract members: ");
       for(Iterator iter = abstractMethods().iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        s.append(m.signature() + " in " + m.hostType().fullName() + " ");
+        s.append(m.signature() + " in " + m.hostType().typeName() + " ");
       }
       error(s.toString());
     }
@@ -183,25 +183,25 @@ aspect Modifiers {
       // 9.4
       if(isStatic())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be static");
+            hostType().typeName() +  " may not be static");
       if(isStrictfp())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be strictfp");
+            hostType().typeName() +  " may not be strictfp");
       if(isNative())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be native");
+            hostType().typeName() +  " may not be native");
       if(isSynchronized())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be synchronized");
+            hostType().typeName() +  " may not be synchronized");
       if(isFinal())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be final");
+            hostType().typeName() +  " may not be final");
       if(isProtected())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be protected");
+            hostType().typeName() +  " may not be protected");
       if(isPrivate())
         error("interface method " + signature() + " in " +
-            hostType().fullName() +  " may not be private");
+            hostType().typeName() +  " may not be private");
     }
   }
 
@@ -213,7 +213,7 @@ aspect Modifiers {
   }
  
   // 8.1.2
-  public void MemberInterface.checkModifiers() {
+  public void MemberInterfaceDecl.checkModifiers() {
     super.checkModifiers();
     if(hostType().isInnerClass())
       error("*** Inner classes may not declare member interfaces");
@@ -242,10 +242,10 @@ aspect Modifiers {
 
   syn boolean MemberDecl.isStatic(); 
   
-  syn boolean MethodDecl.isPublic() = getModifiers().isPublic() || hostType() instanceof InterfaceDecl;
+  syn boolean MethodDecl.isPublic() = getModifiers().isPublic() || hostType().isInterfaceDecl();
   syn boolean MethodDecl.isPrivate() = getModifiers().isPrivate();
   syn boolean MethodDecl.isProtected() = getModifiers().isProtected();
-  syn boolean MethodDecl.isAbstract() = getModifiers().isAbstract() || hostType() instanceof InterfaceDecl;
+  syn boolean MethodDecl.isAbstract() = getModifiers().isAbstract() || hostType().isInterfaceDecl();
   syn boolean MethodDecl.isStatic() = getModifiers().isStatic();
   // 8.4.3.3
   syn boolean MethodDecl.isFinal() = getModifiers().isFinal() || hostType().isFinal() || isPrivate();
@@ -257,16 +257,16 @@ aspect Modifiers {
   syn boolean ConstructorDecl.isPrivate() = getModifiers().isPrivate();
   syn boolean ConstructorDecl.isProtected() = getModifiers().isProtected();
   
-  syn boolean FieldDeclaration.isPublic() = getModifiers().isPublic() || hostType() instanceof InterfaceDecl;
+  syn boolean FieldDeclaration.isPublic() = getModifiers().isPublic() || hostType().isInterfaceDecl();
   syn boolean FieldDeclaration.isPrivate() = getModifiers().isPrivate();
   syn boolean FieldDeclaration.isProtected() = getModifiers().isProtected();
-  syn boolean FieldDeclaration.isStatic() = getModifiers().isStatic() || hostType() instanceof InterfaceDecl;
+  syn boolean FieldDeclaration.isStatic() = getModifiers().isStatic() || hostType().isInterfaceDecl();
   syn boolean FieldDecl.isStatic() = getModifiers().isStatic();
-  syn boolean FieldDeclaration.isFinal() = getModifiers().isFinal() || hostType() instanceof InterfaceDecl;
+  syn boolean FieldDeclaration.isFinal() = getModifiers().isFinal() || hostType().isInterfaceDecl();
   syn boolean FieldDeclaration.isTransient() = getModifiers().isTransient();
   syn boolean FieldDeclaration.isVolatile() = getModifiers().isVolatile();
 
-  eq MemberType.isStatic() = getTypeDecl().isStatic();
+  eq MemberTypeDecl.isStatic() = getTypeDecl().isStatic();
   
   // 8.1.1 & 9.1.1
   eq TypeDecl.getModifiers().mayBePublic() = true;
@@ -336,20 +336,20 @@ aspect Modifiers {
     super.checkModifiers();
     if(numProtectionModifiers() > 1)
       error("only one public, protected, private allowed");
-    if(numStaticModifiers() > 1)
+    if(numModifier("static") > 1)
       error("only one static allowed");
     // 8.4.3.1
     // 8.4.3.2
     // 8.1.1.2
     if(numCompletenessModifiers() > 1)
       error("only one of final, abstract, volatile allowed");
-    if(numSynchronizedModifiers() > 1)
+    if(numModifier("synchronized") > 1)
       error("only one synchronized allowed");
-    if(numTransientModifiers() > 1)
+    if(numModifier("transient") > 1)
       error("only one transient allowed");
-    if(numNativeModifiers() > 1)
+    if(numModifier("native") > 1)
       error("only one native allowed");
-    if(numStrictfpModifiers() > 1)
+    if(numModifier("strictfp") > 1)
       error("only one strictfp allowed");
 
     if(isPublic() && !mayBePublic())
@@ -388,96 +388,34 @@ aspect Modifiers {
   inh boolean Modifiers.mayBeSynchronized();
   inh boolean Modifiers.mayBeNative();
 
-  syn lazy boolean Modifiers.isPublic() = modifiers().contains("public");
-  syn lazy boolean Modifiers.isPrivate() = modifiers().contains("private");
-  syn lazy boolean Modifiers.isProtected() = modifiers().contains("protected");
-  syn lazy boolean Modifiers.isStatic() = modifiers().contains("static");
-  syn lazy boolean Modifiers.isFinal() = modifiers().contains("final");
-  syn lazy boolean Modifiers.isAbstract() = modifiers().contains("abstract");
-  syn lazy boolean Modifiers.isVolatile() = modifiers().contains("volatile");
-  syn lazy boolean Modifiers.isTransient() = modifiers().contains("transient");
-  syn lazy boolean Modifiers.isStrictfp() = modifiers().contains("strictfp");
-  syn lazy boolean Modifiers.isSynchronized() = modifiers().contains("synchronized");
-  syn lazy boolean Modifiers.isNative() = modifiers().contains("native");
+  syn lazy boolean Modifiers.isPublic() = numModifier("public") != 0;
+  syn lazy boolean Modifiers.isPrivate() = numModifier("private") != 0;
+  syn lazy boolean Modifiers.isProtected() = numModifier("protected") != 0;
+  syn lazy boolean Modifiers.isStatic() = numModifier("static") != 0;
+  syn lazy boolean Modifiers.isFinal() = numModifier("final") != 0;
+  syn lazy boolean Modifiers.isAbstract() = numModifier("abstract") != 0;
+  syn lazy boolean Modifiers.isVolatile() = numModifier("volatile") != 0;
+  syn lazy boolean Modifiers.isTransient() = numModifier("transient") != 0;
+  syn lazy boolean Modifiers.isStrictfp() = numModifier("strictfp") != 0;
+  syn lazy boolean Modifiers.isSynchronized() = numModifier("synchronized") != 0;
+  syn lazy boolean Modifiers.isNative() = numModifier("native") != 0;
 
-  syn lazy boolean Modifiers.isSynthetic() = modifiers().contains("synthetic");
+  syn lazy boolean Modifiers.isSynthetic() = numModifier("synthetic") != 0;
 
-  syn lazy Collection Modifiers.modifiers() {
-    HashSet s = new HashSet();
-    for(int i = 0; i < getNumModifier(); i++)
-      s.add(getModifier(i).getID());
-    return s;
-  }
+  syn int Modifiers.numProtectionModifiers() = 
+    numModifier("public") + numModifier("protected") + numModifier("private");
 
-  syn int Modifiers.numProtectionModifiers() {
+  syn int Modifiers.numCompletenessModifiers() =
+    numModifier("abstract") + numModifier("final") + numModifier("volatile");
+    
+  syn lazy int Modifiers.numModifier(String name) {
     int n = 0;
     for(int i = 0; i < getNumModifier(); i++) {
       String s = getModifier(i).getID();
-      if(s.equals("public") || s.equals("protected") || s.equals("private"))
+      if(s.equals(name))
         n++;
     }
     return n;
   }
   
-  syn int Modifiers.numCompletenessModifiers() {
-    int n = 0;
-    for(int i = 0; i < getNumModifier(); i++) {
-      String s = getModifier(i).getID();
-      if(s.equals("abstract") || s.equals("final") || s.equals("volatile"))
-        n++;
-    }
-    return n;
-  }
-  
-  syn int Modifiers.numStaticModifiers() {
-    int n = 0;
-    for(int i = 0; i < getNumModifier(); i++) {
-      String s = getModifier(i).getID();
-      if(s.equals("static"))
-        n++;
-    }
-    return n;
-  }
-  
-  syn int Modifiers.numSynchronizedModifiers() {
-    int n = 0;
-    for(int i = 0; i < getNumModifier(); i++) {
-      String s = getModifier(i).getID();
-      if(s.equals("synchronized"))
-        n++;
-    }
-    return n;
-  }
-  
-  syn int Modifiers.numNativeModifiers() {
-    int n = 0;
-    for(int i = 0; i < getNumModifier(); i++) {
-      String s = getModifier(i).getID();
-      if(s.equals("native"))
-        n++;
-    }
-    return n;
-  }
-  
-  syn int Modifiers.numTransientModifiers() {
-    int n = 0;
-    for(int i = 0; i < getNumModifier(); i++) {
-      String s = getModifier(i).getID();
-      if(s.equals("transient"))
-        n++;
-    }
-    return n;
-  }
-  
-  syn int Modifiers.numStrictfpModifiers() {
-    int n = 0;
-    for(int i = 0; i < getNumModifier(); i++) {
-      String s = getModifier(i).getID();
-      if(s.equals("strictfp"))
-        n++;
-    }
-    return n;
-  }
-  
-
 }

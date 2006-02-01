@@ -250,12 +250,15 @@ aspect TypeAnalysis {
   eq Program.getCompilationUnit().illegalType() = lookupType("primitive", "Illegal");
   inh TypeDecl Expr.illegalType();
   eq Program.getCompilationUnit().unknownField() = lookupType("primitive", "Unknown").findSingleVariable("unknown");
-  eq Program.getCompilationUnit().illegalField() = lookupType("primitive", "Illegal").findSingleVariable("illegal");
+  //eq Program.getCompilationUnit().illegalField() = lookupType("primitive", "Illegal").findSingleVariable("illegal");
+  public FieldDeclaration TypeDecl.findSingleVariable(String name) {
+    return (FieldDeclaration)fields(name).iterator().next();
+  }
   eq Program.getCompilationUnit().illegalMethod() {
     TypeDecl unknownType = lookupType("primitive", "Illegal");
     for(Iterator iter = unknownType.methods().iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
-      if(m.getIdDecl().getID().equals("illegal"))
+      if(m.name().equals("illegal"))
         return m;
     }
     throw new Error("Could not find method unknown in type Unknown");
@@ -264,7 +267,7 @@ aspect TypeAnalysis {
     TypeDecl unknownType = lookupType("primitive", "Unknown");
     for(Iterator iter = unknownType.methods().iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
-      if(m.getIdDecl().getID().equals("unknown"))
+      if(m.name().equals("unknown"))
         return m;
     }
     throw new Error("Could not find method unknown in type Unknown");
@@ -287,15 +290,15 @@ aspect TypeAnalysis {
   syn lazy TypeDecl Parameter.type() = getTypeAccess().type();
 
   inh lazy TypeDecl ArrayInit.declType();
-  eq FieldDeclaration.getAbstractVarInit().declType() = type();
+  eq Program.getCompilationUnit(int i).declType() = null;
   eq FieldDecl.getVariableDecl().declType() = null;
   eq VarDeclStmt.getVariableDecl().declType() = null;
-  eq VariableDeclaration.getAbstractVarInit().declType() = type();
-  eq ArrayInstanceExpr.getArrayInit().declType() = type();
-  eq ArrayInit.getAbstractVarInit().declType() = lookupArray(declType().elementType(), declType().dimension() - 1);
   
-  syn lazy TypeDecl AbstractVarInit.type();
-  eq VarInit.type() = getExpr().type();
+  eq FieldDeclaration.getInit().declType() = type();
+  eq VariableDeclaration.getInit().declType() = type();
+  eq ArrayCreationExpr.getArrayInit().declType() = type();
+  eq ArrayInit.getInit().declType() = lookupArray(declType().elementType(), declType().dimension() - 1);
+
   eq ArrayInit.type() = declType();
 
   inh TypeDecl ConstructorDecl.unknownType();
@@ -316,36 +319,24 @@ aspect TypeAnalysis {
   eq MethodAccess.type() = decl().type();
   eq ConstructorAccess.type() = decl().type();
 
+  eq ThisAccess.type() = decl();
+  eq SuperAccess.type() = decl();
+
   eq AssignExpr.type() = getDest().type();
   
   eq IntegerLiteral.type() = lookupType("primitive", "int");
   eq LongLiteral.type() = lookupType("primitive", "long");
-  eq FPLiteral.type() = lookupType("primitive", "float");
+  eq FloatingPointLiteral.type() = lookupType("primitive", "float");
   eq DoubleLiteral.type() = lookupType("primitive", "double");
   eq BooleanLiteral.type() = lookupType("primitive", "boolean");
-  eq CharLiteral.type() = lookupType("primitive", "char");
+  eq CharacterLiteral.type() = lookupType("primitive", "char");
   eq StringLiteral.type() = lookupType("java.lang", "String");
   eq NullLiteral.type() = lookupType("primitive", "null");
 
   eq ParExpr.type() = getExpr().type();
 
-  eq StringLiteralExpr.type() = getStringLiteral().type();
-
-  eq PrimTypeClassExpr.type() {
-    if(getID().equals("byte")) return lookupType("java.lang", "Byte");
-    else if(getID().equals("short")) return lookupType("java.lang", "Short");
-    else if(getID().equals("int")) return lookupType("java.lang", "Integer");
-    else if(getID().equals("long")) return lookupType("java.lang", "Long");
-    else if(getID().equals("float")) return lookupType("java.lang", "Float");
-    else if(getID().equals("double")) return lookupType("java.lang", "Double");
-    else if(getID().equals("boolean")) return lookupType("java.lang", "Boolean");
-    else if(getID().equals("char")) return lookupType("java.lang", "Character");
-    else if(getID().equals("void")) return lookupType("java.lang", "Void");
-    else return null;
-  }
-
   eq ClassInstanceExpr.type() = hasTypeDecl() ? getTypeDecl() : getAccess().type();
-  eq ArrayInstanceExpr.type() = lookupArray(
+  eq ArrayCreationExpr.type() = lookupArray(
       getTypeAccess().type().elementType(),
       getTypeAccess().type().dimension() + getNumDims()
     );
@@ -392,7 +383,7 @@ aspect TypeAnalysis {
   
   eq InstanceOfExpr.type() = typeBoolean();
 
-  eq QuestionColonExpr.type() {
+  eq ConditionalExpr.type() {
     TypeDecl trueType = getTrueExpr().type();
     TypeDecl falseType = getFalseExpr().type();
     
@@ -446,46 +437,25 @@ aspect TypeWideningAndIdentity {
 
   eq UnknownType.instanceOf(TypeDecl type) = true;
   eq IllegalType.instanceOf(TypeDecl type) = true;
-  public boolean UnknownType.isSupertypeOfClassDecl(ClassDecl type) { 
-    return true;
-  }
-  public boolean UnknownType.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
-    return true;
-  }
-  public boolean UnknownType.isSupertypeOfArrayDecl(ArrayDecl type) {
-    return true;
-  }
-  public boolean UnknownType.isSupertypeOfPrimitiveType(PrimitiveType type) {
-    return true;
-  }
-  public boolean UnknownType.isSupertypeOfNullType(NullType type) {
-    return true;
-  }
-  public boolean IllegalType.isSupertypeOfClassDecl(ClassDecl type) {
-    return true;
-  }
-  public boolean IllegalType.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
-    return true;
-  }
-  public boolean IllegalType.isSupertypeOfArrayDecl(ArrayDecl type) {
-    return true;
-  }
-  public boolean IllegalType.isSupertypeOfPrimitiveType(PrimitiveType type) {
-    return true;
-  }
-  public boolean IllegalType.isSupertypeOfNullType(NullType type) {
-    return true;
-  }
+
+  eq UnknownType.isSupertypeOfClassDecl(ClassDecl type) = true;
+  eq UnknownType.isSupertypeOfInterfaceDecl(InterfaceDecl type) = true;
+  eq UnknownType.isSupertypeOfArrayDecl(ArrayDecl type) = true;
+  eq UnknownType.isSupertypeOfPrimitiveType(PrimitiveType type) = true;
+  eq UnknownType.isSupertypeOfNullType(NullType type) = true;
+  eq IllegalType.isSupertypeOfClassDecl(ClassDecl type) = true;
+  eq IllegalType.isSupertypeOfInterfaceDecl(InterfaceDecl type) = true;
+  eq IllegalType.isSupertypeOfArrayDecl(ArrayDecl type) = true;
+  eq IllegalType.isSupertypeOfPrimitiveType(PrimitiveType type) = true;
+  eq IllegalType.isSupertypeOfNullType(NullType type) = true;
   
-  public boolean TypeDecl.isSupertypeOfClassDecl(ClassDecl type) {
-    return type == this;
-  }
-  public boolean ClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
+  syn lazy boolean TypeDecl.isSupertypeOfClassDecl(ClassDecl type) circular [false] = type == this;
+  eq ClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
     if(super.isSupertypeOfClassDecl(type))
       return true;
     return type.hasSuperclass() && type.superclass() != null && type.superclass().instanceOf(this);
   }
-  public boolean InterfaceDecl.isSupertypeOfClassDecl(ClassDecl type) {
+  eq InterfaceDecl.isSupertypeOfClassDecl(ClassDecl type) {
     if(super.isSupertypeOfClassDecl(type))
       return true;
     for(Iterator iter = type.interfacesIterator(); iter.hasNext(); ) {
@@ -496,13 +466,9 @@ aspect TypeWideningAndIdentity {
     return type.hasSuperclass() && type.superclass() != null && type.superclass().instanceOf(this);
   }
   
-  public boolean TypeDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
-    return type == this;
-  }
-  public boolean ClassDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
-    return isObject();
-  }
-  public boolean InterfaceDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+  syn lazy boolean TypeDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) circular [false] = type == this;
+  eq ClassDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) = isObject();
+  eq InterfaceDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
     if(super.isSupertypeOfInterfaceDecl(type))
       return true;
     for(Iterator iter = type.superinterfacesIterator(); iter.hasNext(); ) {
@@ -513,15 +479,13 @@ aspect TypeWideningAndIdentity {
     return false;
   }
 
-  public boolean TypeDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
-    return this == type;
-  }  
-  public boolean ClassDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+  syn lazy boolean TypeDecl.isSupertypeOfArrayDecl(ArrayDecl type) circular [false] = this == type;
+  eq ClassDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
     if(super.isSupertypeOfArrayDecl(type))
       return true;
     return type.hasSuperclass() && type.superclass() != null && type.superclass().instanceOf(this);
   }
-  public boolean InterfaceDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+  eq InterfaceDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
     if(super.isSupertypeOfArrayDecl(type))
       return true;
     for(Iterator iter = type.interfacesIterator(); iter.hasNext(); ) {
@@ -531,38 +495,29 @@ aspect TypeWideningAndIdentity {
     }
     return false;
   }  
-  public boolean ArrayDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
-    if(type.elementType().isReferenceType())
+  eq ArrayDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+    if(type.elementType().isPrimitive() && elementType().isPrimitive())
+      return type.dimension() == dimension() && type.elementType() == elementType();
+    return type.componentType().instanceOf(componentType());
+      
+    /*if(type.elementType().isReferenceType())
       return type.dimension() == dimension() && type.elementType().instanceOf(elementType());
     else
-      return type.dimension() == dimension() && type.elementType() == elementType();
+      return type.dimension() == dimension() && type.elementType() == elementType();*/
   }  
 
-  public boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) {
-    return type == this;
-  }
-  public boolean PrimitiveType.isSupertypeOfPrimitiveType(PrimitiveType type) {
+  syn lazy boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) circular [false] = type == this;
+  eq PrimitiveType.isSupertypeOfPrimitiveType(PrimitiveType type) {
     if(super.isSupertypeOfPrimitiveType(type))
       return true;
     return type.hasSuperclass() && type.superclass().isPrimitive() && type.superclass().instanceOf(this);
   }
   
-  public boolean TypeDecl.isSupertypeOfNullType(NullType type) {
-    return false;
-  }
-  public boolean ReferenceType.isSupertypeOfNullType(NullType type) {
-    return true;
-  }
-  public boolean NullType.isSupertypeOfNullType(NullType type) {
-    return true;
-  }
+  syn lazy boolean TypeDecl.isSupertypeOfNullType(NullType type) = false;
+  eq ReferenceType.isSupertypeOfNullType(NullType type) = true;
+  eq NullType.isSupertypeOfNullType(NullType type) = true;
   
-  public boolean TypeDecl.isSupertypeOfVoidType(VoidType type) {
-    return false;
-  }
-  public boolean VoidType.isSupertypeOfVoidType(VoidType type) {
-    return true;
-  }
-  
+  syn lazy boolean TypeDecl.isSupertypeOfVoidType(VoidType type) = false;
+  eq VoidType.isSupertypeOfVoidType(VoidType type) = true;
 }
 

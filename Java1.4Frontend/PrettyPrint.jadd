@@ -31,7 +31,7 @@ aspect PrettyPrint {
 
   public void TypeAccess.printTypes() {
     System.out.print(indent());
-    System.out.println(getClass() + " " + type().fullName());
+    System.out.println(getClass() + " " + type().typeName());
     indent++;
     for(int i = 0; i < getNumChild(); i++) {
       getChild(i).printTypes();
@@ -91,7 +91,7 @@ aspect PrettyPrint {
       s.append("\n");
     }
     } catch (NullPointerException e) {
-      System.out.print("Error in compilation unit hosting " + getTypeDecl(0).fullName());
+      System.out.print("Error in compilation unit hosting " + getTypeDecl(0).typeName());
       throw e;
     }
   }
@@ -112,8 +112,7 @@ aspect PrettyPrint {
     
   public void ClassDecl.toString(StringBuffer s) {
     getModifiers().toString(s);
-    s.append("class ");
-    getIdDecl().toString(s);
+    s.append("class " + name());
     if(hasSuperClassAccess()) {
       s.append(" extends ");
       s.append(getSuperClassAccess().type().name());
@@ -156,8 +155,7 @@ aspect PrettyPrint {
   
   public void InterfaceDecl.toString(StringBuffer s) {
     getModifiers().toString(s);
-    s.append(" interface ");
-    getIdDecl().toString(s);
+    s.append(" interface " + name());
     if(getNumSuperInterfaceId() > 0) {
       s.append(" extends ");
       getSuperInterfaceId(0).toString(s);
@@ -210,8 +208,7 @@ aspect PrettyPrint {
   public void ConstructorDecl.toString(StringBuffer s) {
     s.append(indent());
     getModifiers().toString(s);
-    getIdDecl().toString(s);
-    s.append("(");
+    s.append(name() + "(");
     if(getNumParameter() > 0) {
       getParameter(0).toString(s);
       for(int i = 1; i < getNumParameter(); i++) {
@@ -263,13 +260,10 @@ aspect PrettyPrint {
     s.append(indent());
     getModifiers().toString(s);
     getTypeAccess().toString(s);
-    s.append(" ");
-    
-    getIdDecl().toString(s);
-    
-    if(hasAbstractVarInit()) {
+    s.append(" " + name());
+    if(hasInit()) {
       s.append(" = ");
-      getAbstractVarInit().toString(s);
+      getInit().toString(s);
     }
     s.append(";\n");
   }
@@ -278,9 +272,7 @@ aspect PrettyPrint {
     s.append(indent());
     getModifiers().toString(s);
     getTypeAccess().toString(s);
-    s.append(" ");
-    getIdDecl().toString(s);
-    s.append("(");
+    s.append(" " + name() + "(");
     if(getNumParameter() > 0) {
       getParameter(0).toString(s);
       for(int i = 1; i < getNumParameter(); i++) {
@@ -309,12 +301,12 @@ aspect PrettyPrint {
     }
   }
 
-  public void MemberClass.toString(StringBuffer s) {
+  public void MemberClassDecl.toString(StringBuffer s) {
     s.append(indent());
     getClassDecl().toString(s);
   }
 
-  public void MemberInterface.toString(StringBuffer s) {
+  public void MemberInterfaceDecl.toString(StringBuffer s) {
     s.append(indent());
     getInterfaceDecl().toString(s);
   }
@@ -322,28 +314,23 @@ aspect PrettyPrint {
   //
   
   public void VariableDecl.toString(StringBuffer s) {
-    getIdDecl().toString(s);
-    
+    s.append(name());
     for(int i = 0; i < getNumEmptyBracket(); i++) {
       s.append("[]");
     }
-    if(hasAbstractVarInit()) {
+    if(hasInit()) {
       s.append(" = ");
-      getAbstractVarInit().toString(s);
+      getInit().toString(s);
     }
-  }
-
-  public void VarInit.toString(StringBuffer s) {
-    getExpr().toString(s);
   }
 
   public void ArrayInit.toString(StringBuffer s) {
     s.append("{ ");
-    if(getNumAbstractVarInit() > 0) {
-      getAbstractVarInit(0).toString(s);
-      for(int i = 1; i < getNumAbstractVarInit(); i++) {
+    if(getNumInit() > 0) {
+      getInit(0).toString(s);
+      for(int i = 1; i < getNumInit(); i++) {
         s.append(", ");
-        getAbstractVarInit(i).toString(s);
+        getInit(i).toString(s);
       }
     }
     s.append(" } ");
@@ -352,8 +339,7 @@ aspect PrettyPrint {
   public void Parameter.toString(StringBuffer s) {
     getModifiers().toString(s);
     getTypeAccess().toString(s);
-    s.append(" ");
-    getIdDecl().toString(s);
+    s.append(" " + name());
     for(int i = 0; i < getNumEmptyBracket(); i++) {
       s.append("[]");
     }
@@ -434,17 +420,50 @@ aspect PrettyPrint {
   }
   
   public void StringLiteral.toString(StringBuffer s) {
-    s.append("\"" + getLITERAL() + "\"");
+    s.append("\"" + escape(getLITERAL()) + "\"");
   }
   
-  public void CharLiteral.toString(StringBuffer s) {
-    s.append("'" + getLITERAL() + "'");
+  public void CharacterLiteral.toString(StringBuffer s) {
+    s.append("'" + escape(getLITERAL()) + "'");
   }
 
-  public void StringLiteralExpr.toString(StringBuffer s) {
-    getStringLiteral().toString(s);
+  protected static String Literal.escape(String s) {
+    StringBuffer result = new StringBuffer();
+    for (int i=0; i < s.length(); i++) {
+      switch(s.charAt(i)) {
+        case '\b' : result.append("\\b"); break;
+        case '\t' : result.append("\\t"); break;
+        case '\n' : result.append("\\n"); break;
+        case '\f' : result.append("\\f"); break;
+        case '\r' : result.append("\\r"); break;
+        case '\"' : result.append("\\\""); break;
+        case '\'' : result.append("\\\'"); break;
+        case '\\' : result.append("\\\\"); break;
+        case 'å'  : result.append("å"); break;
+        case 'ä'  : result.append("ä"); break;
+        case 'ö'  : result.append("ö"); break;
+        case 'Å'  : result.append("Å"); break;
+        case 'Ä'  : result.append("Ä"); break;
+        case 'Ö'  : result.append("Ö"); break;
+        default:
+          int value = (int)s.charAt(i);
+          if(value < 0x20 || (value > 0x7e))
+            result.append(asEscape(value));
+          else
+            result.append(s.charAt(i));
+      }
+    }
+    return result.toString();
   }
-  
+  protected static String Literal.asEscape(int value) {
+    StringBuffer s = new StringBuffer("\\u");
+    String hex = Integer.toHexString(value);
+    for(int i = 0; i < 4-hex.length(); i++)
+      s.append("0");
+    s.append(hex);
+    return s.toString();
+  }
+
   public void ParExpr.toString(StringBuffer s) {
     s.append("(");
     getExpr().toString(s);
@@ -452,13 +471,7 @@ aspect PrettyPrint {
   }
 
 
-  public void PrimTypeClassExpr.toString(StringBuffer s) {
-    s.append(getID());
-    s.append(".class");
-  }
-
   public void ClassInstanceExpr.toString(StringBuffer s) {
-    findExceptionHandler();
     s.append("new ");
     getAccess().toString(s);
     s.append("(");
@@ -487,7 +500,7 @@ aspect PrettyPrint {
     }
   }
 
-  public void ArrayInstanceExpr.toString(StringBuffer s) {
+  public void ArrayCreationExpr.toString(StringBuffer s) {
     s.append("new ");
     getTypeAccess().toString(s);
 
@@ -496,7 +509,6 @@ aspect PrettyPrint {
     }
     
     if(hasArrayInit()) {
-      s.append(" = ");
       getArrayInit().toString(s);
     }
   }
@@ -657,7 +669,7 @@ aspect PrettyPrint {
     s.append(" || ");
   }
 
-  public void QuestionColonExpr.toString(StringBuffer s) {
+  public void ConditionalExpr.toString(StringBuffer s) {
     getCondition().toString(s);
     s.append(" ? ");
     getTrueExpr().toString(s);
@@ -678,24 +690,14 @@ aspect PrettyPrint {
 
   public void AbstractDot.toString(StringBuffer s) {
     getLeft().toString(s);
-    s.append(".");
-    getRight().toString(s);
-  }
-  public void ArrayDot.toString(StringBuffer s) {
-    getLeft().toString(s);
-    getRight().toString(s);
-  }
-  
-  public void Dot.toString(StringBuffer s) {
-    getLeft().toString(s);
-    s.append(".");
+    if(!getRight().isArrayAccess())
+      s.append(".");
     getRight().toString(s);
   }
   
   public void TypeAccess.toString(StringBuffer s) {
-    for(int i = 0; i < getNumPackage(); i++)
-      s.append(getPackage(i).getID() + ".");
-    s.append(getIdUse().getID());
+    if(!isUnknown())
+      s.append(isQualified() ? decl().name() : decl().typeName());
   }
 
   public void PackageAccess.toString(StringBuffer s) {
@@ -706,8 +708,6 @@ aspect PrettyPrint {
   
   public void ArrayTypeAccess.toString(StringBuffer s) {
     super.toString(s);
-    for(int i = 0; i < getDimension(); i++)
-      s.append("[]");
   }
 
   public void ThisAccess.toString(StringBuffer s) {
@@ -726,13 +726,10 @@ aspect PrettyPrint {
 
   public void VarAccess.toString(StringBuffer s) {
     s.append(name());
-    //s.append(getDecl().name());
   }
 
   public void MethodAccess.toString(StringBuffer s) {
-    findExceptionHandler();
     s.append(name());
-    //s.append(getDecl().getIdDecl().getID());
     s.append("(");
     if(getNumArg() > 0) {
       getArg(0).toString(s);
@@ -745,9 +742,7 @@ aspect PrettyPrint {
   }
 
   public void ConstructorAccess.toString(StringBuffer s) {
-    findExceptionHandler();
     s.append(name());
-    //s.append(getDecl().getIdDecl().getID());
     s.append("(");
     if(getNumArg() > 0) {
       getArg(0).toString(s);
@@ -782,7 +777,7 @@ aspect PrettyPrint {
     s.append(";\n");
   }
 
-  public void LabelStmt.toString(StringBuffer s) {
+  public void LabeledStmt.toString(StringBuffer s) {
     getLabel().toString(s);
     s.append(":\n");
     s.append(indent());
@@ -868,11 +863,10 @@ aspect PrettyPrint {
         VariableDeclaration var = (VariableDeclaration)getInitStmt(0);
         var.getModifiers().toString(s);
         var.getTypeAccess().toString(s);
-        s.append(" ");
-        s.append(var.getIdDecl().getID());
+        s.append(" " + var.name());
         for(int i = 1; i < getNumInitStmt(); i++) {
           s.append(", ");
-          s.append(((VariableDeclaration)getInitStmt(i)).getIdDecl().getID());
+          s.append(((VariableDeclaration)getInitStmt(i)).name());
         }
       }
       else {
@@ -910,7 +904,6 @@ aspect PrettyPrint {
   }
 
   public void BreakStmt.toString(StringBuffer s) {
-    targetStmt();
     s.append("break ");
     if(hasLabel())
       getLabel().toString(s);
@@ -918,7 +911,6 @@ aspect PrettyPrint {
   }
 
   public void ContinueStmt.toString(StringBuffer s) {
-    targetStmt();
     s.append("continue ");
     if(hasLabel())
       getLabel().toString(s);
@@ -926,7 +918,6 @@ aspect PrettyPrint {
   }
 
   public void ReturnStmt.toString(StringBuffer s) {
-    targetBodyDecl();
     s.append("return ");
     if(hasResult()) {
       getResult().toString(s);
@@ -935,13 +926,12 @@ aspect PrettyPrint {
   }
 
   public void ThrowStmt.toString(StringBuffer s) {
-    findExceptionHandler();
     s.append("throw ");
     getExpr().toString(s);
     s.append(";\n");
   }
 
-  public void SynchronizeStmt.toString(StringBuffer s) {
+  public void SynchronizedStmt.toString(StringBuffer s) {
     s.append("synchronized(");
     getExpr().toString(s);
     s.append(") ");
@@ -951,9 +941,9 @@ aspect PrettyPrint {
   public void TryStmt.toString(StringBuffer s) {
     s.append("try ");
     getBlock().toString(s);
-    for(int i = 0; i < getNumCatch(); i++) {
+    for(int i = 0; i < getNumCatchClause(); i++) {
       s.append(indent());
-      getCatch(i).toString(s);
+      getCatchClause(i).toString(s);
     }
     if(hasFinally()) {
       s.append(indent());
@@ -962,7 +952,7 @@ aspect PrettyPrint {
     }
   }
 
-  public void Catch.toString(StringBuffer s) {
+  public void CatchClause.toString(StringBuffer s) {
     s.append("catch (");
     getParameter().toString(s);
     s.append(") ");
@@ -984,13 +974,10 @@ aspect PrettyPrint {
   public void VariableDeclaration.toString(StringBuffer s) {
     getModifiers().toString(s);
     getTypeAccess().toString(s);
-    s.append(" ");
-    
-    getIdDecl().toString(s);
-    
-    if(hasAbstractVarInit()) {
+    s.append(" " + name());
+    if(hasInit()) {
       s.append(" = ");
-      getAbstractVarInit().toString(s);
+      getInit().toString(s);
     }
     s.append(";\n");
   }
@@ -999,8 +986,7 @@ aspect PrettyPrint {
   public void ParameterDeclaration.toString(StringBuffer s) {
     getModifiers().toString(s);
     getTypeAccess().toString(s);
-    s.append(" ");
-    getIdDecl().toString(s);
+    s.append(" " + name());
   }
 
   public void LocalClassDeclStmt.toString(StringBuffer s) {
@@ -1036,5 +1022,6 @@ aspect PrettyPrint {
       getCompilationUnit(i).dumpTree(0);
     }
   }
+
 }
 

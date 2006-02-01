@@ -6,9 +6,9 @@ import AST.ClassDecl;
 import AST.IdDecl;
 import AST.InterfaceDecl;
 import AST.List;
-import AST.MemberClass;
-import AST.MemberInterface;
-import AST.MemberType;
+import AST.MemberClassDecl;
+import AST.MemberInterfaceDecl;
+import AST.MemberTypeDecl;
 import AST.TypeDecl;
 
 
@@ -84,12 +84,12 @@ class Attributes {
           typeDecl.setIdDecl(new IdDecl(inner_name));
           typeDecl.setModifiers(Parser.modifiers(inner_class_access_flags & 0x041f));
           if (this.p.outerClassInfo != null && this.p.outerClassInfo.name().equals(outer_class_info.name())) {
-            MemberType m = null;
+            MemberTypeDecl m = null;
             if (typeDecl instanceof ClassDecl) {
-              m = new MemberClass((ClassDecl)typeDecl);
+              m = new MemberClassDecl((ClassDecl)typeDecl);
               outerTypeDecl.addBodyDecl(m);
             } else if (typeDecl instanceof InterfaceDecl) {
-              m = new MemberInterface((InterfaceDecl)typeDecl);
+              m = new MemberInterfaceDecl((InterfaceDecl)typeDecl);
               outerTypeDecl.addBodyDecl(m);
             }
           }

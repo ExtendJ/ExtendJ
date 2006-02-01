@@ -17,8 +17,8 @@ aspect Variables {
 
     public TypeDecl hostType();
 
-    public AbstractVarInit getAbstractVarInit();
-    public boolean hasAbstractVarInit();
+    public Expr getInit();
+    public boolean hasInit();
   }
   
   VariableDeclaration implements Variable;
@@ -31,7 +31,7 @@ aspect Variables {
   syn boolean VariableDeclaration.isLocalVariable() = true;
   // 4.5.4
   syn boolean VariableDeclaration.isFinal() = getModifiers().isFinal();
-  syn boolean VariableDeclaration.isBlank() = !hasAbstractVarInit();
+  syn boolean VariableDeclaration.isBlank() = !hasInit();
   syn boolean VariableDeclaration.isStatic() = false;
   
   syn String VariableDeclaration.name() = getIdDecl().getID();
@@ -45,7 +45,7 @@ aspect Variables {
   syn boolean FieldDeclaration.isExceptionHandlerParameter() = false;
   syn boolean FieldDeclaration.isLocalVariable() = false;
 
-  syn boolean FieldDeclaration.isBlank() = !hasAbstractVarInit();
+  syn boolean FieldDeclaration.isBlank() = !hasInit();
   
   syn String FieldDeclaration.name() = getIdDecl().getID();
 
@@ -65,9 +65,9 @@ aspect Variables {
   eq MethodDecl.getParameter().isMethodParameter() = true;
   eq MethodDecl.getParameter().isConstructorParameter() = false;
   eq MethodDecl.getParameter().isExceptionHandlerParameter() = false;
-  eq Catch.getParameter().isMethodParameter() = false;
-  eq Catch.getParameter().isConstructorParameter() = false;
-  eq Catch.getParameter().isExceptionHandlerParameter() = true;
+  eq CatchClause.getParameter().isMethodParameter() = false;
+  eq CatchClause.getParameter().isConstructorParameter() = false;
+  eq CatchClause.getParameter().isExceptionHandlerParameter() = true;
   
   // 4.5.4
   syn boolean ParameterDeclaration.isFinal() = getModifiers().isFinal();
@@ -76,8 +76,11 @@ aspect Variables {
   
   syn String ParameterDeclaration.name() = getIdDecl().getID();
 
-  syn boolean ParameterDeclaration.hasAbstractVarInit() = false;
-  syn AbstractVarInit ParameterDeclaration.getAbstractVarInit() { throw new UnsupportedOperationException(); }
+  syn boolean ParameterDeclaration.hasInit() = false;
+  syn Expr ParameterDeclaration.getInit() { throw new UnsupportedOperationException(); }
+
+  syn String Parameter.name() = getIdDecl().getID();
+  syn String VariableDecl.name() = getIdDecl().getID();
 
 }
 
@@ -88,9 +91,8 @@ aspect VariableDeclarationTransformation {
     when(!(this instanceof ParameterDeclaration))
     to Parameter new ParameterDeclaration(
           getModifiers(),
-          //getTypeAccess().qualifiesAccess(new ArrayNameAccess(getNumEmptyBracket(), false)),
           new ArrayTypeAccess(getTypeAccess(), getNumEmptyBracket()),
-          getIdDecl()
+          name()
       );
   }
 
@@ -114,8 +116,8 @@ aspect VariableDeclarationTransformation {
           getModifiers(),
           //getTypeAccess().qualifiesAccess(new ArrayNameAccess(v.getNumEmptyBracket(), false)),
           new ArrayTypeAccess(getTypeAccess(), v.getNumEmptyBracket()),
-          v.getIdDecl(),
-          v.getAbstractVarInitOpt()
+          new IdDecl(v.name()),
+          v.getInitOpt()
       );
       return decl;
     }
@@ -148,8 +150,8 @@ aspect VariableDeclarationTransformation {
           getModifiers(),
           //getTypeAccess().qualifiesAccess(new ArrayNameAccess(v.getNumEmptyBracket(), false)),
           new ArrayTypeAccess(getTypeAccess(), v.getNumEmptyBracket()),
-          v.getIdDecl(),
-          v.getAbstractVarInitOpt()
+          new IdDecl(v.name()),
+          v.getInitOpt()
       );
       decl.setStart(start); // copy location information
       return decl;

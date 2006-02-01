@@ -33,7 +33,7 @@ aspect SpecialClasses {
   inh TypeDecl TypeDecl.typeObject();
 
   inh TypeDecl ThrowStmt.typeThrowable();
-  inh TypeDecl Catch.typeThrowable();
+  inh TypeDecl CatchClause.typeThrowable();
   
  
   eq Program.getCompilationUnit().typeNull() = lookupType("primitive", "null");
@@ -44,7 +44,19 @@ aspect LookupFullyQualifiedTypes {
   syn lazy boolean Program.hasPackage(String packageName) {
     return ClassFile.isPackage(packageName);
   }
+  // The scope of a declaration of an observable top level package is all observable compilation units
   eq Program.getCompilationUnit().hasPackage(String packageName) = hasPackage(packageName);
+  eq AbstractDot.getRight().hasPackage(String packageName) = getLeft().hasQualifiedPackage(packageName);
+  syn boolean Expr.hasQualifiedPackage(String packageName) = false;
+  eq PackageAccess.hasQualifiedPackage(String packageName) =
+    hasPackage(packageName() + "." + packageName);
+  inh boolean Expr.hasPackage(String packageName);
+  eq MethodAccess.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
+  eq ConstructorAccess.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
+  eq SuperConstructorAccess.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
+  eq ArrayAccess.getExpr().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
+  eq ClassInstanceExpr.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
+
   
   inh TypeDecl Expr.lookupType(String packageName, String typeName);
   inh TypeDecl Stmt.lookupType(String packageName, String typeName);
@@ -100,7 +112,7 @@ aspect LookupArray {
 
   inh TypeDecl ArrayInit.lookupArray(TypeDecl elementType, int dimension);
   inh TypeDecl ArrayDecl.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl ArrayInstanceExpr.lookupArray(TypeDecl elementType, int dimension);
+  inh TypeDecl ArrayCreationExpr.lookupArray(TypeDecl elementType, int dimension);
   inh TypeDecl TypeDecl.lookupArray(TypeDecl elementType, int dimension);
   inh TypeDecl ArrayAccess.lookupArray(TypeDecl elementType, int dimension);
   inh TypeDecl ArrayTypeAccess.lookupArray(TypeDecl elementType, int dimension);
@@ -133,12 +145,9 @@ aspect LookupArray {
         new List().add( // BodyDecl*
           new FieldDeclaration(
             new Modifiers(new List().add(new Modifier("public")).add(new Modifier("final"))),
-            new TypeAccess(
-              new List(),
-              new IdUse("int")
-            ),
+            new TypeAccess("int"),
             new IdDecl("length"),
-            new Opt() // [AbstractVarInit]
+            new Opt() // [Init:Expr]
           )).add(
 	  new MethodDecl(
 	    new Modifiers(new List().add(new Modifier("public"))),
@@ -346,11 +355,11 @@ aspect TypeScopePropagation {
 
   syn lazy TypeCollection TypeAccess.decls() {
     if(packageName().equals("")) {
-      return lookupType(getIdUse().getID());
+      return lookupType(name());
     }
     else {
       TypeCollection c = TypeCollection.emptyCollection();
-      TypeDecl typeDecl = lookupType(packageName(), getIdUse().getID());
+      TypeDecl typeDecl = lookupType(packageName(), name());
       c = c.add(typeDecl != null ? typeDecl : unknownType());
       return c;
     }
@@ -364,8 +373,10 @@ aspect TypeScopePropagation {
     return unknownType();
   }
   
-  eq ThisAccess.decls() = TypeCollection.emptyCollection();
-  eq SuperAccess.decls() = TypeCollection.emptyCollection();
+  //eq ThisAccess.decls() = TypeCollection.emptyCollection();
+  //eq SuperAccess.decls() = TypeCollection.emptyCollection();
+  syn lazy TypeCollection ThisAccess.decls() = TypeCollection.emptyCollection();
+  syn lazy TypeCollection SuperAccess.decls() = TypeCollection.emptyCollection();
   syn lazy TypeDecl ThisAccess.decl() = isQualified() ? qualifier().type() : hostType();
   syn lazy TypeDecl SuperAccess.decl() {
     TypeDecl typeDecl = isQualified() ? qualifier().type() : hostType();
@@ -388,6 +399,8 @@ aspect TypeScopePropagation {
   inh TypeDecl ArrayAccess.arrayType();
   eq AbstractDot.getRight().arrayType() {
     TypeDecl typeDecl = getLeft().type();
+    if(typeDecl.dimension() == 0)
+      return illegalType();
     return lookupArray(typeDecl.elementType(), typeDecl.dimension() - 1);
   }
   eq Block.getStmt().arrayType() = null;
@@ -398,10 +411,8 @@ aspect TypeScopePropagation {
   }
   
   eq MethodAccess.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
-  eq ParseMethodName.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
   eq ConstructorAccess.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
   eq ArrayAccess.getExpr().lookupType(String name) = unqualifiedScope().lookupType(name);
-  eq ParseArray.getDims().lookupType(String name) = unqualifiedScope().lookupType(name);
 
   inh TypeCollection CompilationUnit.lookupType(String name);
   inh TypeCollection TypeDecl.lookupType(String name);
@@ -410,11 +421,13 @@ aspect TypeScopePropagation {
 
   eq Program.getCompilationUnit().lookupType(String name) = TypeCollection.emptyCollection();
   
+  // The scope of a type import declaration is all the class and interface type declarations in
+  // the compilation unit in which the import declaration appears.
   eq CompilationUnit.getTypeDecl().lookupType(String name) {
     TypeCollection c = localLookupType(name);
     for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl)iter.next();
-      if(!t.accessableFromPackage(packageName()))
+      if(!t.accessibleFromPackage(packageName()))
         c = iter.remove();
     }
     return c;
@@ -490,35 +503,38 @@ aspect TypeScopePropagation {
     return c;
   }
   
+  eq ParseName.qualifiedLookupType(String name) = TypeCollection.emptyCollection();
+  eq PackageOrTypeAccess.qualifiedLookupType(String name) = TypeCollection.emptyCollection();
+  eq AmbiguousAccess.qualifiedLookupType(String name) = TypeCollection.emptyCollection();
 
   eq AbstractDot.getRight().lookupType(String name) = getLeft().qualifiedLookupType(name);
   syn lazy TypeCollection Expr.qualifiedLookupType(String name) =
-    keepAccessableTypes(type().remoteLookupType(name));
+    keepAccessibleTypes(type().remoteLookupType(name));
 
   eq PackageAccess.qualifiedLookupType(String name) {
     TypeCollection c = TypeCollection.emptyCollection();
     TypeDecl typeDecl = lookupType(packageName(), name);
     if(nextAccess() instanceof ClassInstanceExpr) {
-      if(typeDecl != null && typeDecl.accessableFrom(hostType()))
+      if(typeDecl != null && typeDecl.accessibleFrom(hostType()))
         c = c.add(typeDecl);
       return c;
     }
     else {
       if(typeDecl != null) {
-        if(hostType() != null && typeDecl.accessableFrom(hostType()))
+        if(hostType() != null && typeDecl.accessibleFrom(hostType()))
           c = c.add(typeDecl);
-        else if(hostType() == null && typeDecl.accessableFromPackage(hostPackage()))
+        else if(hostType() == null && typeDecl.accessibleFromPackage(hostPackage()))
           c = c.add(typeDecl);
       }
       return c;
     }
   }
     
-  public TypeCollection Expr.keepAccessableTypes(TypeCollection c) {
+  public TypeCollection Expr.keepAccessibleTypes(TypeCollection c) {
     TypeDecl hostType = hostType();
     for(TypeCollection.TypeIterator iter = c.iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl)iter.next();
-      if((hostType != null && !t.accessableFrom(hostType)) || (hostType == null && !t.accessableFromPackage(hostPackage())))
+      if((hostType != null && !t.accessibleFrom(hostType)) || (hostType == null && !t.accessibleFromPackage(hostPackage())))
         c = iter.remove();
     }
     return c;
@@ -552,14 +568,14 @@ aspect TypeScopePropagation {
       TypeDecl type = (TypeDecl)outerIter.next();
       for(Iterator iter = type.types(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessableFrom(this))
+        if(!decl.isPrivate() && decl.accessibleFrom(this))
           c = c.add(decl);
       }
     }
     if(hasSuperclass()) {
       for(Iterator iter = superclass().types(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessableFrom(this)) {
+        if(!decl.isPrivate() && decl.accessibleFrom(this)) {
           c = c.add(decl);
         }
       }
@@ -588,6 +604,7 @@ aspect TypeScopePropagation {
       return new ArrayList(0);
   }
 
+/*
   protected static int ASTNode.duringTypeLookup = 0;
   protected static boolean ASTNode.duringTypeLookup() {
     if(duringTypeLookup == 0)
@@ -598,18 +615,19 @@ aspect TypeScopePropagation {
       return true;
     }
   }
+  */
 
   public HashSet ClassDecl.types_visit = new HashSet();
   //public boolean ClassDecl.types_visit;
   public Collection ClassDecl.types(String name) {
-    duringTypeLookup++;
+    //duringTypeLookup++;
     //if(types_visit) {
     if(types_visit.contains(name)) {
       //System.err.println("Circularity when searching for " + name + " in " + fullName());
       //Collection list = new ArrayList(1);
       //return list;
       Collection result = myTypes(name);
-      duringTypeLookup--;
+      //duringTypeLookup--;
       return result;
     }
     //types_visit = true;
@@ -617,14 +635,14 @@ aspect TypeScopePropagation {
     Collection result = myTypes(name);
     //types_visit = false;
     types_visit.remove(name);
-    duringTypeLookup--;
+    //duringTypeLookup--;
     return result;
   }
 
   syn lazy boolean BodyDecl.declaresType(String name) = false;
-  eq MemberType.declaresType(String name) = getTypeDecl().name().equals(name);
+  eq MemberTypeDecl.declaresType(String name) = getTypeDecl().name().equals(name);
   syn TypeDecl BodyDecl.type(String name) = null;
-  eq MemberType.type(String name) = declaresType(name) ? getTypeDecl() : null;
+  eq MemberTypeDecl.type(String name) = declaresType(name) ? getTypeDecl() : null;
   
   syn lazy Collection ClassDecl.myTypes(String name) {
     Collection list = new HashSet(); //new ArrayList();
@@ -638,14 +656,14 @@ aspect TypeScopePropagation {
       TypeDecl type = (TypeDecl)outerIter.next();
       for(Iterator iter = type.types(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessableFrom(this))
+        if(!decl.isPrivate() && decl.accessibleFrom(this))
           list.add(decl);
       }
     }
     if(hasSuperclass()) {
       for(Iterator iter = superclass().types(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessableFrom(this)) {
+        if(!decl.isPrivate() && decl.accessibleFrom(this)) {
           list.add(decl);
         }
       }
@@ -712,6 +730,7 @@ aspect TypeScopePropagation {
       }
     }
   
+    // The scope of a type imported by a single-type-import declaration
     for(int i = 0; i < getNumImportDecl(); i++) {
       if(getImportDecl(i) instanceof SingleTypeImportDecl) {
         SingleTypeImportDecl decl = (SingleTypeImportDecl)getImportDecl(i);
@@ -732,6 +751,7 @@ aspect TypeScopePropagation {
       return c;
     }
     
+    // The scope of a type imported by a type-import-on-demand declaration
     TypeCollection c = TypeCollection.emptyCollection();
     for(int i = 0; i < getNumImportDecl(); i++) {
       ImportDecl decl = getImportDecl(i);
@@ -743,7 +763,7 @@ aspect TypeScopePropagation {
           for(int j = 1; j < pack.getNumPackage(); j++)
             s.append("." + pack.getPackage(j).getID());
           result = lookupType(s.toString(), name);
-          if(result != null && result.accessableFromPackage(packageName()) && 
+          if(result != null && result.accessibleFromPackage(packageName()) && 
                  result.fullName().equals(pack.packageName() + "." + name)) {
             c = c.add(result);
           }
@@ -753,7 +773,7 @@ aspect TypeScopePropagation {
           TypeCollection c_temp = type.remoteLookupType(name);
           if(c_temp.size() == 1) {
             result = (TypeDecl)c_temp.first();
-            if(result != null && result.accessableFromPackage(packageName()) &&
+            if(result != null && result.accessibleFromPackage(packageName()) &&
                result.fullName().equals(type.fullName() + "." + name)) {
               c = c.add(result);
             }

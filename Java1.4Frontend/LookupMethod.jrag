@@ -24,21 +24,13 @@ aspect ConstructScope {
   inh TypeDecl ClassInstanceExpr.typeObject();
   
   syn lazy ArrayList ConstructorAccess.decls() = lookupConstructor(this);
-
-  //syn lazy ArrayList SuperConstructorAccess.decls() = lookupSuperConstructor(this);
-  syn lazy ArrayList SuperConstructorAccess.decls() {
-    if(hasPrevExpr() && !prevExpr().isTypeAccess()) {
-      return hostType().lookupSuperConstructor(this);
-    }
-    else 
-      return lookupSuperConstructor(this);
-  }
+  syn lazy ArrayList SuperConstructorAccess.decls() = hasPrevExpr() && !prevExpr().isTypeAccess() ?
+    hostType().lookupSuperConstructor(this) : lookupSuperConstructor(this);
   
   syn lazy ConstructorDecl ConstructorAccess.decl() {
     ArrayList decls = decls();
-    if(decls.size() == 1) {
+    if(decls.size() == 1)
       return (ConstructorDecl)decls.get(0);
-    }
     return illegalConstructor();
   }
 
@@ -46,30 +38,27 @@ aspect ConstructScope {
     TypeDecl typeDecl = hasTypeDecl() ? getTypeDecl() : getAccess().type();
     ArrayList list = new ArrayList(1);
     list.addAll(typeDecl.lookupConstructor(this));
-    keepAccessableConstructors(list);
+    keepAccessibleConstructors(list);
     return list;
   }
   
-  public void ClassInstanceExpr.keepAccessableConstructors(Collection c) {
+  public void ClassInstanceExpr.keepAccessibleConstructors(Collection c) {
     TypeDecl hostType = hostType();
     for(Iterator iter = c.iterator(); iter.hasNext(); ) {
       ConstructorDecl m = (ConstructorDecl)iter.next();
-      if(!m.accessableFrom(hostType))
+      if(!m.accessibleFrom(hostType))
         iter.remove();
       else if(m.isProtected() && !hasTypeDecl() && !m.hostPackage().equals(hostPackage()))
         iter.remove();
     }
   }
   
-  
   syn lazy ConstructorDecl ClassInstanceExpr.decl() {
     ArrayList decls = decls();
-    if(decls.size() == 1) {
+    if(decls.size() == 1)
       return (ConstructorDecl)decls.get(0);
-    }
     return illegalConstructor();
   }
-
 }
 
 aspect ConstructorLookup {
@@ -98,8 +87,8 @@ aspect ConstructorLookup {
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i) instanceof ConstructorDecl) {
         ConstructorDecl decl = (ConstructorDecl)getBodyDecl(i);
-        if(decl.compatible(argList) && decl.accessableFrom(typeDecl)) {
-          //System.err.println("....and accessable from " + typeDecl.fullName());
+        if(decl.compatible(argList) && decl.accessibleFrom(typeDecl)) {
+          //System.err.println("....and accessible from " + typeDecl.fullName());
           if(maxSpecific.isEmpty()) {
             maxSpecific.add(decl);
           }
@@ -120,10 +109,11 @@ aspect ConstructorLookup {
 }
 
 aspect ConstructorDecl {
+  syn lazy String ConstructorDecl.name() = getIdDecl().getID();
   // 8.8.2
   syn lazy String ConstructorDecl.signature() {
     StringBuffer s = new StringBuffer();
-    s.append(getIdDecl() + "(");
+    s.append(name() + "(");
     for(int i = 0; i < getNumParameter(); i++) {
       s.append(getParameter(i));
       if(i != getNumParameter() - 1)
@@ -135,7 +125,7 @@ aspect ConstructorDecl {
 
   // 8.8.2
   syn boolean ConstructorDecl.sameSignature(ConstructorDecl c) {
-    if(!getIdDecl().getID().equals(c.getIdDecl().getID()))
+    if(!name().equals(c.name()))
       return false;
     if(c.getNumParameter() != getNumParameter())
       return false;
@@ -357,98 +347,43 @@ aspect MethodScope {
   inh lazy MethodCollection TypeDecl.lookupMethod(String name);
   
   eq MethodAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
-  eq ParseMethodName.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
   eq ConstructorAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
   eq ArrayAccess.getExpr().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
-  eq ParseArray.getDims().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
 
   eq Program.getCompilationUnit().lookupMethod(String name) = MethodCollection.emptyCollection();
   eq TypeDecl.getBodyDecl(int i).lookupMethod(String name) {
-    if(hasMethod(name)) {
-      MethodCollection list = localLookupMethod(name);
-      /*
-      if(getBodyDecl(i).filterInstanceMember()) {
-        for(MethodCollection.MethodIterator iter = list.iterator(); iter.hasNext(); ) {
-          MethodDecl mDecl = (MethodDecl)iter.next();
-          if(!mDecl.isStatic())
-            list = iter.remove();
-        }
-      }
-      */
-      return list;
-    }
-    if(isNestedType()) {
-      MethodCollection list = lookupMethod(name);
-      if(!isInnerType()) {
-        for(MethodCollection.MethodIterator iter = list.iterator(); iter.hasNext(); ) {
-          MethodDecl mDecl = (MethodDecl)iter.next();
-          if(!mDecl.isStatic())
-            list = iter.remove();
-        }
-      }
-      return list;
-    }
-    //return MethodCollection.emptyCollection();
+    if(hasMethod(name))
+      return localLookupMethod(name);
+    if(isInnerType())
+      return lookupMethod(name);
+    if(isNestedType())
+      return removeInstanceMethods(lookupMethod(name));
     return topLevelType().lookupMethod(name); // Fix to handle static imports
-  }
-
-  public MethodCollection ConstructorDecl.keepClassMethods(MethodCollection c) {
-    for(MethodCollection.MethodIterator iter = c.iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if(!m.isStatic())
-        c = iter.remove();
-    }
-    return c;
   }
 
   // in explicit constructor invocation
   eq ConstructorDecl.getConstructorInvocation().lookupMethod(String name) {
-    if(hostType().hasMethod(name)) {
-      MethodCollection list = hostType().localLookupMethod(name);
-      list = keepClassMethods(list);
-      return list;
-    }
-    if(hostType().isNestedType()) {
+    if(hostType().hasMethod(name))
+      return removeInstanceMethods(hostType().localLookupMethod(name));
+    if(hostType().isNestedType())
       return hostType().lookupMethod(name);
-    }
     return MethodCollection.emptyCollection();
   }
-
 
   eq AbstractDot.getRight().lookupMethod(String name) = getLeft().qualifiedLookupMethod(name);
   
-  syn lazy MethodCollection Expr.qualifiedLookupMethod(String name) {
-    MethodCollection c = MethodCollection.emptyCollection();
-    if(type().accessableFrom(hostType())) {
-      c = type().remoteLookupMethod(name);
-      c = keepAccessableMethods(c);
-    }
-    else {
-      //System.err.println("No visible methods since the type of the qualifying lhs " + type().fullName() + " is not accessable from " + hostType().fullName());
-    }
-    return c;
-  }
-  
-  eq PackageAccess.qualifiedLookupMethod(String name) = unknownType().remoteLookupMethod(name);
-  eq ThisAccess.qualifiedLookupMethod(String name) = keepAccessableMethods(type().remoteLookupMethod(name));
-  eq SuperAccess.qualifiedLookupMethod(String name) = keepAccessableMethods(type().remoteLookupMethod(name));
-  eq TypeAccess.qualifiedLookupMethod(String name) {
-    MethodCollection c = type().remoteLookupMethod(name);
-    if(type().isClassDecl()) {
-      c = keepAccessableMethods(c);
-      if(c.size() == 1)
-        c = keepClassMethods(c);
-      return c;
-    }
-    return MethodCollection.emptyCollection();
-  }
+  syn lazy MethodCollection Expr.qualifiedLookupMethod(String name) =
+    keepAccessibleMethods(type().remoteLookupMethod(name));
+  eq VarAccess.qualifiedLookupMethod(String name) = type().accessibleFrom(hostType()) ?
+    keepAccessibleMethods(type().remoteLookupMethod(name)) : MethodCollection.emptyCollection();
+  eq MethodAccess.qualifiedLookupMethod(String name) = type().accessibleFrom(hostType()) ?
+    keepAccessibleMethods(type().remoteLookupMethod(name)) : MethodCollection.emptyCollection();
 
-
-  public MethodCollection Expr.keepAccessableMethods(MethodCollection c) {
+  public MethodCollection Expr.keepAccessibleMethods(MethodCollection c) {
     TypeDecl hostType = hostType();
     for(MethodCollection.MethodIterator iter = c.iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
-      if(!m.accessableFrom(hostType))
+      if(!m.accessibleFrom(hostType))
         c = iter.remove();
       // 6.6.2.1
       else if(m.isProtected() && !m.hostPackage().equals(hostPackage()) && !m.isStatic() /*&& !isThisAccess()*/ && !isSuperAccess()) {
@@ -463,12 +398,11 @@ aspect MethodScope {
     return c;
   }
   
-  public MethodCollection Expr.keepClassMethods(MethodCollection c) {
+  public static MethodCollection ASTNode.removeInstanceMethods(MethodCollection c) {
     for(MethodCollection.MethodIterator iter = c.iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
-      if(!m.isStatic()) {
+      if(!m.isStatic())
         c = iter.remove();
-      }
     }
     return c;
   }
@@ -496,13 +430,8 @@ aspect MethodScope {
         }
       }
     }
-    if(inStaticContext()) {
-      for(MethodCollection.MethodIterator iter = maxSpecific.iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isStatic())
-          maxSpecific = iter.remove();
-      }
-    }
+    if(isQualified() ? qualifier().staticContextQualifier() : inStaticContext())
+      maxSpecific = removeInstanceMethods(maxSpecific);
     return maxSpecific;
   }
   syn lazy MethodDecl MethodAccess.decl() {
@@ -547,8 +476,15 @@ aspect Overrides {
     set.addAll(localMethods(name));
     for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
       TypeDecl interfaceDecl = (TypeDecl)iter.next();
-      if(!interfaceDecl.isClassDecl())
-        set.addAll(interfaceDecl.allMethods(name));
+      set.addAll(interfaceDecl.allMethods(name));
+    }
+    if(!superinterfacesIterator().hasNext()) {
+      for(Iterator iter = typeObject().allMethods(name).iterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(m.isPublic()) {
+          set.add(m);
+        }
+      }
     }
     return set;
   }
@@ -560,7 +496,7 @@ aspect Overrides {
   }
   
   eq ClassDecl.overrides(MethodDecl m) {
-    String name = m.getIdDecl().getID();
+    String name = m.name();
     HashSet set = new HashSet(4);
     if(m.isStatic())
       return set;
@@ -569,7 +505,7 @@ aspect Overrides {
       for(Iterator iter = superclass().allMethods(name).iterator(); iter.hasNext(); ) {
         MethodDecl methodDecl = (MethodDecl)iter.next();
         if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-          if(!methodDecl.isPrivate() && methodDecl.accessableFrom(m.hostType())) {
+          if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
             set.add(methodDecl);
           }
         }
@@ -589,7 +525,7 @@ aspect Overrides {
   }
 
   eq InterfaceDecl.overrides(MethodDecl m) {
-    String name = m.getIdDecl().getID();
+    String name = m.name();
     HashSet set = new HashSet(4);
     if(m.isStatic())
       return set;
@@ -597,7 +533,7 @@ aspect Overrides {
     for(Iterator iter = localMethods(name).iterator(); iter.hasNext(); ) {
       MethodDecl methodDecl = (MethodDecl)iter.next();
       if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-        if(!methodDecl.isPrivate() && methodDecl.accessableFrom(m.hostType())) {
+        if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
           set.add(methodDecl);
         }
       }
@@ -605,22 +541,21 @@ aspect Overrides {
     
     for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      if(!typeDecl.isClassDecl()) {
-        for(Iterator iter = typeDecl.allMethods(name).iterator(); iter.hasNext(); ) {
-          MethodDecl methodDecl = (MethodDecl)iter.next();
-          if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-            if(!methodDecl.isPrivate() && methodDecl.accessableFrom(m.hostType())) {
-              set.add(methodDecl);
-            }
+      for(Iterator iter = typeDecl.localMethods(name).iterator(); iter.hasNext(); ) {
+        MethodDecl methodDecl = (MethodDecl)iter.next();
+        if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
+          if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
+            set.add(methodDecl);
           }
         }
       }
-      else {
-        for(Iterator iter = typeDecl.localMethods(name).iterator(); iter.hasNext(); ) {
-          MethodDecl methodDecl = (MethodDecl)iter.next();
-          if(m != methodDecl && m.sameSignature(methodDecl) && methodDecl.isPublic()) {
-            set.add(methodDecl);
-          }
+    }
+    if(!superinterfacesIterator().hasNext()) {
+      TypeDecl typeDecl = typeObject();
+      for(Iterator iter = typeDecl.allMethods(name).iterator(); iter.hasNext(); ) {
+        MethodDecl methodDecl = (MethodDecl)iter.next();
+        if(m != methodDecl && m.sameSignature(methodDecl) && methodDecl.isPublic()) {
+          set.add(methodDecl);
         }
       }
     }
@@ -635,7 +570,7 @@ aspect Hides {
   }
   
   eq ClassDecl.hides(MethodDecl m) {
-    String name = m.getIdDecl().getID();
+    String name = m.name();
     HashSet set = new HashSet(4);
     if(!m.isStatic())
       return set;
@@ -643,7 +578,7 @@ aspect Hides {
     for(Iterator iter = localMethods(name).iterator(); iter.hasNext(); ) {
       MethodDecl methodDecl = (MethodDecl)iter.next();
       if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-        if(!methodDecl.isPrivate() && methodDecl.accessableFrom(m.hostType())) {
+        if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
           set.add(methodDecl);
         }
       }
@@ -665,7 +600,7 @@ aspect Hides {
   }
 
   eq InterfaceDecl.hides(MethodDecl m) {
-    String name = m.getIdDecl().getID();
+    String name = m.name();
     HashSet set = new HashSet(4);
     if(!m.isStatic())
       return set;
@@ -673,7 +608,7 @@ aspect Hides {
     for(Iterator iter = localMethods(name).iterator(); iter.hasNext(); ) {
       MethodDecl methodDecl = (MethodDecl)iter.next();
       if(m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-        if(methodDecl.accessableFrom(m.hostType())) {
+        if(methodDecl.accessibleFrom(m.hostType())) {
           set.add(methodDecl);
         }
       }
@@ -682,6 +617,14 @@ aspect Hides {
     for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)iter.next();
       set.addAll(typeDecl.hides(m));
+    }
+    if(!superinterfacesIterator().hasNext()) {
+      for(Iterator iter = typeObject().hides(m).iterator(); iter.hasNext(); ) {
+        MethodDecl decl = (MethodDecl)iter.next();
+        if(decl.isPublic()) {
+          set.add(decl);
+        }
+      }
     }
     return set;
   }
@@ -694,7 +637,7 @@ aspect MethodDecl {
   // 8.4.2
   syn lazy String MethodDecl.signature() {
     StringBuffer s = new StringBuffer();
-    s.append(getTypeAccess() + " " + getIdDecl() + "(");
+    s.append(getTypeAccess() + " " + name() + "(");
     for(int i = 0; i < getNumParameter(); i++) {
       s.append(getParameter(i));
       if(i != getNumParameter() - 1)
@@ -706,7 +649,7 @@ aspect MethodDecl {
 
   // 8.4.2 Method Signature
   syn lazy boolean MethodDecl.sameSignature(MethodDecl m) {
-    if(!getIdDecl().getID().equals(m.getIdDecl().getID()))
+    if(!name().equals(m.name()))
       return false;
     if(m.getNumParameter() != getNumParameter())
       return false;
@@ -770,7 +713,7 @@ aspect MethodDecl {
   }
   
   public boolean MethodDecl.compatible(MethodAccess m) {
-    if(!getIdDecl().getID().equals(m.getIdUse().getID()))
+    if(!name().equals(m.name()))
       return false;
     if(getNumParameter() != m.getNumArg())
       return false;
@@ -778,13 +721,13 @@ aspect MethodDecl {
       if(!m.getArg(i).type().instanceOf(getParameter(i).type()))
         return false;
     }
-    if(!accessableFrom(m.hostType()))
+    if(!accessibleFrom(m.hostType()))
       return false;
     return true;
   }
   
   syn lazy boolean MethodDecl.compatible(MethodDecl m) {
-    if(!getIdDecl().getID().equals(m.getIdDecl().getID()))
+    if(!name().equals(m.name()))
       return false;
     if(getNumParameter() != m.getNumParameter())
       return false;
@@ -834,7 +777,7 @@ aspect LookupMethod {
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i) instanceof MethodDecl) {
         MethodDecl decl = (MethodDecl)getBodyDecl(i);
-        if(decl.getIdDecl().getID().equals(name))
+        if(decl.name().equals(name))
           list.add(decl);
       }
     }
@@ -857,7 +800,7 @@ aspect LookupMethod {
     if(hasSuperclass()) {
       for(Iterator iter = superclass().methods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessableFrom(this)) {
+        if(!decl.isPrivate() && decl.accessibleFrom(this)) {
           for(Iterator i2 = list.iterator(); i2.hasNext(); ) {
             MethodDecl m = (MethodDecl)i2.next();
             if(decl.sameSignature(m) && !decl.isAbstract())
@@ -886,7 +829,7 @@ aspect LookupMethod {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
       for(Iterator iter = typeDecl.methods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate() && (decl.isPublic() || !decl.hostType().isClassDecl()))
+        if(!decl.isPrivate() && !decl.hostType().isObject())
           list.add(decl);
       }
     }
@@ -898,6 +841,19 @@ aspect LookupMethod {
           iter.remove();
       }
       list.add(decl);
+    }
+    for(Iterator i1 = typeObject().methods(name).iterator(); i1.hasNext(); ) {
+      MethodDecl decl = (MethodDecl)i1.next();
+      if(decl.isPublic()) {
+        boolean found = false;
+        for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+          MethodDecl m = (MethodDecl)iter.next();
+          if(decl.sameSignature(m))
+            found = true;
+        }
+        if(!found)
+          list.add(decl);
+      }
     }
     return list;
   }
@@ -918,7 +874,7 @@ aspect LookupMethod {
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i) instanceof MethodDecl) {
         MethodDecl decl = (MethodDecl)getBodyDecl(i);
-        set.add(decl.getIdDecl().getID());
+        set.add(decl.name());
       }
     }
     set.addAll(intertypeMethodNames()); // Added
@@ -945,6 +901,17 @@ aspect LookupMethod {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
       for(Iterator iter = typeDecl.methodNames().iterator(); iter.hasNext(); )
         set.add(iter.next());
+    }
+    if(!superinterfacesIterator().hasNext()) {
+      TypeDecl typeDecl = typeObject();
+      for(Iterator iter = typeDecl.methodNames().iterator(); iter.hasNext(); ) {
+        set.add(iter.next());
+        /*
+        MethodDecl m = (MethodDecl)iter.next();
+        if(m.isPublic())
+          set.add(m);
+        */
+      }
     }
     return set;
   }

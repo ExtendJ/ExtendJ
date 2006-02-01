@@ -23,8 +23,8 @@ aspect AccessControl {
 
   // 8.5
   inh boolean TypeDecl.isMemberType();
-  eq MemberClass.getClassDecl().isMemberType() = true;
-  eq MemberInterface.getInterfaceDecl().isMemberType() = true;
+  eq MemberClassDecl.getClassDecl().isMemberType() = true;
+  eq MemberInterfaceDecl.getInterfaceDecl().isMemberType() = true;
   eq CompilationUnit.getTypeDecl().isMemberType() = false;
   eq ClassInstanceExpr.getTypeDecl().isMemberType() = false;
   
@@ -90,29 +90,20 @@ aspect AccessControl {
   eq MethodDecl.getBlock().hostBodyDecl() = this;
   eq ConstructorDecl.getBlock().hostBodyDecl() = this;
   eq ConstructorDecl.getConstructorInvocation().hostBodyDecl() = this;
-  eq FieldDeclaration.getAbstractVarInit().hostBodyDecl() = this;
+  eq FieldDeclaration.getInit().hostBodyDecl() = this;
  
   // 6.6 Access Control
   
-  syn boolean ArrayDecl.accessableFrom(TypeDecl type) {
-    return elementType().accessableFrom(type);
-  }
+  syn boolean ArrayDecl.accessibleFrom(TypeDecl type) = elementType().accessibleFrom(type);
  
-  syn boolean TypeDecl.accessableFromPackage(String packageName) {
-    if(isPublic()) {
-      return true;
-    }
-    else if(isPrivate()) {
-      return false;
-    }
-    return hostPackage().equals(packageName);
-  }
+  syn boolean TypeDecl.accessibleFromPackage(String packageName) =
+    !isPrivate() && (isPublic() || hostPackage().equals(packageName));
   
-  syn boolean TypeDecl.accessableFromExtend(TypeDecl type) {
+  syn boolean TypeDecl.accessibleFromExtend(TypeDecl type) {
     if(type == this)
       return true;
     if(isInnerType()) { 
-      if(!enclosingType().accessableFrom(type)) {
+      if(!enclosingType().accessibleFrom(type)) {
         return false;
       }
     }
@@ -131,19 +122,16 @@ aspect AccessControl {
       return hostPackage().equals(type.hostPackage());
   }
  
-  syn boolean TypeDecl.accessableFromImplement(TypeDecl type) {
+  syn boolean TypeDecl.accessibleFromImplement(TypeDecl type) {
     if(type == this)
       return true;
     if(isInnerType()) { 
-      if(!enclosingType().accessableFrom(type)) {
+      if(!enclosingType().accessibleFrom(type)) {
         return false;
       }
     }
-    if(isPublic()) 
+    if(isPublic() || isProtected()) 
       return true;
-    else if(isProtected()) {
-      return true;
-    }
     else if(isPrivate()) {
       return topLevelType() == type.topLevelType();
     }
@@ -152,11 +140,11 @@ aspect AccessControl {
   }
   
 
-  syn lazy boolean TypeDecl.accessableFrom(TypeDecl type) {
+  syn lazy boolean TypeDecl.accessibleFrom(TypeDecl type) {
     if(type == this)
       return true;
     if(isInnerType()) { 
-      if(!enclosingType().accessableFrom(type)) {
+      if(!enclosingType().accessibleFrom(type)) {
         return false;
       }
     }
@@ -185,7 +173,7 @@ aspect AccessControl {
     }
   }
 
-  syn lazy boolean MethodDecl.accessableFrom(TypeDecl type) {
+  syn lazy boolean MethodDecl.accessibleFrom(TypeDecl type) {
     if(isPublic()) {
       return true;
     }
@@ -202,8 +190,8 @@ aspect AccessControl {
       return hostPackage().equals(type.hostPackage());
   }
   
-  syn lazy boolean ConstructorDecl.accessableFrom(TypeDecl type) {
-    if(!hostType().accessableFrom(type))
+  syn lazy boolean ConstructorDecl.accessibleFrom(TypeDecl type) {
+    if(!hostType().accessibleFrom(type))
       return false;
     else if(isPublic())
       return true;
@@ -216,8 +204,25 @@ aspect AccessControl {
     else
       return hostPackage().equals(type.hostPackage());
   }
+  
+  syn lazy boolean FieldDeclaration.accessibleFrom(TypeDecl type, TypeDecl qualifierType) {
+    if(isPublic())
+      return true;
+    else if(isProtected()) {
+      if(hostPackage().equals(type.hostPackage()))
+        return true;
+      TypeDecl C = hostType();
+      TypeDecl S = type.subclassWithinBody(C);
+      TypeDecl Q = type();
+      return S != null && (!isInstanceVariable() || Q.instanceOf(S));
+    }
+    else if(isPrivate())
+      return hostType().topLevelType() == type.topLevelType();
+    else
+      return hostPackage().equals(type.hostPackage());
+  }
 
-  syn lazy boolean FieldDeclaration.accessableFrom(TypeDecl type) {
+  syn lazy boolean FieldDeclaration.accessibleFrom(TypeDecl type) {
     if(isPublic())
       return true;
     else if(isProtected()) {
@@ -239,10 +244,10 @@ aspect AccessControl {
   public void TypeAccess.accessControl() {
     super.accessControl();
     TypeDecl hostType = hostType();
-    if(hostType != null && !hostType.isIllegal() && !type().accessableFrom(hostType)) {
+    if(hostType != null && !hostType.isIllegal() && !type().accessibleFrom(hostType)) {
       error("" + this + " in " + hostType().fullName() + " can not access type " + type().fullName());
     }
-    else if((hostType == null || hostType.isIllegal())  && !type().accessableFromPackage(hostPackage())) {
+    else if((hostType == null || hostType.isIllegal())  && !type().accessibleFromPackage(hostPackage())) {
       error("" + this + " can not access type " + type().fullName());
     }
   }
@@ -251,8 +256,8 @@ aspect AccessControl {
     super.accessControl();
     if(type().isAbstract())
       error("Can not instantiate abstract class " + type().fullName());
-    if(!decl().accessableFrom(hostType()))
-      error("constructor " + decl().signature() + " is not accessable");
+    if(!decl().accessibleFrom(hostType()))
+      error("constructor " + decl().signature() + " is not accessible");
   }
   
   // 8.1.3
@@ -292,8 +297,8 @@ aspect AccessControl {
     if(typeDecl != null && typeDecl.isFinal()) {
       error("class " + fullName() + " may not extend final class " + typeDecl.fullName());
     }
-    if(typeDecl != null && !typeDecl.accessableFromExtend(this))
-      error("class " + fullName() + " may not extend non accessable type " + typeDecl.fullName());
+    if(typeDecl != null && !typeDecl.accessibleFromExtend(this))
+      error("class " + fullName() + " may not extend non accessible type " + typeDecl.fullName());
 
     // 8.1.3
     if(dependsOn(this))
@@ -309,8 +314,8 @@ aspect AccessControl {
   
       if(!decl.isInterfaceDecl())
         error("type " + fullName() + " tries no implement non interface type " + decl.fullName());
-      if(!decl.accessableFromImplement(this))
-        error("class " + fullName() + " can not implement non accessable type " + decl.fullName());
+      if(!decl.accessibleFromImplement(this))
+        error("class " + fullName() + " can not implement non accessible type " + decl.fullName());
       if(set.contains(decl))
         error("type " + decl.fullName() + " mentionened multiple times in implements clause");
       set.add(decl);
@@ -331,8 +336,8 @@ aspect AccessControl {
   
       if(!decl.isInterfaceDecl())
         error("interface " + fullName() + " tries no extend non interface type " + decl.fullName());
-      if(!decl.accessableFromExtend(this))
-        error("interface " + fullName() + " can not extend non accessable type " + decl.fullName());
+      if(!decl.accessibleFromExtend(this))
+        error("interface " + fullName() + " can not extend non accessible type " + decl.fullName());
       
       if(set.contains(decl))
         error("extended interface " + decl.fullName() + " mentionened multiple times in extends clause");

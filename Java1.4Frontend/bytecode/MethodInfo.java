@@ -64,7 +64,7 @@ class MethodInfo {
 	}
 
 	public boolean isSynthetic() {
-		return attributes.isSynthetic();
+		return attributes.isSynthetic() || (flags & 0x1000) != 0;
 	}
 	
 }

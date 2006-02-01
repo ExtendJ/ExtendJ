@@ -9,277 +9,223 @@ aspect LabelBinding {
     public boolean isDAafterFinally(Variable v);
   }
   TryStmt implements FinallyHost;
-  SynchronizeStmt implements FinallyHost;
+  SynchronizedStmt implements FinallyHost;
   
-  syn lazy Stmt BreakStmt.targetStmt() = breakTargetStmt(this);
-  syn lazy Stmt ContinueStmt.targetStmt() = continueTargetStmt(this);
-  
-  inh lazy Stmt BreakStmt.breakTargetStmt(BreakStmt stmt);
-  inh lazy Stmt ContinueStmt.continueTargetStmt(ContinueStmt stmt);
-  
-  inh lazy Stmt BranchTargetStmt.breakTargetStmt(BreakStmt stmt);
-  inh lazy Stmt BranchTargetStmt.continueTargetStmt(ContinueStmt stmt);
-
-  inh lazy Stmt TryStmt.breakTargetStmt(BreakStmt stmt);
-  inh lazy Stmt TryStmt.continueTargetStmt(ContinueStmt stmt);
-  inh lazy Stmt SynchronizeStmt.breakTargetStmt(BreakStmt stmt);
-  inh lazy Stmt SynchronizeStmt.continueTargetStmt(ContinueStmt stmt);
-
-  // order is important since code generation traverses finally blocks
-  protected Set BreakStmt.breakReachedFinally = new LinkedHashSet();
-  public void BreakStmt.addBreakReachedFinally(FinallyHost f) {
-    breakReachedFinally.add(f);
-  }
-  public Collection BreakStmt.breakReachedFinally() {
-    return breakReachedFinally;
-  }
-
-  // order is important since code generation traverses finally blocks
-  protected Collection ReturnStmt.returnReachedFinally = new LinkedHashSet();
-  public void ReturnStmt.addReturnReachedFinally(FinallyHost f) {
-    returnReachedFinally.add(f);
-  }
-  public Collection ReturnStmt.returnReachedFinally() {
-    return returnReachedFinally;
-  }
-
-  syn lazy BodyDecl ReturnStmt.targetBodyDecl() = targetBodyDecl(this);
-  inh lazy BodyDecl ReturnStmt.targetBodyDecl(ReturnStmt stmt);
-  inh lazy BodyDecl TryStmt.targetBodyDecl(ReturnStmt stmt);
-  inh lazy BodyDecl SynchronizeStmt.targetBodyDecl(ReturnStmt stmt);
-  eq Program.getCompilationUnit().targetBodyDecl(ReturnStmt stmt) = null;
-  eq MethodDecl.getBlock().targetBodyDecl(ReturnStmt stmt) = this;
-  eq ConstructorDecl.getBlock().targetBodyDecl(ReturnStmt stmt) = this;
-  eq TryStmt.getBlock().targetBodyDecl(ReturnStmt stmt) {
-    if(hasFinally())
-      stmt.addReturnReachedFinally(this);
-    return targetBodyDecl(stmt);
-  }
-  eq TryStmt.getCatch().targetBodyDecl(ReturnStmt stmt) {
-    if(hasFinally())
-      stmt.addReturnReachedFinally(this);
-    return targetBodyDecl(stmt);
-  }
-  eq SynchronizeStmt.getBlock().targetBodyDecl(ReturnStmt stmt) {
-    stmt.addReturnReachedFinally(this);
-    return targetBodyDecl(stmt);
-  }
-
-  // order is important since code generation traverses finally blocks
-  protected Set ContinueStmt.continueReachedFinally = new LinkedHashSet();
-  public void ContinueStmt.addContinueReachedFinally(FinallyHost f) {
-    continueReachedFinally.add(f);
-  }
-  public Collection ContinueStmt.continueReachedFinally() {
-    return continueReachedFinally;
-  }
-  
-  protected Set BranchTargetStmt.breakTarget = new HashSet();
-  public void BranchTargetStmt.addBreakTarget(BreakStmt stmt) {
-    breakTarget.add(stmt);
-  }
-  public Iterator BranchTargetStmt.breakTarget() {
-    return breakTarget.iterator();
-  }
-  
-  protected Set BranchTargetStmt.breakEscape = new HashSet();
-  public void BranchTargetStmt.addBreakEscape(BreakStmt stmt) {
-    breakEscape.add(stmt);
-  }
-  public Iterator BranchTargetStmt.breakEscape() {
-    return breakEscape.iterator();
-  }
-  protected Set BranchTargetStmt.continueTarget = new HashSet();
-  public void BranchTargetStmt.addContinueTarget(ContinueStmt stmt) {
-    continueTarget.add(stmt);
-  }
-  public Iterator BranchTargetStmt.continueTarget() {
-    return continueTarget.iterator();
-  }
-  protected Set BranchTargetStmt.continueEscape = new HashSet();
-  public void BranchTargetStmt.addContinueEscape(ContinueStmt stmt) {
-    continueEscape.add(stmt);
-  }
-  public Iterator BranchTargetStmt.continueEscape() {
-    return continueEscape.iterator();
-  }
-
-  eq TypeDecl.getBodyDecl().breakTargetStmt(BreakStmt stmt) {
-    return null;
-  }
-  eq TypeDecl.getBodyDecl().continueTargetStmt(ContinueStmt stmt) {
-    return null;
-  }
-
+  // propagate branch statements to the statements that are their respective
+  // targets taking finally blocks that can not complete normally into account
+  interface BranchPropagation {
+    syn lazy Collection targetContinues();
+    syn lazy Collection targetBreaks();
+    syn lazy Collection targetBranches();
+    syn lazy Collection escapedBranches();
+    syn lazy Collection branches();
+    public void collectBranches(Collection c);
     
-  eq TryStmt.getBlock().breakTargetStmt(BreakStmt stmt) {
-    if(hasFinally() && !getFinally().canCompleteNormally()) {
-      return this;
+    syn boolean targetOf(ContinueStmt stmt);
+    syn boolean targetOf(BreakStmt stmt);
+  }
+  BranchTargetStmt implements BranchPropagation;
+
+  public void ASTNode.collectBranches(Collection c) {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).collectBranches(c);
+  }
+  public void ContinueStmt.collectBranches(Collection c) {
+    c.add(this);
+  }
+  public void BreakStmt.collectBranches(Collection c) {
+    c.add(this);
+  }
+  public void ReturnStmt.collectBranches(Collection c) {
+    c.add(this);
+  }
+  public void BranchPropagation.collectBranches(Collection c) {
+    c.addAll(escapedBranches());
+  }
+  public void TryStmt.collectBranches(Collection c) {
+    c.addAll(escapedBranches());
+  }
+  
+  eq LabeledStmt.targetOf(ContinueStmt stmt) =
+    stmt.hasLabel() && stmt.getLabel().getID().equals(getLabel().getID());
+  eq WhileStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
+  eq DoStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
+  eq ForStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
+  eq SwitchStmt.targetOf(ContinueStmt stmt) = false;
+  
+  eq LabeledStmt.targetOf(BreakStmt stmt) =
+    stmt.hasLabel() && stmt.getLabel().getID().equals(getLabel().getID());
+  eq SwitchStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
+  eq WhileStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
+  eq DoStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
+  eq ForStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
+  
+  // the branches for which this node is the target
+  eq BranchPropagation.targetBranches() {
+    Set set = new HashSet();
+    for(Iterator iter = branches().iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+      if(o instanceof ContinueStmt && targetOf((ContinueStmt)o))
+        set.add(o);
+      if(o instanceof BreakStmt && targetOf((BreakStmt)o))
+        set.add(o);
     }
+    return set;
+  }
+  // the branches that escape this node
+  eq BranchPropagation.escapedBranches() {
+    Set set = new HashSet();
+    for(Iterator iter = branches().iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+      if(o instanceof ContinueStmt && !targetOf((ContinueStmt)o))
+        set.add(o);
+      if(o instanceof BreakStmt && !targetOf((BreakStmt)o))
+        set.add(o);
+    }
+    return set;
+  }
+  // all branches that reach this node
+  eq BranchPropagation.branches() {
+    HashSet set = new HashSet();
+    super.collectBranches(set);
+    return set;
+  }
+
+  // all branches that reach this node
+  syn lazy Collection TryStmt.branches() {
+    HashSet set = new HashSet();
+    getBlock().collectBranches(set);
+    for(int i = 0; i < getNumCatchClause(); i++)
+      getCatchClause(i).collectBranches(set);
+    return set;
+  }
+  
+  syn lazy Collection TryStmt.branchesFromFinally() {
+    HashSet set = new HashSet();
     if(hasFinally())
-      stmt.addBreakReachedFinally(this);
-    return breakTargetStmt(stmt);
+      getFinally().collectBranches(set);
+    return set;
   }
-  eq TryStmt.getCatch().breakTargetStmt(BreakStmt stmt) {
-    if(hasFinally() && !getFinally().canCompleteNormally()) {
-      return this;
-    }
+
+  // all branches the this node is target for
+  syn lazy Collection TryStmt.targetBranches() {
+    HashSet set = new HashSet();
+    if(hasFinally() && !getFinally().canCompleteNormally())
+      set.addAll(branches());
+    return set;
+  }
+
+  // all branches that escapes
+  syn lazy Collection TryStmt.escapedBranches() {
+    HashSet set = new HashSet();
     if(hasFinally())
-      stmt.addBreakReachedFinally(this);
-    return breakTargetStmt(stmt);
+      set.addAll(branchesFromFinally());
+    if(!hasFinally() || getFinally().canCompleteNormally())
+      set.addAll(branches());
+    return set;
   }
-  eq SynchronizeStmt.getBlock().breakTargetStmt(BreakStmt stmt) {
-    stmt.addBreakReachedFinally(this);
-    return breakTargetStmt(stmt);
+  // find the target statement for break and continue
+  syn lazy Stmt BreakStmt.targetStmt() = branchTarget(this);
+  syn lazy Stmt ContinueStmt.targetStmt() = branchTarget(this);
+  public Stmt ASTNode.branchTarget(Stmt branchStmt) {
+    if(getParent() != null)
+      return getParent().branchTarget(branchStmt);
+    else
+      return null;
+  }
+  public Stmt BranchPropagation.branchTarget(Stmt branchStmt) {
+    if(targetBranches().contains(branchStmt))
+      return this;
+    return super.branchTarget(branchStmt);
+  }
+  public Stmt TryStmt.branchTarget(Stmt branchStmt) {
+    if(targetBranches().contains(branchStmt))
+      return this;
+    return super.branchTarget(branchStmt);
   }
   
-  eq TryStmt.getBlock().continueTargetStmt(ContinueStmt stmt) {
-    if(hasFinally() && !getFinally().canCompleteNormally()) {
-      return this;
-    }
-    if(hasFinally()) {
-      stmt.addContinueReachedFinally(this);
-    }
-    return continueTargetStmt(stmt);
-  }
-  eq TryStmt.getCatch().continueTargetStmt(ContinueStmt stmt) {
-    if(hasFinally() && !getFinally().canCompleteNormally()) {
-      return this;
-    }
-    if(hasFinally())
-      stmt.addContinueReachedFinally(this);
-    return continueTargetStmt(stmt);
-  }
-  eq SynchronizeStmt.getBlock().continueTargetStmt(ContinueStmt stmt) {
-    stmt.addContinueReachedFinally(this);
-    return continueTargetStmt(stmt);
-  }
-  
-  eq LabelStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
-    if(stmt.hasLabel() && getLabel().getID().equals(stmt.getLabel().getID())) {
-      if(getStmt() instanceof BranchTargetStmt) {
-        BranchTargetStmt branchTarget = (BranchTargetStmt)getStmt();
-        branchTarget.addBreakTarget(stmt);
-        branchTarget.addBreakEscape(stmt);
-        return branchTarget;
-      }
-      else {
-        addBreakEscape(stmt);
-        addBreakTarget(stmt);
-        return this;
-      }
-    }
-    breakEscape.add(stmt);
-    return breakTargetStmt(stmt);
-  }
-
-  eq LabelStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
-    if(stmt.hasLabel() && getLabel().getID().equals(stmt.getLabel().getID())) {
-      if(getStmt() instanceof BranchTargetStmt) {
-        BranchTargetStmt branchTarget = (BranchTargetStmt)getStmt();
-        branchTarget.addContinueTarget(stmt);
-        return branchTarget;
-      }
-      else {
-        addContinueTarget(stmt);
-        return this;
-      }
-    }
-    continueEscape.add(stmt);
-    return continueTargetStmt(stmt);
-  }
-
-  eq SwitchStmt.getCase().breakTargetStmt(BreakStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addBreakTarget(stmt);
-      addBreakEscape(stmt);
-      return this;
-    }
-    breakEscape.add(stmt);
-    return breakTargetStmt(stmt);
-  }
-  
-  eq WhileStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addBreakTarget(stmt);
-      addBreakEscape(stmt);
-      return this;
-    }
-    breakEscape.add(stmt);
-    return breakTargetStmt(stmt);
-  }
-  
-  eq WhileStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addContinueTarget(stmt);
-      return this;
-    }
-    addContinueEscape(stmt);
-    return continueTargetStmt(stmt);
-  }
-
-
-  eq DoStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addBreakTarget(stmt);
-      addBreakEscape(stmt);
-      return this;
-    }
-    breakEscape.add(stmt);
-    return breakTargetStmt(stmt);
-  }
-  
-  eq DoStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addContinueTarget(stmt);
-      return this;
-    }
-    addContinueEscape(stmt);
-    return continueTargetStmt(stmt);
-  }
-
-
-  eq ForStmt.getStmt().breakTargetStmt(BreakStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addBreakTarget(stmt);
-      addBreakEscape(stmt);
-      return this;
-    }
-    breakEscape.add(stmt);
-    return breakTargetStmt(stmt);
-  }
-  
-  eq ForStmt.getStmt().continueTargetStmt(ContinueStmt stmt) {
-    if(!stmt.hasLabel()) {
-      addContinueTarget(stmt);
-      return this;
-    }
-    addContinueEscape(stmt);
-    return continueTargetStmt(stmt);
-  }
-
-  inh lazy BodyDecl LabelStmt.enclosingBodyDecl();
-
-  eq InstanceInitializer.getBlock().enclosingBodyDecl() = this;
-  eq StaticInitializer.getBlock().enclosingBodyDecl() = this;
-  eq ConstructorDecl.getBlock().enclosingBodyDecl() = this;
-  eq ConstructorDecl.getConstructorInvocation().enclosingBodyDecl() = this;
-  eq MethodDecl.getBlock().enclosingBodyDecl() = this;
-  eq FieldDeclaration.getAbstractVarInit().enclosingBodyDecl() = this;
-
-  eq Program.getCompilationUnit().enclosingBodyDecl() = null;
-
+  // find the enclosing body declaration
+  inh lazy BodyDecl LabeledStmt.enclosingBodyDecl();
   inh lazy BodyDecl VariableDeclaration.enclosingBodyDecl();
   inh lazy BodyDecl ParameterDeclaration.enclosingBodyDecl();
   inh lazy BodyDecl VarAccess.enclosingBodyDecl();
+  eq Program.getCompilationUnit().enclosingBodyDecl() = null;
+  eq TypeDecl.getBodyDecl(int i).enclosingBodyDecl() = getBodyDecl(i);
 
-  eq MethodDecl.getParameter().enclosingBodyDecl() = this;
-  eq ConstructorDecl.getParameter().enclosingBodyDecl() = this;
-
-
-  inh lazy LabelStmt LabelStmt.lookupLabel(String name);
-  eq LabelStmt.getStmt().lookupLabel(String name) = name.equals(getLabel().getID()) ? this : lookupLabel(name);
+  // lookup visible label
+  inh lazy LabeledStmt BreakStmt.lookupLabel(String name);
+  inh lazy LabeledStmt ContinueStmt.lookupLabel(String name);
+  inh lazy LabeledStmt LabeledStmt.lookupLabel(String name);
+  eq LabeledStmt.getStmt().lookupLabel(String name) = name.equals(getLabel().getID()) ? this : lookupLabel(name);
   eq TypeDecl.getBodyDecl().lookupLabel(String name) = null;
   
+  // compute the list of finally blocks that are reached on the way to the target
+  syn lazy ArrayList BreakStmt.finallyList() {
+    ArrayList list = new ArrayList();
+    collectFinally(this, list);
+    return list;
+  }
+  syn lazy ArrayList ContinueStmt.finallyList() {
+    ArrayList list = new ArrayList();
+    collectFinally(this, list);
+    return list;
+  }
+   syn lazy ArrayList ReturnStmt.finallyList() {
+    ArrayList list = new ArrayList();
+    collectFinally(this, list);
+    return list;
+  }
+  public void ASTNode.collectFinally(Stmt branchStmt, ArrayList list) {
+    if(getParent() != null)
+      getParent().collectFinally(branchStmt, list);
+  }
+  public void BranchPropagation.collectFinally(Stmt branchStmt, ArrayList list) {
+    if(targetBranches().contains(branchStmt))
+      return;
+    super.collectFinally(branchStmt, list);
+  }
+  public void TryStmt.collectFinally(Stmt branchStmt, ArrayList list) {
+    if(hasFinally() && !branchesFromFinally().contains(branchStmt))
+      list.add(this);
+    if(targetBranches().contains(branchStmt))
+      return;
+    super.collectFinally(branchStmt, list);
+  }
+  public void SynchronizedStmt.collectFinally(Stmt branchStmt, ArrayList list) {
+    list.add(this);
+    super.collectFinally(branchStmt, list);
+  }
+  public void BodyDecl.collectFinally(Stmt branchStmt, ArrayList list) {
+    // terminate search if body declaration is reached
+  }
+
+  // find the continue statements that have this node as actual target
+  eq BranchPropagation.targetContinues() {
+    Set set = new HashSet();
+    for(Iterator iter = targetBranches().iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+      if(o instanceof ContinueStmt)
+        set.add(o);
+    }
+    if(getParent() instanceof LabeledStmt) {
+      for(Iterator iter = ((LabeledStmt)getParent()).targetBranches().iterator(); iter.hasNext(); ) {
+        Object o = iter.next();
+        if(o instanceof ContinueStmt)
+          set.add(o);
+      }
+    }
+    return set;
+  }
+  // find the break statements that have this node as their actual target
+  eq BranchPropagation.targetBreaks() {
+    Set set = new HashSet();
+    for(Iterator iter = targetBranches().iterator(); iter.hasNext(); ) {
+      Object o = iter.next();
+      if(o instanceof BreakStmt)
+        set.add(o);
+    }
+    return set;
+  }
+
 }
 
