@@ -139,12 +139,12 @@ aspect CodeGeneration {
       int catch_type;
     }
     public void createExceptionTable(TryStmt tryStmt) {  
-      for(int i = 0; i < tryStmt.getNumCatch(); i++) {
+      for(int i = 0; i < tryStmt.getNumCatchClause(); i++) {
         addException(
             addressOf(tryStmt.label_begin(this)),
             addressOf(tryStmt.label_block_end(this)),
-            addressOf(tryStmt.getCatch(i).label(this)),
-            constantPool().addClass(tryStmt.getCatch(i).getParameter().type().constantPoolName())
+            addressOf(tryStmt.getCatchClause(i).label(this)),
+            constantPool().addClass(tryStmt.getCatchClause(i).getParameter().type().constantPoolName())
             );
       }
       if(tryStmt.hasFinally()) {
@@ -156,7 +156,7 @@ aspect CodeGeneration {
             );
       }
     }
-    public void createExceptionTable(SynchronizeStmt stmt) {  
+    public void createExceptionTable(SynchronizedStmt stmt) {  
       addException(
           addressOf(stmt.label_begin(this)),
           addressOf(stmt.label_finally(this)),
@@ -164,7 +164,6 @@ aspect CodeGeneration {
           0
           );
     }
-
 
     public int maxLocals() {
       return maxLocals+1;
@@ -211,8 +210,6 @@ aspect CodeGeneration {
       bytes.set(position + 1, (byte)(address&0xff));
     }
 
-
-
     public void emitStoreReference(int pos) {
       maxLocals = Math.max(maxLocals, pos+1);
       if(pos == 0) emit(Bytecode.ASTORE_0);
@@ -220,7 +217,7 @@ aspect CodeGeneration {
       else if(pos == 2) emit(Bytecode.ASTORE_2);
       else if(pos == 3) emit(Bytecode.ASTORE_3);
       else if(pos < 256) emit(Bytecode.ASTORE).add(pos);
-      else emit(Bytecode.WIDE).emit(Bytecode.ASTORE).add(pos >> 8).add(pos & 0xff);
+      else emit(Bytecode.WIDE).emit(Bytecode.ASTORE).add2(pos);
     }
     public void emitLoadReference(int pos) {
       maxLocals = Math.max(maxLocals, pos+1);
@@ -229,7 +226,7 @@ aspect CodeGeneration {
       else if(pos == 2) emit(Bytecode.ALOAD_2);
       else if(pos == 3) emit(Bytecode.ALOAD_3);
       else if(pos < 256) emit(Bytecode.ALOAD).add(pos);
-      else emit(Bytecode.WIDE).emit(Bytecode.ALOAD).add(pos >> 8).add(pos & 0xff);
+      else emit(Bytecode.WIDE).emit(Bytecode.ALOAD).add2(pos);
     }
 
     public void emitReturn() {
@@ -242,11 +239,11 @@ aspect CodeGeneration {
 
     public void emitInstanceof(TypeDecl type) {
       int p = constantPool().addClass(type.isArrayDecl() ? type.typeDescriptor() : type.constantPoolName());
-      bytes.emit(Bytecode.INSTANCEOF).add((p&0xff00)>>8).add(p&0xff);
+      bytes.emit(Bytecode.INSTANCEOF).add2(p);
     }
     public void emitCheckCast(TypeDecl type) {
       int p = constantPool().addClass(type.isArrayDecl() ? type.typeDescriptor() : type.constantPoolName());
-      bytes.emit(Bytecode.CHECKCAST).add((p&0xff00)>>8).add(p&0xff);
+      bytes.emit(Bytecode.CHECKCAST).add2(p);
     }
 
     public void emitDup() {
@@ -264,19 +261,24 @@ aspect CodeGeneration {
       bytes.emit(Bytecode.SWAP);
     }
 
+    public void emitBranchNonNull(int label) {
+      int p = jump(label);
+      bytes.emit(Bytecode.IFNONNULL).add2(p);
+    }
+
     public void emitGoto(int label) {
       int p = jump(label);
-      bytes.emit(Bytecode.GOTO).add((p&0xff00)>>8).add(p&0xff);
+      bytes.emit(Bytecode.GOTO).add2(p);
     }
 
     public void emitJsr(int label) {
       int p = jump(label);
-      bytes.emit(Bytecode.JSR).add((p&0xff00)>>8).add(p&0xff);
+      bytes.emit(Bytecode.JSR).add2(p);
     }
 
     public void emitCompare(byte bytecode, int label) {
       int p = jump(label);
-      bytes.emit(bytecode).add((p&0xff00)>>8).add(p&0xff);
+      bytes.emit(bytecode).add2(p);
     }
 
     public String toString() {
@@ -287,19 +289,20 @@ aspect CodeGeneration {
     public byte[] toArray() {return bytes.toArray();}
     CodeGeneration add(int i) { return add((byte)i); }
     CodeGeneration add(byte b) { bytes.add(b); return this; }
+    CodeGeneration add2(int index) { bytes.add2(index); return this; }
+    CodeGeneration add4(int i) {
+      bytes.add(i >> 24 & 0xff);
+      bytes.add(i >> 16 & 0xff);
+      bytes.add(i >> 8 & 0xff);
+      bytes.add(i & 0xff);
+      return this;
+    }
     CodeGeneration emit(byte b) {
       bytes.emit(b);
       return this;
     }
     CodeGeneration emit(byte b, int stackChange) {
       bytes.emit(b, stackChange);
-      return this;
-    }
-    CodeGeneration add4(int i) {
-      bytes.add(i >> 24 & 0xff);
-      bytes.add(i >> 16 & 0xff);
-      bytes.add(i >> 8 & 0xff);
-      bytes.add(i & 0xff);
       return this;
     }
     public int maxStackDepth() {
@@ -332,27 +335,30 @@ aspect CodeGeneration {
       bytes[pos++] = b;
       return this;
     }
+    ByteArray add2(int index) { add(index >> 8).add(index & 0xff); return this; }
     ByteArray emit(byte b) {
-      checkStackDepth(b);
+      changeStackDepth(BytecodeDebug.stackChange(b));
       add(b);
       return this;
-    }
-    public int maxStackDepth() {
-      return maxStackDepth;
-    }
-    public int stackDepth() {
-      return stackDepth;
     }
     ByteArray emit(byte b, int stackChange) {
       changeStackDepth(stackChange);
       add(b);
       return this;
     }
+    
+    public int maxStackDepth() {
+      return maxStackDepth;
+    }
+    public int stackDepth() {
+      return stackDepth;
+    }
     public void changeStackDepth(int i) {
       stackDepth += i;
       if(stackDepth > maxStackDepth)
         maxStackDepth = stackDepth;
     }
+    
     public int pos() {return pos;}
     public int size() {return pos;}
     public byte get(int index) {return bytes[index];}
@@ -366,244 +372,6 @@ aspect CodeGeneration {
       byte[] b = new byte[pos];
       System.arraycopy(bytes, 0, b, 0, pos);
       return b;
-    }
-
-    private void checkStackDepth(byte b) {
-      int change = 0;
-      switch(b) {
-        // no change
-        case Bytecode.NOP: 
-        case Bytecode.LALOAD:
-        case Bytecode.DALOAD:
-        case Bytecode.SWAP:
-        case Bytecode.IINC:
-        case Bytecode.I2F:
-        case Bytecode.L2D:
-        case Bytecode.F2I:
-        case Bytecode.D2L:
-        case Bytecode.I2B:
-        case Bytecode.I2C:
-        case Bytecode.I2S:
-        case Bytecode.GOTO:
-        case Bytecode.RET:
-        case Bytecode.RETURN:
-        case Bytecode.NEWARRAY:
-        case Bytecode.ANEWARRAY:
-        case Bytecode.ARRAYLENGTH:
-        case Bytecode.CHECKCAST:
-        case Bytecode.INSTANCEOF:
-        case Bytecode.GOTO_W:
-        case Bytecode.BREAKPOINT:
-        case Bytecode.IMPDEP1:
-        case Bytecode.IMPDEP2:
-        case Bytecode.WIDE:
-        case Bytecode.INEG:
-        case Bytecode.FNEG:
-        case Bytecode.LNEG:
-        case Bytecode.DNEG:
-        case Bytecode.JSR:
-        case Bytecode.JSR_W:
-          change = 0;
-          break;
-          // add 1
-        case Bytecode.ACONST_NULL:
-        case Bytecode.ICONST_M1:
-        case Bytecode.ICONST_0:
-        case Bytecode.ICONST_1:
-        case Bytecode.ICONST_2:
-        case Bytecode.ICONST_3:
-        case Bytecode.ICONST_4:
-        case Bytecode.ICONST_5:
-        case Bytecode.FCONST_0:
-        case Bytecode.FCONST_1:
-        case Bytecode.FCONST_2: 
-        case Bytecode.BIPUSH:
-        case Bytecode.SIPUSH:
-        case Bytecode.LDC:
-        case Bytecode.LDC_W:
-        case Bytecode.ILOAD:
-        case Bytecode.FLOAD:
-        case Bytecode.ALOAD:
-        case Bytecode.ILOAD_0:
-        case Bytecode.ILOAD_1:
-        case Bytecode.ILOAD_2:
-        case Bytecode.ILOAD_3:
-        case Bytecode.FLOAD_0:
-        case Bytecode.FLOAD_1:
-        case Bytecode.FLOAD_2:
-        case Bytecode.FLOAD_3:
-        case Bytecode.ALOAD_0:
-        case Bytecode.ALOAD_1:
-        case Bytecode.ALOAD_2:
-        case Bytecode.ALOAD_3:
-        case Bytecode.DUP:
-        case Bytecode.DUP_X1:
-        case Bytecode.DUP_X2:
-        case Bytecode.I2L:
-        case Bytecode.I2D:
-        case Bytecode.F2L:
-        case Bytecode.F2D:
-        case Bytecode.NEW:
-          change = 1;
-          break;
-          // add 2
-        case Bytecode.LCONST_0:
-        case Bytecode.LCONST_1:
-        case Bytecode.DCONST_0:
-        case Bytecode.DCONST_1:
-        case Bytecode.LDC2_W:
-        case Bytecode.LLOAD:
-        case Bytecode.DLOAD:
-        case Bytecode.LLOAD_0:
-        case Bytecode.LLOAD_1:
-        case Bytecode.LLOAD_2:
-        case Bytecode.LLOAD_3:
-        case Bytecode.DLOAD_0:
-        case Bytecode.DLOAD_1:
-        case Bytecode.DLOAD_2:
-        case Bytecode.DLOAD_3:
-        case Bytecode.DUP2:
-        case Bytecode.DUP2_X1:
-        case Bytecode.DUP2_X2:
-          change = 2;
-          break;
-          // sub 1
-        case Bytecode.IALOAD:
-        case Bytecode.FALOAD:
-        case Bytecode.AALOAD:
-        case Bytecode.BALOAD:
-        case Bytecode.CALOAD:
-        case Bytecode.SALOAD:
-        case Bytecode.ISTORE:
-        case Bytecode.FSTORE:
-        case Bytecode.ASTORE:
-        case Bytecode.ISTORE_0:
-        case Bytecode.ISTORE_1:
-        case Bytecode.ISTORE_2:
-        case Bytecode.ISTORE_3:
-        case Bytecode.FSTORE_0:
-        case Bytecode.FSTORE_1:
-        case Bytecode.FSTORE_2:
-        case Bytecode.FSTORE_3:
-        case Bytecode.ASTORE_0:
-        case Bytecode.ASTORE_1:
-        case Bytecode.ASTORE_2:
-        case Bytecode.ASTORE_3:
-        case Bytecode.POP:
-        case Bytecode.IADD:
-        case Bytecode.FADD:
-        case Bytecode.ISUB:
-        case Bytecode.FSUB:
-        case Bytecode.IMUL:
-        case Bytecode.FMUL:
-        case Bytecode.IDIV:
-        case Bytecode.FDIV:
-        case Bytecode.IREM:
-        case Bytecode.FREM:
-        case Bytecode.ISHL:
-        case Bytecode.ISHR:
-        case Bytecode.IUSHR:
-        case Bytecode.LSHL:
-        case Bytecode.LSHR:
-        case Bytecode.LUSHR:
-        case Bytecode.IAND:
-        case Bytecode.IOR:
-        case Bytecode.IXOR:
-        case Bytecode.L2I:
-        case Bytecode.L2F:
-        case Bytecode.D2I:
-        case Bytecode.D2F:
-        case Bytecode.FCMPL:
-        case Bytecode.FCMPG:
-        case Bytecode.IFEQ:
-        case Bytecode.IFNE:
-        case Bytecode.IFLT:
-        case Bytecode.IFGE:
-        case Bytecode.IFGT:
-        case Bytecode.IFLE:
-        case Bytecode.TABLESWITCH:
-        case Bytecode.LOOKUPSWITCH: 
-        case Bytecode.IRETURN:
-        case Bytecode.FRETURN:
-        case Bytecode.ARETURN:
-        case Bytecode.MONITORENTER:
-        case Bytecode.MONITOREXIT:
-        case Bytecode.IFNULL:
-        case Bytecode.IFNONNULL:
-        case Bytecode.ATHROW: // remember to add one to each catch block
-          change = -1;
-          break;
-          // sub 2
-        case Bytecode.DSTORE:
-        case Bytecode.LSTORE:
-        case Bytecode.LSTORE_0:
-        case Bytecode.LSTORE_1:
-        case Bytecode.LSTORE_2:
-        case Bytecode.LSTORE_3:
-        case Bytecode.DSTORE_0:
-        case Bytecode.DSTORE_1:
-        case Bytecode.DSTORE_2:
-        case Bytecode.DSTORE_3:
-        case Bytecode.POP2:
-        case Bytecode.LADD:
-        case Bytecode.DADD:
-        case Bytecode.LSUB:
-        case Bytecode.DSUB:
-        case Bytecode.LMUL:
-        case Bytecode.DMUL:
-        case Bytecode.LDIV:
-        case Bytecode.DDIV:
-        case Bytecode.LREM:
-        case Bytecode.DREM:
-        case Bytecode.LAND:
-        case Bytecode.LOR:
-        case Bytecode.LXOR:
-        case Bytecode.IF_ICMPEQ:
-        case Bytecode.IF_ICMPNE:
-        case Bytecode.IF_ICMPLT:
-        case Bytecode.IF_ICMPGE:
-        case Bytecode.IF_ICMPGT:
-        case Bytecode.IF_ICMPLE:
-        case Bytecode.IF_ACMPEQ:
-        case Bytecode.IF_ACMPNE:
-        case Bytecode.LRETURN:
-        case Bytecode.DRETURN:
-          change = -2;
-          break;
-          // sub 3
-        case Bytecode.IASTORE:
-        case Bytecode.FASTORE:
-        case Bytecode.AASTORE:
-        case Bytecode.BASTORE:
-        case Bytecode.CASTORE:
-        case Bytecode.SASTORE:
-        case Bytecode.LCMP:
-        case Bytecode.DCMPL:
-        case Bytecode.DCMPG:
-          change = -3;
-          break;
-          // sub 4
-        case Bytecode.LASTORE:
-        case Bytecode.DASTORE:
-          change = -4;
-          break;
-
-        case Bytecode.GETSTATIC:
-        case Bytecode.PUTSTATIC:
-        case Bytecode.GETFIELD:
-        case Bytecode.PUTFIELD:
-        case Bytecode.INVOKEVIRTUAL:
-        case Bytecode.INVOKESPECIAL:
-        case Bytecode.INVOKESTATIC:
-        case Bytecode.INVOKEINTERFACE:
-
-        case Bytecode.MULTIANEWARRAY:
-          // tre bytes senare avgör
-
-        default:
-          throw new Error("Can not compute stack change for bytecode: " + b);
-      }
-      changeStackDepth(change);
     }
   }
 
@@ -641,14 +409,14 @@ aspect CodeGeneration {
           gen.emit(Bytecode.BIPUSH).add(value);
         }
         else if(value >= -32768 && value <= 32767) {
-          gen.emit(Bytecode.SIPUSH).add(value >> 8).add(value & 0xff);
+          gen.emit(Bytecode.SIPUSH).add2(value);
         }
         else {
           int index = gen.constantPool().addConstant(value);
           if(index < 256)
             gen.emit(Bytecode.LDC).add(index);
           else 
-            gen.emit(Bytecode.LDC_W).add(index >> 8).add(index & 0xff);
+            gen.emit(Bytecode.LDC_W).add2(value);
         }
     }
   }
@@ -670,7 +438,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.LCONST_1);
     else {
       int index = gen.constantPool().addConstant((long)value);
-      gen.emit(Bytecode.LDC2_W).add(index >> 8).add(index & 0xff);
+      gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
   public void DoubleType.emitPushConstant(CodeGeneration gen, int value) {
@@ -680,7 +448,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.DCONST_1);
     else {
       int index = gen.constantPool().addConstant((double)value);
-      gen.emit(Bytecode.LDC2_W).add(index >> 8).add(index & 0xff);
+      gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
   public void FloatType.emitPushConstant(CodeGeneration gen, int value) {
@@ -695,7 +463,7 @@ aspect CodeGeneration {
       if(index < 256)
         gen.emit(Bytecode.LDC).add(index);
       else
-        gen.emit(Bytecode.LDC_W).add(index >> 8).add(index & 0xff);
+        gen.emit(Bytecode.LDC_W).add2(index);
     }
   }
 
@@ -709,11 +477,11 @@ aspect CodeGeneration {
     type().emitPushConstant(gen, constant().intValue());
   }
 
-  public void CharLiteral.emitPushConstant(CodeGeneration gen) {
+  public void CharacterLiteral.emitPushConstant(CodeGeneration gen) {
     type().emitPushConstant(gen, constant().intValue());
   }
 
-  public void FPLiteral.emitPushConstant(CodeGeneration gen) {
+  public void FloatingPointLiteral.emitPushConstant(CodeGeneration gen) {
     if(constant().floatValue() == 0) gen.emit(Bytecode.FCONST_0);
     else if(constant().floatValue() == 1) gen.emit(Bytecode.FCONST_1);
     else if(constant().floatValue() == 2) gen.emit(Bytecode.FCONST_2);
@@ -722,7 +490,7 @@ aspect CodeGeneration {
       if(index < 256)
         gen.emit(Bytecode.LDC).add(index);
       else 
-        gen.emit(Bytecode.LDC_W).add(index >> 8).add(index & 0xff);
+        gen.emit(Bytecode.LDC_W).add2(index);
     }
   }
 
@@ -731,7 +499,7 @@ aspect CodeGeneration {
     else if(constant().longValue() == 1) gen.emit(Bytecode.LCONST_1);
     else {
       int index = gen.constantPool().addConstant(constant().longValue());
-      gen.emit(Bytecode.LDC2_W).add(index >> 8).add(index & 0xff);
+      gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
 
@@ -740,7 +508,7 @@ aspect CodeGeneration {
     else if(constant().doubleValue() == 1) gen.emit(Bytecode.DCONST_1);
     else {
       int index = gen.constantPool().addConstant(constant().doubleValue());
-      gen.emit(Bytecode.LDC2_W).add(index >> 8).add(index & 0xff);
+      gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
 
@@ -749,7 +517,7 @@ aspect CodeGeneration {
     if(index < 256)
       gen.emit(Bytecode.LDC).add(index);
     else 
-      gen.emit(Bytecode.LDC_W).add(index >> 8).add(index & 0xff);
+      gen.emit(Bytecode.LDC_W).add2(index);
   }
 
   public void NullLiteral.emitPushConstant(CodeGeneration gen) {
@@ -794,7 +562,7 @@ aspect CodeGeneration {
           enclosing = enclosing.enclosingType();
           String desc = enclosing.typeDescriptor();
           int index = gen.constantPool().addFieldref(classname, "this$0", desc);
-          gen.emit(Bytecode.GETFIELD, 0).add(index >> 8).add(index & 0xff);
+          gen.emit(Bytecode.GETFIELD, 0).add2(index);
         }
       }
       else {
@@ -805,7 +573,7 @@ aspect CodeGeneration {
           enclosing = enclosing.enclosingType();
           String desc = enclosing.typeDescriptor();
           int index = gen.constantPool().addFieldref(classname, "this$0", desc);
-          gen.emit(Bytecode.GETFIELD, 0).add(index >> 8).add(index & 0xff);
+          gen.emit(Bytecode.GETFIELD, 0).add2(index);
         } 
       }
     }
@@ -820,15 +588,12 @@ aspect CodeGeneration {
       gen.emit(Bytecode.ALOAD_0);
       TypeDecl enclosing = hostType;
       do {
-        gen.emit(Bytecode.GETFIELD, 0);
         String classname = enclosing.constantPoolName();
         enclosing = enclosing.enclosingType();
         String desc = enclosing.typeDescriptor();
         String name = "this$0";
         int index = gen.constantPool().addFieldref(classname, name, desc);
-        int indexHi = index >> 8;
-        int indexLo = index & 0xff;
-        gen.add(indexHi).add(indexLo);
+        gen.emit(Bytecode.GETFIELD, 0).add2(index);
       } while (!enclosing.instanceOf(targetDecl));
     }
   }
@@ -854,7 +619,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.ILOAD_2);
     else if(pos == 3) gen.emit(Bytecode.ILOAD_3);
     else if(pos < 256) gen.emit(Bytecode.ILOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.ILOAD).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.ILOAD).add2(pos);
   }
   public void LongType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -863,7 +628,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.LLOAD_2);
     else if(pos == 3) gen.emit(Bytecode.LLOAD_3);
     else if(pos < 256) gen.emit(Bytecode.LLOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.LLOAD).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.LLOAD).add2(pos);
   }
   public void FloatType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
@@ -872,7 +637,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.FLOAD_2);
     else if(pos == 3) gen.emit(Bytecode.FLOAD_3);
     else if(pos < 256) gen.emit(Bytecode.FLOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.FLOAD).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.FLOAD).add2(pos);
   }
   public void DoubleType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -881,7 +646,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.DLOAD_2);
     else if(pos == 3) gen.emit(Bytecode.DLOAD_3);
     else if(pos < 256) gen.emit(Bytecode.DLOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.DLOAD).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.DLOAD).add2(pos);
   }
   public void ReferenceType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.emitLoadReference(pos);
@@ -895,17 +660,14 @@ aspect CodeGeneration {
       gen.emit(Bytecode.ARRAYLENGTH);
       return;
     }
-    if(isStatic())
-      gen.emit(Bytecode.GETSTATIC, type().size());
-    else
-      gen.emit(Bytecode.GETFIELD, type().size() - 1);
     String classname = typeDecl.constantPoolName();
     String      desc = type().typeDescriptor();
     String      name = getIdDecl().getID();
     int index = gen.constantPool().addFieldref(classname, name, desc);
-    int indexHi = index >> 8;
-    int indexLo = index & 0xff;
-    gen.add(indexHi).add(indexLo);
+    if(isStatic())
+      gen.emit(Bytecode.GETSTATIC, type().size()).add2(index);
+    else
+      gen.emit(Bytecode.GETFIELD, type().size() - 1).add2(index);
   }
   
 
@@ -950,17 +712,14 @@ aspect CodeGeneration {
   eq BooleanType.arrayStore() = Bytecode.BASTORE;
   
   public void FieldDeclaration.emitStoreField(CodeGeneration gen, TypeDecl typeDecl) {
-    if(isStatic())
-      gen.emit(Bytecode.PUTSTATIC, -type().size());
-    else
-      gen.emit(Bytecode.PUTFIELD, -type().size() - 1);
     String classname = typeDecl.constantPoolName();
     String      desc = type().typeDescriptor();
     String      name = getIdDecl().getID();
     int index = gen.constantPool().addFieldref(classname, name, desc);
-    int indexHi = index >> 8;
-    int indexLo = index & 0xff;
-    gen.add(indexHi).add(indexLo);
+    if(isStatic())
+      gen.emit(Bytecode.PUTSTATIC, -type().size()).add2(index);
+    else
+      gen.emit(Bytecode.PUTFIELD, -type().size() - 1).add2(index);
   }
   
   public void TypeDecl.emitStoreLocal(CodeGeneration gen, int pos) {error();}
@@ -971,7 +730,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.ISTORE_2);
     else if(pos == 3) gen.emit(Bytecode.ISTORE_3);
     else if(pos < 256) gen.emit(Bytecode.ISTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.ISTORE).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.ISTORE).add2(pos);
   }
   public void LongType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -980,7 +739,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.LSTORE_2);
     else if(pos == 3) gen.emit(Bytecode.LSTORE_3);
     else if(pos < 256) gen.emit(Bytecode.LSTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.LSTORE).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.LSTORE).add2(pos);
   }
   public void FloatType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
@@ -989,7 +748,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.FSTORE_2);
     else if(pos == 3) gen.emit(Bytecode.FSTORE_3);
     else if(pos < 256) gen.emit(Bytecode.FSTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.FSTORE).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.FSTORE).add2(pos);
   }
   public void DoubleType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
@@ -998,7 +757,7 @@ aspect CodeGeneration {
     else if(pos == 2) gen.emit(Bytecode.DSTORE_2);
     else if(pos == 3) gen.emit(Bytecode.DSTORE_3);
     else if(pos < 256) gen.emit(Bytecode.DSTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.DSTORE).add(pos >> 8).add(pos & 0xff);
+    else gen.emit(Bytecode.WIDE).emit(Bytecode.DSTORE).add2(pos);
   }
   public void ReferenceType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.emitStoreReference(pos);
@@ -1030,16 +789,16 @@ aspect CodeGeneration {
     if(num < 256)
       gen.emit(Bytecode.RET).add(num);
     else
-      gen.emit(Bytecode.WIDE).emit(Bytecode.RET).add(num >> 8).add(num & 0xff);
+      gen.emit(Bytecode.WIDE).emit(Bytecode.RET).add2(num);
   }
 
-  public void SynchronizeStmt.emitMonitorEnter(CodeGeneration gen) {
+  public void SynchronizedStmt.emitMonitorEnter(CodeGeneration gen) {
     gen.emitDup();
     int num = localNum();
     gen.emitStoreReference(num);
     gen.emit(Bytecode.MONITORENTER);
   }
-  public void SynchronizeStmt.emitExceptionHandler(CodeGeneration gen) {
+  public void SynchronizedStmt.emitExceptionHandler(CodeGeneration gen) {
     // add 1 to stack depth
     gen.changeStackDepth(1);
     int num = localNum() + 1;
@@ -1048,7 +807,7 @@ aspect CodeGeneration {
     gen.emitLoadReference(num);
     gen.emit(Bytecode.ATHROW);
   }
-  public void SynchronizeStmt.emitFinallyBlock(CodeGeneration gen) {
+  public void SynchronizedStmt.emitFinallyBlock(CodeGeneration gen) {
     // add 1 to stack depth
     gen.changeStackDepth(1);
     int num = localNum() + 2;
@@ -1088,40 +847,32 @@ aspect CodeGeneration {
       int size = type().size() - 1;
       for(int i = 0; i < getNumParameter(); i++)
         size -= getParameter(i).type().size();
-      gen.emit(Bytecode.INVOKEINTERFACE, size);
       String classname = hostType.constantPoolName();
       String      desc = descName();
       String      name = getIdDecl().getID();
       int index = gen.constantPool().addInterfaceMethodref(classname, name, desc);
-      int indexHi = index >> 8;
-      int indexLo = index & 0xff;
-      gen.add(indexHi).add(indexLo);
       int numArg = 1; // instance
       for(int i = 0; i < getNumParameter(); i++)
         numArg += getParameter(i).type().size();
-      gen.add(numArg);
-      gen.add(0);
+      gen.emit(Bytecode.INVOKEINTERFACE, size).add2(index).add(numArg).add(0);
     }
     else {
       String classname = hostType.constantPoolName();
       String      desc = descName();
       String      name = getIdDecl().getID();
       int index = gen.constantPool().addMethodref(classname, name, desc);
-      int indexHi = index >> 8;
-      int indexLo = index & 0xff;
       if(isStatic()) {
         int size = type().size();
         for(int i = 0; i < getNumParameter(); i++)
           size -= getParameter(i).type().size();
-        gen.emit(Bytecode.INVOKESTATIC, size);
+        gen.emit(Bytecode.INVOKESTATIC, size).add2(index);
       }
       else {
         int size = type().size() - 1;
         for(int i = 0; i < getNumParameter(); i++)
           size -= getParameter(i).type().size();
-        gen.emit(Bytecode.INVOKEVIRTUAL, size);
+        gen.emit(Bytecode.INVOKEVIRTUAL, size).add2(index);
       }
-      gen.add(indexHi).add(indexLo);
     }
   }
   
@@ -1130,13 +881,10 @@ aspect CodeGeneration {
     String      desc = descName();
     String      name = getIdDecl().getID();
     int index = gen.constantPool().addMethodref(classname, name, desc);
-    int indexHi = index >> 8;
-    int indexLo = index & 0xff;
     int size = type().size() - 1;
     for(int i = 0; i < getNumParameter(); i++)
       size -= getParameter(i).type().size();
-    gen.emit(Bytecode.INVOKESPECIAL, size);
-    gen.add(indexHi).add(indexLo);
+    gen.emit(Bytecode.INVOKESPECIAL, size).add2(index);
   }
 
   public void ConstructorDecl.emitInvokeConstructor(CodeGeneration gen) {
@@ -1152,122 +900,19 @@ aspect CodeGeneration {
       Variable v = (Variable)iter.next();
       size -= v.type().size();
     }
-    gen.emit(Bytecode.INVOKESPECIAL, size);
     String classname = hostType().constantPoolName();
     String      desc = descName();
     String      name = "<init>";
     int index = gen.constantPool().addMethodref(classname, name, desc);
-    int indexHi = index >> 8;
-    int indexLo = index & 0xff;
-    gen.add(indexHi).add(indexLo);
+    gen.emit(Bytecode.INVOKESPECIAL, size).add2(index);
   }
 
   // emitNew
 
   public void TypeDecl.emitNew(CodeGeneration gen) {
     int index = gen.constantPool().addClass(constantPoolName());
-    int indexHi = index >> 8;
-    int indexLo = index & 0xff;
-    gen.emit(Bytecode.NEW).add(indexHi).add(indexLo);
+    gen.emit(Bytecode.NEW).add2(index);
   }
-  
-  public void ArrayInstanceExpr.emitNew(CodeGeneration gen) {
-    throw new Error("Should have been specialized");
-  }
-
-  public void ValArrayInstanceExpr.emitNew(CodeGeneration gen) {
-    gen.emit(Bytecode.NEWARRAY).add(getTypeAccess().type().atype());
-  }
-
-  syn int ArrayInstanceExpr.actualDims() {
-    int dim = 0;
-    for(int i = 0; i < getNumDims(); i++)
-      if(getDims(i).hasExpr())
-        dim++;
-    return dim;
-  }
-
-  public void RefArrayInstanceExpr.emitNew(CodeGeneration gen) {
-    //int dim = getNumDims();
-    int dim = actualDims();
-    // kind of array creation depends on actualDims()
-    // type of array depends on getNumDims()
-    // array of dimension 1 has special syntax
-    if(dim == 1 || hasArrayInit()) {
-      // ANEWARRAY
-      String n;
-      if(!getTypeAccess().type().isPrimitive() && (getNumDims() - 1) == 0)
-        n = getTypeAccess().type().constantPoolName();
-      else
-        n = lookupArray(getTypeAccess().type(), getNumDims()-1).typeDescriptor();
-      int index = gen.constantPool().addClass(n);
-      int indexHi = index >> 8;
-      int indexLo = index & 0xff;
-      gen.emit(Bytecode.ANEWARRAY).add(indexHi).add(indexLo);
-    }
-    else {
-      // MULTINEWARRAY
-      String n = lookupArray(getTypeAccess().type(), getNumDims()).typeDescriptor();
-      int index = gen.constantPool().addClass(n);
-      int indexHi = index >> 8;
-      int indexLo = index & 0xff;
-      gen.emit(Bytecode.MULTIANEWARRAY, 1 - dim).add(indexHi).add(indexLo).add(dim);
-    }
-  }
-
-  public void AbstractVarInit.emitNew(CodeGeneration gen) {
-    throw new Error("Cannot generate new for AbstractVarInit");  
-  }
-  public void VarInit.emitNew(CodeGeneration gen) {
-    if(type().isPrimitive())
-      gen.emit(Bytecode.NEWARRAY).add(type().atype());      
-    else {
-      String n = type().constantPoolName();
-      int index = gen.constantPool().addClass(n);
-      int indexHi = index >> 8;
-      int indexLo = index & 0xff;
-      gen.emit(Bytecode.ANEWARRAY).add(indexHi).add(indexLo);
-    }
-  }
-  public void ArrayInit.emitNew(CodeGeneration gen) {
-    String n;
-    if(type().dimension() == 1) {
-      if(type().elementType().isPrimitive()) {
-        gen.emit(Bytecode.NEWARRAY).add(type().elementType().atype());
-        return;
-      }
-      else {
-        n = type().elementType().constantPoolName();
-      }
-    }
-    else
-      n = lookupArray(type().elementType(), type().dimension() - 1).typeDescriptor();
-    int index = gen.constantPool().addClass(n);
-    int indexHi = index >> 8;
-    int indexLo = index & 0xff;
-    gen.emit(Bytecode.ANEWARRAY).add(indexHi).add(indexLo);
-  }
-
-  public static final int ValArrayInstanceExpr.T_BOOLEAN = 4;
-  public static final int ValArrayInstanceExpr.T_CHAR = 5;
-  public static final int ValArrayInstanceExpr.T_FLOAT = 6;
-  public static final int ValArrayInstanceExpr.T_DOUBLE = 7;
-  public static final int ValArrayInstanceExpr.T_BYTE = 8;
-  public static final int ValArrayInstanceExpr.T_SHORT = 9;
-  public static final int ValArrayInstanceExpr.T_INT = 10;
-  public static final int ValArrayInstanceExpr.T_LONG = 11;
-  syn int TypeDecl.atype() { error(); return -1; }
-  eq BooleanType.atype() = ValArrayInstanceExpr.T_BOOLEAN;
-  eq CharType.atype() = ValArrayInstanceExpr.T_CHAR;
-  eq FloatType.atype() = ValArrayInstanceExpr.T_FLOAT;
-  eq DoubleType.atype() = ValArrayInstanceExpr.T_DOUBLE;
-  eq ByteType.atype() = ValArrayInstanceExpr.T_BYTE;
-  eq ShortType.atype() = ValArrayInstanceExpr.T_SHORT;
-  eq IntType.atype() = ValArrayInstanceExpr.T_INT;
-  eq LongType.atype() = ValArrayInstanceExpr.T_LONG;
-
-
-
 }
 aspect CodeGenerationConversions {
   void TypeDecl.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {

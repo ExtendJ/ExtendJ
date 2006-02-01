@@ -28,73 +28,6 @@ aspect Java2Rewrites {
   eq ReferenceType.referenceClassFieldName() = "class$" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
   eq ArrayDecl.referenceClassFieldName() = "array" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
   
-  
-  public boolean Dot.shameLessTest() {
-    if(leftSide().type().isReferenceType() && rightSide().isClassAccess() && !leftSide().type().isUnknown()) {
-      FieldDeclaration f = hostType().createStaticClassField(leftSide().type().referenceClassFieldName());
-      // add method to perform lookup as a side-effect
-      MethodDecl m = hostType().createStaticClassMethod();
-    }
-    return false;
-  }
-  
-  rewrite Dot {
-    /*
-    when((leftSide().type().isPrimitiveType() || leftSide().type().isVoid()) && rightSide().isClassAccess())
-    to Access {
-      Access access = lookupType("java.lang", leftSide().type().primitiveClassName()).createQualifiedAccess().qualifiesAccess(
-            new VarAccess(new IdUse("TYPE")));
-
-      if(rightSide().hasNextAccess()) {
-        Access a = rightSide().nextAccess();
-        a = a.isLeftChildOfDot() ? (Access)a.getParent() : a;
-        return access.qualifiesAccess(a);
-      }
-      return access;
-    }*/
-    
-    when(shameLessTest())
-    to Access this;
-    /*
-    when(leftSide().type().isReferenceType() && rightSide().isClassAccess())
-    to Access {
-      // For each non primitive type name used in a .class expression 
-      // a static field is created that holds a cached value of the mapping to .class name.
-      // BoundFieldAccess is used to bypass name binding
-      
-      // add field to hold cached result as a side-effect
-      FieldDeclaration f = hostType().createStaticClassField(leftSide().type().referenceClassFieldName());
-      // add method to perform lookup as a side-effect
-      MethodDecl m = hostType().createStaticClassMethod();
-      Expr e =
-        new QuestionColonExpr(
-          new NEExpr(
-            new BoundFieldAccess(f),
-            new NullLiteral("null")
-          ),
-          new BoundFieldAccess(f),
-          new AssignSimpleExpr(
-            new BoundFieldAccess(f),
-            new BoundMethodAccess(
-              m.name(),
-              new List().add(new StringLiteral(leftSide().type().referenceClassName())),
-              m
-            )
-          )
-        );
-      if(getRightNoTransform() instanceof Dot) {
-        Dot dot = (Dot)getRightNoTransform();
-        dot.setLeft(e);
-        return dot;
-      }
-      else
-        return e;
-    }*/
-    
-  }
-
-  
-
   inh TypeDecl AssertStmt.hostType();
 
   rewrite AssertStmt {
@@ -138,7 +71,6 @@ aspect Java2Rewrites {
       new TypeAccess(new List(), new IdUse("boolean")),
       new IdDecl("$assertionsDisabled"),
       new Opt(
-        new VarInit(
           new LogNotExpr(
             new TypeAccess(new List(), new IdUse(name())).qualifiesAccess(
               new ClassAccess().qualifiesAccess(
@@ -149,7 +81,6 @@ aspect Java2Rewrites {
               )
             )
           )
-        )
       )
     );
     addBodyDecl(createAssertionsDisabled);
@@ -225,7 +156,7 @@ aspect Java2Rewrites {
                 )
               ),
               new List().add(
-                new Catch(
+                new CatchClause(
                   new ParameterDeclaration(
                     new Modifiers(new List()),
                     lookupType("java.lang", "ClassNotFoundException").createQualifiedAccess(),

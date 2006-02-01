@@ -54,6 +54,8 @@ class JavaCompiler {
         System.out.println(name + ": " + e.getMessage());
         return false;
       } catch (IOException e) {
+        System.err.println("error: " + e.getMessage());
+        return false;
       } catch (Exception e) {
         System.err.println(e);
         e.printStackTrace();
@@ -93,7 +95,7 @@ class JavaCompiler {
   }
 
   protected static void printVersion() {
-    System.out.println("Java1.4Frontend + Backend (http://jastadd.cs.lth.se) Version R20050930");
+    System.out.println("Java1.4Frontend + Backend (http://jastadd.cs.lth.se) Version R20060127");
   }
 
 }
