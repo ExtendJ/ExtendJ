@@ -147,7 +147,7 @@ aspect SuperClasses {
       private TypeDecl current = null;
       private void computeNextCurrent() {
         current = null;
-        if(isObject())
+        if(isObject() || isCircular())
           return;
         while(index < getNumImplements()) {
           TypeDecl typeDecl = getImplements(index++).type();
@@ -176,6 +176,7 @@ aspect SuperClasses {
       private TypeDecl current = null;
       private void computeNextCurrent() {
         current = null;
+        if(isCircular()) return;
         while(index < getNumSuperInterfaceId()) {
           TypeDecl typeDecl = getSuperInterfaceId(index++).type();
           if(!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
@@ -193,13 +194,32 @@ aspect Circularity {
   inh lazy TypeDecl TypeDecl.illegalType();
   syn lazy boolean TypeDecl.isCircular() circular [true] = false;
   eq ClassDecl.isCircular() {
-    return hasSuperClassAccess() && getSuperClassAccess().type().isCircular();
+    if(hasSuperClassAccess()) {
+      Access a = getSuperClassAccess().lastAccess();
+      while(a != null) {
+        if(a.type().isCircular())
+          return true;
+        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (TypeAccess)a.qualifier() : null;
+      }
+    }
+    for(int i = 0; i < getNumImplements(); i++) {
+      Access a = getImplements(i).lastAccess();
+      while(a != null) {
+        if(a.type().isCircular())
+          return true;
+        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (TypeAccess)a.qualifier() : null;
+      }
+    }
+    return false;
   }
   eq InterfaceDecl.isCircular() {
     for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-      TypeDecl typeDecl = getSuperInterfaceId(i).type();
-      if(typeDecl.isCircular())
-        return true;
+      Access a = getSuperInterfaceId(i).lastAccess();
+      while(a != null) {
+        if(a.type().isCircular())
+          return true;
+        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (TypeAccess)a.qualifier() : null;
+      }
     }
     return false;
   }
