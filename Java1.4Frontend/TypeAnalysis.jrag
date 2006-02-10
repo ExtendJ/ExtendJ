@@ -1,29 +1,5 @@
 import java.util.*;
 
-aspect Arrays {
-  syn int TypeDecl.dimension() = 0;
-  eq ArrayDecl.dimension() = getDimension();
-  
-  syn TypeDecl TypeDecl.elementType() = this;
-  eq ArrayDecl.elementType() = getElementType();
-
-  //syn TypeDecl ArrayDecl.componentType() = lookupArray(elementType(), dimension() - 1);
-  syn TypeDecl TypeDecl.componentType() = elementType();
-  eq ArrayDecl.componentType() = lookupArray(elementType(), dimension() - 1);
-  
-  eq ArrayDecl.name() = fullName();
-  eq ArrayDecl.fullName() = getIdDecl().getID();
-
-  syn List ArrayTypeAccess.getPackageList() {
-    String[] names = getAccess().type().packageName().split("\\.");
-    List list = new List();
-    for(int i = 0; i < names.length; i++)
-      list.add(new IdUse(names[i]));
-    return list;
-  }
-  syn IdUse ArrayTypeAccess.getIdUse() = new IdUse(getAccess().type().name());
-}
-
 // 5.1 Kinds of Conversion
 aspect TypeConversion {
   // 5.1.1 Identity Conversion
@@ -139,8 +115,8 @@ aspect TypeConversion {
     //System.err.println("ArrayDecl.castingConversionTo");
     if(type.isArrayDecl()) {
       //System.err.println("Both are arrays");
-      TypeDecl SC = lookupArray(elementType(), dimension() - 1);
-      TypeDecl TC = lookupArray(type.elementType(), type.dimension() - 1);
+      TypeDecl SC = componentType();
+      TypeDecl TC = type.componentType();
       //System.err.println("Elements are " + SC.fullName() + " and " + TC.fullName());
       if(SC.isPrimitiveType() && TC.isPrimitiveType() && SC == TC)
         return true;
@@ -247,7 +223,9 @@ aspect TypeAnalysis {
   syn lazy boolean TypeDecl.isUnknown() = fullName().equals("primitive.Unknown");
 
   eq Program.getCompilationUnit().unknownType() = lookupType("primitive", "Unknown");
-  eq Program.getCompilationUnit().illegalType() = lookupType("primitive", "Illegal");
+  syn lazy TypeDecl Program.illegalType() = lookupType("primitive", "Illegal");
+  
+  eq Program.getCompilationUnit().illegalType() = illegalType();
   inh TypeDecl Expr.illegalType();
   eq Program.getCompilationUnit().unknownField() = lookupType("primitive", "Unknown").findSingleVariable("unknown");
   //eq Program.getCompilationUnit().illegalField() = lookupType("primitive", "Illegal").findSingleVariable("illegal");
@@ -297,7 +275,7 @@ aspect TypeAnalysis {
   eq FieldDeclaration.getInit().declType() = type();
   eq VariableDeclaration.getInit().declType() = type();
   eq ArrayCreationExpr.getArrayInit().declType() = type();
-  eq ArrayInit.getInit().declType() = lookupArray(declType().elementType(), declType().dimension() - 1);
+  eq ArrayInit.getInit().declType() = declType().componentType();
 
   eq ArrayInit.type() = declType();
 
@@ -314,7 +292,9 @@ aspect TypeAnalysis {
 
   eq Access.type() = unknownType();
   eq TypeAccess.type() = decl();
-  eq ArrayAccess.type() = decl();
+  eq ArrayAccess.type() = isQualified() ? qualifier().type().componentType() : illegalType();
+  inh TypeDecl ArrayAccess.illegalType();
+
   eq VarAccess.type() = decl().type();
   eq MethodAccess.type() = decl().type();
   eq ConstructorAccess.type() = decl().type();
@@ -336,10 +316,12 @@ aspect TypeAnalysis {
   eq ParExpr.type() = getExpr().type();
 
   eq ClassInstanceExpr.type() = hasTypeDecl() ? getTypeDecl() : getAccess().type();
-  eq ArrayCreationExpr.type() = lookupArray(
-      getTypeAccess().type().elementType(),
-      getTypeAccess().type().dimension() + getNumDims()
-    );
+  eq ArrayCreationExpr.type() {
+    TypeDecl typeDecl = getTypeAccess().type();
+    for(int i = 0; i < getNumDims(); i++)
+      typeDecl = typeDecl.arrayType();
+    return typeDecl;
+  }
 
   eq Unary.type() = getOperand().type();
   eq PlusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();

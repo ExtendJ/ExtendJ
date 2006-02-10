@@ -197,6 +197,7 @@ aspect NameCheck {
 
   inh boolean Expr.inStaticContext(); // SuperAccess, ThisAccess, ClassInstanceExpr, MethodAccess
   inh lazy boolean TypeDecl.inStaticContext();
+  inh boolean Block.inStaticContext();
   
   eq Program.getCompilationUnit().inStaticContext() = false;
   eq TypeDecl.getBodyDecl().inStaticContext() = isStatic() || inStaticContext();
@@ -215,10 +216,11 @@ aspect NameCheck {
   eq CastExpr.staticContextQualifier() = getExpr().staticContextQualifier();
   eq AbstractDot.staticContextQualifier() = lastAccess().staticContextQualifier();
   eq TypeAccess.staticContextQualifier() = true;
+  eq ArrayTypeAccess.staticContextQualifier() = true;
   
   public void ArrayTypeAccess.nameCheck() {
     if(decl().elementType() == unknownType())
-      error("no type named " + name());
+      error("no type named " + decl().elementType().name());
   }
   
   public void TypeAccess.nameCheck() {
@@ -468,6 +470,8 @@ aspect NameCheck {
 
   public void InterfaceDecl.nameCheck() {
     super.nameCheck();
+    if(isCircular())
+      error("circular inheritance dependency in " + typeName()); 
     for(int i = 0; i < getNumSuperInterfaceId(); i++) {
       TypeDecl typeDecl = getSuperInterfaceId(i).type();
       if(typeDecl.isCircular())

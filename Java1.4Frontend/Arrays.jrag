@@ -1,0 +1,74 @@
+aspect Arrays {
+  syn lazy List TypeDecl.getDynamicTypeList() = new List();
+  syn lazy List ArrayDecl.getDynamicTypeList() = new List();
+  syn lazy List ClassDecl.getDynamicTypeList() = new List();
+  syn lazy List InterfaceDecl.getDynamicTypeList() = new List();
+  syn lazy List AnonymousDecl.getDynamicTypeList() = new List();
+  syn lazy List PrimitiveType.getDynamicTypeList() = new List();
+
+  syn int TypeDecl.dimension() = 0;
+  //eq ArrayDecl.dimension() = getDimension();
+  eq ArrayDecl.dimension() = componentType().dimension() + 1;
+  
+  // TypeDecl.elementType() - the ground type that the array is based on
+  syn TypeDecl TypeDecl.elementType() = this;
+  eq ArrayDecl.elementType() = componentType().elementType();
+
+  // TypeDecl.componentType() -  the elements in an array has this type
+  eq Program.getCompilationUnit().componentType() = illegalType();
+  eq TypeDecl.getDynamicType().componentType() = this;
+  inh TypeDecl TypeDecl.componentType();
+
+  // TypeDecl.arrayType() - the type that has components of type this
+  public TypeDecl TypeDecl.arrayType() {
+    // TODO: do this in a nicer way. The arrayType() must return the same declaration every time even if caching is not allowed
+    if(computedArray) return valueArray;
+    String name = name() + "[]";
+
+    TypeDecl typeDecl =
+      new ArrayDecl(
+        new Modifiers(new List().add(new Modifier("public"))),
+        new IdDecl(name.toString()),
+        new Opt(typeObject().createQualifiedAccess()), // [SuperClassAccess]
+        new List().add(typeCloneable().createQualifiedAccess()).add(typeSerializable().createQualifiedAccess()), // Implements*
+        new List().add( // BodyDecl*
+          new FieldDeclaration(
+            new Modifiers(new List().add(new Modifier("public")).add(new Modifier("final"))),
+            new TypeAccess("int"),
+            new IdDecl("length"),
+            new Opt() // [Init:Expr]
+          )).add(
+          new MethodDecl(
+            new Modifiers(new List().add(new Modifier("public"))),
+            typeObject().createQualifiedAccess(),
+            new IdDecl("clone"),
+            new List(),
+            new List(),
+            new List(),
+            new Opt(new Block())
+          )
+        )
+      );
+    addDynamicType(typeDecl);
+    valueArray = typeDecl;
+    computedArray = true;
+    return typeDecl;
+  }
+  private boolean TypeDecl.computedArray = false;
+  private TypeDecl TypeDecl.valueArray;
+  
+  inh TypeDecl TypeDecl.typeCloneable();
+  inh TypeDecl TypeDecl.typeSerializable();
+  
+  eq ArrayDecl.name() = fullName();
+  eq ArrayDecl.fullName() = getIdDecl().getID();
+
+  syn List ArrayTypeAccess.getPackageList() {
+    String[] names = getAccess().type().packageName().split("\\.");
+    List list = new List();
+    for(int i = 0; i < names.length; i++)
+      list.add(new IdUse(names[i]));
+    return list;
+  }
+  syn IdUse ArrayTypeAccess.getIdUse() = new IdUse(getAccess().type().name());
+}

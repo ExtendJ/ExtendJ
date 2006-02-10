@@ -108,75 +108,6 @@ aspect LookupFullyQualifiedTypes {
   }
 }
 
-aspect LookupArray {
-
-  inh TypeDecl ArrayInit.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl ArrayDecl.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl ArrayCreationExpr.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl TypeDecl.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl ArrayAccess.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl ArrayTypeAccess.lookupArray(TypeDecl elementType, int dimension);
-  inh TypeDecl AbstractDot.lookupArray(TypeDecl elementType, int dimension);
-  
-  eq Program.getCompilationUnit().lookupArray(TypeDecl elementType, int dimension) {
-    if(dimension == 0) return elementType;
-    for(int i = 0; i < getNumCompilationUnit(); i++) {
-      CompilationUnit unit = getCompilationUnit(i);
-      for(int j = 0; j < unit.getNumTypeDecl(); j++) {
-        TypeDecl type = unit.getTypeDecl(j);
-        if(type.elementType().equals(elementType) && type.dimension() == dimension) {
-          return type;
-        }
-      }
-    }
-
-    StringBuffer name = new StringBuffer();
-    name.append(elementType.fullName());
-    for(int i = 0; i < dimension; i++) {
-      name.append("[]");
-    }
-
-    TypeDecl type =
-      new ArrayDecl(
-        new Modifiers(new List().add(new Modifier("public"))),
-        new IdDecl(name.toString()),
-        new Opt(typeObject().createQualifiedAccess()), // [SuperClassAccess]
-        new List().add(typeCloneable().createQualifiedAccess()).add(typeSerializable().createQualifiedAccess()), // Implements*
-        new List().add( // BodyDecl*
-          new FieldDeclaration(
-            new Modifiers(new List().add(new Modifier("public")).add(new Modifier("final"))),
-            new TypeAccess("int"),
-            new IdDecl("length"),
-            new Opt() // [Init:Expr]
-          )).add(
-	  new MethodDecl(
-	    new Modifiers(new List().add(new Modifier("public"))),
-      typeObject().createQualifiedAccess(),
-	    new IdDecl("clone"),
-	    new List(),
-	    new List(),
-	    new List(),
-	    new Opt(new Block())
-	  )
-        ),
-        elementType,
-        dimension
-      );
-    
-    addCompilationUnit(
-      new CompilationUnit(
-        new List(), // PackageDecl*
-        new List(), // ImportDecl*
-        new List().add(type) // TypeDecl*
-      )
-    );
-
-    return type;
-  }
-  
-}
-
-
 aspect TypeScopePropagation {
   class TypeCollection {
     static class EmptyCollection extends TypeCollection implements TypeIterator {
@@ -373,8 +304,13 @@ aspect TypeScopePropagation {
     return unknownType();
   }
   
-  //eq ThisAccess.decls() = TypeCollection.emptyCollection();
-  //eq SuperAccess.decls() = TypeCollection.emptyCollection();
+  syn lazy TypeDecl ArrayTypeAccess.decl() {
+    TypeDecl typeDecl = getAccess().type();
+    for(int i = 0; i < getDimension(); i++)
+      typeDecl = typeDecl.arrayType();
+    return typeDecl;
+  }
+  
   syn lazy TypeCollection ThisAccess.decls() = TypeCollection.emptyCollection();
   syn lazy TypeCollection SuperAccess.decls() = TypeCollection.emptyCollection();
   syn lazy TypeDecl ThisAccess.decl() = isQualified() ? qualifier().type() : hostType();
@@ -386,28 +322,6 @@ aspect TypeScopePropagation {
     if(!classDecl.hasSuperclass())
       return illegalType();
     return classDecl.superclass();
-  }
-
-  syn lazy TypeDecl ArrayTypeAccess.decl() {
-    TypeDecl elementType = getAccess().type().elementType();
-    int dimension = getAccess().type().dimension() + getDimension();
-    return lookupArray(elementType, dimension);
-  }
-  
-  inh lazy TypeDecl ArrayAccess.illegalType();
-
-  inh TypeDecl ArrayAccess.arrayType();
-  eq AbstractDot.getRight().arrayType() {
-    TypeDecl typeDecl = getLeft().type();
-    if(typeDecl.dimension() == 0)
-      return illegalType();
-    return lookupArray(typeDecl.elementType(), typeDecl.dimension() - 1);
-  }
-  eq Block.getStmt().arrayType() = null;
-  eq Program.getCompilationUnit().arrayType() = null;
-  syn lazy TypeDecl ArrayAccess.decl() {
-    TypeDecl type = arrayType();
-    return type != null ? type : illegalType();
   }
   
   eq MethodAccess.getArg().lookupType(String name) = unqualifiedScope().lookupType(name);
