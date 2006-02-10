@@ -398,14 +398,21 @@ aspect CreateBCode {
         f.emitLoadField(gen, fieldQualifierType());
     }
   }
-  
+  inh BodyDecl Access.enclosingBodyDecl();
+  inh boolean Access.inExplicitConstructorInvocation();
   public void Access.emitLoadLocalInNestedClass(CodeGeneration gen, Variable v) {
-    String classname = hostType().constantPoolName();
-    String      desc = v.type().typeDescriptor();
-    String      name = "val$" + v.name();
-    int index = gen.constantPool().addFieldref(classname, name, desc);
-    gen.emit(Bytecode.ALOAD_0);
-    gen.emit(Bytecode.GETFIELD, v.type().size() - 1).add2(index);
+    if(inExplicitConstructorInvocation()) {
+      ConstructorDecl c = (ConstructorDecl)enclosingBodyDecl();
+      v.type().emitLoadLocal(gen, c.localIndexOfEnclosingVariable(v));
+    }
+    else {
+      String classname = hostType().constantPoolName();
+      String      desc = v.type().typeDescriptor();
+      String      name = "val$" + v.name();
+      int index = gen.constantPool().addFieldref(classname, name, desc);
+      gen.emit(Bytecode.ALOAD_0);
+      gen.emit(Bytecode.GETFIELD, v.type().size() - 1).add2(index);
+    }
   }
 
   private void VarAccess.createLoadQualifier(CodeGeneration gen) {
@@ -421,21 +428,34 @@ aspect CreateBCode {
           prevExpr().type().emitPop(gen);
       }
       else if(f.isInstanceVariable()) {
-        // load implicit this qualifier
-        gen.emit(Bytecode.ALOAD_0);
-        if(!hostType().hasField(f.name())) {
-          TypeDecl enclosing = hostType();
-          do {
+        if(inExplicitConstructorInvocation() && !hostType().hasField(f.name())) {
+          gen.emit(Bytecode.ALOAD_1);
+          TypeDecl enclosing = hostType().enclosingType();
+          while(!enclosing.hasField(f.name())) {
             String classname = enclosing.constantPoolName();
             enclosing = enclosing.enclosingType();
-            if(enclosing == null) {
-              throw new Error("Error accessing " + f.name() + " in " + f.hostType().fullName() + " from " + hostType().fullName());
-            }
             String desc = enclosing.typeDescriptor();
-            String name = "this$0";
-            int index = gen.constantPool().addFieldref(classname, name, desc);
+            int index = gen.constantPool().addFieldref(classname, "this$0", desc);
             gen.emit(Bytecode.GETFIELD, 0).add2(index);
-          } while (!enclosing.hasField(name()));
+          }
+        }
+        else {
+          // load implicit this qualifier
+          gen.emit(Bytecode.ALOAD_0);
+          if(!hostType().hasField(f.name())) {
+            TypeDecl enclosing = hostType();
+            do {
+              String classname = enclosing.constantPoolName();
+              enclosing = enclosing.enclosingType();
+              if(enclosing == null) {
+                throw new Error("Error accessing " + f.name() + " in " + f.hostType().fullName() + " from " + hostType().fullName());
+              }
+              String desc = enclosing.typeDescriptor();
+              String name = "this$0";
+              int index = gen.constantPool().addFieldref(classname, name, desc);
+              gen.emit(Bytecode.GETFIELD, 0).add2(index);
+            } while (!enclosing.hasField(name()));
+          }
         }
       }
     }
@@ -608,8 +628,9 @@ aspect CreateBCode {
     // this$val
     for(Iterator iter = c.hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
-      v.type().emitLoadLocal(gen, index);
-      index += v.type().size();
+      ConstructorDecl con = (ConstructorDecl)enclosingBodyDecl();
+      int localIndex = con.localIndexOfEnclosingVariable(v);
+      v.type().emitLoadLocal(gen, localIndex);
     }
     if(decl().isPrivate() && decl().hostType() != hostType()) {
       gen.emit(Bytecode.ACONST_NULL);
@@ -643,11 +664,18 @@ aspect CreateBCode {
       index++;
       
     if(c.needsEnclosing()) {
-      if(hasPrevExpr() && !prevExpr().isTypeAccess())
+      if(hasPrevExpr() && !prevExpr().isTypeAccess()) {
         prevExpr().createBCode(gen);
+      }
       else {
-        gen.emitLoadReference(index++);
-        //loadEnclosingThis(gen, hostType().enclosingType(), c.hostType().enclosingType());
+        if(hostType().needsSuperEnclosing()) {
+          gen.emitLoadReference(index);
+        }
+        else {
+          gen.emitLoadReference(1); 
+          loadEnclosingThis(gen, hostType().enclosingType(), c.hostType().enclosingType());
+        }
+        index++;
       }
     }
 
@@ -658,9 +686,12 @@ aspect CreateBCode {
     }
     // this$val
     for(Iterator iter = c.hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
+        gen.emit(Bytecode.NOP);
       Variable v = (Variable)iter.next();
-      v.type().emitLoadLocal(gen, index);
-      index += v.type().size();
+      ConstructorDecl con = (ConstructorDecl)enclosingBodyDecl();
+      int localIndex = con.localIndexOfEnclosingVariable(v);
+      v.type().emitLoadLocal(gen, localIndex);
+        gen.emit(Bytecode.NOP);
     }
     if(decl().isPrivate() && decl().hostType() != hostType()) {
       gen.emit(Bytecode.ACONST_NULL);
@@ -669,6 +700,17 @@ aspect CreateBCode {
     else {
       decl().emitInvokeConstructor(gen);
     }
+  }
+
+  syn int ConstructorDecl.localIndexOfEnclosingVariable(Variable v) {
+    int localIndex  = offsetFirstEnclosingVariable();
+    Iterator iter = hostType().enclosingVariables().iterator();
+    Variable varDecl = (Variable)iter.next();
+    while(varDecl != v && iter.hasNext()) {
+      localIndex += varDecl.type().size();
+      varDecl = (Variable)iter.next();
+    }
+    return localIndex;
   }
 
   // 15.9.2
