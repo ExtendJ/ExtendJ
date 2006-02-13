@@ -266,8 +266,11 @@ public class Parser {
 		println("Major: " + high + "." + low);
 	}
 
+  public static boolean isInnerClass = false;
 
 	public TypeDecl parseTypeDecl() {
+    isInnerClass = false;
+    
 		int flags = u2();
 		Modifiers modifiers = modifiers(flags & 0xfddf);
 		if ((flags & 0x0200) == 0) {
@@ -278,6 +281,9 @@ public class Parser {
 			decl.setSuperClassAccessOpt(superClass == null ? new Opt()
 					: new Opt(superClass));
 			decl.setImplementsList(parseInterfaces(new List()));
+      
+      if((flags & 0x0008) == 0 && outerClassInfo != null)
+        isInnerClass = true;
 			return decl;
 		} else {
 			InterfaceDecl decl = new InterfaceDecl();

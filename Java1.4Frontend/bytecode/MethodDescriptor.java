@@ -26,6 +26,10 @@ class MethodDescriptor {
 		TypeDescriptor d = new TypeDescriptor(p, parameterDescriptors);
 		return d.parameterList();
 	}
+	public List parameterListSkipFirst() {
+		TypeDescriptor d = new TypeDescriptor(p, parameterDescriptors);
+		return d.parameterListSkipFirst();
+	}
 	
 	public Access type() {
 		TypeDescriptor d = new TypeDescriptor(p, typeDescriptor);

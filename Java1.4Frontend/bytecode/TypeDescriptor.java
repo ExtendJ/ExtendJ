@@ -70,6 +70,16 @@ class TypeDescriptor {
 		}
 		return list;
 	}
+	public List parameterListSkipFirst() {
+		List list = new List();
+		String s = descriptor;
+    if(!s.equals(""))
+      s = typeList(s, new List()); // skip first
+		while(!s.equals("")) {
+			s = typeList(s, list);
+		}
+		return list;
+	}
 	
 	public String typeList(String s, List l) {
 		char c = s.charAt(0);
