@@ -168,8 +168,11 @@ aspect ConstantExpression {
       }
       x *= radix;
       x += c;
-      if(x < oldx && radix == 10)
-        throw new NumberFormatException("");
+      if(x < oldx && radix == 10) {
+        boolean negMinValue = i == (s.length()-1) && neg && x == Long.MIN_VALUE;
+        if(!negMinValue)
+          throw new NumberFormatException("");
+      }
       oldx = x;
     }
     if(radix == 10 && x == Long.MIN_VALUE)
@@ -188,13 +191,17 @@ aspect ConstantExpression {
   syn boolean LongLiteral.isOctal() = getLITERAL().startsWith("0");
   syn boolean LongLiteral.isDecimal() = !isHex() && !isOctal();
 
+  syn boolean Expr.isPositive() = false;
+  eq IntegerLiteral.isPositive() = !getLITERAL().startsWith("-");
+  eq LongLiteral.isPositive() = !getLITERAL().startsWith("-");
+
   rewrite MinusExpr {
-    when(getOperand() instanceof IntegerLiteral && ((IntegerLiteral)getOperand()).isDecimal())
+    when(getOperand() instanceof IntegerLiteral && ((IntegerLiteral)getOperand()).isDecimal() && getOperand().isPositive())
     to IntegerLiteral new IntegerLiteral("-" + ((IntegerLiteral)getOperand()).getLITERAL());
   }
   
   rewrite MinusExpr {
-    when(getOperand() instanceof LongLiteral && ((LongLiteral)getOperand()).isDecimal())
+    when(getOperand() instanceof LongLiteral && ((LongLiteral)getOperand()).isDecimal() && getOperand().isPositive())
     to LongLiteral new LongLiteral("-" + ((LongLiteral)getOperand()).getLITERAL());
   }
 

@@ -181,18 +181,7 @@ aspect TypeCheck {
     TypeDecl right = getSource().type();
     if(!right.isPrimitive())
       return illegalType();
-    
-    //if(!left.isPrimitive() || !right.isPrimitive())
-    //  return illegalType();
     return right;
-    /*
-    if(!left.isNumericType() && !left.isBoolean() || !right.isNumericType() && !right.isBoolean())
-      return illegalType();
-    if(left.instanceOf(right))
-      return right;
-    if(right.instanceOf(left))
-      return left;
-    return illegalType();*/
   }
   
   eq AssignPlusExpr.sourceType() {
@@ -246,7 +235,11 @@ aspect TypeCheck {
   public void Binary.typeCheck() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
-    if(!left.instanceOf(right) && !right.instanceOf(left)) {
+    if(left.isNumericType() || right.isNumericType()) {
+      if(left.binaryNumericPromotion(right).isIllegal())
+        error(this + ", Left hand side " + left.typeName() + " is not compatible with right hand side " + right.typeName());
+    }
+    else if(!left.instanceOf(right) && !right.instanceOf(left)) {
       StringBuffer leftString = new StringBuffer();
       getLeftOperand().toString(leftString);
       StringBuffer rightString = new StringBuffer();
@@ -478,7 +471,6 @@ aspect TypeCheck {
     TypeDecl type = getExpr().type();
     if(!type.isIntegralType() || type == typeLong())
       error("Switch expression must be of char, byte, short, or int");
-    
   }
 
   public void ConstCase.typeCheck() {
@@ -493,7 +485,6 @@ aspect TypeCheck {
   inh TypeDecl Case.switchType();
   eq SwitchStmt.getCase().switchType() = getExpr().type();
 
-  
   public void SynchronizedStmt.typeCheck() {
     TypeDecl type = getExpr().type();
     if(!type.isReferenceType() || type.isNull())
@@ -553,8 +544,6 @@ aspect TypeCheck {
     }
   }
 
-
-
   inh TypeDecl SuperConstructorAccess.enclosingInstance();
   inh TypeDecl ClassInstanceExpr.enclosingInstance();
   inh TypeDecl TypeDecl.enclosingInstance();
@@ -572,7 +561,6 @@ aspect TypeCheck {
 
   inh TypeDecl ConstructorDecl.illegalType();
   eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = illegalType();
-  
 
   syn boolean ClassInstanceExpr.noEnclosingInstance() = isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
   
@@ -669,14 +657,6 @@ aspect TypeCheck {
       }
       
     }
-    /*
-    if(hasExpr() && type().isInnerType() && !type().enclosingType().instanceOf(getExpr().type()))
-      error("*** The instantiation of " + type().fullName() + " is not an inner class of the qualifying type " + getExpr().type().fullName());
-      */
-    /*
-    if(hasExpr() && (type() == illegalType() || !decl().hostType().isInnerType()))
-      error("*** The instantiation of " + type().fullName() + " is not an inner class of the qualifying type " + getExpr().type().fullName());
-    */
   }
 
   public void ArrayCreationExpr.typeCheck() {
@@ -694,7 +674,7 @@ aspect TypeCheck {
     if(type() == illegalType()) {
       error("*** Operands in conditional operator does not match"); 
     }
- }
+  }
 
  public void IntegerLiteral.typeCheck() {
    if(constant().error)
@@ -720,7 +700,4 @@ aspect TypeCheck {
    if(constant().doubleValue() == Double.NEGATIVE_INFINITY || constant().doubleValue() == Double.POSITIVE_INFINITY)
      error("It is an error for floating-point " + getLITERAL() + " to round to an infinity");
  }
-
- 
 } 
-

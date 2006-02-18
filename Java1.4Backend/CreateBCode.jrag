@@ -428,35 +428,7 @@ aspect CreateBCode {
           prevExpr().type().emitPop(gen);
       }
       else if(f.isInstanceVariable()) {
-        if(inExplicitConstructorInvocation() && !hostType().hasField(f.name())) {
-          gen.emit(Bytecode.ALOAD_1);
-          TypeDecl enclosing = hostType().enclosingType();
-          while(!enclosing.hasField(f.name())) {
-            String classname = enclosing.constantPoolName();
-            enclosing = enclosing.enclosingType();
-            String desc = enclosing.typeDescriptor();
-            int index = gen.constantPool().addFieldref(classname, "this$0", desc);
-            gen.emit(Bytecode.GETFIELD, 0).add2(index);
-          }
-        }
-        else {
-          // load implicit this qualifier
-          gen.emit(Bytecode.ALOAD_0);
-          if(!hostType().hasField(f.name())) {
-            TypeDecl enclosing = hostType();
-            do {
-              String classname = enclosing.constantPoolName();
-              enclosing = enclosing.enclosingType();
-              if(enclosing == null) {
-                throw new Error("Error accessing " + f.name() + " in " + f.hostType().fullName() + " from " + hostType().fullName());
-              }
-              String desc = enclosing.typeDescriptor();
-              String name = "this$0";
-              int index = gen.constantPool().addFieldref(classname, name, desc);
-              gen.emit(Bytecode.GETFIELD, 0).add2(index);
-            } while (!enclosing.hasField(name()));
-          }
-        }
+        emitThis(gen, fieldQualifierType());
       }
     }
   }
@@ -569,21 +541,7 @@ aspect CreateBCode {
     }
     else if(!m.isStatic()) {
       // load implicit this qualifier
-      gen.emit(Bytecode.ALOAD_0);
-      if(!hostType().hasMethod(m.name())) {
-        TypeDecl enclosing = hostType();
-        do {
-          String classname = enclosing.constantPoolName();
-          enclosing = enclosing.enclosingType();
-          if(enclosing == null) {
-            throw new Error("Error accessing " + m.name() + " in " + m.hostType().fullName() + " from " + hostType().fullName());
-          }
-          String desc = enclosing.typeDescriptor();
-          String name = "this$0";
-          int index = gen.constantPool().addFieldref(classname, name, desc);
-          gen.emit(Bytecode.GETFIELD, 0).add2(index);
-        } while (!enclosing.hasMethod(name()));
-      }
+      emitThis(gen, methodQualifierType());
     }
   }
 
@@ -603,11 +561,37 @@ aspect CreateBCode {
   }
 
   public void ThisAccess.createBCode(CodeGeneration gen) {
-    emitLoadThis(gen);
+    emitThis(gen, decl());
   }
   public void SuperAccess.createBCode(CodeGeneration gen) {
-    emitLoadSuper(gen);
+    TypeDecl targetDecl = isQualified() ? qualifier().type() : hostType();
+    emitThis(gen, targetDecl);
   }
+
+  // load this where hostType is the target this instance 
+  // supporting inner classes and in explicit contructor invocations
+  public void Access.emitThis(CodeGeneration gen, TypeDecl targetDecl) {
+    if(targetDecl == hostType())
+      gen.emit(Bytecode.ALOAD_0);
+    else {
+      TypeDecl enclosing = hostType();
+      if(inExplicitConstructorInvocation()) {
+        gen.emit(Bytecode.ALOAD_1);
+        enclosing = enclosing.enclosingType();
+      }
+      else {
+        gen.emit(Bytecode.ALOAD_0);
+      }
+      while(enclosing != targetDecl) {
+        String classname = enclosing.constantPoolName();
+        enclosing = enclosing.enclosingType();
+        String desc = enclosing.typeDescriptor();
+        int index = gen.constantPool().addFieldref(classname, "this$0", desc);
+        gen.emit(Bytecode.GETFIELD, 0).add2(index);
+      }
+    }
+  }
+
 
   public void ConstructorAccess.createBCode(CodeGeneration gen) {
     ConstructorDecl c = decl();
@@ -640,42 +624,34 @@ aspect CreateBCode {
       decl().emitInvokeConstructor(gen);
     }
   }
- 
-  protected void Access.loadEnclosingThis(CodeGeneration gen, TypeDecl hostType, TypeDecl targetEnclosingType) {
-    TypeDecl enclosing = hostType;
-    while(!enclosing.instanceOf(targetEnclosingType)) {
-      String classname = enclosing.constantPoolName();
+  
+  protected TypeDecl Access.superConstructorQualifier(TypeDecl targetEnclosingType) {
+    TypeDecl enclosing = hostType();
+    while(!enclosing.instanceOf(targetEnclosingType))
       enclosing = enclosing.enclosingType();
-      String desc = enclosing.typeDescriptor();
-      int index = gen.constantPool().addFieldref(classname, "this$0", desc);
-      gen.emit(Bytecode.GETFIELD, 0).add2(index);
-    }
+    return enclosing;
   }
  
   public void SuperConstructorAccess.createBCode(CodeGeneration gen) {
     ConstructorDecl c = decl();
-    int index = 0;
     
     // this
-    gen.emitLoadReference(index++);
+    gen.emit(Bytecode.ALOAD_0);
     
-    // this$0
-    if(hostType().needsSuperEnclosing())
-      index++;
-      
     if(c.needsEnclosing()) {
       if(hasPrevExpr() && !prevExpr().isTypeAccess()) {
         prevExpr().createBCode(gen);
       }
       else {
         if(hostType().needsSuperEnclosing()) {
-          gen.emitLoadReference(index);
+          if(hostType().needsEnclosing())
+            gen.emit(Bytecode.ALOAD_2);
+          else
+            gen.emit(Bytecode.ALOAD_1);
         }
         else {
-          gen.emitLoadReference(1); 
-          loadEnclosingThis(gen, hostType().enclosingType(), c.hostType().enclosingType());
+          emitThis(gen, superConstructorQualifier(c.hostType().enclosingType()));
         }
-        index++;
       }
     }
 
@@ -686,12 +662,10 @@ aspect CreateBCode {
     }
     // this$val
     for(Iterator iter = c.hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
-        gen.emit(Bytecode.NOP);
       Variable v = (Variable)iter.next();
       ConstructorDecl con = (ConstructorDecl)enclosingBodyDecl();
       int localIndex = con.localIndexOfEnclosingVariable(v);
       v.type().emitLoadLocal(gen, localIndex);
-        gen.emit(Bytecode.NOP);
     }
     if(decl().isPrivate() && decl().hostType() != hostType()) {
       gen.emit(Bytecode.ACONST_NULL);
@@ -716,10 +690,7 @@ aspect CreateBCode {
   // 15.9.2
   private void ClassInstanceExpr.emitLocalEnclosing(CodeGeneration gen, TypeDecl localClass) {
     if(!localClass.inStaticContext()) {
-      TypeDecl targetEnclosing = localClass.enclosingType();
-      TypeDecl enclosing = hostType();
-      gen.emit(Bytecode.ALOAD_0);
-      loadEnclosingThis(gen, hostType(), targetEnclosing);
+      emitThis(gen, localClass.enclosingType());
     }
   }
   private void ClassInstanceExpr.emitInnerMemberEnclosing(CodeGeneration gen, TypeDecl innerClass) {
@@ -731,16 +702,10 @@ aspect CreateBCode {
       gen.emitPop();
     }
     else {
-      gen.emit(Bytecode.ALOAD_0);
-      String instantiatedClass = innerClass.name();
       TypeDecl enclosing = hostType();
-      while(!enclosing.hasType(instantiatedClass)) {
-        String classname = enclosing.constantPoolName();
+      while(!enclosing.hasType(innerClass.name()))
         enclosing = enclosing.enclosingType();
-        String desc = enclosing.typeDescriptor();
-        int index = gen.constantPool().addFieldref(classname, "this$0", desc);
-        gen.emit(Bytecode.GETFIELD, 0).add2(index);
-      }
+      emitThis(gen, enclosing);
     }
   }
   public void ClassInstanceExpr.createBCode(CodeGeneration gen) {
@@ -1618,6 +1583,7 @@ aspect CreateBCode {
       gen.emitBranchNonNull(next_label);
       
       // emit string literal
+      
       new StringLiteral(prevExpr().type().referenceClassName()).emitPushConstant(gen);
       m.emitInvokeMethod(gen, hostType());
       gen.emitDup();

@@ -75,7 +75,7 @@ aspect NameCheck {
         if(!((MethodDecl)iter.next()).isAbstract())
           allAbstract = false;
       }
-      if(!allAbstract) {
+      if(!allAbstract && validArgs()) {
         StringBuffer s = new StringBuffer();
         s.append("several most specific methods for " + this + "\n");
         for(MethodCollection.MethodIterator iter = decls().iterator(); iter.hasNext(); ) {
@@ -86,6 +86,13 @@ aspect NameCheck {
       }
        
     }
+  }
+  
+  syn boolean MethodAccess.validArgs() {
+    for(int i = 0; i < getNumArg(); i++)
+      if(getArg(i).type().isIllegal() || getArg(i).type().isUnknown())
+        return false;
+    return true;
   }
 
 
@@ -137,7 +144,7 @@ aspect NameCheck {
     super.nameCheck();
     if(decl() == illegalConstructor() && decls().size() <= 1)
       error("no constructor named " + name());
-    if(decls().size() > 1) {
+    if(decls().size() > 1 && validArgs()) {
       error("several most specific constructors for " + this);
       for(Iterator iter = decls().iterator(); iter.hasNext(); ) {
         error("         " + ((ConstructorDecl)iter.next()).signature());
@@ -145,11 +152,24 @@ aspect NameCheck {
     }
   }
 
+  syn boolean ConstructorAccess.validArgs() {
+    for(int i = 0; i < getNumArg(); i++)
+      if(getArg(i).type().isIllegal() || getArg(i).type().isUnknown())
+        return false;
+    return true;
+  }
+  syn boolean ClassInstanceExpr.validArgs() {
+    for(int i = 0; i < getNumArg(); i++)
+      if(getArg(i).type().isIllegal() || getArg(i).type().isUnknown())
+        return false;
+    return true;
+  }
+
   public void ClassInstanceExpr.nameCheck() {
     super.nameCheck();
     if(decl() == illegalConstructor() && decls().size() <= 1)
       error("can not instantiate " + type().typeName() + " no matching constructor found in " + type().typeName());
-    else if(decls().size() > 1) {
+    else if(decls().size() > 1 && validArgs()) {
       error("several most specific constructors found");
       for(Iterator iter = decls().iterator(); iter.hasNext(); ) {
         error("         " + ((ConstructorDecl)iter.next()).signature());
