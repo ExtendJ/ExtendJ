@@ -22,6 +22,7 @@ class JavaCompiler {
     program.addKeyOption("-verbose");
     program.addKeyOption("-version");
     program.addKeyOption("-help");
+    program.addKeyOption("-g");
     
     program.addOptions(args);
     Collection files = program.files();
@@ -48,10 +49,10 @@ class JavaCompiler {
       	reader.close();
         program.addCompilationUnit(unit);
       } catch (Error e) {
-        System.out.println(name + ": " + e.getMessage());
+        System.err.println(name + ": " + e.getMessage());
         return false;
       } catch (RuntimeException e) {
-        System.out.println(name + ": " + e.getMessage());
+        System.err.println(name + ": " + e.getMessage());
         return false;
       } catch (IOException e) {
         System.err.println("error: " + e.getMessage());
@@ -59,6 +60,7 @@ class JavaCompiler {
       } catch (Exception e) {
         System.err.println(e);
         e.printStackTrace();
+        return false;
       }
     }
     program.updateRemoteAttributeCollections(files.size());
