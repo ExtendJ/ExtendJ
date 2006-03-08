@@ -11,7 +11,8 @@ class FieldDescriptor {
 		p = parser;
 		int descriptor_index = p.u2();
 		typeDescriptor = ((CONSTANT_Utf8_Info) p.constantPool[descriptor_index]).string();
-		p.println("  Field: " + name + ", " + typeDescriptor);
+    if(Parser.VERBOSE)
+		  p.println("  Field: " + name + ", " + typeDescriptor);
 	}
 	
 	public Access type() {

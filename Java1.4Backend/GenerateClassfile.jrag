@@ -8,7 +8,7 @@ aspect GenerateClassfile {
   public void CompilationUnit.generateClassfile() {
     for(int i = 0; i < getNumTypeDecl(); i++) {
       getTypeDecl(i).generateClassfile();
-      getTypeDecl(i).clearClassfile();
+      getTypeDecl(i).clear();
     }
   }
   
@@ -21,61 +21,79 @@ aspect GenerateClassfile {
     }
   }
 
-  public void BodyDecl.clear() {
-    attributes_computed = false;
-    attributes_value = null;
-  }
-
-  public void MethodDecl.clear() {
-    super.clear();
-    bytecodes(hostType().constantPool()).clearCodeGeneration();
-    bytecodes_ConstantPool_values = null;
-    if(hasBlock()) {
-      getBlock().setParent(null);
-      setBlockOpt(new Opt());
+  public boolean ASTNode.clear() {
+    boolean empty = true;
+    for(int i = 0; i < getNumChild(); i++) {
+      if(!getChild(i).clear())
+        empty = false;
+      else
+        setChild(null, i);
     }
+    if(empty) {
+      setParent(null);
+    }
+    if(flush())
+      flushCache();
+    return empty;
   }
 
-  public void ConstructorDecl.clear() {
-    super.clear();
-    bytecodes(hostType().constantPool()).clearCodeGeneration();
-    bytecodes_ConstantPool_values = null;
-    getBlock().setParent(null);
-    setBlock(new Block());
-  }
-
-  public void TypeDecl.clearClassfile() {
+  syn boolean ASTNode.flush() = true;
+  
+  eq TypeDecl.flush() = false;
+  eq LocalClassDeclStmt.flush() = true;
+  eq AnonymousDecl.flush() = true;
+  
+  eq MethodDecl.flush() = false;
+  eq FieldDeclaration.flush() = false;
+  eq ConstructorDecl.flush() = false;
+  
+  public boolean TypeDecl.clear() {
     bytecodes(constantPool()).clearCodeGeneration();
+    for(int i = 0; i < getNumBodyDecl(); i++)
+      getBodyDecl(i).clear();
     attributes_computed = false;
     attributes_value = null;
     clinit_attributes_computed = false;
     clinit_attributes_value = null;
     constantPool_computed = false;
-    constantPool();
+    constantPool_value = null;
     bytecodes_ConstantPool_values = null;
+    return false;
   }
-  public void ClassDecl.clearClassfile() {
-    for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
-      BodyDecl b = (BodyDecl)iter.next();
-      b.clear();
-    }
-    for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
-      BodyDecl b = (BodyDecl)iter.next();
-      b.clear();
-    }
-    super.clearClassfile();
+  public boolean LocalClassDeclStmt.clear() {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).clear();
+    setParent(null);
+    flushCache();
+    return true;
   }
-  public void InterfaceDecl.clearClassfile() {
-    for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
-      BodyDecl b = (BodyDecl)iter.next();
-      b.clear();
-    }
-    for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
-      BodyDecl b = (BodyDecl)iter.next();
-      b.clear();
-    }
-    super.clearClassfile();
+  public boolean AnonymousDecl.clear() {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).clear();
+    setParent(null);
+    flushCache();
+    return true;
   }
+
+  public boolean MethodDecl.clear() {
+    if(hasBlock())
+      getBlock().clear();
+    //bytecodes(hostType().constantPool()).clearCodeGeneration();
+    bytecodes_ConstantPool_values = null;
+    return false;
+  }
+
+  public boolean FieldDeclaration.clear() {
+    return false;
+  }
+
+  public boolean ConstructorDecl.clear() {
+    getBlock().clear();
+    //bytecodes(hostType().constantPool()).clearCodeGeneration();
+    bytecodes_ConstantPool_values = null;
+    return false;
+  }
+
 
   public void InterfaceDecl.generateClassfile() {
     super.generateClassfile();
@@ -97,7 +115,7 @@ aspect GenerateClassfile {
         parentFile.mkdirs();
 
       FileOutputStream f = new FileOutputStream(fileName);
-      DataOutputStream out = new DataOutputStream(f);
+      DataOutputStream out = new DataOutputStream(new BufferedOutputStream(f));
       out.writeInt(0xCAFEBABE);
       out.writeChar(0);
       out.writeChar(48);

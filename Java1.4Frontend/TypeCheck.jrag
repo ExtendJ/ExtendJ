@@ -2,7 +2,13 @@
 aspect TypeCheck {
   public void ASTNode.typeCheck() {
   }
-
+  
+  syn boolean Expr.isVariable() = false;
+  eq AbstractDot.isVariable() = lastAccess().isVariable();
+  eq VarAccess.isVariable() = true;
+  eq ArrayAccess.isVariable() = true;
+  eq ParExpr.isVariable() = getExpr().isVariable();
+ 
   public void VariableDeclaration.typeCheck() {
     if(hasInit()) {
       TypeDecl right = getInit().type();
@@ -18,12 +24,6 @@ aspect TypeCheck {
     }
   }
 
-  syn boolean Expr.isVariable() = false;
-  eq AbstractDot.isVariable() = lastAccess().isVariable();
-  eq VarAccess.isVariable() = true;
-  eq ArrayAccess.isVariable() = true;
-  eq ParExpr.isVariable() = getExpr().isVariable();
- 
   public void FieldDeclaration.typeCheck() {
     if(hasInit()) {
       TypeDecl source = getInit().type();
@@ -45,7 +45,7 @@ aspect TypeCheck {
       error("left hand side is not a variable");
     TypeDecl source = sourceType();
     TypeDecl dest = getDest().type();
-    if(source != illegalType() && source.assignConversionTo(dest, getSource()))
+    if(!source.isIllegal() && source.assignConversionTo(dest, getSource()))
       return;
     StringBuffer s = new StringBuffer();
     toString(s);
@@ -94,7 +94,7 @@ aspect TypeCheck {
   public void AssignPlusExpr.typeCheck() {
     if(!getDest().isVariable())
       error("left hand side is not a variable");
-    if(getDest().type().isString() && !(getSource().type() instanceof VoidType))
+    if(getDest().type().isString() && !(getSource().type().isVoid()))
       return;
     if(getSource().type().isBoolean() || getDest().type().isBoolean()) {
       error("Operator + does not operate on boolean types");
@@ -187,13 +187,11 @@ aspect TypeCheck {
   eq AssignPlusExpr.sourceType() {
     TypeDecl left = getDest().type();
     TypeDecl right = getSource().type();
-    TypeDecl stringType = typeString();
-    TypeDecl voidType = typeVoid();
-    if(left != stringType && right != stringType)
+    if(!left.isString() && !right.isString())
       return super.sourceType();
-    if(left == voidType || right == voidType)
+    if(left.isVoid() || right.isVoid())
       return illegalType();
-    return stringType;
+    return left.isString() ? left : right;
   }
   
   syn TypeDecl AssignSimpleExpr.sourceType() = getSource().type();
@@ -363,15 +361,13 @@ aspect TypeCheck {
   public void AddExpr.typeCheck() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
-    TypeDecl stringType = typeString();
-    TypeDecl voidType = typeVoid();
-    if(left != stringType && right != stringType) {
+    if(!left.isString() && !right.isString()) {
       super.typeCheck();
     }
-    else if(left == voidType) {
+    else if(left.isVoid()) {
       error("The type void of the left hand side is not numeric");
     }
-    else if(right == voidType) {
+    else if(right.isVoid()) {
       error("The type void of the right hand side is not numeric");
     }
   }     
@@ -469,7 +465,7 @@ aspect TypeCheck {
 
   public void SwitchStmt.typeCheck() {
     TypeDecl type = getExpr().type();
-    if(!type.isIntegralType() || type == typeLong())
+    if(!type.isIntegralType() || type.isLong())
       error("Switch expression must be of char, byte, short, or int");
   }
 
@@ -671,7 +667,7 @@ aspect TypeCheck {
   public void ConditionalExpr.typeCheck() {
     if(!getCondition().type().isBoolean())
       error("*** First expression must be a boolean in conditional operator");
-    if(type() == illegalType()) {
+    if(type().isIllegal()) {
       error("*** Operands in conditional operator does not match"); 
     }
   }

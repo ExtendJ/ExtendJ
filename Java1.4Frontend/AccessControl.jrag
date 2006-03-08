@@ -12,6 +12,14 @@ aspect AccessControl {
     return enclosingType().topLevelType();
   }
 
+  syn Stmt Expr.enclosingStmt() {
+    ASTNode node = this;
+    while(node != null && !(node instanceof Stmt))
+      node = node.getParent();
+    return (Stmt)node;
+  }
+
+
   // 8
   inh boolean TypeDecl.isNestedType();
   eq CompilationUnit.getTypeDecl().isNestedType() = false;
@@ -94,12 +102,12 @@ aspect AccessControl {
  
   // 6.6 Access Control
   
-  syn boolean ArrayDecl.accessibleFrom(TypeDecl type) = elementType().accessibleFrom(type);
+  syn lazy boolean ArrayDecl.accessibleFrom(TypeDecl type) = elementType().accessibleFrom(type);
  
-  syn boolean TypeDecl.accessibleFromPackage(String packageName) =
+  syn lazy boolean TypeDecl.accessibleFromPackage(String packageName) =
     !isPrivate() && (isPublic() || hostPackage().equals(packageName));
   
-  syn boolean TypeDecl.accessibleFromExtend(TypeDecl type) {
+  syn lazy boolean TypeDecl.accessibleFromExtend(TypeDecl type) {
     if(type == this)
       return true;
     if(isInnerType()) { 
@@ -190,23 +198,6 @@ aspect AccessControl {
       return hostPackage().equals(type.hostPackage());
   }
   
-  syn lazy boolean FieldDeclaration.accessibleFrom(TypeDecl type, TypeDecl qualifierType) {
-    if(isPublic())
-      return true;
-    else if(isProtected()) {
-      if(hostPackage().equals(type.hostPackage()))
-        return true;
-      TypeDecl C = hostType();
-      TypeDecl S = type.subclassWithinBody(C);
-      TypeDecl Q = type();
-      return S != null && (!isInstanceVariable() || Q.instanceOf(S));
-    }
-    else if(isPrivate())
-      return hostType().topLevelType() == type.topLevelType();
-    else
-      return hostPackage().equals(type.hostPackage());
-  }
-
   syn lazy boolean FieldDeclaration.accessibleFrom(TypeDecl type) {
     if(isPublic())
       return true;
@@ -250,29 +241,18 @@ aspect AccessControl {
     
     // 8.1.1.2 final Classes
     TypeDecl typeDecl = hasSuperclass() ? superclass() : null;
-    if(typeDecl != null && typeDecl.isFinal()) {
-      error("class " + fullName() + " may not extend final class " + typeDecl.fullName());
-    }
     if(typeDecl != null && !typeDecl.accessibleFromExtend(this))
     //if(typeDecl != null && !isCircular() && !typeDecl.accessibleFrom(this))
       error("class " + fullName() + " may not extend non accessible type " + typeDecl.fullName());
 
-    // 8.1.3
-    if(isCircular())
-      error("class " + fullName() + " depends on itself");
+    if(hasSuperclass() && !superclass().accessibleFrom(this))
+      error("a superclass must be accessible which " + superclass().name() + " is not");
 
- 
     // 8.1.4
-    Set set = new HashSet();
     for(int i = 0; i < getNumImplements(); i++) {
       TypeDecl decl = getImplements(i).type();
-      if(!decl.isInterfaceDecl())
-        error("type " + fullName() + " tries no implement non interface type " + decl.fullName());
       if(!decl.isCircular() && !decl.accessibleFrom(this))
         error("class " + fullName() + " can not implement non accessible type " + decl.fullName());
-      if(set.contains(decl))
-        error("type " + decl.fullName() + " mentionened multiple times in implements clause");
-      set.add(decl);
     }
   }
 

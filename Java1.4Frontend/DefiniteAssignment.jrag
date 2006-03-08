@@ -88,7 +88,8 @@ aspect DefiniteAssignment {
         if(v.isValue()) {
         }
         else if(v.isBlankFinal()) {
-          if(!isDAbefore(v) /*&& !v.hasInit() && !v.getInit().isConstant()*/)
+          //if(!isDAbefore(v) && !v.hasInit() && !v.getInit().isConstant())
+          if(!isDAbefore(v))
             error("Final variable " + v + " is not assigned before used");
         }
         else {
@@ -132,10 +133,6 @@ aspect DefiniteAssignment {
         if(var.isFinal() && (var.hasInit() || !isDUbefore(var))) {
         //if(var.isFinal() && ((var.hasInit() && var.getInit().isConstant()) || !isDUbefore(var))) {
         }
-        /*
-        if(var.isFinal() && isIncOrDec())
-          error("++ and -- can not be applied to final variables");
-          */
       }
       // field
       else if(v instanceof FieldDeclaration) {
@@ -148,11 +145,6 @@ aspect DefiniteAssignment {
             error("final field " + f.name() + " may only be assigned in constructors and initializers");
           if(!isDUbefore(f))
             error("Final field " + f.name() + " may only be assigned once");
-          /*
-          if(isIncOrDec())
-            error("++ and -- can not be applied to final fields");
-            */
-
         }
       }
       else if(v instanceof ParameterDeclaration) {
@@ -162,14 +154,60 @@ aspect DefiniteAssignment {
         if(p.isFinal()) {
           error("Final parameter " + p.name() + " may not be assigned");
         }
-
-        /*
-        if(p.isFinal() && isIncOrDec())
-          error("++ and -- can not be applied to final parameters");
-          */
       }
       
     }
+  }
+  
+  public void FieldDeclaration.definiteAssignment() {
+    super.definiteAssignment();
+    if(isBlank() && isFinal() && isClassVariable()) {
+      boolean found = false;
+      TypeDecl typeDecl = hostType();
+      for(int i = 0; i < typeDecl.getNumBodyDecl(); i++) {
+        if(typeDecl.getBodyDecl(i) instanceof StaticInitializer) {
+          StaticInitializer s = (StaticInitializer)typeDecl.getBodyDecl(i);
+          if(s.isDAafter(this))
+            found = true;
+        }
+        
+        else if(typeDecl.getBodyDecl(i) instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)typeDecl.getBodyDecl(i);
+          if(f.isStatic() && f.isDAafter(this))
+            found = true;
+        }
+        
+      }
+      if(!found)
+        error("blank final class variable " + name() + " in " + hostType().typeName() + " is not definitely assigned in static initializer");
+
+    }
+    if(isBlank() && isFinal() && isInstanceVariable()) {
+      TypeDecl typeDecl = hostType();
+      boolean found = false;
+      for(int i = 0; !found && i < typeDecl.getNumBodyDecl(); i++) {
+        if(typeDecl.getBodyDecl(i) instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)typeDecl.getBodyDecl(i);
+          if(!f.isStatic() && f.isDAafter(this))
+            found = true;
+        }
+        else if(typeDecl.getBodyDecl(i) instanceof InstanceInitializer) {
+          InstanceInitializer ii = (InstanceInitializer)typeDecl.getBodyDecl(i);
+          if(ii.getBlock().isDAafter(this))
+            found = true;
+        }
+      }
+      for(Iterator iter = typeDecl.constructors().iterator(); !found && iter.hasNext(); ) {
+        ConstructorDecl c = (ConstructorDecl)iter.next();
+        if(!c.isDAafter(this)) {
+          error("blank final instance variable " + name() + " in " + hostType().typeName() + " is not definitely assigned after " + c.signature());
+          }
+      }
+    }
+    if(isBlank() && hostType().isInterfaceDecl()) {
+            error("variable  " + name() + " in " + hostType().typeName() + " which is an interface must have an initializer");
+    }
+
   }
 }
 
@@ -177,12 +215,13 @@ aspect DA {
   syn boolean Expr.booleanValued() = type().isBoolean();
   syn lazy boolean ConditionalExpr.booleanOperator() = getTrueExpr().booleanValued() && getFalseExpr().booleanValued();
   
-  inh lazy boolean Stmt.isDAbefore(Variable v);
+  inh boolean Stmt.isDAbefore(Variable v);
   syn lazy boolean Stmt.isDAafter(Variable v);
-  inh lazy boolean Expr.isDAbefore(Variable v);
-  syn lazy boolean Expr.isDAafter(Variable v);
+  inh boolean Expr.isDAbefore(Variable v);
+  syn boolean Expr.isDAafter(Variable v);
 
   syn lazy boolean Binary.isDAafter(Variable v);
+  syn lazy boolean AbstractDot.isDAafter(Variable v);
 
   inh lazy boolean TypeDecl.isDAbefore(Variable v);
 
@@ -191,7 +230,8 @@ aspect DA {
 
   eq TypeDecl.getBodyDecl().isDAbefore(Variable v) {
     BodyDecl b = getBodyDecl(childIndex);
-    if(b instanceof MethodDecl /*|| b instanceof MemberTypeDecl*/) {
+    //if(b instanceof MethodDecl || b instanceof MemberTypeDecl) {
+    if(b instanceof MethodDecl) {
       return true;
     }
     if(b instanceof MemberTypeDecl && v.isBlank() && v.isFinal() && v.hostType() == this)
@@ -262,7 +302,8 @@ aspect DA {
   eq Program.getCompilationUnit().isDAbefore(Variable v) = false;
   eq Stmt.isDAafter(Variable v) {
     //System.out.println("### isDAafter reached in " + getClass().getName());
-    throw new NullPointerException();
+    //throw new NullPointerException();
+    throw new Error("Can not compute isDAafter for " + getClass().getName() + " at " + errorPrefix());
   }
   
   syn boolean Expr.isDAafterTrue(Variable v);
@@ -278,14 +319,17 @@ aspect DA {
 
   eq Expr.isDAafter(Variable v) = (isDAafterFalse(v) && isDAafterTrue(v)) || isDAbefore(v);
 
+  eq InstanceOfExpr.isDAafterFalse(Variable v) = isDAafter(v);
+  eq InstanceOfExpr.isDAafterTrue(Variable v) = isDAafter(v);
+
   eq ParExpr.isDAafterTrue(Variable v) = getExpr().isDAafterTrue(v) || isFalse();
   eq ParExpr.isDAafterFalse(Variable v) = getExpr().isDAafterFalse(v) || isTrue();
 
-  syn lazy boolean VarAccess.isDAafter(Variable v) {
+  syn boolean VarAccess.isDAafter(Variable v) {
     return (isDest() && decl() == v) || isDAbefore(v);
   }
   eq AbstractDot.getRight().isDAbefore(Variable v) = getLeft().isDAafter(v);
-  syn lazy boolean AbstractDot.isDAafter(Variable v) = lastAccess().isDAafter(v);
+  eq AbstractDot.isDAafter(Variable v) = lastAccess().isDAafter(v);
 
   eq ArrayAccess.isDAafter(Variable v) = getExpr().isDAafter(v);
 
@@ -318,7 +362,8 @@ aspect DA {
   eq ConditionalExpr.getFalseExpr().isDAbefore(Variable v) = getCondition().isDAafterFalse(v);
   eq ConditionalExpr.isDAafter(Variable v) = booleanOperator() ? isDAafterTrue(v) && isDAafterFalse(v) : getTrueExpr().isDAafter(v) && getFalseExpr().isDAafter(v);
 
-  eq AssignExpr.isDAafter(Variable v) = /*(getDest().isVariable() && getDest().varDecl() == v) ||*/ getSource().isDAafter(v);
+  //eq AssignExpr.isDAafter(Variable v) = (getDest().isVariable() && getDest().varDecl() == v) || getSource().isDAafter(v);
+  eq AssignExpr.isDAafter(Variable v) = getSource().isDAafter(v);
   eq AssignExpr.getSource().isDAbefore(Variable v) = getDest().isDAafter(v);
   eq AssignExpr.getDest().isDAbefore(Variable v) = isDAbefore(v);
   eq AssignExpr.isDAafterTrue(Variable v) = isDAafter(v) || isFalse();
@@ -328,8 +373,8 @@ aspect DA {
   eq Unary.isDAafter(Variable v) = getOperand().isDAafter(v);
   eq CastExpr.isDAafter(Variable v) = getExpr().isDAafter(v);
   
-  eq Binary.isDAafterTrue(Variable v) = getRightOperand().isDAafter(v) || isFalse();
-  eq Binary.isDAafterFalse(Variable v) = getRightOperand().isDAafter(v) || isTrue();
+  syn lazy boolean Binary.isDAafterTrue(Variable v) = getRightOperand().isDAafter(v) || isFalse();
+  syn lazy boolean Binary.isDAafterFalse(Variable v) = getRightOperand().isDAafter(v) || isTrue();
   
   eq Binary.isDAafter(Variable v) = getRightOperand().isDAafter(v);
   eq Binary.getRightOperand().isDAbefore(Variable v) = getLeftOperand().isDAafter(v);
@@ -362,12 +407,13 @@ aspect DA {
       return isDAbefore(v);
     return getDims(getNumDims()-1).isDAafter(v);
   }
-  eq ArrayCreationExpr.isDAafter(Variable v) = isDAafterCreation(v);
+  eq ArrayCreationExpr.isDAafter(Variable v) = hasArrayInit() ? getArrayInit().isDAafter(v) : isDAafterCreation(v);
   eq ArrayCreationExpr.getDims(int i).isDAbefore(Variable v) {
     if(i == 0)
       return isDAbefore(v);
     return getDims(i-1).isDAafter(v);
   }
+  eq ArrayCreationExpr.getArrayInit().isDAbefore(Variable v) = isDAafterCreation(v);
   syn boolean Dims.isDAafter(Variable v) = hasExpr() ? getExpr().isDAafter(v) : isDAbefore(v);
   inh boolean Dims.isDAbefore(Variable v);
 
@@ -433,8 +479,38 @@ aspect DA {
     return hasInit() ? getInit().isDAafter(v) : isDAbefore(v);
   }
   
-  eq ArrayInit.isDAafter(Variable v) = getNumInit() == 0 ? isDAbefore(v) : getInit(getNumInit()-1).isDAafter(v);
-  eq ArrayInit.getInit().isDAbefore(Variable v) = childIndex == 0 ? isDAbefore(v) : getInit(childIndex-1).isDAafter(v);
+
+  syn lazy Collection ArrayInit.assignments() {
+    Collection c = new ArrayList();
+    collectAssignments(c);
+    return c;
+  }
+
+  protected void ASTNode.collectAssignments(Collection c) {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).collectAssignments(c);
+  }
+  protected void TypeDecl.collectAssignments(Collection c) {
+  }
+  protected void AssignExpr.collectAssignments(Collection c) {
+    super.collectAssignments(c);
+    if(getDest().isVariable())
+      c.add(getDest().varDecl());
+  }
+
+  eq ArrayInit.isDAafter(Variable v) {
+    if(getNumInit() > 0 && assignments().contains(v))
+      return true;
+    return isDAbefore(v);
+    //getInit(getNumInit()-1).isDAafter(v);
+  }
+  eq ArrayInit.getInit().isDAbefore(Variable v) {
+    if(childIndex == 0) return isDAbefore(v);
+    int index = childIndex-1;
+    while(index > 0 && getInit(index).isConstant())
+      index--;
+    return getInit(childIndex-1).isDAafter(v);
+  }
 
   eq LabeledStmt.getStmt().isDAbefore(Variable v) = isDAbefore(v);
   eq LabeledStmt.isDAafter(Variable v) {
@@ -511,7 +587,7 @@ aspect DA {
     return getExpr().isDAafter(v) && c.getStmt(c.getNumStmt()-1).isDAafter(v);
   }
 
-  inh boolean Case.isDAbefore(Variable v);
+  inh lazy boolean Case.isDAbefore(Variable v);
   // 16.2.8 5th bullet
   eq Case.getStmt(int i).isDAbefore(Variable v) {
     if(i ==  0)
@@ -634,13 +710,16 @@ aspect DA {
 }
 
 aspect DU {
-  inh lazy boolean Stmt.isDUbefore(Variable v);
+  inh boolean Stmt.isDUbefore(Variable v);
   syn lazy boolean Stmt.isDUafter(Variable v);
-  inh lazy boolean Expr.isDUbefore(Variable v);
-  syn lazy boolean Expr.isDUafter(Variable v);
+  inh boolean Expr.isDUbefore(Variable v);
+  syn boolean Expr.isDUafter(Variable v);
+  
+  syn lazy boolean Binary.isDUafter(Variable v);
+  syn lazy boolean AbstractDot.isDUafter(Variable v);
 
-  syn lazy boolean Expr.isDUafterTrue(Variable v);
-  syn lazy boolean Expr.isDUafterFalse(Variable v);
+  syn boolean Expr.isDUafterTrue(Variable v);
+  syn boolean Expr.isDUafterFalse(Variable v);
 
   inh lazy boolean TypeDecl.isDUbefore(Variable v);
 
@@ -769,20 +848,20 @@ aspect DU {
   eq AssignExpr.isDUafterTrue(Variable v) = isDUafter(v);
   eq AssignExpr.isDUafterFalse(Variable v) = isDUafter(v);
 
-  syn lazy boolean VarAccess.isDUafter(Variable v) {
+  syn boolean VarAccess.isDUafter(Variable v) {
     if(isDest() && decl() == v)
       return false;
     return isDUbefore(v);
   }
   eq AbstractDot.getRight().isDUbefore(Variable v) = getLeft().isDUafter(v);
-  syn lazy boolean AbstractDot.isDUafter(Variable v) = lastAccess().isDUafter(v);
+  eq AbstractDot.isDUafter(Variable v) = lastAccess().isDUafter(v);
   eq ArrayAccess.isDUafter(Variable v) = getExpr().isDUafter(v);
 
   eq ParExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
   eq Unary.isDUafter(Variable v) = getOperand().isDUafter(v);
   eq CastExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
   
-  syn lazy boolean Binary.isDUafter(Variable v) = getRightOperand().isDUafter(v);
+  eq Binary.isDUafter(Variable v) = getRightOperand().isDUafter(v);
   eq Binary.getRightOperand().isDUbefore(Variable v) = getLeftOperand().isDUafter(v);
 
   eq InstanceOfExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
@@ -804,9 +883,11 @@ aspect DU {
       return isDUbefore(v);
     return getDims(getNumDims()-1).isDUafter(v);
   }
-  eq ArrayCreationExpr.isDUafter(Variable v) = isDUafterCreation(v);
+  eq ArrayCreationExpr.isDUafter(Variable v) = hasArrayInit() ? getArrayInit().isDUafter(v) : isDUafterCreation(v);
   eq ArrayCreationExpr.getDims(int i).isDUbefore(Variable v) = i == 0 ?
     isDUbefore(v) : getDims(i-1).isDUafter(v);
+  
+  eq ArrayCreationExpr.getArrayInit().isDUbefore(Variable v) = isDUafterCreation(v);
 
   syn boolean Dims.isDUafter(Variable v) = hasExpr() ? getExpr().isDUafter(v) : isDUbefore(v);
   inh boolean Dims.isDUbefore(Variable v);
@@ -828,7 +909,13 @@ aspect DU {
   }
   eq VariableDeclaration.getInit().isDUbefore(Variable v) = isDUbefore(v);
 
-  eq ArrayInit.isDUafter(Variable v) = getNumInit() == 0 ? isDUbefore(v) : getInit(getNumInit()-1).isDUafter(v);
+  //eq ArrayInit.isDUafter(Variable v) = getNumInit() == 0 ? isDUbefore(v) : getInit(getNumInit()-1).isDUafter(v);
+  eq ArrayInit.isDUafter(Variable v) {
+    if(getNumInit() > 0 && assignments().contains(v))
+      return false;
+    return isDUbefore(v);
+    //getInit(getNumInit()-1).isDAafter(v);
+  }
   eq ArrayInit.getInit().isDUbefore(Variable v) = childIndex == 0 ? isDUbefore(v) : getInit(childIndex-1).isDUafter(v);
 
   eq LabeledStmt.getStmt().isDUbefore(Variable v) = isDUbefore(v);
@@ -842,12 +929,22 @@ aspect DU {
     }
     return true;
   }
+
+  interface FinallyHost {
+    //public Block getFinally();
+    public boolean isDUafterFinally(Variable v);
+    public boolean isDAafterFinally(Variable v);
+  }
+  TryStmt implements FinallyHost;
+  SynchronizedStmt implements FinallyHost;
+
   
   syn boolean TryStmt.isDUafterFinally(Variable v) = getFinally().isDUafter(v);
   syn boolean SynchronizedStmt.isDUafterFinally(Variable v) = true;
   
   syn boolean TryStmt.isDAafterFinally(Variable v) = getFinally().isDAafter(v);
   syn boolean SynchronizedStmt.isDAafterFinally(Variable v) = false;
+
   
   syn lazy boolean BreakStmt.isDUafterReachedFinallyBlocks(Variable v) {
     if(!isDUbefore(v) && finallyList().isEmpty())
@@ -1166,13 +1263,6 @@ aspect DU {
     return super.unassignedEverywhere(v, stmt);
   }
 
-  syn Stmt Expr.enclosingStmt() {
-    ASTNode node = this;
-    while(node != null && !(node instanceof Stmt))
-      node = node.getParent();
-    return (Stmt)node;
-  }
-  
   // 16.2.14 6th bullet
   eq TryStmt.getFinally().isDUbefore(Variable v) {
     if(!getBlock().isDUeverywhere(v))

@@ -1,432 +1,69 @@
 import java.util.*;
 import java.util.ArrayList;
 
-aspect ConstructScope {
-  private static final ArrayList Program.emptyConstructorList = new ArrayList();
-  
-  inh ArrayList ConstructorAccess.lookupConstructor(ConstructorAccess a);
-  eq TypeDecl.getBodyDecl().lookupConstructor(ConstructorAccess a) = lookupConstructor(a);
-  eq Program.getCompilationUnit().lookupConstructor(ConstructorAccess a) = Program.emptyConstructorList;
-  eq AbstractDot.getRight().lookupConstructor(ConstructorAccess a) = getLeft().type().lookupConstructor(a);
-
-  inh ArrayList SuperConstructorAccess.lookupSuperConstructor(ConstructorAccess a);
-  eq TypeDecl.getBodyDecl().lookupSuperConstructor(ConstructorAccess a) = lookupSuperConstructor(a);
-  syn ArrayList TypeDecl.lookupSuperConstructor(ConstructorAccess a) = new ArrayList(0);
-  eq ClassDecl.lookupSuperConstructor(ConstructorAccess a) = hasSuperclass() ? superclass().lookupConstructor(a) : new ArrayList(0);
-  eq InterfaceDecl.lookupSuperConstructor(ConstructorAccess a) = typeObject().lookupConstructor(a);
-  eq Program.getCompilationUnit().lookupSuperConstructor(ConstructorAccess a) = Program.emptyConstructorList;
-  eq AbstractDot.getRight().lookupSuperConstructor(ConstructorAccess a) = getLeft().type().lookupSuperConstructor(a);
-  
-  inh ConstructorDecl Access.illegalConstructor();
-  inh ConstructorDecl ClassInstanceExpr.illegalConstructor();
-  inh lazy ConstructorDecl TypeDecl.illegalConstructor();
-  inh TypeDecl InterfaceDecl.typeObject();
-  inh TypeDecl ClassInstanceExpr.typeObject();
-  
-  syn lazy ArrayList ConstructorAccess.decls() = lookupConstructor(this);
-  syn lazy ArrayList SuperConstructorAccess.decls() = hasPrevExpr() && !prevExpr().isTypeAccess() ?
-    hostType().lookupSuperConstructor(this) : lookupSuperConstructor(this);
-  
-  syn lazy ConstructorDecl ConstructorAccess.decl() {
-    ArrayList decls = decls();
-    if(decls.size() == 1)
-      return (ConstructorDecl)decls.get(0);
-    return illegalConstructor();
-  }
-
-  syn lazy ArrayList ClassInstanceExpr.decls() {
-    TypeDecl typeDecl = hasTypeDecl() ? getTypeDecl() : getAccess().type();
-    ArrayList list = new ArrayList(1);
-    list.addAll(typeDecl.lookupConstructor(this));
-    keepAccessibleConstructors(list);
-    return list;
-  }
-  
-  public void ClassInstanceExpr.keepAccessibleConstructors(Collection c) {
-    TypeDecl hostType = hostType();
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-      ConstructorDecl m = (ConstructorDecl)iter.next();
-      if(!m.accessibleFrom(hostType))
-        iter.remove();
-      else if(m.isProtected() && !hasTypeDecl() && !m.hostPackage().equals(hostPackage()))
-        iter.remove();
-    }
-  }
-  
-  syn lazy ConstructorDecl ClassInstanceExpr.decl() {
-    ArrayList decls = decls();
-    if(decls.size() == 1)
-      return (ConstructorDecl)decls.get(0);
-    return illegalConstructor();
-  }
-}
-
-aspect ConstructorLookup {
-  public ConstructorDecl TypeDecl.lookupConstructor(ConstructorDecl signature) {
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof ConstructorDecl) {
-        ConstructorDecl decl = (ConstructorDecl)getBodyDecl(i);
-        if(decl.sameSignature(signature)) {
-          return decl;
-        }
-      }
-    }
-    return null;
-  }
-  
-  public ArrayList TypeDecl.lookupConstructor(ClassInstanceExpr e) {
-    return findConstructor(e.getArgList(), e.hostType());
-  }
-  public ArrayList TypeDecl.lookupConstructor(ConstructorAccess e) {
-    return findConstructor(e.getArgList(), e.hostType());
-  }
-
-  public ArrayList TypeDecl.findConstructor(List argList, TypeDecl typeDecl) {
-    //System.err.println("Trying to find a constructor with " + argList.getNumChild() + " arguments in " + fullName() + " from " + typeDecl.fullName());
-    ArrayList maxSpecific = new ArrayList();
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof ConstructorDecl) {
-        ConstructorDecl decl = (ConstructorDecl)getBodyDecl(i);
-        if(decl.compatible(argList) && decl.accessibleFrom(typeDecl)) {
-          //System.err.println("....and accessible from " + typeDecl.fullName());
-          if(maxSpecific.isEmpty()) {
-            maxSpecific.add(decl);
-          }
-          else {
-            if(decl.moreSpecificThan((ConstructorDecl)maxSpecific.get(0))) {
-              maxSpecific.clear();
-              maxSpecific.add(decl);
-            }
-            else if(!((ConstructorDecl)maxSpecific.get(0)).moreSpecificThan(decl)) {
-              maxSpecific.add(decl);
-            }
-          }
-        }
-      }
-    }
-    return maxSpecific;
-  }
-}
-
-aspect ConstructorDecl {
-  syn lazy String ConstructorDecl.name() = getIdDecl().getID();
-  // 8.8.2
-  syn lazy String ConstructorDecl.signature() {
-    StringBuffer s = new StringBuffer();
-    s.append(name() + "(");
-    for(int i = 0; i < getNumParameter(); i++) {
-      s.append(getParameter(i));
-      if(i != getNumParameter() - 1)
-        s.append(", ");
-    }
-    s.append(")");
-    return s.toString();
-  }
-
-  // 8.8.2
-  syn boolean ConstructorDecl.sameSignature(ConstructorDecl c) {
-    if(!name().equals(c.name()))
-      return false;
-    if(c.getNumParameter() != getNumParameter())
-      return false;
-    for(int i = 0; i < getNumParameter(); i++)
-      if(!c.getParameter(i).type().equals(getParameter(i).type()))
-        return false;
-    return true;
-  }
-
-  public boolean ConstructorDecl.moreSpecificThan(ConstructorDecl m) {
-    for(int i = 0; i < getNumParameter(); i++) {
-      if(!getParameter(i).type().instanceOf(m.getParameter(i).type()))
-        return false;
-    }
-    return true;
-  }
-
-  public boolean ConstructorDecl.compatible(List argList) {
-    if(getNumParameter() != argList.getNumChild())
-      return false;
-    for(int i = 0; i < getNumParameter(); i++) {
-      TypeDecl arg = ((Expr)argList.getChild(i)).type();
-      TypeDecl parameter = getParameter(i).type();
-      if(!arg.instanceOf(parameter)) {
-        return false;
-      }  
-    }
-    return true;
-  }
-}
-
-
-aspect MethodScope {
-  class MethodCollection {
-    static class EmptyCollection extends MethodCollection implements MethodIterator {
-      public EmptyCollection() {
-      }
-      public MethodIterator iterator() {
-        return this;
-      }
-      public MethodDecl first() {
-        return null;
-      }
-      public int size() {
-        return 0;
-      }
-      public boolean isEmpty() {
-        return true;
-      }
-      public MethodCollection add(MethodDecl m) {
-        return singleCollection(m);
-      }
-      public boolean contains(MethodDecl m) {
-        return false;
-      }
-      public boolean hasNext() {
-        return false;
-      }
-      public MethodDecl next() {
-        return null;
-      }
-      public MethodCollection remove() {
-        return this;
-      }
-    }
-    static class SingleElementCollection extends MethodCollection implements MethodIterator {
-      boolean hasNext = false;
-      private MethodDecl element;
-      public SingleElementCollection(MethodDecl element) {
-        this.element = element;
-      }
-      public MethodIterator iterator() {
-        hasNext = true;
-        return this;
-      }
-      public MethodDecl first() {
-        return element;
-      }
-      public int size() {
-        return 1;
-      }
-      public boolean isEmpty() {
-        return false;
-      }
-      public MethodCollection add(MethodDecl m) {
-        if(contains(m))
-          return this;
-        MethodDecl[] list = new MethodDecl[2];
-        list[0] = element;
-        list[1] = m;
-        return multiCollection(list);
-      }
-      public boolean contains(MethodDecl m) {
-        return element == m;
-      }
-      public boolean hasNext() {
-        return hasNext;
-      }
-      public MethodDecl next() {
-        if(hasNext) {
-          hasNext = false;
-          return element;
-        }
-        return null;
-      }
-      public MethodCollection remove() {
-        return emptyCollection();
-      }
-    }
-    static class MultiElementCollection extends MethodCollection {
-      private MethodDecl[] list;
-      public MultiElementCollection(MethodDecl[] list) {
-        this.list = list;
-      }
-      public MethodIterator iterator() {
-        return new MultiIterator(list);
-      }
-      public MethodDecl first() {
-        return list[0];
-      }
-      public int size() {
-        return list.length;
-      }
-      public boolean isEmpty() {
-        return false;
-      }
-      public MethodCollection add(MethodDecl m) {
-        if(contains(m))
-          return this;
-        MethodDecl[] newList = new MethodDecl[list.length + 1];
-        System.arraycopy(list, 0, newList, 0, list.length);
-        newList[list.length] = m;
-        return multiCollection(newList);
-      }
-      public boolean contains(MethodDecl m) {
-        for(int i = 0; i < list.length; i++)
-          if(list[i].equals(m))
-            return true;
-        return false;
-      }
-    }
-    
-    private static MethodCollection emptyCollection = new EmptyCollection();
-
-    private static MethodCollection singleCollection(MethodDecl m) {
-      return new SingleElementCollection(m);
-    }
-    
-    private static MethodCollection multiCollection(MethodDecl[] list) {
-      return new MultiElementCollection(list);
-    }
-    
-    public static MethodCollection emptyCollection() {
-      return emptyCollection;
-    }
-    
-    private MethodCollection() {
-    }
-    
-    public MethodIterator iterator() { return null; }
-    public MethodDecl first() { return null; }
-    public int size() { return 0; }
-    public boolean isEmpty() { return false; }
-    public MethodCollection add(MethodDecl m) { return null; }
-    public boolean contains(MethodDecl m) { return false; }
-
-    static class MultiIterator implements MethodIterator {
-      MethodDecl[] list;
-      int counter = 0;
-      public MultiIterator(MethodDecl[] list) {
-        this.list = list;
-      }
-      public boolean hasNext() {
-        return counter < list.length;
-      }
-      public MethodDecl next() {
-        return list[counter++];
-      }
-      public MethodCollection remove() {
-        if(list.length == 1) {
-          return emptyCollection();
-        }
-        else if(list.length == 2) {
-          int elementToRemove = counter - 1;
-          return singleCollection(list[elementToRemove == 0 ? 1 : 0]);
-        }
-        else {
-          MethodDecl[] newList = new MethodDecl[list.length - 1];
-          for(int i = 0; i < counter - 1; i++)
-            newList[i] = list[i];
-          for(int i = counter; i < list.length; i++)
-            newList[i-1] = list[i];
-          list = newList;
-          counter--;
-          return multiCollection(newList);
-        }
-      }
-    }
-
-    interface MethodIterator {
-      public boolean hasNext();
-      public MethodDecl next();
-      public MethodCollection remove();
-    }
-  }
-
+aspect LookupMethod {
   inh MethodDecl MethodDecl.unknownMethod();
   inh MethodDecl MethodAccess.unknownMethod();
   
-  syn lazy Expr Access.unqualifiedScope() = isQualified() ? nestedScope() : this;
-  inh lazy Expr Access.nestedScope();
+  syn Expr Access.unqualifiedScope() = isQualified() ? nestedScope() : this;
+  inh Expr Access.nestedScope();
   eq AbstractDot.getRight().nestedScope() = isQualified() ? nestedScope() : this;
   eq AbstractDot.getLeft().nestedScope() = isQualified() ? nestedScope() : this;
   eq Program.getCompilationUnit().nestedScope() { throw new UnsupportedOperationException(); }
 
-  inh lazy MethodCollection BodyDecl.lookupMethod(String name);
-  inh lazy MethodCollection MethodAccess.lookupMethod(String name);
-  inh lazy MethodCollection Expr.lookupMethod(String name);
-  inh lazy MethodCollection TypeDecl.lookupMethod(String name);
+  inh Collection Expr.lookupMethod(String name);
+  inh lazy Collection TypeDecl.lookupMethod(String name);
   
   eq MethodAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
   eq ConstructorAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
   eq ArrayAccess.getExpr().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
 
-  eq Program.getCompilationUnit().lookupMethod(String name) = MethodCollection.emptyCollection();
-  eq TypeDecl.getBodyDecl(int i).lookupMethod(String name) {
-    if(hasMethod(name))
-      return localLookupMethod(name);
+  eq Program.getCompilationUnit().lookupMethod(String name) = Collections.EMPTY_LIST;
+  eq TypeDecl.getBodyDecl(int i).lookupMethod(String name) = unqualifiedLookupMethod(name);
+
+  syn lazy Collection TypeDecl.unqualifiedLookupMethod(String name) {
+    Collection c = memberMethods(name);
+    if(!c.isEmpty()) return c;
     if(isInnerType())
       return lookupMethod(name);
     if(isNestedType())
       return removeInstanceMethods(lookupMethod(name));
-    return topLevelType().lookupMethod(name); // Fix to handle static imports
+    return Collections.EMPTY_LIST;
+    //return topLevelType().lookupMethod(name); // Fix to handle static imports
   }
 
   // in explicit constructor invocation
   eq ConstructorDecl.getConstructorInvocation().lookupMethod(String name) {
-    if(hostType().hasMethod(name))
-      return removeInstanceMethods(hostType().localLookupMethod(name));
+    Collection c = hostType().memberMethods(name);
+    if(!c.isEmpty()) return removeInstanceMethods(c);
     if(hostType().isNestedType())
       return hostType().lookupMethod(name);
-    return MethodCollection.emptyCollection();
+    return Collections.EMPTY_LIST;
   }
-
-  eq AbstractDot.getRight().lookupMethod(String name) = getLeft().qualifiedLookupMethod(name);
-  
-  syn lazy MethodCollection Expr.qualifiedLookupMethod(String name) =
-    keepAccessibleMethods(type().remoteLookupMethod(name));
-  eq VarAccess.qualifiedLookupMethod(String name) = type().accessibleFrom(hostType()) ?
-    keepAccessibleMethods(type().remoteLookupMethod(name)) : MethodCollection.emptyCollection();
-  eq MethodAccess.qualifiedLookupMethod(String name) = type().accessibleFrom(hostType()) ?
-    keepAccessibleMethods(type().remoteLookupMethod(name)) : MethodCollection.emptyCollection();
-
-  public MethodCollection Expr.keepAccessibleMethods(MethodCollection c) {
-    TypeDecl hostType = hostType();
-    for(MethodCollection.MethodIterator iter = c.iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if(!m.accessibleFrom(hostType))
-        c = iter.remove();
-      // 6.6.2.1
-      else if(m.isProtected() && !m.hostPackage().equals(hostPackage()) && !m.isStatic() /*&& !isThisAccess()*/ && !isSuperAccess()) {
-        TypeDecl C = m.hostType();
-        TypeDecl S = hostType().subclassWithinBody(C);
-        TypeDecl Q = type();
-        if(S == null || !Q.instanceOf(S)) {
-          c = iter.remove();
-        }
-      }
-    }
-    return c;
-  }
-  
-  public static MethodCollection ASTNode.removeInstanceMethods(MethodCollection c) {
-    for(MethodCollection.MethodIterator iter = c.iterator(); iter.hasNext(); ) {
+  public static Collection ASTNode.removeInstanceMethods(Collection c) {
+    c = new LinkedList(c);
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
       if(!m.isStatic())
-        c = iter.remove();
+        iter.remove();
     }
     return c;
   }
 
-  syn lazy MethodCollection MethodAccess.decls() {
-    String name = name();
-    MethodCollection maxSpecific = MethodCollection.emptyCollection();
-    for(MethodCollection.MethodIterator iter = lookupMethod(name).iterator(); iter.hasNext(); ) {
+  eq AbstractDot.getRight().lookupMethod(String name) = getLeft().type().memberMethods(name);
+
+  syn lazy SimpleSet MethodAccess.decls() {
+    SimpleSet maxSpecific = SimpleSet.emptySet;
+    for(Iterator iter = lookupMethod(name()).iterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl)iter.next();
-      if(decl.compatible(this)) {
-        if(maxSpecific.isEmpty()) {
+      if(applicable(decl) && accessible(decl)) {
+        if(maxSpecific.isEmpty())
           maxSpecific = maxSpecific.add(decl);
-        }
         else {
-          if(decl.moreSpecificThan(maxSpecific.first())) {
-            maxSpecific = MethodCollection.emptyCollection();
+          if(decl.moreSpecificThan((MethodDecl)maxSpecific.iterator().next()))
+            maxSpecific = SimpleSet.emptySet.add(decl);
+          else if(!((MethodDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
             maxSpecific = maxSpecific.add(decl);
-          }
-          else if(!maxSpecific.first().moreSpecificThan(decl)) {
-            // 8.4.6.4
-            // only return the first method in case of multply inherited abstract methods
-            //if(!decl.isAbstract())
-              maxSpecific = maxSpecific.add(decl);
-          }
         }
       }
     }
@@ -435,273 +72,68 @@ aspect MethodScope {
     return maxSpecific;
   }
   syn lazy MethodDecl MethodAccess.decl() {
-    MethodCollection decls = decls();
-    if(decls.size() == 1) {
-      return decls.first();
-    }
+    SimpleSet decls = decls();
+    if(decls.size() == 1)
+      return (MethodDecl)decls.iterator().next();
+
+    // 8.4.6.4 - only return the first method in case of multply inherited abstract methods
     boolean allAbstract = true;
-    for(MethodCollection.MethodIterator iter = decls.iterator(); iter.hasNext() && allAbstract; ) {
+    for(Iterator iter = decls.iterator(); iter.hasNext() && allAbstract; )
       if(!((MethodDecl)iter.next()).isAbstract())
         allAbstract = false;
-    }
-    if(decls.size() > 1 && allAbstract) {
-      return decls.first();
-    }
+    if(decls.size() > 1 && allAbstract)
+      return (MethodDecl)decls.iterator().next();
     return unknownMethod();
   }
-}
-
-
-aspect Overrides {
-
-  syn lazy HashSet TypeDecl.allMethods(String name) {
-    HashSet set = new HashSet();
-    set.addAll(localMethods(name));
-    return set;
-  }
-  eq ClassDecl.allMethods(String name) {
-    HashSet set = new HashSet();
-    set.addAll(localMethods(name));
-    if(hasSuperclass()) {
-      set.addAll(superclass().allMethods(name));
-    }
-    for(Iterator iter = interfacesIterator(); iter.hasNext(); ) {
-      TypeDecl interfaceDecl = (TypeDecl)iter.next();
-      set.addAll(interfaceDecl.allMethods(name));
-    }
-    return set;
-  }
-  eq InterfaceDecl.allMethods(String name) {
-    HashSet set = new HashSet();
-    set.addAll(localMethods(name));
-    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
-      TypeDecl interfaceDecl = (TypeDecl)iter.next();
-      set.addAll(interfaceDecl.allMethods(name));
-    }
-    if(!superinterfacesIterator().hasNext()) {
-      for(Iterator iter = typeObject().allMethods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl m = (MethodDecl)iter.next();
-        if(m.isPublic()) {
-          set.add(m);
-        }
-      }
-    }
-    return set;
-  }
-    
-
-  // 8.4.6.1
-  syn lazy HashSet TypeDecl.overrides(MethodDecl m) {
-    return new HashSet(4);
-  }
-  
-  eq ClassDecl.overrides(MethodDecl m) {
-    String name = m.name();
-    HashSet set = new HashSet(4);
-    if(m.isStatic())
-      return set;
- 
-    if(hasSuperclass()) {
-      for(Iterator iter = superclass().allMethods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl methodDecl = (MethodDecl)iter.next();
-        if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-          if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
-            set.add(methodDecl);
-          }
-        }
-      }
-    }
-    
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl interfaceDecl = (TypeDecl)outerIter.next();
-      set.addAll(interfaceDecl.overrides(m));
-      for(Iterator iter = interfaceDecl.allMethods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(m.hostType() != this && m != decl && m.sameSignature(decl) && !m.isAbstract())
-          set.add(decl);
-      }
-    }
-    return set;
-  }
-
-  eq InterfaceDecl.overrides(MethodDecl m) {
-    String name = m.name();
-    HashSet set = new HashSet(4);
-    if(m.isStatic())
-      return set;
-    
-    for(Iterator iter = localMethods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl methodDecl = (MethodDecl)iter.next();
-      if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-        if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
-          set.add(methodDecl);
-        }
-      }
-    }
-    
-    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.localMethods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl methodDecl = (MethodDecl)iter.next();
-        if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-          if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
-            set.add(methodDecl);
-          }
-        }
-      }
-    }
-    if(!superinterfacesIterator().hasNext()) {
-      TypeDecl typeDecl = typeObject();
-      for(Iterator iter = typeDecl.allMethods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl methodDecl = (MethodDecl)iter.next();
-        if(m != methodDecl && m.sameSignature(methodDecl) && methodDecl.isPublic()) {
-          set.add(methodDecl);
-        }
-      }
+  private static SimpleSet MethodAccess.removeInstanceMethods(SimpleSet c) {
+    SimpleSet set = SimpleSet.emptySet;
+    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.isStatic())
+        set = set.add(m);
     }
     return set;
   }
 }
-aspect Hides {
-
-  // 8.4.6.2
-  syn lazy HashSet TypeDecl.hides(MethodDecl m) {
-    return new HashSet(4);
-  }
-  
-  eq ClassDecl.hides(MethodDecl m) {
-    String name = m.name();
-    HashSet set = new HashSet(4);
-    if(!m.isStatic())
-      return set;
-    
-    for(Iterator iter = localMethods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl methodDecl = (MethodDecl)iter.next();
-      if(m != methodDecl && m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-        if(!methodDecl.isPrivate() && methodDecl.accessibleFrom(m.hostType())) {
-          set.add(methodDecl);
-        }
-      }
-    }
-    
-    if(hasSuperclass()) {
-      set.addAll(superclass().hides(m));
-    }
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl interfaceDecl = (TypeDecl)outerIter.next();
-      set.addAll(interfaceDecl.hides(m));
-      for(Iterator iter = interfaceDecl.methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(m.hostType() != this && m != decl && m.sameSignature(decl) && !m.isAbstract())
-          set.add(decl);
-      }
-    }
-    return set;
-  }
-
-  eq InterfaceDecl.hides(MethodDecl m) {
-    String name = m.name();
-    HashSet set = new HashSet(4);
-    if(!m.isStatic())
-      return set;
-      
-    for(Iterator iter = localMethods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl methodDecl = (MethodDecl)iter.next();
-      if(m.sameSignature(methodDecl) && m.hostType().instanceOf(methodDecl.hostType())) {
-        if(methodDecl.accessibleFrom(m.hostType())) {
-          set.add(methodDecl);
-        }
-      }
-    }
-    
-    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)iter.next();
-      set.addAll(typeDecl.hides(m));
-    }
-    if(!superinterfacesIterator().hasNext()) {
-      for(Iterator iter = typeObject().hides(m).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(decl.isPublic()) {
-          set.add(decl);
-        }
-      }
-    }
-    return set;
-  }
-    
-}
-
 
 aspect MethodDecl {
-  syn lazy String MethodDecl.name() = getIdDecl().getID();
+  syn String MethodDecl.name() = getIdDecl().getID();
+
   // 8.4.2
-  syn lazy String MethodDecl.signature() {
+  syn lazy MethodSignature MethodDecl.signature() = MethodSignature.factory(signatureString());
+
+  syn String MethodDecl.signatureString() {
     StringBuffer s = new StringBuffer();
-    s.append(getTypeAccess() + " " + name() + "(");
+    s.append(name() + "(");
     for(int i = 0; i < getNumParameter(); i++) {
-      s.append(getParameter(i));
-      if(i != getNumParameter() - 1)
-        s.append(", ");
+      if(i != 0) s.append(", ");
+      s.append(getParameter(i).type().typeName());
     }
     s.append(")");
     return s.toString();
   }
+  class MethodSignature {
+    static private HashMap signatures = new HashMap();
+    
+    static MethodSignature factory(String signature) {
+      if(signatures.containsKey(signature))
+        return (MethodSignature)signatures.get(signature);
+      MethodSignature m = new MethodSignature(signature);
+      signatures.put(signature, m);
+      return m;
+    }
+    private String str;
+    private MethodSignature(String s) {
+      str = s;
+    }
+    public String toString() {
+      return str;
+    }
+  }
 
   // 8.4.2 Method Signature
-  syn lazy boolean MethodDecl.sameSignature(MethodDecl m) {
-    if(!name().equals(m.name()))
-      return false;
-    if(m.getNumParameter() != getNumParameter())
-      return false;
-    for(int i = 0; i < getNumParameter(); i++)
-      if(!m.getParameter(i).type().equals(getParameter(i).type()))
-        return false;
-    return true;
-  }
-
-  // 8.4.6.4
-  syn lazy boolean MethodDecl.overridesMultipleInheritance(MethodDecl m) {
-    if(this == m)
-      return false;
-    if(isStatic() || isAbstract())
-      return false;
-    if(!sameSignature(m))
-      return false;
-    if(m.isPrivate())
-      return false;
-    overrides.add(m);
-    return true;
-  }
+  syn boolean MethodDecl.sameSignature(MethodDecl m) = signature().equals(m.signature());
   
-
-  
-  // 8.4.6.1 
-  syn lazy HashSet MethodDecl.overrides() {
-    TypeDecl typeDecl = hostType();
-    HashSet set = new HashSet(4);
-    set.addAll(typeDecl.overrides(this));
-    return set;
-  }
-    
-  // 8.4.6.2 Hiding
-  syn lazy HashSet MethodDecl.hides() {
-    HashSet set = new HashSet(4);
-    TypeDecl hostType = hostType();
-    if(hostType instanceof ClassDecl) {
-      ClassDecl c = (ClassDecl)hostType;
-      if(c.hasSuperclass())
-        set.addAll(c.superclass().hides(this));
-      for(Iterator iter = c.interfacesIterator(); iter.hasNext(); ) {
-        TypeDecl type = (TypeDecl)iter.next();
-        set.addAll(type.hides(this));
-      }
-    }
-    return set;
-  }
-  
-  public Set MethodDecl.overrides = new HashSet(4);
-  public Set MethodDecl.hides = new HashSet(4);
-
   syn lazy boolean MethodDecl.moreSpecificThan(MethodDecl m) {
     if(getNumParameter() == 0)
       return false;
@@ -712,205 +144,252 @@ aspect MethodDecl {
     return true;
   }
   
-  public boolean MethodDecl.compatible(MethodAccess m) {
-    if(!name().equals(m.name()))
+  public boolean MethodAccess.applicable(MethodDecl decl) {
+    if(getNumArg() != decl.getNumParameter())
       return false;
-    if(getNumParameter() != m.getNumArg())
+    if(!name().equals(decl.name()))
       return false;
-    for(int i = 0; i < getNumParameter(); i++) {
-      if(!m.getArg(i).type().instanceOf(getParameter(i).type()))
+    for(int i = 0; i < getNumArg(); i++) {
+      if(!getArg(i).type().instanceOf(decl.getParameter(i).type()))
         return false;
     }
-    if(!accessibleFrom(m.hostType()))
-      return false;
     return true;
   }
   
-  syn lazy boolean MethodDecl.compatible(MethodDecl m) {
-    if(!name().equals(m.name()))
+  syn boolean MethodAccess.accessible(MethodDecl m) {
+    if(!isQualified())
+      return true;
+    if(!m.accessibleFrom(hostType()))
       return false;
-    if(getNumParameter() != m.getNumParameter())
+    // the method is not accessible if the type is not accessible
+    if(!qualifier().type().accessibleFrom(hostType()))
       return false;
-    for(int i = 0; i < getNumParameter(); i++) {
-      if(!m.getParameter(i).type().instanceOf(getParameter(i).type()))
+    // 6.6.2.1 -  include qualifier type for protected access
+    if(m.isProtected() && !m.hostPackage().equals(hostPackage()) && !m.isStatic() && !qualifier().isSuperAccess()) {
+      TypeDecl C = m.hostType();
+      TypeDecl S = hostType().subclassWithinBody(C);
+      TypeDecl Q = qualifier().type();
+      if(S == null || !Q.instanceOf(S))
+        return false;
+    }
+    return true;
+  }
+  
+  syn lazy boolean MethodDecl.overrides(MethodDecl m) =
+    !isStatic() && !m.isPrivate() && m.accessibleFrom(hostType()) && 
+     hostType().instanceOf(m.hostType()) && m.signature().equals(signature());
+     
+  syn lazy boolean MethodDecl.hides(MethodDecl m) =
+    isStatic() && !m.isPrivate() && m.accessibleFrom(hostType()) && 
+     hostType().instanceOf(m.hostType()) && m.signature().equals(signature());
+}
+
+aspect MemberMethods {
+  syn Collection TypeDecl.memberMethods(String name) {
+    Collection c = (Collection)methodsNameMap().get(name);
+    if(c != null) return c;
+    return Collections.EMPTY_LIST;
+  }
+  // name -> Collection
+  syn lazy HashMap TypeDecl.methodsNameMap() {
+    HashMap map = new HashMap();
+    for(Iterator iter = methodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      ArrayList list = (ArrayList)map.get(m.name());
+      if(list == null) {
+        list = new ArrayList(4);
+        map.put(m.name(), list);
+      }
+      list.add(m);
+    }
+    return map;
+  }
+
+
+  public Iterator TypeDecl.localMethodsIterator() {
+    return localMethodsSignatureMap().values().iterator();
+  }
+  syn SimpleSet TypeDecl.localMethodsSignature(MethodSignature signature) {
+    SimpleSet set = (SimpleSet)localMethodsSignatureMap().get(signature);
+    if(set != null) return set;
+    return SimpleSet.emptySet;
+  }
+  // signature -> method declaration
+  syn lazy HashMap TypeDecl.localMethodsSignatureMap() {
+    HashMap map = new HashMap(getNumBodyDecl());
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl decl = (MethodDecl)getBodyDecl(i);
+        map.put(decl.signature(), decl);
+      }
+    }
+    return map;
+  }
+
+  // iterator over all methods in implemented interfaces
+  public Iterator ClassDecl.interfacesMethodsIterator() {
+    return new Iterator() {
+      private Iterator outer = interfacesMethodsSignatureMap().values().iterator();
+      private Iterator inner = null;
+      public boolean hasNext() {
+        if((inner == null || !inner.hasNext()) && outer.hasNext())
+          inner = ((SimpleSet)outer.next()).iterator();
+        return inner == null ? false : inner.hasNext();
+      }
+      public Object next() {
+        return inner.next();
+      }
+      public void remove() { throw new UnsupportedOperationException(); }
+    };
+  }
+  syn SimpleSet ClassDecl.interfacesMethodsSignature(MethodSignature signature) {
+    SimpleSet set = (SimpleSet)interfacesMethodsSignatureMap().get(signature);
+    if(set != null) return set;
+    return SimpleSet.emptySet;
+  }
+  // signature -> set of method declarations
+  syn lazy HashMap ClassDecl.interfacesMethodsSignatureMap() {
+    HashMap map = new HashMap();
+    for(Iterator iter = interfacesIterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (InterfaceDecl)iter.next();
+      for(Iterator i2 = typeDecl.methodsIterator(); i2.hasNext(); ) {
+        MethodDecl m = (MethodDecl)i2.next();
+        putSimpleSetElement(map, m.signature(), m);
+      }
+    }
+    return map;
+  }
+
+  // iterate over all member methods in this type
+  public Iterator TypeDecl.methodsIterator() {
+    return new Iterator() {
+      private Iterator outer = methodsSignatureMap().values().iterator();
+      private Iterator inner = null;
+      public boolean hasNext() {
+        if((inner == null || !inner.hasNext()) && outer.hasNext())
+          inner = ((SimpleSet)outer.next()).iterator();
+        return inner != null ? inner.hasNext() : false;
+      }
+      public Object next() {
+        return inner.next();
+      }
+      public void remove() { throw new UnsupportedOperationException(); }
+    };
+  }
+
+  syn SimpleSet TypeDecl.methodsSignature(MethodSignature signature) {
+    SimpleSet set = (SimpleSet)methodsSignatureMap().get(signature);
+    if(set != null) return set;
+    return SimpleSet.emptySet;
+  }
+  // signature -> SimpleSet
+  syn lazy HashMap TypeDecl.methodsSignatureMap() = localMethodsSignatureMap();
+  eq ClassDecl.methodsSignatureMap() {
+    HashMap map = new HashMap(localMethodsSignatureMap());
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature()))
+          putSimpleSetElement(map, m.signature(), m);
+      }
+    }
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature()))
+          if(allMethodsAbstract((SimpleSet)map.get(m.signature())))
+            putSimpleSetElement(map, m.signature(), m);
+      }
+    }
+    return map;
+  }
+  eq InterfaceDecl.methodsSignatureMap() {
+    HashMap map = new HashMap(localMethodsSignatureMap());
+    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature()))
+          putSimpleSetElement(map, m.signature(), m);
+      }
+    }
+    for(Iterator iter = typeObject().methodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.isPublic() && !map.containsKey(m.signature()))
+        putSimpleSetElement(map, m.signature(), m);
+    }
+    return map;
+  }
+  protected static void ASTNode.putSimpleSetElement(HashMap map, Object key, Object value) {
+    SimpleSet set = (SimpleSet)map.get(key);
+    if(set == null) set = SimpleSet.emptySet;
+    map.put(key, set.add(value));
+  }
+  protected boolean TypeDecl.allMethodsAbstract(SimpleSet set) {
+    if(set == null) return true;
+    for(Iterator iter = set.iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(!m.isAbstract())
         return false;
     }
     return true;
   }
 }
 
+aspect AncestorMethods {
+  // methods with the same signature declared in ancestors
+  // this is used when checking correct overriding, hiding, and implementation of abstract methods
+  syn lazy SimpleSet TypeDecl.ancestorMethods(MethodSignature signature) = SimpleSet.emptySet;
 
-aspect LookupMethod {
-  syn lazy boolean TypeDecl.hasMethod(String id) = !methods(id).isEmpty();
-
-  syn lazy MethodCollection TypeDecl.localLookupMethod(MethodDecl signature) {
-    String name = signature.name();
-    MethodCollection maxSpecific = MethodCollection.emptyCollection();
-    for(Iterator iter = methods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl)iter.next();
-      if(decl.name().equals(signature.name()) && decl.getNumParameter() == signature.getNumParameter()) {
-        boolean same = true;
-        for(int i = 0; i < decl.getNumParameter(); i++)
-          if(decl.getParameter(i).type() != signature.getParameter(i).type())
-            same = false;
-        if(same)
-          maxSpecific = maxSpecific.add(decl);
-      }
-    }
-    return maxSpecific;
-  }
-
-  syn lazy MethodCollection TypeDecl.remoteLookupMethod(String name) = localLookupMethod(name);
-
-  syn lazy MethodCollection TypeDecl.localLookupMethod(String name) {
-    MethodCollection m = MethodCollection.emptyCollection();
-    for(Iterator iter = methods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl)iter.next();
-      m = m.add(decl);
-    }
-    return m;
-  }
-  
-
-  syn lazy Collection TypeDecl.localMethods(String name) {
-    Collection list = new ArrayList();
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl decl = (MethodDecl)getBodyDecl(i);
-        if(decl.name().equals(name))
-          list.add(decl);
-      }
-    }
-    return list;
-  }
-  
-  syn lazy Collection TypeDecl.methods(String name) = localMethods(name);
-  
-  eq ClassDecl.methods(String name) {
-    // 8.4.6
-    Collection list = new LinkedList();
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate())
-          list.add(decl);
-      }
-    }
+  eq ClassDecl.ancestorMethods(MethodSignature signature) {
+    SimpleSet set = SimpleSet.emptySet;
     if(hasSuperclass()) {
-      for(Iterator iter = superclass().methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessibleFrom(this)) {
-          for(Iterator i2 = list.iterator(); i2.hasNext(); ) {
-            MethodDecl m = (MethodDecl)i2.next();
-            if(decl.sameSignature(m) && !decl.isAbstract())
-              i2.remove();
-          }
-          list.add(decl);
-        }
-      }
-    }
-    for(Iterator i1 = localMethods(name).iterator(); i1.hasNext(); ) {
-      MethodDecl decl = (MethodDecl)i1.next();
-      for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+      for(Iterator iter = superclass().localMethodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        if(decl.sameSignature(m))
-          iter.remove();
+        if(!m.isPrivate())
+          set = set.add(m);
       }
-      list.add(decl);
     }
-    return list;
+    if(set.size() != 1 || ((MethodDecl)set.iterator().next()).isAbstract()) { 
+      for(Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        set = set.add(m);
+      }
+    }
+    if(!hasSuperclass()) return set;
+    if(set.size() == 1) {
+      MethodDecl m = (MethodDecl)set.iterator().next();
+      if(!m.isAbstract()) {
+        boolean done = true;
+        for(Iterator iter = superclass().ancestorMethods(signature).iterator(); iter.hasNext(); ) {
+          MethodDecl n = (MethodDecl)iter.next();
+          if(n.isPrivate() || !n.accessibleFrom(m.hostType()))
+            done = false;
+        }
+        if(done) return set;
+      }
+    }
+    for(Iterator iter = superclass().ancestorMethods(signature).iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      set = set.add(m);
+    }
+    return set;
   }
-  
-  eq InterfaceDecl.methods(String name) {
-    // 9.4.1
-    Collection list = new LinkedList();
+  eq InterfaceDecl.ancestorMethods(MethodSignature signature) {
+    SimpleSet set = SimpleSet.emptySet;
     for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.methods(name).iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        if(!decl.isPrivate() && !decl.hostType().isObject())
-          list.add(decl);
-      }
-    }
-    for(Iterator i1 = localMethods(name).iterator(); i1.hasNext(); ) {
-      MethodDecl decl = (MethodDecl)i1.next();
-      for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+      for(Iterator iter = typeDecl.methodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        if(decl.sameSignature(m))
-          iter.remove();
+        set = set.add(m);
       }
-      list.add(decl);
-    }
-    for(Iterator i1 = typeObject().methods(name).iterator(); i1.hasNext(); ) {
-      MethodDecl decl = (MethodDecl)i1.next();
-      if(decl.isPublic()) {
-        boolean found = false;
-        for(Iterator iter = list.iterator(); iter.hasNext(); ) {
-          MethodDecl m = (MethodDecl)iter.next();
-          if(decl.sameSignature(m))
-            found = true;
-        }
-        if(!found)
-          list.add(decl);
-      }
-    }
-    return list;
-  }
-
-  syn lazy Collection TypeDecl.methods() {
-    Set set = new HashSet();
-    for(Iterator iter = methodNames().iterator(); iter.hasNext(); ) {
-      String name = (String)iter.next();
-      set.addAll(methods(name));
-    }
-    return set;
-  }
-
-  syn lazy Set TypeDecl.intertypeMethodNames() = new HashSet(); // Added
-
-  syn lazy Set TypeDecl.methodNames() {
-    Set set = new HashSet();
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl decl = (MethodDecl)getBodyDecl(i);
-        set.add(decl.name());
-      }
-    }
-    set.addAll(intertypeMethodNames()); // Added
-    return set;
-  }
-
-  eq ClassDecl.methodNames() {
-    Set set = super.methodNames();
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl type = (TypeDecl)outerIter.next();
-      for(Iterator iter = type.methodNames().iterator(); iter.hasNext(); )
-        set.add(iter.next());
-    }
-    if(hasSuperclass())
-      for(Iterator iter = superclass().methodNames().iterator(); iter.hasNext(); )
-        set.add(iter.next());
-    return set;
-    
-  }
-
-  eq InterfaceDecl.methodNames() {
-    Set set = super.methodNames();
-    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.methodNames().iterator(); iter.hasNext(); )
-        set.add(iter.next());
     }
     if(!superinterfacesIterator().hasNext()) {
-      TypeDecl typeDecl = typeObject();
-      for(Iterator iter = typeDecl.methodNames().iterator(); iter.hasNext(); ) {
-        set.add(iter.next());
-        /*
+      for(Iterator iter = typeObject().methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         if(m.isPublic())
-          set.add(m);
-        */
+          set = set.add(m);
       }
     }
     return set;

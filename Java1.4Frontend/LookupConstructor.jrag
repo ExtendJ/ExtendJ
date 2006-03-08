@@ -1,0 +1,166 @@
+import java.util.*;
+import java.util.ArrayList;
+
+aspect ConstructScope {
+  inh Collection ConstructorAccess.lookupConstructor();
+  eq Program.getCompilationUnit().lookupConstructor() = Collections.EMPTY_LIST;
+  eq TypeDecl.getBodyDecl().lookupConstructor() = constructors();
+  eq AbstractDot.getRight().lookupConstructor() = getLeft().type().constructors();
+
+  inh Collection SuperConstructorAccess.lookupSuperConstructor();
+  eq TypeDecl.getBodyDecl().lookupSuperConstructor() = lookupSuperConstructor();
+  syn Collection TypeDecl.lookupSuperConstructor() = Collections.EMPTY_LIST;
+  eq ClassDecl.lookupSuperConstructor() = hasSuperclass() ? superclass().constructors() : Collections.EMPTY_LIST;
+  eq InterfaceDecl.lookupSuperConstructor() = typeObject().constructors();
+  eq Program.getCompilationUnit().lookupSuperConstructor() = Collections.EMPTY_LIST;
+  eq AbstractDot.getRight().lookupSuperConstructor() = getLeft().type().lookupSuperConstructor();
+
+  inh TypeDecl ClassInstanceExpr.typeObject();
+  
+  // compute the most specific constructor in a collection
+  // the constructor is invoked with the arguments specified in argList
+  // the curent context (this) is used to evaluate the hostType for accessibility
+  syn SimpleSet Expr.mostSpecificConstructor(Collection constructors) {
+    SimpleSet maxSpecific = SimpleSet.emptySet;
+    for(Iterator iter = constructors.iterator(); iter.hasNext(); ) {
+      ConstructorDecl decl = (ConstructorDecl)iter.next();
+      if(applicableAndAccessible(decl)) {
+        if(maxSpecific.isEmpty())
+          maxSpecific = maxSpecific.add(decl);
+        else {
+          if(decl.moreSpecificThan((ConstructorDecl)maxSpecific.iterator().next()))
+            maxSpecific = SimpleSet.emptySet.add(decl);
+          else if(!((ConstructorDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+            maxSpecific = maxSpecific.add(decl);
+        }
+      }
+    }
+    return maxSpecific;
+  }
+
+  syn boolean Expr.applicableAndAccessible(ConstructorDecl decl) = false;
+  eq ConstructorAccess.applicableAndAccessible(ConstructorDecl decl) =
+    decl.applicable(getArgList()) && decl.accessibleFrom(hostType());
+  eq ClassInstanceExpr.applicableAndAccessible(ConstructorDecl decl) = 
+    decl.applicable(getArgList()) && decl.accessibleFrom(hostType()) && 
+    (!decl.isProtected() || hasTypeDecl() || decl.hostPackage().equals(hostPackage()));
+  
+  syn lazy SimpleSet ConstructorAccess.decls() = mostSpecificConstructor(lookupConstructor());
+  
+  syn lazy SimpleSet SuperConstructorAccess.decls() {
+    Collection c = hasPrevExpr() && !prevExpr().isTypeAccess() ?
+      hostType().lookupSuperConstructor() : lookupSuperConstructor();
+    return mostSpecificConstructor(c);
+  }
+  
+  syn lazy ConstructorDecl ConstructorAccess.decl() {
+    SimpleSet decls = decls();
+    if(decls.size() == 1)
+      return (ConstructorDecl)decls.iterator().next();
+    return illegalConstructor();
+  }
+  inh ConstructorDecl ConstructorAccess.illegalConstructor();
+
+  syn lazy SimpleSet ClassInstanceExpr.decls() {
+    TypeDecl typeDecl = hasTypeDecl() ? getTypeDecl() : getAccess().type();
+    return mostSpecificConstructor(typeDecl.constructors());
+  }
+  
+  syn lazy ConstructorDecl ClassInstanceExpr.decl() {
+    SimpleSet decls = decls();
+    if(decls.size() == 1)
+      return (ConstructorDecl)decls.iterator().next();
+    return illegalConstructor();
+  }
+  inh ConstructorDecl ClassInstanceExpr.illegalConstructor();
+}
+
+aspect ConstructorLookup {
+  public ConstructorDecl TypeDecl.lookupConstructor(ConstructorDecl signature) {
+    for(Iterator iter = constructors().iterator(); iter.hasNext(); ) {
+      ConstructorDecl decl = (ConstructorDecl)iter.next();
+      if(decl.sameSignature(signature)) {
+        return decl;
+      }
+    }
+    return null;
+  }
+
+  // add implicit constructor
+  syn lazy Collection TypeDecl.constructors() {
+    Collection c = new ArrayList();
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof ConstructorDecl) {
+        c.add(getBodyDecl(i));
+      }
+    }
+    if(c.isEmpty() && isClassDecl()) {
+      Modifiers m = new Modifiers();
+      if(isPublic()) m.addModifier(new Modifier("public"));
+      if(isProtected()) m.addModifier(new Modifier("protected"));
+      if(isPrivate()) m.addModifier(new Modifier("private"));
+      addBodyDecl(
+          new ConstructorDecl(
+            m,
+            new IdDecl(name()),
+            new List(),
+            new List(),
+            new Opt(),
+            new Block()
+          )
+      );
+      c.add(getBodyDecl(getNumBodyDecl()-1));
+    }
+    return c;
+  }
+  
+}
+
+aspect ConstructorDecl {
+  syn lazy String ConstructorDecl.name() = getIdDecl().getID();
+  // 8.8.2
+  syn lazy String ConstructorDecl.signature() {
+    StringBuffer s = new StringBuffer();
+    s.append(name() + "(");
+    for(int i = 0; i < getNumParameter(); i++) {
+      s.append(getParameter(i));
+      if(i != getNumParameter() - 1)
+        s.append(", ");
+    }
+    s.append(")");
+    return s.toString();
+  }
+
+  // 8.8.2
+  syn lazy boolean ConstructorDecl.sameSignature(ConstructorDecl c) {
+    if(!name().equals(c.name()))
+      return false;
+    if(c.getNumParameter() != getNumParameter())
+      return false;
+    for(int i = 0; i < getNumParameter(); i++)
+      if(!c.getParameter(i).type().equals(getParameter(i).type()))
+        return false;
+    return true;
+  }
+
+  syn lazy boolean ConstructorDecl.moreSpecificThan(ConstructorDecl m) {
+    for(int i = 0; i < getNumParameter(); i++) {
+      if(!getParameter(i).type().instanceOf(m.getParameter(i).type()))
+        return false;
+    }
+    return true;
+  }
+
+  public boolean ConstructorDecl.applicable(List argList) {
+    if(getNumParameter() != argList.getNumChild())
+      return false;
+    for(int i = 0; i < getNumParameter(); i++) {
+      TypeDecl arg = ((Expr)argList.getChild(i)).type();
+      TypeDecl parameter = getParameter(i).type();
+      if(!arg.instanceOf(parameter)) {
+        return false;
+      }  
+    }
+    return true;
+  }
+}

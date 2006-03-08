@@ -2,101 +2,95 @@ import java.util.*;
 
 aspect VariableScope {
   // lookupVariable(String name) shows the variables in scope named name
-  inh lazy Collection TypeDecl.lookupVariable(String name);
-  inh Collection BodyDecl.lookupVariable(String name);
-  inh lazy Collection Block.lookupVariable(String name);
-  inh lazy Collection SwitchStmt.lookupVariable(String name);
-  inh lazy Collection ForStmt.lookupVariable(String name);
-  inh Collection Expr.lookupVariable(String name);
-  inh lazy Collection CatchClause.lookupVariable(String name);
-  inh Collection VariableDeclaration.lookupVariable(String name);
-  inh Collection ParameterDeclaration.lookupVariable(String name);
+  inh lazy SimpleSet TypeDecl.lookupVariable(String name);
+  inh lazy SimpleSet BodyDecl.lookupVariable(String name);
+  inh lazy SimpleSet Block.lookupVariable(String name);
+  inh lazy SimpleSet SwitchStmt.lookupVariable(String name);
+  inh lazy SimpleSet Case.lookupVariable(String name);
+  inh lazy SimpleSet ForStmt.lookupVariable(String name);
+  inh SimpleSet Expr.lookupVariable(String name);
+  inh lazy SimpleSet CatchClause.lookupVariable(String name);
+  inh SimpleSet VariableDeclaration.lookupVariable(String name);
+  inh SimpleSet ParameterDeclaration.lookupVariable(String name);
   
-  protected static final Collection ASTNode.emptyVariableList = new ArrayList(0);
-  protected static Collection ASTNode.newVariableList() {
-    return new ArrayList(1);
-  }
-  protected static Collection ASTNode.createVariableCollection(Variable v) {
-    java.util.ArrayList list = new java.util.ArrayList(1);
-    list.add(v);
-    return list;
-  }
-
-  eq Program.getCompilationUnit().lookupVariable(String name) = emptyVariableList;
+  eq Program.getCompilationUnit().lookupVariable(String name) = SimpleSet.emptySet;
 
   // 6.5.6.1
   eq TypeDecl.getBodyDecl(int i).lookupVariable(String name) {
-    Collection list = lookupMemberField(name);
+    SimpleSet list = lookupMemberField(name);
     if(!list.isEmpty()) return list;
-    list = newVariableList();
-    list.addAll(lookupVariable(name));
+    list = lookupVariable(name);
     if(inStaticContext() || isStatic() || (isAnonymous() && inExplicitConstructorInvocation()))
-      removeInstanceVariables(list);
+      list = removeInstanceVariables(list);
     if(!list.isEmpty()) return list;
-    return topLevelType().lookupVariable(name); // Fix to handle static imports
+    return SimpleSet.emptySet;
+    //return topLevelType().lookupVariable(name); // Fix to handle static imports
   }
 
   // The scope of a parameter of a method is the entire body of the method
   eq MethodDecl.getBlock().lookupVariable(String name) {
-    Variable v = parameterDeclaration(name);
+    SimpleSet set = parameterDeclaration(name);
     // A declaration of a method parameter name shadows any other variable declarations
-    if(v != null ) return createVariableCollection(v);
+    if(!set.isEmpty()) return set;
     // Delegate to other declarations in scope
     return lookupVariable(name);
   }
   // A method declaration may only declare one parameter named name
   // This is enforced by a check that the declaration in scope for a declaration is itself
-  eq MethodDecl.getParameter().lookupVariable(String name) = 
-    createVariableCollection(parameterDeclaration(name));
+  eq MethodDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
   eq ConstructorDecl.getBlock().lookupVariable(String name) {
-    Variable v = parameterDeclaration(name);
-    if(v != null) return createVariableCollection(v);
+    SimpleSet set = parameterDeclaration(name);
+    if(!set.isEmpty()) return set;
     return lookupVariable(name);
   }
   eq ConstructorDecl.getConstructorInvocation().lookupVariable(String name) {
-    Variable v = parameterDeclaration(name);
-    if(v != null) return createVariableCollection(v);
-    Collection list = newVariableList();
-    list.addAll(hostType().lookupMemberField(name)); // search members
-    if(!list.isEmpty()) {
-      removeInstanceVariables(list);
-      return list;
+    SimpleSet set = parameterDeclaration(name);
+    if(!set.isEmpty()) return set;
+    set = hostType().lookupMemberField(name); // search members
+    if(!set.isEmpty()) {
+      set = removeInstanceVariables(set);
+      return set;
     }
     if(hostType().isNestedType() || hostType().isAnonymous())
       return hostType().lookupVariable(name);
-    return list;
+    return SimpleSet.emptySet;
   }
    
-  eq ConstructorDecl.getParameter().lookupVariable(String name) = 
-    createVariableCollection(parameterDeclaration(name));
+  eq ConstructorDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
     // The scope of a local variable declaration in a block is the rest of
     // the block in which the declaration appears
   eq Block.getStmt(int index).lookupVariable(String name) {
-    Variable v = localVariableDeclaration(name);
+    VariableDeclaration v = localVariableDeclaration(name);
     // declare before use and shadowing
     if(v != null && declaredBeforeUse(v, index))
-      return createVariableCollection(v);
+      return v;
     return lookupVariable(name);
   }
 
   eq SwitchStmt.getCase(int index).lookupVariable(String name) {
-    Variable v = localVariableDeclaration(name);
+    for(int i = 0; i < index; i++)
+      if(getCase(i).localVariableDeclaration(name) != null)
+        return getCase(i).localVariableDeclaration(name);
+    return lookupVariable(name);
+  }
+
+  eq Case.getStmt(int index).lookupVariable(String name) {
+    VariableDeclaration v = localVariableDeclaration(name);
     if(v != null && declaredBeforeUse(v, index))
-      return createVariableCollection(v);
+      return v;
     return lookupVariable(name);
   }
   
   // The scope of the parameter of an exception handler that is declared in a
   // catch clause of a try statement is the entire block associated with the catch
   eq CatchClause.getBlock().lookupVariable(String name) {
-    Variable v = parameterDeclaration(name);
-    if(v != null) return createVariableCollection(v);
+    SimpleSet set = parameterDeclaration(name);
+    if(!set.isEmpty()) return set;
     return lookupVariable(name);
   }
-  eq CatchClause.getParameter().lookupVariable(String name) = 
-    createVariableCollection(parameterDeclaration(name));
+  eq CatchClause.getParameter().lookupVariable(String name) = parameterDeclaration(name);
   
   // The scope of a local variable declared in the ForInit part of the for
   // statement includes all of the following:
@@ -104,46 +98,46 @@ aspect VariableScope {
   eq ForStmt.getCondition().lookupVariable(String name) = localLookup(name);
   eq ForStmt.getUpdateStmt().lookupVariable(String name) = localLookup(name);
   eq ForStmt.getStmt().lookupVariable(String name) = localLookup(name);
-  syn lazy Collection ForStmt.localLookup(String name) {
-    Variable v = localVariableDeclaration(name);
-    if(v != null) return createVariableCollection(v);
+  syn lazy SimpleSet ForStmt.localLookup(String name) {
+    VariableDeclaration v = localVariableDeclaration(name);
+    if(v != null) return v;
     return lookupVariable(name);
   }
 
   // Return the first variable declaration named name
   
-  syn lazy Variable MethodDecl.parameterDeclaration(String name) {
+  syn lazy SimpleSet MethodDecl.parameterDeclaration(String name) {
     for(int i = 0; i < getNumParameter(); i++)
       if(getParameter(i).name().equals(name))
-        return (Variable)getParameter(i);
-    return null;
+        return (ParameterDeclaration)getParameter(i);
+    return SimpleSet.emptySet;
   }
-  syn lazy Variable ConstructorDecl.parameterDeclaration(String name) {
+  syn lazy SimpleSet ConstructorDecl.parameterDeclaration(String name) {
     for(int i = 0; i < getNumParameter(); i++)
       if(getParameter(i).name().equals(name))
-        return (Variable)getParameter(i);
-    return null;
+        return (ParameterDeclaration)getParameter(i);
+    return SimpleSet.emptySet;
   }
-  syn lazy Variable CatchClause.parameterDeclaration(String name) = 
-    getParameter().name().equals(name) ? (Variable)getParameter() : null;
+  syn lazy SimpleSet CatchClause.parameterDeclaration(String name) = 
+    getParameter().name().equals(name) ? (ParameterDeclaration)getParameter() : SimpleSet.emptySet;
   
-  syn lazy Variable Block.localVariableDeclaration(String name) {
+  syn lazy VariableDeclaration Block.localVariableDeclaration(String name) {
     for(int i = 0; i < getNumStmt(); i++)
       if(getStmt(i).declaresVariable(name))
-        return (Variable)getStmt(i);
+        return (VariableDeclaration)getStmt(i);
     return null;
   }
-  syn lazy Variable SwitchStmt.localVariableDeclaration(String name) {
-    for(int i = 0; i < getNumCase(); i++)
-      for(int j = 0; j < getCase(i).getNumStmt(); j++)
-        if(getCase(i).getStmt(j).declaresVariable(name))
-          return (Variable)getCase(i).getStmt(j);
+  syn lazy VariableDeclaration Case.localVariableDeclaration(String name) {
+    for(int j = 0; j < getNumStmt(); j++)
+      if(getStmt(j).declaresVariable(name))
+        return (VariableDeclaration)getStmt(j);
     return null;
   }
-  syn lazy Variable ForStmt.localVariableDeclaration(String name) {
+  
+  syn lazy VariableDeclaration ForStmt.localVariableDeclaration(String name) {
     for(int i = 0; i < getNumInitStmt(); i++)
       if(getInitStmt(i).declaresVariable(name))
-        return (Variable)getInitStmt(i);
+        return (VariableDeclaration)getInitStmt(i);
     return null;
   }
   syn boolean Stmt.declaresVariable(String name) = false;
@@ -157,46 +151,52 @@ aspect VariableScope {
 
   eq AbstractDot.getRight().lookupVariable(String name) = getLeft().qualifiedLookupVariable(name);
 
-  eq ParseName.qualifiedLookupVariable(String name) = Collections.EMPTY_LIST;
-  eq PackageOrTypeAccess.qualifiedLookupVariable(String name) = Collections.EMPTY_LIST;
-  eq AmbiguousAccess.qualifiedLookupVariable(String name) = Collections.EMPTY_LIST;
+  eq ParseName.qualifiedLookupVariable(String name) = SimpleSet.emptySet;
+  eq PackageOrTypeAccess.qualifiedLookupVariable(String name) = SimpleSet.emptySet;
+  eq AmbiguousAccess.qualifiedLookupVariable(String name) = SimpleSet.emptySet;
 
   // Access control specifies the part of a program where a declared entity can
   // be referred to by a qualified name, field access expression, method
   // invocation expression without a simple name
-  syn lazy Collection Expr.qualifiedLookupVariable(String name) {
-    Collection c = newVariableList();
-    if(type().accessibleFrom(hostType())) {
-      c.addAll(type().lookupMemberField(name));
-      keepAccessibleFields(c);
-    }
-    return c;
+  syn SimpleSet Expr.qualifiedLookupVariable(String name) {
+    if(type().accessibleFrom(hostType()))
+      return keepAccessibleFields(type().lookupMemberField(name));
+    return SimpleSet.emptySet;
   }
-  eq PackageAccess.qualifiedLookupVariable(String name) = unknownType().lookupVariable(name);
+  eq PackageAccess.qualifiedLookupVariable(String name) = SimpleSet.emptySet;
   eq TypeAccess.qualifiedLookupVariable(String name) {
-    Collection c = newVariableList();
     if(type().accessibleFrom(hostType())) {
-      c.addAll(type().lookupMemberField(name));
-      keepAccessibleFields(c);
+      SimpleSet c = type().lookupMemberField(name);
+      c = keepAccessibleFields(c);
       if(type().isClassDecl() && c.size() == 1)
-        removeInstanceVariables(c);
-        
+        c = removeInstanceVariables(c);
+      return c;
     }
-    return c;
+    return SimpleSet.emptySet;
   }
 
   // remove fields that are not accessible when using this Expr as qualifier
-  public void Expr.keepAccessibleFields(Collection c) {
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
+  public SimpleSet Expr.keepAccessibleFields(SimpleSet oldSet) {
+    SimpleSet newSet = SimpleSet.emptySet;
+    for(Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
       if(v instanceof FieldDeclaration) {
         FieldDeclaration f = (FieldDeclaration)v;
-        if(!mayAccess(f))
-          iter.remove();
+        if(mayAccess(f))
+          newSet = newSet.add(f);
       }
-      else 
-        iter.remove();
     }
+    return newSet;
+  }
+
+  public SimpleSet ASTNode.removeInstanceVariables(SimpleSet oldSet) {
+    SimpleSet newSet = SimpleSet.emptySet;
+    for(Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      if(!v.isInstanceVariable())
+        newSet = newSet.add(v);
+    }
+    return newSet;
   }
 
   private boolean Expr.mayAccess(FieldDeclaration f) {
@@ -220,14 +220,6 @@ aspect VariableScope {
       return f.hostPackage().equals(hostType().hostPackage());
   }
   
-  public void ASTNode.removeInstanceVariables(Collection c) {
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-      Variable v = (Variable)iter.next();
-      if(v.isInstanceVariable())
-        iter.remove();
-    }
-  }
-  
   public TypeDecl TypeDecl.subclassWithinBody(TypeDecl typeDecl) {
     if(instanceOf(typeDecl))
       return this;
@@ -240,7 +232,7 @@ aspect VariableScope {
 
 aspect VariableScopePropagation {
   interface VariableScope {
-    public Collection lookupVariable(String name);
+    public SimpleSet lookupVariable(String name);
   }
   
   CatchClause implements VariableScope;
@@ -248,67 +240,53 @@ aspect VariableScopePropagation {
   TypeDecl implements VariableScope;
   ForStmt implements VariableScope;
 
-  inh VariableScope ParameterDeclaration.outerScope();
-  inh VariableScope VariableDeclaration.outerScope();
-  eq CatchClause.getParameter().outerScope() = this;
-  eq Block.getStmt().outerScope() = this;
-  eq TypeDecl.getBodyDecl().outerScope() = this;
-  eq ForStmt.getInitStmt().outerScope() = this;
-  eq ForStmt.getStmt().outerScope() = this;
-
   inh Variable Access.unknownField();
   
-  syn lazy Collection VarAccess.decls() {
-    Collection c = new ArrayList(1);
-    c.addAll(lookupVariable(name()));
-    if(c.size() == 1 && (isQualified() ? qualifier().staticContextQualifier() : inStaticContext())) {
-      for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-        Variable v = (Variable)iter.next();
-        if(v.isInstanceVariable())
-          iter.remove();
-      }
+  syn lazy SimpleSet VarAccess.decls() {
+    SimpleSet set = lookupVariable(name());
+    if(set.size() == 1 && (isQualified() ? qualifier().staticContextQualifier() : inStaticContext())) {
+      Variable v = (Variable)set.iterator().next();
+      if(v.isInstanceVariable())
+        return SimpleSet.emptySet;
     }
-    return c;
-    //= lookupVariable(name());
+    return set;
   }
   syn lazy Variable VarAccess.decl() {
-    Collection decls = decls();
-    if(decls.size() == 1) {
+    SimpleSet decls = decls();
+    if(decls.size() == 1)
       return (Variable)decls.iterator().next();
-    }
     return unknownField();
   }
 }
 
 aspect Fields {
-  syn lazy Collection TypeDecl.lookupMemberField(String name) = fields(name);
+  syn lazy SimpleSet TypeDecl.lookupMemberField(String name) = fields(name);
 
   // TODO: this somehow affects code generation of JastAdd when not lazy...
-  syn lazy Collection TypeDecl.localFields(String name) {
-    Collection list = new ArrayList();
+  syn lazy SimpleSet TypeDecl.localFields(String name) {
+    SimpleSet fields = SimpleSet.emptySet;
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
         if(decl.name().equals(name))
-          list.add(decl);
+          fields = fields.add(decl);
       }
     }
-    return list;
+    return fields;
   }
   
-  syn lazy Collection TypeDecl.fields(String name) = localFields(name);
+  syn SimpleSet TypeDecl.fields(String name) = localFields(name);
 
   // member fields
   eq ClassDecl.fields(String name) {
-    Collection localFields = localFields(name);
-    if(!localFields.isEmpty())
-      return localFields; // this causes hiding of fields in superclass and interfaces
-    HashSet set = new HashSet();
+    SimpleSet fields = localFields(name);
+    if(!fields.isEmpty())
+      return fields; // this causes hiding of fields in superclass and interfaces
     if(hasSuperclass()) {
       for(Iterator iter = superclass().fields(name).iterator(); iter.hasNext(); ) {
         FieldDeclaration decl = (FieldDeclaration)iter.next();
         if(!decl.isPrivate() && decl.accessibleFrom(this))
-          set.add(decl);
+          fields = fields.add(decl);
       }
     }
     for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
@@ -316,27 +294,26 @@ aspect Fields {
       for(Iterator iter = type.fields(name).iterator(); iter.hasNext(); ) {
         FieldDeclaration decl = (FieldDeclaration)iter.next();
         if(!decl.isPrivate() && decl.accessibleFrom(this))
-          set.add(decl);
+          fields = fields.add(decl);
       }
     }
-    return set;
+    return fields;
   }
   
   eq InterfaceDecl.fields(String name) {
-    Collection localFields = localFields(name);
-    if(!localFields.isEmpty())
-      return localFields;
-    HashSet set = new HashSet();
+    SimpleSet fields = localFields(name);
+    if(!fields.isEmpty()) 
+      return fields;
     for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
       for(Iterator iter = typeDecl.fields(name).iterator(); iter.hasNext(); ) {
         FieldDeclaration f = (FieldDeclaration)iter.next();
         if(f.accessibleFrom(this) && !f.isPrivate()) {
-          set.add(f);
+          fields = fields.add(f);
         }
       }
     }
-    return set;
+    return fields;
   }
 }
 

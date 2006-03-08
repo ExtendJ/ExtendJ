@@ -5,6 +5,8 @@ import java.io.*;
 
 
 public class Parser {
+  public static final boolean VERBOSE = false;
+
 	private DataInputStream is;
 	public CONSTANT_Class_Info classInfo;
 	public CONSTANT_Class_Info outerClassInfo;
@@ -13,6 +15,11 @@ public class Parser {
   public Parser(byte[] buffer, int size, String name) {
     //this.is = new DataInputStream(new DummyInputStream(buffer, size));
     this.is = new DataInputStream(new ByteArrayInputStream(buffer, 0, size));
+    this.name = name;
+  }
+  public Parser(InputStream in, String name) {
+    //this.is = new DataInputStream(new DummyInputStream(buffer, size));
+    this.is = new DataInputStream(new DummyInputStream(in));
     this.name = name;
   }
   
@@ -226,10 +233,11 @@ public class Parser {
       }
    
   		// // Does not work without DummyInputStream. Why?
-  		is = new DataInputStream(new DummyInputStream(new BufferedInputStream(file)));
-      file.close();
+  		//is = new DataInputStream(new DummyInputStream(new BufferedInputStream(file)));
+  		is = new DataInputStream(new BufferedInputStream(file));
     }
-    println("Parsing byte codes in " + name);
+    if(Parser.VERBOSE) 
+      println("Parsing byte codes in " + name);
     
 		this.outerClassInfo = outerClassInfo;
 		parseMagic();
@@ -257,13 +265,15 @@ public class Parser {
 	public void parseMinor() {
 		int low = u1();
 		int high = u1();
-		println("Minor: " + high + "." + low);
+    if(Parser.VERBOSE) 
+		  println("Minor: " + high + "." + low);
 	}
 
 	public void parseMajor() {
 		int low = u1();
 		int high = u1();
-		println("Major: " + high + "." + low);
+    if(Parser.VERBOSE) 
+		  println("Major: " + high + "." + low);
 	}
 
   public static boolean isInnerClass = false;
@@ -383,9 +393,11 @@ public class Parser {
 
 	public void parseFields(TypeDecl typeDecl) {
 		int count = u2();
-		println("Fields (" + count + "):");
+    if(Parser.VERBOSE) 
+		  println("Fields (" + count + "):");
 		for (int i = 0; i < count; i++) {
-      print(" Field nbr " + i + " ");
+      if(Parser.VERBOSE) 
+        print(" Field nbr " + i + " ");
 			FieldInfo fieldInfo = new FieldInfo(this);
 			if(!fieldInfo.isSynthetic())
 				typeDecl.addBodyDecl(fieldInfo.bodyDecl());
@@ -395,9 +407,11 @@ public class Parser {
 	
 	public void parseMethods(TypeDecl typeDecl) {
 		int count = u2();
-		println("Methods (" + count + "):");
+    if(Parser.VERBOSE) 
+		  println("Methods (" + count + "):");
 		for (int i = 0; i < count; i++) {
-      print("  Method nbr " + i + " ");
+      if(Parser.VERBOSE) 
+        print("  Method nbr " + i + " ");
 			MethodInfo info = new MethodInfo(this);
 			if(!info.isSynthetic() && !info.name.equals("<clinit>")) {
 				typeDecl.addBodyDecl(info.bodyDecl());
@@ -439,7 +453,8 @@ public class Parser {
 
 	public void parseConstantPool() {
 		int count = u2();
-		println("constant_pool_count: " + count);
+    if(Parser.VERBOSE) 
+		  println("constant_pool_count: " + count);
 		constantPool = new CONSTANT_Info[count + 1];
 		for (int i = 1; i < count; i++) {
 			parseEntry(i);

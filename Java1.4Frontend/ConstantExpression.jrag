@@ -1,99 +1,98 @@
 aspect ConstantExpression {
-
   class Constant {
-    private Number n;
-    private boolean isBoolean = false;
-    private boolean booleanValue;
-    private boolean isString = false;
-    private String stringValue;
-    private boolean isChar = false;
-    private char c;
+    static class ConstantInt extends Constant {
+      private int value;
+      public ConstantInt(int i) { this.value = i; }
+      int intValue() { return value; }
+      long longValue() { return value; }
+      float floatValue() { return value; }
+      double doubleValue() { return value; }
+      String stringValue() { return new Integer(value).toString(); }
+    }
+    static class ConstantLong extends Constant {
+      private long value;
+      public ConstantLong(long l) { this.value = l; }
+      int intValue() { return (int)value; }
+      long longValue() { return value; }
+      float floatValue() { return value; }
+      double doubleValue() { return value; }
+      String stringValue() { return new Long(value).toString(); }
+    }
+    static class ConstantFloat extends Constant {
+      private float value;
+      public ConstantFloat(float f) { this.value = f; }
+      int intValue() { return (int)value; }
+      long longValue() { return (long)value; }
+      float floatValue() { return value; }
+      double doubleValue() { return value; }
+      String stringValue() { return new Float(value).toString(); }
+    }
+    static class ConstantDouble extends Constant {
+      private double value;
+      public ConstantDouble(double d) { this.value = d; }
+      int intValue() { return (int)value; }
+      long longValue() { return (long)value; }
+      float floatValue() { return (float)value; }
+      double doubleValue() { return value; }
+      String stringValue() { return new Double(value).toString(); }
+    }
+    static class ConstantChar extends Constant {
+      private char value;
+      public ConstantChar(char c) { this.value = c; }
+      int intValue() { return value; }
+      long longValue() { return value; }
+      float floatValue() { return value; }
+      double doubleValue() { return value; }
+      String stringValue() { return new Character(value).toString(); }
+    }
+    static class ConstantBoolean extends Constant {
+      private boolean value;
+      public ConstantBoolean(boolean b) { this.value = b; }
+      boolean booleanValue() { return value; }
+      String stringValue() { return new Boolean(value).toString(); }
+    }
+    static class ConstantString extends Constant {
+      private String value;
+      public ConstantString(String s) { this.value = s; }
+      String stringValue() { return value; }
+    }
 
+    int intValue() { throw new UnsupportedOperationException(); }
+    long longValue() { throw new UnsupportedOperationException(); }
+    float floatValue() { throw new UnsupportedOperationException(); }
+    double doubleValue() { throw new UnsupportedOperationException(); }
+    boolean booleanValue() { throw new UnsupportedOperationException(); }
+    String stringValue() { throw new UnsupportedOperationException(); }
+      
+    protected Constant() {
+    }
+    
     public boolean error = false;
-   
-    public Constant(char c) {
-      isChar = true;
-      this.c = c;
-    }
-    public Constant(Number n) {
-      this.n = n;
-    }
-    public Constant(int i) {
-      n = new Integer(i);
-    }
-    public Constant(long l) {
-      n = new Long(l);
-    }
-    public Constant(float f) {
-      n = new Float(f);
-    }
-    public Constant(double d) {
-      n = new Double(d);
-    }
-    public Constant(boolean b) {
-      isBoolean = true;
-      booleanValue = b;
-    }
-    public Constant(String s) {
-      isString = true;
-      stringValue = s;
-    }
-    int intValue() {
-      if(isChar)
-        return c;
-      if(!isBoolean && !isString)
-        return n.intValue();
-      throw new UnsupportedOperationException();
-    }
-    long longValue() {
-      if(isChar)
-        return c;
-      if(!isBoolean && !isString)
-        return n.longValue();
-      throw new UnsupportedOperationException();
-    }
-    float floatValue() {
-      if(isChar)
-        return c;
-      if(!isBoolean && !isString)
-        return n.floatValue();
-      throw new UnsupportedOperationException();
-    }
-    double doubleValue() {
-      if(isChar)
-        return c;
-      if(!isBoolean && !isString)
-        return n.doubleValue();
-      throw new UnsupportedOperationException();
-    }
-    boolean booleanValue() {
-      if(isBoolean)
-        return booleanValue;
-      throw new UnsupportedOperationException();
-    }
-    String stringValue() {
-      if(isString)
-        return stringValue;
-      if(isBoolean)
-        return new Boolean(booleanValue).toString();
-      if(isChar)
-        return new Character(c).toString();
-      return n.toString();
-    }
+
+    static Constant create(int i) { return new ConstantInt(i); }
+    static Constant create(long l) { return new ConstantLong(l); }
+    static Constant create(float f) { return new ConstantFloat(f); }
+    static Constant create(double d) { return new ConstantDouble(d); }
+    static Constant create(boolean b) { return new ConstantBoolean(b); }
+    static Constant create(char c) { return new ConstantChar(c); }
+    static Constant create(String s) { return new ConstantString(s); }
   }
 
   syn Constant Expr.constant() {
     throw new UnsupportedOperationException("ConstantExpression operation constant" +
       " not supported for type " + getClass().getName()); 
   }
+  // enable caching for Literal constants
+  syn lazy Constant Literal.constant() {
+    throw new UnsupportedOperationException("ConstantExpression operation constant" +
+      " not supported for type " + getClass().getName()); 
+  }
 
-  syn lazy Constant VarAccess.constant() = decl().getInit().constant();
+  eq VarAccess.constant() = decl().getInit().constant();
   eq AbstractDot.constant() = lastAccess().constant();
   eq CastExpr.constant() = type().cast(getExpr().constant());
   eq ParExpr.constant() = getExpr().constant();
 
-  syn lazy Constant Binary.constant();
-  
   eq PlusExpr.constant() = type().plus(getOperand().constant());
   eq MinusExpr.constant() = type().minus(getOperand().constant());
   eq BitNotExpr.constant() = type().bitNot(getOperand().constant());
@@ -115,6 +114,7 @@ aspect ConstantExpression {
 
   eq ConditionalExpr.constant() = type().questionColon(getCondition().constant(), getTrueExpr().constant(),getFalseExpr().constant());
   
+
   syn lazy boolean FloatingPointLiteral.isZero() {
     String s = getLITERAL();
     for(int i = 0; i < s.length(); i++) {
@@ -211,7 +211,7 @@ aspect ConstantExpression {
       l = Literal.parseLong(getLITERAL());
     } catch (NumberFormatException e) {
     }
-    Constant c = new Constant((int)l);
+    Constant c = Constant.create((int)l);
     if(isDecimal() && l != (int)l)
       c.error = true;
     if(isOctal() && l > 037777777777L)
@@ -220,50 +220,50 @@ aspect ConstantExpression {
   }
   eq LongLiteral.constant() {
     try {
-      return new Constant(Literal.parseLong(getLITERAL()));
+      return Constant.create(Literal.parseLong(getLITERAL()));
     } catch (NumberFormatException e) {
-      Constant c = new Constant(0L);
+      Constant c = Constant.create(0L);
       c.error = true;
       return c;
     }
   }
   eq FloatingPointLiteral.constant() {
     try {
-      return new Constant(Float.parseFloat(getLITERAL()));
+      return Constant.create(Float.parseFloat(getLITERAL()));
     }
     catch (NumberFormatException e) {
-      Constant c = new Constant(0.0f);
+      Constant c = Constant.create(0.0f);
       c.error = true;
       return c;
     }
   }
   eq DoubleLiteral.constant() {
     try {
-      return new Constant(Double.parseDouble(getLITERAL()));
+      return Constant.create(Double.parseDouble(getLITERAL()));
     }
     catch (NumberFormatException e) {
-      Constant c = new Constant(0.0d);
+      Constant c = Constant.create(0.0d);
       c.error = true;
       return c;
     }
   }
-  eq BooleanLiteral.constant() = new Constant(Boolean.valueOf(getLITERAL()).booleanValue());
-  eq CharacterLiteral.constant() = new Constant(getLITERAL().charAt(0));
-  eq StringLiteral.constant() = new Constant(getLITERAL());
+  eq BooleanLiteral.constant() = Constant.create(Boolean.valueOf(getLITERAL()).booleanValue());
+  eq CharacterLiteral.constant() = Constant.create(getLITERAL().charAt(0));
+  eq StringLiteral.constant() = Constant.create(getLITERAL());
   
   syn Constant TypeDecl.cast(Constant c) {
     throw new UnsupportedOperationException("ConstantExpression operation cast" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.cast(Constant c)= new Constant(c.intValue());
-  eq ShortType.cast(Constant c) = new Constant((short)c.intValue()); 
-  eq CharType.cast(Constant c) = new Constant((char)c.intValue()); 
-  eq ByteType.cast(Constant c) = new Constant((byte)c.intValue()); 
-  eq LongType.cast(Constant c) = new Constant(c.longValue());
-  eq FloatType.cast(Constant c) = new Constant(c.floatValue());
-  eq DoubleType.cast(Constant c) = new Constant(c.doubleValue());
-  eq BooleanType.cast(Constant c) = new Constant(c.booleanValue());
-  eq ClassDecl.cast(Constant c) = new Constant(c.stringValue());
+  eq IntegralType.cast(Constant c)= Constant.create(c.intValue());
+  eq ShortType.cast(Constant c) = Constant.create((short)c.intValue()); 
+  eq CharType.cast(Constant c) = Constant.create((char)c.intValue()); 
+  eq ByteType.cast(Constant c) = Constant.create((byte)c.intValue()); 
+  eq LongType.cast(Constant c) = Constant.create(c.longValue());
+  eq FloatType.cast(Constant c) = Constant.create(c.floatValue());
+  eq DoubleType.cast(Constant c) = Constant.create(c.doubleValue());
+  eq BooleanType.cast(Constant c) = Constant.create(c.booleanValue());
+  eq ClassDecl.cast(Constant c) = Constant.create(c.stringValue());
 
   syn Constant TypeDecl.plus(Constant c) {
     throw new UnsupportedOperationException("ConstantExpression operation plus" +
@@ -278,119 +278,119 @@ aspect ConstantExpression {
     throw new UnsupportedOperationException("ConstantExpression operation minus" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.minus(Constant c) = new Constant(-c.intValue());
-  eq LongType.minus(Constant c) = new Constant(-c.longValue());
-  eq FloatType.minus(Constant c) = new Constant(-c.floatValue());
-  eq DoubleType.minus(Constant c) = new Constant(-c.doubleValue());
+  eq IntegralType.minus(Constant c) = Constant.create(-c.intValue());
+  eq LongType.minus(Constant c) = Constant.create(-c.longValue());
+  eq FloatType.minus(Constant c) = Constant.create(-c.floatValue());
+  eq DoubleType.minus(Constant c) = Constant.create(-c.doubleValue());
   
   syn Constant TypeDecl.bitNot(Constant c) {
     throw new UnsupportedOperationException("ConstantExpression operation bitNot" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.bitNot(Constant c) = new Constant(~c.intValue());
-  eq LongType.bitNot(Constant c) = new Constant(~c.longValue());
+  eq IntegralType.bitNot(Constant c) = Constant.create(~c.intValue());
+  eq LongType.bitNot(Constant c) = Constant.create(~c.longValue());
   
   syn Constant TypeDecl.mul(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation mul" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.mul(Constant c1, Constant c2) = new Constant(c1.intValue() * c2.intValue());
-  eq LongType.mul(Constant c1, Constant c2) = new Constant(c1.longValue() * c2.longValue());
-  eq FloatType.mul(Constant c1, Constant c2) = new Constant(c1.floatValue() * c2.floatValue());
-  eq DoubleType.mul(Constant c1, Constant c2) = new Constant(c1.doubleValue() * c2.doubleValue());
+  eq IntegralType.mul(Constant c1, Constant c2) = Constant.create(c1.intValue() * c2.intValue());
+  eq LongType.mul(Constant c1, Constant c2) = Constant.create(c1.longValue() * c2.longValue());
+  eq FloatType.mul(Constant c1, Constant c2) = Constant.create(c1.floatValue() * c2.floatValue());
+  eq DoubleType.mul(Constant c1, Constant c2) = Constant.create(c1.doubleValue() * c2.doubleValue());
   
   syn Constant TypeDecl.div(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation div" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.div(Constant c1, Constant c2) = new Constant(c1.intValue() / c2.intValue());
-  eq LongType.div(Constant c1, Constant c2) = new Constant(c1.longValue() / c2.longValue());
-  eq FloatType.div(Constant c1, Constant c2) = new Constant(c1.floatValue() / c2.floatValue());
-  eq DoubleType.div(Constant c1, Constant c2) = new Constant(c1.doubleValue() / c2.doubleValue());
+  eq IntegralType.div(Constant c1, Constant c2) = Constant.create(c1.intValue() / c2.intValue());
+  eq LongType.div(Constant c1, Constant c2) = Constant.create(c1.longValue() / c2.longValue());
+  eq FloatType.div(Constant c1, Constant c2) = Constant.create(c1.floatValue() / c2.floatValue());
+  eq DoubleType.div(Constant c1, Constant c2) = Constant.create(c1.doubleValue() / c2.doubleValue());
   
   syn Constant TypeDecl.mod(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation mod" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.mod(Constant c1, Constant c2) = new Constant(c1.intValue() % c2.intValue());
-  eq LongType.mod(Constant c1, Constant c2) = new Constant(c1.longValue() % c2.longValue());
-  eq FloatType.mod(Constant c1, Constant c2) = new Constant(c1.floatValue() % c2.floatValue());
-  eq DoubleType.mod(Constant c1, Constant c2) = new Constant(c1.doubleValue() % c2.doubleValue());
+  eq IntegralType.mod(Constant c1, Constant c2) = Constant.create(c1.intValue() % c2.intValue());
+  eq LongType.mod(Constant c1, Constant c2) = Constant.create(c1.longValue() % c2.longValue());
+  eq FloatType.mod(Constant c1, Constant c2) = Constant.create(c1.floatValue() % c2.floatValue());
+  eq DoubleType.mod(Constant c1, Constant c2) = Constant.create(c1.doubleValue() % c2.doubleValue());
       
   syn Constant TypeDecl.add(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation add" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.add(Constant c1, Constant c2) = new Constant(c1.intValue() + c2.intValue());
-  eq LongType.add(Constant c1, Constant c2) = new Constant(c1.longValue() + c2.longValue());
-  eq FloatType.add(Constant c1, Constant c2) = new Constant(c1.floatValue() + c2.floatValue());
-  eq DoubleType.add(Constant c1, Constant c2) = new Constant(c1.doubleValue() + c2.doubleValue());
-  eq ClassDecl.add(Constant c1, Constant c2) = new Constant(c1.stringValue() + c2.stringValue());
+  eq IntegralType.add(Constant c1, Constant c2) = Constant.create(c1.intValue() + c2.intValue());
+  eq LongType.add(Constant c1, Constant c2) = Constant.create(c1.longValue() + c2.longValue());
+  eq FloatType.add(Constant c1, Constant c2) = Constant.create(c1.floatValue() + c2.floatValue());
+  eq DoubleType.add(Constant c1, Constant c2) = Constant.create(c1.doubleValue() + c2.doubleValue());
+  eq ClassDecl.add(Constant c1, Constant c2) = Constant.create(c1.stringValue() + c2.stringValue());
 
   syn Constant TypeDecl.sub(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation sub" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.sub(Constant c1, Constant c2) = new Constant(c1.intValue() - c2.intValue());
-  eq LongType.sub(Constant c1, Constant c2) = new Constant(c1.longValue() - c2.longValue());
-  eq FloatType.sub(Constant c1, Constant c2) = new Constant(c1.floatValue() - c2.floatValue());
-  eq DoubleType.sub(Constant c1, Constant c2) = new Constant(c1.doubleValue() - c2.doubleValue());
+  eq IntegralType.sub(Constant c1, Constant c2) = Constant.create(c1.intValue() - c2.intValue());
+  eq LongType.sub(Constant c1, Constant c2) = Constant.create(c1.longValue() - c2.longValue());
+  eq FloatType.sub(Constant c1, Constant c2) = Constant.create(c1.floatValue() - c2.floatValue());
+  eq DoubleType.sub(Constant c1, Constant c2) = Constant.create(c1.doubleValue() - c2.doubleValue());
   
   syn Constant TypeDecl.lshift(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation lshift" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.lshift(Constant c1, Constant c2) = new Constant(c1.intValue() << c2.intValue());
-  eq LongType.lshift(Constant c1, Constant c2) = new Constant(c1.longValue() << c2.longValue());
+  eq IntegralType.lshift(Constant c1, Constant c2) = Constant.create(c1.intValue() << c2.intValue());
+  eq LongType.lshift(Constant c1, Constant c2) = Constant.create(c1.longValue() << c2.longValue());
 
   syn Constant TypeDecl.rshift(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation rshift" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.rshift(Constant c1, Constant c2) = new Constant(c1.intValue() >> c2.intValue());
-  eq LongType.rshift(Constant c1, Constant c2) = new Constant(c1.longValue() >> c2.longValue());
+  eq IntegralType.rshift(Constant c1, Constant c2) = Constant.create(c1.intValue() >> c2.intValue());
+  eq LongType.rshift(Constant c1, Constant c2) = Constant.create(c1.longValue() >> c2.longValue());
   
   syn Constant TypeDecl.urshift(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation urshift" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.urshift(Constant c1, Constant c2) = new Constant(c1.intValue() >>> c2.intValue());
-  eq LongType.urshift(Constant c1, Constant c2) = new Constant(c1.longValue() >>> c2.longValue());
+  eq IntegralType.urshift(Constant c1, Constant c2) = Constant.create(c1.intValue() >>> c2.intValue());
+  eq LongType.urshift(Constant c1, Constant c2) = Constant.create(c1.longValue() >>> c2.longValue());
   
   syn Constant TypeDecl.andBitwise(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation andBitwise" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.andBitwise(Constant c1, Constant c2) = new Constant(c1.intValue() & c2.intValue());
-  eq LongType.andBitwise(Constant c1, Constant c2) = new Constant(c1.longValue() & c2.longValue());
-  eq BooleanType.andBitwise(Constant c1, Constant c2) = new Constant(c1.booleanValue() & c2.booleanValue());
+  eq IntegralType.andBitwise(Constant c1, Constant c2) = Constant.create(c1.intValue() & c2.intValue());
+  eq LongType.andBitwise(Constant c1, Constant c2) = Constant.create(c1.longValue() & c2.longValue());
+  eq BooleanType.andBitwise(Constant c1, Constant c2) = Constant.create(c1.booleanValue() & c2.booleanValue());
 
   syn Constant TypeDecl.xorBitwise(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation xorBitwise" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.xorBitwise(Constant c1, Constant c2) = new Constant(c1.intValue() ^ c2.intValue());
-  eq LongType.xorBitwise(Constant c1, Constant c2) = new Constant(c1.longValue() ^ c2.longValue());
-  eq BooleanType.xorBitwise(Constant c1, Constant c2) = new Constant(c1.booleanValue() ^ c2.booleanValue());
+  eq IntegralType.xorBitwise(Constant c1, Constant c2) = Constant.create(c1.intValue() ^ c2.intValue());
+  eq LongType.xorBitwise(Constant c1, Constant c2) = Constant.create(c1.longValue() ^ c2.longValue());
+  eq BooleanType.xorBitwise(Constant c1, Constant c2) = Constant.create(c1.booleanValue() ^ c2.booleanValue());
   
   syn Constant TypeDecl.orBitwise(Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation orBitwise" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.orBitwise(Constant c1, Constant c2) = new Constant(c1.intValue() | c2.intValue());
-  eq LongType.orBitwise(Constant c1, Constant c2) = new Constant(c1.longValue() | c2.longValue());
-  eq BooleanType.orBitwise(Constant c1, Constant c2) = new Constant(c1.booleanValue() | c2.booleanValue());
+  eq IntegralType.orBitwise(Constant c1, Constant c2) = Constant.create(c1.intValue() | c2.intValue());
+  eq LongType.orBitwise(Constant c1, Constant c2) = Constant.create(c1.longValue() | c2.longValue());
+  eq BooleanType.orBitwise(Constant c1, Constant c2) = Constant.create(c1.booleanValue() | c2.booleanValue());
 
   syn Constant TypeDecl.questionColon(Constant cond, Constant c1, Constant c2) {
     throw new UnsupportedOperationException("ConstantExpression operation questionColon" +
       " not supported for type " + getClass().getName()); 
   }
-  eq IntegralType.questionColon(Constant cond, Constant c1, Constant c2) = new Constant(cond.booleanValue() ? c1.intValue() : c2.intValue());
-  eq LongType.questionColon(Constant cond, Constant c1, Constant c2) = new Constant(cond.booleanValue() ? c1.longValue() : c2.longValue());
-  eq FloatType.questionColon(Constant cond, Constant c1, Constant c2) = new Constant(cond.booleanValue() ? c1.floatValue() : c2.floatValue());
-  eq DoubleType.questionColon(Constant cond, Constant c1, Constant c2) = new Constant(cond.booleanValue() ? c1.doubleValue() : c2.doubleValue());
-  eq BooleanType.questionColon(Constant cond, Constant c1, Constant c2) = new Constant(cond.booleanValue() ? c1.booleanValue() : c2.booleanValue());
-  eq ClassDecl.questionColon(Constant cond, Constant c1, Constant c2) = new Constant(cond.booleanValue() ? c1.stringValue() : c2.stringValue());
+  eq IntegralType.questionColon(Constant cond, Constant c1, Constant c2) = Constant.create(cond.booleanValue() ? c1.intValue() : c2.intValue());
+  eq LongType.questionColon(Constant cond, Constant c1, Constant c2) = Constant.create(cond.booleanValue() ? c1.longValue() : c2.longValue());
+  eq FloatType.questionColon(Constant cond, Constant c1, Constant c2) = Constant.create(cond.booleanValue() ? c1.floatValue() : c2.floatValue());
+  eq DoubleType.questionColon(Constant cond, Constant c1, Constant c2) = Constant.create(cond.booleanValue() ? c1.doubleValue() : c2.doubleValue());
+  eq BooleanType.questionColon(Constant cond, Constant c1, Constant c2) = Constant.create(cond.booleanValue() ? c1.booleanValue() : c2.booleanValue());
+  eq ClassDecl.questionColon(Constant cond, Constant c1, Constant c2) = Constant.create(cond.booleanValue() ? c1.stringValue() : c2.stringValue());
  
   /* 
    * representableIn(T) is true if and only if the the expression is a 
@@ -399,7 +399,7 @@ aspect ConstantExpression {
    * where T must be byte, char or short.
    */
    
-  syn lazy boolean Expr.representableIn(TypeDecl t) {	
+  syn boolean Expr.representableIn(TypeDecl t) {	
   	if (!type().isByte() && !type().isChar() && !type().isShort() && !type().isInt()) {
   		return false;
   	}
@@ -454,7 +454,7 @@ aspect ConstantExpression {
 
   syn Expr Binary.left() = getLeftOperand();
   syn Expr Binary.right() = getRightOperand();
-  syn lazy TypeDecl Binary.binaryNumericPromotedType() {
+  syn TypeDecl Binary.binaryNumericPromotedType() {
     TypeDecl leftType = left().type();
     TypeDecl rightType = right().type();
     if(leftType.isString())
@@ -471,15 +471,15 @@ aspect ConstantExpression {
   syn char Expr.constantCharValue() = 0;
   eq CharacterLiteral.constantCharValue() = getLITERAL().charAt(0);
   
-  eq LogNotExpr.constant() = new Constant(!getOperand().constant().booleanValue());
-  eq EQExpr.constant() = new Constant(binaryNumericPromotedType().eqIsTrue(left(), right()));
-  eq NEExpr.constant() = new Constant(!binaryNumericPromotedType().eqIsTrue(left(), right()));
-  eq LTExpr.constant() = new Constant(binaryNumericPromotedType().ltIsTrue(left(), right()));
-  eq LEExpr.constant() = new Constant(binaryNumericPromotedType().leIsTrue(left(), right()));
-  eq GTExpr.constant() = new Constant(!binaryNumericPromotedType().leIsTrue(left(), right()));
-  eq GEExpr.constant() = new Constant(!binaryNumericPromotedType().ltIsTrue(left(), right()));
-  eq AndLogicalExpr.constant() = new Constant(left().constant().booleanValue() && right().constant().booleanValue());
-  eq OrLogicalExpr.constant() = new Constant(left().constant().booleanValue() || right().constant().booleanValue());
+  eq LogNotExpr.constant() = Constant.create(!getOperand().constant().booleanValue());
+  eq EQExpr.constant() = Constant.create(binaryNumericPromotedType().eqIsTrue(left(), right()));
+  eq NEExpr.constant() = Constant.create(!binaryNumericPromotedType().eqIsTrue(left(), right()));
+  eq LTExpr.constant() = Constant.create(binaryNumericPromotedType().ltIsTrue(left(), right()));
+  eq LEExpr.constant() = Constant.create(binaryNumericPromotedType().leIsTrue(left(), right()));
+  eq GTExpr.constant() = Constant.create(!binaryNumericPromotedType().leIsTrue(left(), right()));
+  eq GEExpr.constant() = Constant.create(!binaryNumericPromotedType().ltIsTrue(left(), right()));
+  eq AndLogicalExpr.constant() = Constant.create(left().constant().booleanValue() && right().constant().booleanValue());
+  eq OrLogicalExpr.constant() = Constant.create(left().constant().booleanValue() || right().constant().booleanValue());
   
   syn boolean TypeDecl.eqIsTrue(Expr left, Expr right) {
     System.err.println("Evaluation eqIsTrue for unknown type: " + getClass().getName());
@@ -503,7 +503,5 @@ aspect ConstantExpression {
   eq LongType.leIsTrue(Expr left, Expr right) = left.constant().longValue() <= right.constant().longValue();
   eq FloatType.leIsTrue(Expr left, Expr right) = left.constant().floatValue() <= right.constant().floatValue();
   eq DoubleType.leIsTrue(Expr left, Expr right) = left.constant().doubleValue() <= right.constant().doubleValue();
-
-
- 
 }
+ 

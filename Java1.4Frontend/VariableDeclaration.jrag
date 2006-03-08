@@ -19,6 +19,8 @@ aspect Variables {
 
     public Expr getInit();
     public boolean hasInit();
+
+    public Constant constant();
   }
   
   VariableDeclaration implements Variable;
@@ -36,6 +38,8 @@ aspect Variables {
   
   syn String VariableDeclaration.name() = getIdDecl().getID();
 
+  syn lazy Constant VariableDeclaration.constant() = getInit().constant();
+
   FieldDeclaration implements Variable;
   // 4.5.3
   syn boolean FieldDeclaration.isClassVariable() = getModifiers().isStatic() || hostType().isInterfaceDecl();
@@ -48,6 +52,7 @@ aspect Variables {
   syn boolean FieldDeclaration.isBlank() = !hasInit();
   
   syn String FieldDeclaration.name() = getIdDecl().getID();
+  syn lazy Constant FieldDeclaration.constant() = getInit().constant();
 
   ParameterDeclaration implements Variable;
   // 4.5.3
@@ -78,6 +83,7 @@ aspect Variables {
 
   syn boolean ParameterDeclaration.hasInit() = false;
   syn Expr ParameterDeclaration.getInit() { throw new UnsupportedOperationException(); }
+  syn Constant ParameterDeclaration.constant() { throw new UnsupportedOperationException(); }
 
   syn String Parameter.name() = getIdDecl().getID();
   syn String VariableDecl.name() = getIdDecl().getID();
@@ -177,6 +183,22 @@ aspect VariableDeclarationTransformation {
     }
   }
   rewrite VarDeclStmt in ForStmt.getInitStmt() {
+    when(getNumVariableDecl() > 1)
+    to List {
+      List varList = new List();
+      for(int j = 0; j < getNumVariableDecl(); j++) {
+        varList.add(
+            new VarDeclStmt(
+                (Modifiers)getModifiers().fullCopy(),
+                (Access)getTypeAccess().fullCopy(),
+                new List().add(getVariableDecl(j))
+              )
+        );
+      }
+      return varList;
+    }
+  }
+  rewrite VarDeclStmt in Case.getStmt() {
     when(getNumVariableDecl() > 1)
     to List {
       List varList = new List();

@@ -2,8 +2,6 @@ import java.io.File;
 import java.util.*;
 
 aspect ClassPath {
-
-
   private String CompilationUnit.relativeName;
   private String CompilationUnit.pathName;
   private boolean CompilationUnit.fromSource;
@@ -24,6 +22,7 @@ aspect ClassPath {
 
   class ClassFile {
     private boolean exists;
+    public InputStream is;
     //private static byte[] buf; // caused problems with nested classes
     private byte[] buf;
     private int size;
@@ -44,9 +43,24 @@ aspect ClassPath {
       sourcePath.remove(sourcePath.size()-1);
     }
 
+    private static ArrayList sourceFiles = new ArrayList();
+    public static void addSourceFile(String name) {
+      initPaths();
+      sourceFiles.add(name);
+    }
+    private static HashSet processedSourceFiles = new HashSet();
+    public static boolean processedSourceFile(String name) {
+      initPaths();
+      return processedSourceFiles.contains(name);
+    }
+
     private static void initPaths() {
       if(!pathsInitialized) {
         pathsInitialized = true;
+  
+        sourceFiles = new ArrayList();
+        processedSourceFiles = new HashSet();
+        
         //System.err.println("Initializing class paths");
         
         ArrayList classPaths = new ArrayList();
@@ -215,9 +229,10 @@ aspect ClassPath {
             if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
               //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
               size = (int)zipEntry.getSize();
-              InputStream is = zip.getInputStream(zipEntry);
-              fillBuf(is, size);
-              is.close();
+              if(is != null) is.close();
+              is = zip.getInputStream(zipEntry);
+              //fillBuf(is, size);
+              //is.close();
               exists = true;
               isSource = true;
               age = zipEntry.getTime();
@@ -231,9 +246,10 @@ aspect ClassPath {
             if(classFile.isFile() && classFile.lastModified() > age) {
               //System.out.println("Found " + fileName + " in " + classFile.toString() + ", size: " + classFile.length());
               size = (int)classFile.length();
-              InputStream is = new FileInputStream(classFile);
-              fillBuf(is, size);
-              is.close();
+              if(is != null) is.close();
+              is = new FileInputStream(classFile);
+              //fillBuf(is, size);
+              //is.close();
               exists = true;
               isSource = true;
               age = classFile.lastModified();
@@ -251,9 +267,10 @@ aspect ClassPath {
             if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
               //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
               size = (int)zipEntry.getSize();
-              InputStream is = zip.getInputStream(zipEntry);
-              fillBuf(is, size);
-              is.close();
+              if(is != null) is.close();
+              is = zip.getInputStream(zipEntry);
+              //fillBuf(is, size);
+              //is.close();
               exists = true;
               isSource = false;
               age = zipEntry.getTime();
@@ -267,14 +284,36 @@ aspect ClassPath {
             if(classFile.isFile() && classFile.lastModified() > age) {
               //System.out.println("Found " + fileName + " in " + classFile.toString() + ", size: " + classFile.length());
               size = (int)classFile.length();
-              InputStream is = new FileInputStream(classFile);
-              fillBuf(is, size);
-              is.close();
+              if(is != null) is.close();
+              is = new FileInputStream(classFile);
+              //fillBuf(is, size);
+              //is.close();
               exists = true;
               isSource = false;
               age = classFile.lastModified();
               pathName = classFile.getPath();
               relativeName = fileName;
+            }
+          }
+        }
+        for(Iterator iter = sourceFiles.iterator(); iter.hasNext(); ) {
+          String s = (String)iter.next();
+          if(s.endsWith(fileName + ".java")) {
+            File classFile;
+            classFile = new File(s);
+            if(classFile.isFile()) {
+              //System.out.println("Found " + fileName + " in " + classFile.toString() + ", size: " + classFile.length());
+              size = (int)classFile.length();
+              if(is != null) is.close();
+              is = new FileInputStream(classFile);
+              //fillBuf(is, size);
+              //is.close();
+              exists = true;
+              isSource = true;
+              age = classFile.lastModified();
+              pathName = classFile.getPath();
+              relativeName = fileName;
+              processedSourceFiles.add(s);
             }
           }
         }
@@ -312,10 +351,20 @@ aspect ClassPath {
       if(!isSource) {
         if(Program.verbose())
           System.out.print("Loading .class file: " + fullName + " ");
-        CompilationUnit u = new bytecode.Parser(buffer(), size(), fullName).parse(null, null);
+        
+        //fillBuf(is, size());
+        //is.close();
+        //is = null;
+        
+        //CompilationUnit u = new bytecode.Parser(buffer(), size(), fullName).parse(null, null);
+        CompilationUnit u = new bytecode.Parser(is, fullName).parse(null, null);
         u.setPathName(pathName);
         u.setRelativeName(relativeName + ".class");
         u.setFromSource(false);
+        
+        is.close();
+        is = null;
+        
         if(Program.verbose())
           System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
         return u;
@@ -323,11 +372,13 @@ aspect ClassPath {
       else {
         if(Program.verbose())
           System.out.print("Loading .java file: " + fullName + " ");
-        InputStream is = new ByteArrayInputStream(buffer(), 0, size());
+          
         parser.JavaScanner scanner = new parser.JavaScanner(new parser.UnicodeEscapes(is));
         parser.JavaParser parser = new parser.JavaParser();
         CompilationUnit u = ((Program)parser.parse(scanner)).getCompilationUnit(0);
         is.close();
+        is = null;
+        
         u.setPathName(pathName);
         u.setRelativeName(relativeName + ".java");
         u.setFromSource(true);

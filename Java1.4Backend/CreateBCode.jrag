@@ -113,7 +113,7 @@ aspect CreateBCode {
       localIndex++;
     }
     for(int i = 0; i < getNumParameter(); i++)
-      localIndex += getParameter(i).type().size();
+      localIndex += getParameter(i).type().variableSize();
     for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
       gen.emitLoadReference(0);
@@ -122,8 +122,8 @@ aspect CreateBCode {
       String desc = v.type().typeDescriptor();
       String name = "val$" + v.name();
       int index = gen.constantPool().addFieldref(classname, name, desc);
-      gen.emit(Bytecode.PUTFIELD, -1 - v.type().size()).add2(index);
-      localIndex += v.type().size();
+      gen.emit(Bytecode.PUTFIELD, -1 - v.type().variableSize()).add2(index);
+      localIndex += v.type().variableSize();
     }
 
     if(needsInit) {
@@ -243,7 +243,7 @@ aspect CreateBCode {
       argumentType = dest.stringPromotion();
       desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.size()).add2(index); // StringBuffer.append
+      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index); // StringBuffer.append
       
       getSource().createBCode(gen);
 
@@ -251,7 +251,7 @@ aspect CreateBCode {
       argumentType = source.stringPromotion();
       desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.size()).add2(index); // StringBuffer.append
+      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index); // StringBuffer.append
       
       // toString
       desc = "()" + type().typeDescriptor();
@@ -411,7 +411,7 @@ aspect CreateBCode {
       String      name = "val$" + v.name();
       int index = gen.constantPool().addFieldref(classname, name, desc);
       gen.emit(Bytecode.ALOAD_0);
-      gen.emit(Bytecode.GETFIELD, v.type().size() - 1).add2(index);
+      gen.emit(Bytecode.GETFIELD, v.type().variableSize() - 1).add2(index);
     }
   }
 
@@ -553,6 +553,18 @@ aspect CreateBCode {
       typeDecl = typeDecl.enclosingType();
     return typeDecl;
   }
+
+  syn boolean TypeDecl.hasMethod(String id) {
+    if(!memberMethods(id).isEmpty()) return true;
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl decl = (MethodDecl)getBodyDecl(i);
+        if(decl.name().equals(id))
+          return true;
+      }
+    }
+    return false;
+  }
   
   public void ArrayAccess.createBCode(CodeGeneration gen) {
     prevExpr().createBCode(gen);
@@ -681,7 +693,7 @@ aspect CreateBCode {
     Iterator iter = hostType().enclosingVariables().iterator();
     Variable varDecl = (Variable)iter.next();
     while(varDecl != v && iter.hasNext()) {
-      localIndex += varDecl.type().size();
+      localIndex += varDecl.type().variableSize();
       varDecl = (Variable)iter.next();
     }
     return localIndex;
@@ -915,7 +927,7 @@ aspect CreateBCode {
   public void RShiftExpr.createBCode(CodeGeneration gen) { emitShiftExpr(gen); }
   public void URShiftExpr.createBCode(CodeGeneration gen) { emitShiftExpr(gen); }
 
-  syn lazy TypeDecl TypeDecl.stringPromotion() = this;
+  syn TypeDecl TypeDecl.stringPromotion() = this;
   eq ReferenceType.stringPromotion() = typeObject();
   eq NullType.stringPromotion() = typeObject();
   eq ByteType.stringPromotion() = typeInt();
@@ -946,7 +958,7 @@ aspect CreateBCode {
         argumentType = getLeftOperand().type().stringPromotion();
         desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "append", desc);
-        gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.size()).add2(index); // StringBuffer.append
+        gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index); // StringBuffer.append
       }
       else {
         getLeftOperand().createBCode(gen);
@@ -955,7 +967,7 @@ aspect CreateBCode {
       argumentType = getRightOperand().type().stringPromotion();
       desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.size()).add2(index); // StringBuffer.append
+      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index); // StringBuffer.append
       if(lastStringAddPart()) {
         desc = "()" + type().typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "toString", desc);
@@ -997,11 +1009,11 @@ aspect CreateBCode {
   eq ForStmt.getCondition().condition_true_label(CodeGeneration gen) = begin_label(gen);
   
   // propagate labels downwards for complex boolean expressions
-  inh lazy int Expr.condition_false_label(CodeGeneration gen);
+  inh int Expr.condition_false_label(CodeGeneration gen);
   eq Program.getCompilationUnit(int i).condition_false_label(CodeGeneration gen) {
     throw new Error("condition_false_label not implemented");
   }
-  inh lazy int Expr.condition_true_label(CodeGeneration gen);
+  inh int Expr.condition_true_label(CodeGeneration gen);
   eq Program.getCompilationUnit(int i).condition_true_label(CodeGeneration gen) {
     throw new Error("condition_true_label not implemented");
   }
@@ -1031,7 +1043,7 @@ aspect CreateBCode {
   eq OrLogicalExpr.getRightOperand().condition_false_label(CodeGeneration gen) = false_label(gen);
   eq OrLogicalExpr.getRightOperand().condition_true_label(CodeGeneration gen) = true_label(gen);
 
-  syn lazy boolean Expr.canBeTrue() = !isFalse();
+  syn boolean Expr.canBeTrue() = !isFalse();
   eq ParExpr.canBeTrue() = getExpr().canBeTrue();
   eq AbstractDot.canBeTrue() = lastAccess().canBeTrue();
   eq OrLogicalExpr.canBeTrue() = getLeftOperand().canBeTrue() || getRightOperand().canBeTrue();
@@ -1041,7 +1053,7 @@ aspect CreateBCode {
     || getCondition().isFalse() && getFalseExpr().canBeTrue());
   eq LogNotExpr.canBeTrue() = getOperand().canBeFalse();
   
-  syn lazy boolean Expr.canBeFalse() = !isTrue();
+  syn boolean Expr.canBeFalse() = !isTrue();
   eq ParExpr.canBeFalse() = getExpr().canBeFalse();
   eq AbstractDot.canBeFalse() = lastAccess().canBeFalse();
   eq OrLogicalExpr.canBeFalse() = getLeftOperand().canBeFalse() && getRightOperand().canBeFalse();
@@ -1077,7 +1089,7 @@ aspect CreateBCode {
         getTrueExpr().createBCode(gen);
         getTrueExpr().type().emitCastTo(gen, type());
         if(getCondition().canBeFalse()) {
-          gen.changeStackDepth(-getTrueExpr().type().size());
+          gen.changeStackDepth(-getTrueExpr().type().variableSize());
           gen.emitGoto(endBranch);
         }
       }
@@ -1569,7 +1581,7 @@ aspect CreateBCode {
   public void ClassAccess.createBCode(CodeGeneration gen) {
     if(prevExpr().type().isPrimitiveType() || prevExpr().type().isVoid()) {
       TypeDecl typeDecl = lookupType("java.lang", prevExpr().type().primitiveClassName());
-      Collection c = typeDecl.lookupMemberField("TYPE");
+      SimpleSet c = typeDecl.lookupMemberField("TYPE");
       FieldDeclaration f = (FieldDeclaration)c.iterator().next();
       f.emitLoadField(gen, typeDecl);
     }

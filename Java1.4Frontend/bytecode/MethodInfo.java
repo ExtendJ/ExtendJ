@@ -19,7 +19,8 @@ class MethodInfo {
 	public MethodInfo(Parser parser) {
 		p = parser;
 		flags = p.u2();
-    p.print("  Flags: " + Integer.toBinaryString(flags));
+    if(Parser.VERBOSE)
+      p.print("  Flags: " + Integer.toBinaryString(flags));
 		int name_index = p.u2();
     CONSTANT_Info info = p.constantPool[name_index];
     if(info == null || !(info instanceof CONSTANT_Utf8_Info)) {

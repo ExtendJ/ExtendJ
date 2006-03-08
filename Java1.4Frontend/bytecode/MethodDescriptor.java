@@ -13,7 +13,8 @@ class MethodDescriptor {
 		p = parser;
 		int descriptor_index = p.u2();
 		String descriptor = ((CONSTANT_Utf8_Info) p.constantPool[descriptor_index]).string();
-		p.println("  Method: " + name + ", " + descriptor);
+    if(Parser.VERBOSE)
+		  p.println("  Method: " + name + ", " + descriptor);
 		//String[] strings = descriptor.substring(1).split("\\)");
 		//parameterDescriptors = strings[0];
 		//typeDescriptor = strings[1];

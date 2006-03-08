@@ -28,12 +28,14 @@ class Attributes {
 		isSynthetic = false;
 		
 		int attributes_count = p.u2();
-    p.println("    " + attributes_count + " attributes:");
+    if(Parser.VERBOSE)
+      p.println("    " + attributes_count + " attributes:");
 		for (int j = 0; j < attributes_count; j++) {
 			int attribute_name_index = p.u2();
 			int attribute_length = p.u4();
 			String attribute_name = p.getCONSTANT_Utf8_Info(attribute_name_index).string();
-			p.println("    Attribute: " + attribute_name + ", length: "
+      if(Parser.VERBOSE)
+			  p.println("    Attribute: " + attribute_name + ", length: "
 					+ attribute_length);
 			if (attribute_name.equals("Exceptions")) {
 				exceptions();
@@ -53,10 +55,11 @@ class Attributes {
 	
 	public void innerClasses(TypeDecl typeDecl, TypeDecl outerTypeDecl) {
 		int number_of_classes = this.p.u2();
-		p.println("    Number of classes: " + number_of_classes);
-    p.println("    begin");
+    if(Parser.VERBOSE)
+		  p.println("    Number of classes: " + number_of_classes);
     for (int i = 0; i < number_of_classes; i++) {
-      p.print("      " + i + "(" + number_of_classes + ")" +  ":");
+      if(Parser.VERBOSE)
+        p.print("      " + i + "(" + number_of_classes + ")" +  ":");
       int inner_class_info_index = this.p.u2();
       int outer_class_info_index = this.p.u2();
       int inner_name_index = this.p.u2();
@@ -71,7 +74,8 @@ class Attributes {
         String inner_class_name = inner_class_info.name();
         String outer_class_name = outer_class_info.name();
 
-        this.p.println("      inner: " + inner_class_name + ", outer: " + outer_class_name);
+        if(Parser.VERBOSE)
+          this.p.println("      inner: " + inner_class_name + ", outer: " + outer_class_name);
 
         if (inner_name_index != 0) {
           inner_name = this.p.getCONSTANT_Utf8_Info(inner_name_index).string();
@@ -80,7 +84,8 @@ class Attributes {
         }
 
         if (inner_class_info.name().equals(p.classInfo.name())) {
-          p.println("      Class " + inner_class_name + " is inner");
+          if(Parser.VERBOSE)
+            p.println("      Class " + inner_class_name + " is inner");
           typeDecl.setIdDecl(new IdDecl(inner_name));
           typeDecl.setModifiers(Parser.modifiers(inner_class_access_flags & 0x041f));
           if (this.p.outerClassInfo != null && this.p.outerClassInfo.name().equals(outer_class_info.name())) {
@@ -95,14 +100,19 @@ class Attributes {
           }
         }
         if (outer_class_info.name().equals(this.p.classInfo.name())) {
-          p.println("      Class " + this.p.classInfo.name()
+          if(Parser.VERBOSE)
+            p.println("      Class " + this.p.classInfo.name()
               + " has inner class: " + inner_class_name);
-          p.println("Begin processing: " + inner_class_name);
+          if(Parser.VERBOSE)
+            p.println("Begin processing: " + inner_class_name);
           try {
             AST.ClassFile file = new AST.ClassFile(inner_class_name);
             if(file.exists()) {
-              Parser p = new Parser(file.buffer(), file.size(), this.p.name);
+              //Parser p = new Parser(file.buffer(), file.size(), this.p.name);
+              Parser p = new Parser(file.is, this.p.name);
               p.parse(typeDecl, outer_class_info);
+              file.is.close();
+              file.is = null;
             }
             else {
               System.out.println("Error: ClassFile " + inner_class_name
@@ -115,20 +125,24 @@ class Attributes {
             e.printStackTrace();
             System.exit(1);
           }
-          p.println("End processing: " + inner_class_name);
+          if(Parser.VERBOSE)
+            p.println("End processing: " + inner_class_name);
         }
       }
 
     }
-    p.println("    end");
+    if(Parser.VERBOSE)
+      p.println("    end");
   }
 	
 	private void exceptions() {
 		int number_of_exceptions = this.p.u2();
-    p.println("      " + number_of_exceptions + " exceptions:");
+    if(Parser.VERBOSE)
+      p.println("      " + number_of_exceptions + " exceptions:");
 		for (int i = 0; i < number_of_exceptions; i++) {
 			CONSTANT_Class_Info exception = this.p.getCONSTANT_Class_Info(this.p.u2());
-      p.println("        exception " + exception.name());
+      if(Parser.VERBOSE)
+        p.println("        exception " + exception.name());
 			exceptionList.add(exception.access());
 		}
 	}

@@ -2,30 +2,30 @@ aspect ExceptionHandling {
 
   // exception types
   eq Program.getCompilationUnit().typeException() = lookupType("java.lang", "Exception");
-  inh TypeDecl TypeDecl.typeException();
+  inh lazy TypeDecl TypeDecl.typeException();
   eq Program.getCompilationUnit().typeRuntimeException() = lookupType("java.lang", "RuntimeException");
-  inh TypeDecl TypeDecl.typeRuntimeException();
+  inh lazy TypeDecl TypeDecl.typeRuntimeException();
   eq Program.getCompilationUnit().typeError() = lookupType("java.lang", "Error");
-  inh TypeDecl TypeDecl.typeError();
+  inh lazy TypeDecl TypeDecl.typeError();
   eq Program.getCompilationUnit().typeNullPointerException() = lookupType("java.lang", "NullPointerException");
-  inh TypeDecl ThrowStmt.typeNullPointerException();
+  inh lazy TypeDecl ThrowStmt.typeNullPointerException();
   eq Program.getCompilationUnit().typeThrowable() = lookupType("java.lang", "Throwable");
-  inh TypeDecl BodyDecl.typeThrowable();
+  inh lazy TypeDecl BodyDecl.typeThrowable();
 
-  syn boolean TypeDecl.isException() = instanceOf(typeException());
-  syn boolean TypeDecl.isCheckedException() = isException() &&
+  syn lazy boolean TypeDecl.isException() = instanceOf(typeException());
+  syn lazy boolean TypeDecl.isCheckedException() = isException() &&
     (instanceOf(typeRuntimeException()) || instanceOf(typeError()));
-  syn boolean TypeDecl.isUncheckedException() = isException() && !isCheckedException();
+  syn lazy boolean TypeDecl.isUncheckedException() = isException() && !isCheckedException();
 
   inh boolean MethodAccess.handlesException(TypeDecl exceptionType);
   inh boolean ConstructorAccess.handlesException(TypeDecl exceptionType);
-  inh boolean ThrowStmt.handlesException(TypeDecl exceptionType);
-  inh boolean InstanceInitializer.handlesException(TypeDecl exceptionType);
-  inh boolean StaticInitializer.handlesException(TypeDecl exceptionType);
+  inh lazy boolean ThrowStmt.handlesException(TypeDecl exceptionType);
+  inh lazy boolean InstanceInitializer.handlesException(TypeDecl exceptionType);
+  inh lazy boolean StaticInitializer.handlesException(TypeDecl exceptionType);
   inh boolean FieldDeclaration.handlesException(TypeDecl exceptionType);
-  inh boolean TryStmt.handlesException(TypeDecl exceptionType);
-  inh boolean ConstructorDecl.handlesException(TypeDecl exceptionType);
-  inh boolean MethodDecl.handlesException(TypeDecl exceptionType);
+  inh lazy boolean TryStmt.handlesException(TypeDecl exceptionType);
+  inh lazy boolean ConstructorDecl.handlesException(TypeDecl exceptionType);
+  inh lazy boolean MethodDecl.handlesException(TypeDecl exceptionType);
   inh boolean ClassInstanceExpr.handlesException(TypeDecl exceptionType);
   
   public void ASTNode.exceptionHandling() {
@@ -42,7 +42,7 @@ aspect ExceptionHandling {
   syn lazy Collection MethodAccess.exceptionCollection() {
     //System.out.println("Computing exceptionCollection for " + name());
     Set set = new HashSet();
-    MethodCollection.MethodIterator iter = decls().iterator();
+    Iterator iter = decls().iterator();
     if(!iter.hasNext())
       return set;
 
@@ -80,6 +80,11 @@ aspect ExceptionHandling {
     return set;
   }
 
+  public void ClassDecl.exceptionHandling() {
+    constructors();
+    super.exceptionHandling();
+  }
+
   public void ConstructorAccess.exceptionHandling() {
     for(int i = 0; i < decl().getNumException(); i++) {
       TypeDecl exceptionType = decl().getException(i).type();
@@ -106,7 +111,7 @@ aspect ExceptionHandling {
   eq MethodDecl.getBlock().handlesException(TypeDecl exceptionType) =
     throwsException(exceptionType) || handlesException(exceptionType);
   
-  syn boolean MethodDecl.throwsException(TypeDecl exceptionType) {
+  syn lazy boolean MethodDecl.throwsException(TypeDecl exceptionType) {
     for(int i = 0; i < getNumException(); i++)
       if(exceptionType.instanceOf(getException(i).type()))
         return true;
@@ -119,7 +124,7 @@ aspect ExceptionHandling {
   eq ConstructorDecl.getConstructorInvocation().handlesException(TypeDecl exceptionType) = 
     throwsException(exceptionType) || handlesException(exceptionType);
 
-  syn boolean ConstructorDecl.throwsException(TypeDecl exceptionType) {
+  syn lazy boolean ConstructorDecl.throwsException(TypeDecl exceptionType) {
     for(int i = 0; i < getNumException(); i++)
       if(exceptionType.instanceOf(getException(i).type()))
         return true;
@@ -131,12 +136,10 @@ aspect ExceptionHandling {
       return true;
     if(!exceptionType.isUncheckedException())
       return true;
-    for(int i = 0; i < hostType().getNumBodyDecl(); i++) {
-      if(hostType().getBodyDecl(i) instanceof ConstructorDecl) {
-        ConstructorDecl decl = (ConstructorDecl)hostType().getBodyDecl(i);
-        if(!decl.throwsException(exceptionType))
-          return false;
-      }
+    for(Iterator iter = hostType().constructors().iterator(); iter.hasNext(); ) {
+      ConstructorDecl decl = (ConstructorDecl)iter.next();
+      if(!decl.throwsException(exceptionType))
+        return false;
     }
     return true;
   }
@@ -147,12 +150,10 @@ aspect ExceptionHandling {
       return true;
     if(!exceptionType.isUncheckedException())
       return true;
-    for(int i = 0; i < hostType().getNumBodyDecl(); i++) {
-      if(hostType().getBodyDecl(i) instanceof ConstructorDecl) {
-        ConstructorDecl decl = (ConstructorDecl)hostType().getBodyDecl(i);
-        if(!decl.throwsException(exceptionType))
-          return false;
-      }
+    for(Iterator iter = hostType().constructors().iterator(); iter.hasNext(); ) {
+      ConstructorDecl decl = (ConstructorDecl)iter.next();
+      if(!decl.throwsException(exceptionType))
+        return false;
     }
     return true;
   }
@@ -203,7 +204,7 @@ aspect ExceptionHandling {
     return hasFinally() && getFinally().reachedException(type);
   }
 
-  syn boolean TypeDecl.mayCatch(TypeDecl thrownType) =
+  syn lazy boolean TypeDecl.mayCatch(TypeDecl thrownType) =
     thrownType.instanceOf(this) || this.instanceOf(thrownType);
 
   protected boolean MethodAccess.reachedException(TypeDecl catchType) {
@@ -244,7 +245,7 @@ aspect ExceptionHandling {
     return super.reachedException(catchType);
   }
   
-  syn Collection FieldDeclaration.exceptions() {
+  syn lazy Collection FieldDeclaration.exceptions() {
     Set set = new HashSet();
     if(isInstanceVariable() && hasInit()) {
       collectExceptions(set, this);
@@ -257,7 +258,7 @@ aspect ExceptionHandling {
     return set;
   }
 
-  syn Collection InstanceInitializer.exceptions() {
+  syn lazy Collection InstanceInitializer.exceptions() {
     Set set = new HashSet();
     collectExceptions(set, this);
     for(Iterator iter = set.iterator(); iter.hasNext(); ) {

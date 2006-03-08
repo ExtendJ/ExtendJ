@@ -15,7 +15,8 @@ class FieldInfo {
 	public FieldInfo(Parser parser) {
 		p = parser;
 		flags = p.u2();
-    p.print("Flags: " + flags);
+    if(Parser.VERBOSE)
+      p.print("Flags: " + flags);
 		int name_index = p.u2();
 		name = ((CONSTANT_Utf8_Info) p.constantPool[name_index]).string();
 		

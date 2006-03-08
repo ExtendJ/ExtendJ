@@ -1,0 +1,474 @@
+aspect DataStructures {
+  class SimpleMap implements java.util.Map {
+    public static void mapStats() {
+      /*
+      System.out.println("MapStats:");
+      for(int i = 0; i < 15; i++) {
+        System.out.println(" num maps of size " + (1 << i) + ": " + (mapSizes[i]-mapSizes[i+1]));
+      }
+      for(int i = 0; i < 15; i++) {
+        System.out.println(" num lists of size " + (1 << i) + ": " + (listSizes[i]-listSizes[i+1]));
+      }*/
+
+      /*
+      System.out.println("Reuse8: " + reuse8);
+      System.out.println("Reclaim8: " + reclaim8);
+      System.out.println("Reuse32: " + reuse32);
+      System.out.println("Reclaim32: " + reclaim32);
+      */
+    }
+
+    
+    static class SimpleList {
+      Object[] data;
+      public SimpleList() {
+        // initial size is 4 elements
+        setData(new Object[6]);
+      }
+      public void setData(Object[] data) {
+        this.data = data;
+        /*
+        int i = 1;
+        int j = data.length;
+        while(j != 1) {
+          i++;
+          j >>= 1;
+        }
+        listSizes[i]++;
+        */
+      }
+    }
+    private Object[] data; // data to store keys and values
+    private void setData(Object[] data) {
+      this.data = data;
+      /*
+      int i = 1;
+      int j = data.length;
+      while(j != 1) {
+        i++;
+        j >>= 1;
+      }
+      mapSizes[i]++;
+      */
+    }
+
+    /*
+    private static int[] mapSizes = new int[32];
+    private static int[] listSizes = new int[32];
+    */
+    
+    
+    private int size;   // used elements in data
+
+    public SimpleMap() {
+      // intial size is 8 elements
+      setData(createData(8));
+      this.size = 0;
+    }
+
+    static int hash(Object x) {
+      int h = x.hashCode();
+      h += ~(h << 9);
+      h ^=  (h >>> 14);
+      h +=  (h << 4);
+      h ^=  (h >>> 10);
+      return h;
+    }
+
+    static boolean same(Object x, Object y) {
+      return x == y || x.equals(y);
+    }
+
+    // keys are placed at even locations, and data on odd locations
+    // length is a power of two
+    static int indexFor(int h, int length) {
+      return (h & (length-1)) << 1; 
+    }
+
+    private boolean lastContains;
+    private Object lastKey;
+    private Object lastValue;
+  
+    public Object get(Object key) {
+      if(lastKey == key) return lastValue;
+      lastKey = key;
+      int hash = hash(key);
+      int i = indexFor(hash, data.length >> 1);
+      Object o = data[i];
+      if(o == null) {
+        lastContains = false;
+        lastValue = null;
+        return null;
+      }
+      if(o instanceof SimpleList) {
+        SimpleList list = (SimpleList)o;
+        for(int j = 0; j < list.data.length; j+=2) {
+          Object list_key = list.data[j];
+          if(same(key, list_key)) {
+            Object value = list.data[j+1];
+            lastContains = true;
+            lastValue = value;
+            return value;
+          }
+          else if(list_key == null) {
+            break;
+          }
+        }
+        lastContains = false;
+        lastValue = null;
+        return null;
+      }
+      if(same(key, o)) {
+        Object value = data[i+1];
+        lastContains = true;
+        lastValue = value;
+        return value;
+      }
+      else {
+        lastContains = false;
+        lastValue = null;
+        return null;
+      }
+    }
+
+    public boolean containsKey(Object key) {
+      if(lastKey == key) return lastContains;
+      lastKey = key;
+      int hash = hash(key);
+      int i = indexFor(hash, data.length >> 1);
+      Object o = data[i];
+      if(o == null) {
+        lastContains = false;
+        lastValue = null;
+        return false;
+      }
+      if(o instanceof SimpleList) {
+        SimpleList list = (SimpleList)o;
+        for(int j = 0; j < list.data.length; j+=2) {
+          Object list_key = list.data[j];
+          if(same(key, list_key)) {
+            lastContains = true;
+            lastValue = list.data[j+1];
+            return true;
+          }
+          else if(list_key == null) {
+            break;
+          }
+        }
+        lastContains = false;
+        lastValue = null;
+        return false;
+      }
+      if(same(key, o)) {
+        lastContains = true;
+        lastValue = data[i+1];
+        return true;
+      }
+      else {
+        lastContains = false;
+        lastValue = null;
+        return false;
+      }
+    }
+
+    public Object put(Object key, Object value) {
+      lastKey = null; // invalidate cache in case of overwriting
+      // resize if necessary
+      resize();
+      return put(key, value, data);
+    }
+      
+    public Object put(Object key, Object value, Object[] data) {
+      int hash = hash(key);
+      int i = indexFor(hash, data.length >> 1);
+      Object o = data[i];
+      if(o == null) {
+        // add element
+        data[i] = key;
+        data[i+1] = value;
+        size++;
+        return null;
+      }
+      if(o instanceof SimpleList) {
+        // multiple elements have same hash
+        SimpleList list = (SimpleList)o;
+        for(int j = 0; j < list.data.length; j+=2) {
+          Object list_data_key = list.data[j];
+          if(list_data_key == null) {
+            // append to free end of list
+            list.data[j] = key;
+            list.data[j+1] = value;
+            size++;
+            return null;
+          }
+          if(same(key, list_data_key)) {
+            // replace element
+            list.data[j+1] = value;
+            return null;
+          }
+        }
+        // resize list
+        Object[] list2_data = new Object[list.data.length << 1]; // double multiple elements list
+        System.arraycopy(list.data, 0, list2_data, 0, list.data.length);
+        list2_data[list.data.length] = key;
+        list2_data[list.data.length+1] = value;
+        list.setData(list2_data);
+        size++;
+        return null;
+      }
+      if(same(key, o)) {
+        // replace value
+        data[i+1] = value;
+        return null;
+      }
+      else {
+        SimpleList list = new SimpleList();
+        list.data[0] = o;
+        list.data[1] = data[i+1];
+        list.data[2] = key;
+        list.data[3] = value;
+        data[i] = list;
+        data[i+1] = null;
+        size++;
+        return null;
+      }
+    }
+
+    void resize() {
+      if(size < ((data.length >> 1) * 4 / 5)) // 0.80
+        return;
+      int oldCapacity = data.length;
+      int newCapacity = oldCapacity << 2; // quadruple number of elements
+      Object[] oldData = data;
+      Object[] newData = createData(newCapacity);
+      int oldSize = size;
+      transfer(oldData, newData);
+      setData(newData);
+      size = oldSize;
+      reclaimData(oldData);
+    }
+
+    void transfer(Object[] data, Object[] newData) {
+      for(int i = 0; i < data.length; i+=2) {
+        Object key = data[i];
+        if(key != null) {
+          if(key instanceof SimpleList) {
+            SimpleList list = (SimpleList)key;
+            for(int j = 0; j < list.data.length; j+=2) {
+              Object o = list.data[j];
+              if(o != null) {
+                put(o, list.data[j+1], newData);
+              }
+              else {
+                break;
+              }
+            }
+            data[i] = null; // clear to enable reuse
+          }
+          else {
+            put(key, data[i+1], newData);
+            data[i] = null; // clear to enable reuse
+            data[i+1] = null; // clear to enable reuse
+          }
+        }
+      }
+    }
+
+    static void reclaimData(Object[] data) {
+      if(data.length == 8 && posSize8 < (poolSize8.length - 1)) {
+        reclaim8++;
+        poolSize8[posSize8++] = data;
+      }
+      else if(data.length == 32 && posSize32 < (poolSize32.length - 1)) {
+        reclaim32++;
+        poolSize32[posSize32++] = data;
+      }
+    }
+
+    static Object[] createData(int size) {
+      if(size == 8 && posSize8 > 0) {
+        reuse8++;
+        return poolSize8[--posSize8];
+      }
+      else if(size == 32 && posSize32 > 0) {
+        reuse32++;
+        return poolSize32[--posSize32];
+      }
+      return new Object[size];
+    }
+
+    static Object[][] poolSize8 = new Object[200][];
+    static int posSize8 = 0;
+    static int reuse8;
+    static int reclaim8;
+    
+    static Object[][] poolSize32 = new Object[200][];
+    static int posSize32 = 0;
+    static int reuse32;
+    static int reclaim32;
+    
+    public void clear() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public boolean containsValue(Object value) {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public Set entrySet() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public boolean equals(Object o) {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public int hashCode() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public boolean isEmpty() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public Set keySet() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public void putAll(Map t) {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public Object remove(Object key) {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public int size() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+    public Collection values() {
+      throw new UnsupportedOperationException("Not implemented by SimpleMap");
+    }
+  }
+
+
+  // A persistent Set
+  interface SimpleSet {
+    int size();
+    boolean isEmpty();
+    SimpleSet add(Object o);
+    Iterator iterator();
+    boolean contains(Object o);
+    SimpleSet emptySet = new SimpleSet() {
+      public int size() { return 0; }
+      public boolean isEmpty() { return true; }
+      public SimpleSet add(Object o) {
+        if(o instanceof SimpleSet)
+          return (SimpleSet)o;
+        return new SimpleSetImpl().add(o);
+      }
+      public boolean contains(Object o) { return false; }
+      public Iterator iterator() { return Collections.EMPTY_LIST.iterator(); }
+    };
+    class SimpleSetImpl implements SimpleSet {
+      private HashSet internalSet;
+      public SimpleSetImpl() {
+        internalSet = new HashSet(4);
+      }
+      private SimpleSetImpl(SimpleSetImpl set) {
+        this.internalSet = new HashSet(set.internalSet);
+      }
+      public int size() {
+        return internalSet.size();
+      }
+      public boolean isEmpty() {
+        return internalSet.isEmpty();
+      }
+      public SimpleSet add(Object o) {
+        if(internalSet.contains(o)) return this;
+        SimpleSetImpl set = new SimpleSetImpl(this);
+        set.internalSet.add(o);
+        return set;
+      }
+      public Iterator iterator() {
+        return internalSet.iterator();
+      }
+      public boolean contains(Object o) {
+        return internalSet.contains(o);
+      }
+    }
+  }
+
+  // FieldDeclaration is a SimpleSet
+  FieldDeclaration implements SimpleSet;
+  syn int FieldDeclaration.size() = 1;
+  syn boolean FieldDeclaration.isEmpty() = false;
+  public SimpleSet FieldDeclaration.add(Object o) {
+    return new SimpleSetImpl().add(this).add(o);
+  }
+  syn boolean FieldDeclaration.contains(Object o) = this == o;
+  
+  FieldDeclaration implements Iterator;
+  private FieldDeclaration FieldDeclaration.iterElem;
+  public Iterator FieldDeclaration.iterator() { iterElem = this; return this; }
+  public boolean FieldDeclaration.hasNext() { return iterElem != null; }
+  public Object FieldDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
+  public void FieldDeclaration.remove() { throw new UnsupportedOperationException(); }
+
+  // VariableDeclaration is a SimpleSet
+  VariableDeclaration implements SimpleSet;
+  syn int VariableDeclaration.size() = 1;
+  syn boolean VariableDeclaration.isEmpty() = false;
+  public SimpleSet VariableDeclaration.add(Object o) {
+    return new SimpleSetImpl().add(this).add(o);
+  }
+  syn boolean VariableDeclaration.contains(Object o) = this == o;
+  
+  VariableDeclaration implements Iterator;
+  private VariableDeclaration VariableDeclaration.iterElem;
+  public Iterator VariableDeclaration.iterator() { iterElem = this; return this; }
+  public boolean VariableDeclaration.hasNext() { return iterElem != null; }
+  public Object VariableDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
+  public void VariableDeclaration.remove() { throw new UnsupportedOperationException(); }
+  
+  // ParameterDeclaration is a SimpleSet
+  ParameterDeclaration implements SimpleSet;
+  syn int ParameterDeclaration.size() = 1;
+  syn boolean ParameterDeclaration.isEmpty() = false;
+  public SimpleSet ParameterDeclaration.add(Object o) {
+    return new SimpleSetImpl().add(this).add(o);
+  }
+  syn boolean ParameterDeclaration.contains(Object o) = this == o;
+  
+  ParameterDeclaration implements Iterator;
+  private ParameterDeclaration ParameterDeclaration.iterElem;
+  public Iterator ParameterDeclaration.iterator() { iterElem = this; return this; }
+  public boolean ParameterDeclaration.hasNext() { return iterElem != null; }
+  public Object ParameterDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
+  public void ParameterDeclaration.remove() { throw new UnsupportedOperationException(); }
+
+
+  // TypeDecl is a SimpleSet
+  TypeDecl implements SimpleSet;
+  syn int TypeDecl.size() = 1;
+  syn boolean TypeDecl.isEmpty() = false;
+  public SimpleSet TypeDecl.add(Object o) {
+    return new SimpleSetImpl().add(this).add(o);
+  }
+  syn boolean TypeDecl.contains(Object o) = this == o;
+
+  TypeDecl implements Iterator;
+  private TypeDecl TypeDecl.iterElem;
+  public Iterator TypeDecl.iterator() { iterElem = this; return this; }
+  public boolean TypeDecl.hasNext() { return iterElem != null; }
+  public Object TypeDecl.next() { Object o = iterElem; iterElem = null; return o; }
+  public void TypeDecl.remove() { throw new UnsupportedOperationException(); }
+  
+  // MethodDecl is a SimpleSet
+  MethodDecl implements SimpleSet;
+  syn int MethodDecl.size() = 1;
+  syn boolean MethodDecl.isEmpty() = false;
+  public SimpleSet MethodDecl.add(Object o) {
+    return new SimpleSetImpl().add(this).add(o);
+  }
+  syn boolean MethodDecl.contains(Object o) = this == o;
+
+  MethodDecl implements Iterator;
+  private MethodDecl MethodDecl.iterElem;
+  public Iterator MethodDecl.iterator() { iterElem = this; return this; }
+  public boolean MethodDecl.hasNext() { return iterElem != null; }
+  public Object MethodDecl.next() { Object o = iterElem; iterElem = null; return o; }
+  public void MethodDecl.remove() { throw new UnsupportedOperationException(); }
+
+}

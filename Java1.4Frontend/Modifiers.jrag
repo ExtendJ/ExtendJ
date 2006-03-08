@@ -2,108 +2,56 @@ aspect Modifiers {
   void ASTNode.checkModifiers() {
   }
 
-  syn lazy boolean TypeDecl.hasAbstract() {
-    for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl)iter.next();
-      if(decl.isAbstract()) {
-        // 8.4.6.4
-        boolean found = false;
-        MethodCollection list = localLookupMethod(decl);
-        for(MethodCollection.MethodIterator i2 = list.iterator(); i2.hasNext(); ) {
-          MethodDecl m = (MethodDecl)i2.next();
-          if(!m.isAbstract() && (m.isStatic() == decl.isStatic()) ) {
-            found = true;
-          }
-        }
-        if(!found) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  
-  syn lazy Set TypeDecl.abstractMethods() = new HashSet();
-  eq ClassDecl.abstractMethods() {
-    HashSet set = abstractMethodDeclarations();
-    if(set.size() != 0) {
-      return set;
-    }
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.abstractMethodDeclarations().iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        MethodCollection list = localLookupMethod(decl);
-        for(MethodCollection.MethodIterator i2 = list.iterator(); i2.hasNext(); ) {
-          MethodDecl d = (MethodDecl)i2.next();
-          if(d.isAbstract())
-            set.add(d);
-        }
-      }
-    }
-    return set;
-  }
-  
-  // 8.1.1.1
-  eq ClassDecl.hasAbstract() {
-    HashSet set = abstractMethodDeclarations();
-    if(set.size() != 0) {
-      return true;
-    }
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.abstractMethodDeclarations().iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl)iter.next();
-        MethodCollection list = localLookupMethod(decl);
-        if(list.size() != 1) {
-          return true;
-        }
-        MethodDecl target = list.first();
-        if(target.isAbstract()) {
-          return true;
-        }
-      }
-    }
-    return false;
-    
-  }
+  syn lazy boolean TypeDecl.hasAbstract() = true;
 
-  
-  syn lazy HashSet TypeDecl.abstractMethodDeclarations() {
-    return new HashSet();
-  }
-  eq ClassDecl.abstractMethodDeclarations() {
-    HashSet set = new HashSet();
-    if(hasSuperclass())
-      set.addAll(superclass().abstractMethodDeclarations());
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl)getBodyDecl(i);
-        if(!m.isAbstract()) {
-          for(Iterator iter = m.overrides().iterator(); iter.hasNext(); ) {
-            MethodDecl n = (MethodDecl)iter.next();
-            if(set.contains(n))
-              set.remove(n);
-          }
-        }
-        else {
-          set.add(m);
+  syn lazy Collection TypeDecl.unimplementedMethods() = Collections.EMPTY_LIST;
+  eq ClassDecl.unimplementedMethods() {
+    Collection c = new ArrayList();
+    for(Iterator iter = interfacesMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      boolean implemented = false;
+      SimpleSet set = (SimpleSet)localMethodsSignature(m.signature());
+      if(set.size() == 1) {
+        MethodDecl n = (MethodDecl)set.iterator().next();
+        if(!n.isAbstract())
+          implemented = true;
+      }
+      if(!implemented) {
+        set = (SimpleSet)ancestorMethods(m.signature());
+        for(Iterator i2 = set.iterator(); i2.hasNext(); ) {
+          MethodDecl n = (MethodDecl)i2.next();
+          if(!n.isAbstract())
+            implemented = true;
         }
       }
+      if(!implemented) {
+        c.add(m);
+      }
     }
-    return set;
-  }
-  
-  eq InterfaceDecl.abstractMethodDeclarations() {
-    HashSet set = new HashSet();
-    for(Iterator iter = methods().iterator(); iter.hasNext(); ) {
+
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().unimplementedMethods().iterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        SimpleSet set = (SimpleSet)localMethodsSignature(m.signature());
+        if(set.size() == 1) {
+          MethodDecl n = (MethodDecl)set.iterator().next();
+          if(n.isAbstract() || !n.overrides(m))
+            c.add(m);
+        }
+        else
+          c.add(m);
+      }
+    }
+    
+    for(Iterator iter = localMethodsIterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
       if(m.isAbstract())
-        set.add(m);
+        c.add(m);
     }
-    return set;
+    return c;
   }
-  
+
+  eq ClassDecl.hasAbstract() = !unimplementedMethods().isEmpty();
 
   public void TypeDecl.checkModifiers() {
     super.checkModifiers();
@@ -124,13 +72,23 @@ aspect Modifiers {
     // 8.1.1.1
     if(!isAbstract() && hasAbstract()) {
       StringBuffer s = new StringBuffer();
-      s.append("" + name() + " is not declared abstract but contains abstract members: ");
-      for(Iterator iter = abstractMethods().iterator(); iter.hasNext(); ) {
+      s.append("" + name() + " is not declared abstract but contains abstract members: \n");
+      for(Iterator iter = unimplementedMethods().iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        s.append(m.signature() + " in " + m.hostType().typeName() + " ");
+        s.append("  " + m.signature() + " in " + m.hostType().typeName() + "\n");
       }
       error(s.toString());
     }
+  }
+  
+ public void ClassDecl.checkModifiers() {
+    super.checkModifiers();
+    // 8.1.1.2 final Classes
+    TypeDecl typeDecl = hasSuperclass() ? superclass() : null;
+    if(typeDecl != null && typeDecl.isFinal()) {
+      error("class " + fullName() + " may not extend final class " + typeDecl.fullName());
+    }
+
   }
   
   public void InterfaceDecl.checkModifiers() {
@@ -225,13 +183,13 @@ aspect Modifiers {
       error("*** Inner classes may not declare static members, unless they are compile-time constant fields");
   }
   
-  syn boolean TypeDecl.isPublic() = getModifiers().isPublic() || isMemberType() && enclosingType().isInterfaceDecl();
+  syn lazy boolean TypeDecl.isPublic() = getModifiers().isPublic() || isMemberType() && enclosingType().isInterfaceDecl();
   //eq InterfaceDecl.isPublic() = !isProtected() && !isPrivate();
   syn boolean TypeDecl.isPrivate() = getModifiers().isPrivate();
   syn boolean TypeDecl.isProtected() = getModifiers().isProtected();
   syn boolean TypeDecl.isAbstract() = getModifiers().isAbstract();
   eq InterfaceDecl.isAbstract() = true;
-  syn boolean TypeDecl.isStatic() = getModifiers().isStatic() || isMemberType() && enclosingType().isInterfaceDecl();
+  syn lazy boolean TypeDecl.isStatic() = getModifiers().isStatic() || isMemberType() && enclosingType().isInterfaceDecl();
   // 8.5.2
   eq InterfaceDecl.isStatic() = getModifiers().isStatic() || isMemberType();
   syn boolean TypeDecl.isFinal() = getModifiers().isFinal();
