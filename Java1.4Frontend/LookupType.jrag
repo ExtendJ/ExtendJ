@@ -177,9 +177,11 @@ aspect TypeScopePropagation {
   eq CompilationUnit.getImportDecl().lookupType(String name) = lookupType(name);
   
   eq TypeDecl.getBodyDecl().lookupType(String name) {
-    SimpleSet c = localLookupType(name);
-    if(!c.isEmpty())
+    SimpleSet c = memberTypes(name);
+    if(!c.isEmpty()) 
       return c;
+    if(name().equals(name))
+      return SimpleSet.emptySet.add(this);
 
     c = lookupType(name);
     // 8.5.2
@@ -187,7 +189,7 @@ aspect TypeScopePropagation {
       SimpleSet newSet = SimpleSet.emptySet;
       for(Iterator iter = c.iterator(); iter.hasNext(); ) {
         TypeDecl d = (TypeDecl)iter.next();
-        if(!(!d.isStatic() && d.enclosingType() != null && !instanceOf(d.enclosingType()))) {
+        if(d.isStatic() || d.isTopLevelType() || this.instanceOf(d.enclosingType())) {
           newSet = newSet.add(d);
         }
       }
@@ -224,17 +226,13 @@ aspect TypeScopePropagation {
   }
   
   eq ClassInstanceExpr.getTypeDecl().lookupType(String name) {
-    //System.err.println("Begin Delegation lookup for " + name + " from " + getTypeDecl().fullName());
     SimpleSet c = localLookupType(name);
     if(!c.isEmpty())
       return c;
-    //System.err.println("Continue Delegation lookup from " + getTypeDecl().fullName());
     c = lookupType(name);
     if(!c.isEmpty())
       return c;
-    c = unqualifiedScope().lookupType(name);
-    //System.err.println("End Delegation lookup from " + getTypeDecl().fullName() + ", found " + c.size() + " types");
-    return c;
+    return unqualifiedScope().lookupType(name);
   }
 
   public SimpleSet ClassInstanceExpr.keepInnerClasses(SimpleSet c) {
@@ -254,7 +252,16 @@ aspect TypeScopePropagation {
 
   eq AbstractDot.getRight().lookupType(String name) = getLeft().qualifiedLookupType(name);
   syn SimpleSet Expr.qualifiedLookupType(String name) =
-    keepAccessibleTypes(type().remoteLookupType(name));
+    keepAccessibleTypes(type().memberTypes(name));
+
+  eq ClassInstanceExpr.qualifiedLookupType(String name) {
+    SimpleSet c = keepAccessibleTypes(type().memberTypes(name));
+    if(!c.isEmpty())
+      return c;
+    if(type().name().equals(name))
+      return SimpleSet.emptySet.add(type());
+    return SimpleSet.emptySet;
+  }
 
   eq PackageAccess.qualifiedLookupType(String name) {
     SimpleSet c = SimpleSet.emptySet;
@@ -292,59 +299,14 @@ aspect TypeScopePropagation {
     return SimpleSet.emptySet;
   }
 
-  syn lazy SimpleSet TypeDecl.remoteLookupType(String name) = localLookupType(name);
-  eq ClassDecl.remoteLookupType(String name) {
-    // should really include all types (inherited from both superclasses and interfaces) and let the caller remove
-    // not visible types using accesableFrom
-    SimpleSet c = SimpleSet.emptySet;
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i).declaresType(name)) {
-        c = c.add(getBodyDecl(i).type(name));
-      }
-    }
-    if(!c.isEmpty()) return c;
-    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl type = (TypeDecl)outerIter.next();
-      for(Iterator iter = type.types(name).iterator(); iter.hasNext(); ) {
-        TypeDecl decl = (TypeDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessibleFrom(this))
-          c = c.add(decl);
-      }
-    }
-    if(hasSuperclass()) {
-      for(Iterator iter = superclass().types(name).iterator(); iter.hasNext(); ) {
-        TypeDecl decl = (TypeDecl)iter.next();
-        if(!decl.isPrivate() && decl.accessibleFrom(this)) {
-          c = c.add(decl);
-        }
-      }
-    }
-    if(c.isEmpty() && name().equals(name))
-      c = c.add(this);
-    return c;
-  }
-
-  syn lazy SimpleSet TypeDecl.localLookupType(String name) {
-    SimpleSet set = SimpleSet.emptySet;
-    for(Iterator iter = types(name).iterator(); iter.hasNext(); ) {
-      TypeDecl t = (TypeDecl)iter.next();
-      if(t.name().equals(name)) {
-        set = set.add(t);
-      }
-    }
-    if(set.isEmpty() && name().equals(name))
-      set = set.add(this);
-    return set;
-  }
-
-  syn boolean TypeDecl.hasType(String name) = !types(name).isEmpty();
+  syn boolean TypeDecl.hasType(String name) = !memberTypes(name).isEmpty();
   syn boolean BodyDecl.declaresType(String name) = false;
   eq MemberTypeDecl.declaresType(String name) = getTypeDecl().name().equals(name);
   syn TypeDecl BodyDecl.type(String name) = null;
   eq MemberTypeDecl.type(String name) = declaresType(name) ? getTypeDecl() : null;
   
-  syn lazy SimpleSet TypeDecl.types(String name) = SimpleSet.emptySet;
-  eq ClassDecl.types(String name) {
+  syn lazy SimpleSet TypeDecl.memberTypes(String name) = SimpleSet.emptySet;
+  eq ClassDecl.memberTypes(String name) {
     SimpleSet set = SimpleSet.emptySet;
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i).declaresType(name)) {
@@ -354,14 +316,14 @@ aspect TypeScopePropagation {
     if(!set.isEmpty()) return set;
     for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl type = (TypeDecl)outerIter.next();
-      for(Iterator iter = type.types(name).iterator(); iter.hasNext(); ) {
+      for(Iterator iter = type.memberTypes(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
         if(!decl.isPrivate() && decl.accessibleFrom(this))
           set = set.add(decl);
       }
     }
     if(hasSuperclass()) {
-      for(Iterator iter = superclass().types(name).iterator(); iter.hasNext(); ) {
+      for(Iterator iter = superclass().memberTypes(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
         if(!decl.isPrivate() && decl.accessibleFrom(this)) {
           set = set.add(decl);
@@ -371,7 +333,7 @@ aspect TypeScopePropagation {
     return set;
   }
 
-  eq InterfaceDecl.types(String name) {
+  eq InterfaceDecl.memberTypes(String name) {
     SimpleSet set = SimpleSet.emptySet;
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i).declaresType(name)) {
@@ -381,7 +343,7 @@ aspect TypeScopePropagation {
     if(!set.isEmpty()) return set;
     for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.types(name).iterator(); iter.hasNext(); ) {
+      for(Iterator iter = typeDecl.memberTypes(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl)iter.next();
         if(!decl.isPrivate())
           set = set.add(decl);
@@ -389,20 +351,7 @@ aspect TypeScopePropagation {
     }
     return set;
   }
-
-  eq PrimitiveType.localLookupType(String name) {
-    SimpleSet set = super.localLookupType(name);
-    if(set.isEmpty() && hasSuperclass()) {
-      if(name.equals("super")) {
-        set = set.add(superclass());
-      }
-      else 
-        set = superclass().remoteLookupType(name);
-    }
-    return set;
-  }
-
-
+  
   syn lazy SimpleSet CompilationUnit.localLookupType(String name) {
     for(int i = 0; i < getNumTypeDecl(); i++) {
       if(getTypeDecl(i).name().equals(name))
@@ -442,7 +391,7 @@ aspect TypeScopePropagation {
         }
         else if(decl.getAccess().lastAccess().isTypeAccess()) {
           TypeDecl type = decl.getAccess().lastAccess().type();
-          SimpleSet c_temp = type.remoteLookupType(name);
+          SimpleSet c_temp = type.memberTypes(name);
           if(c_temp.size() == 1) {
             result = (TypeDecl)c_temp.iterator().next();
             if(result != null && result.accessibleFromPackage(packageName()) &&
