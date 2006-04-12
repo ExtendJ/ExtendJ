@@ -9,33 +9,25 @@ aspect TypeCheck {
   eq ArrayAccess.isVariable() = true;
   eq ParExpr.isVariable() = getExpr().isVariable();
  
+  // 5.2
   public void VariableDeclaration.typeCheck() {
     if(hasInit()) {
-      TypeDecl right = getInit().type();
-      TypeDecl left = type();
-      if(!right.assignConversionTo(left, getInit())) {
-        StringBuffer s = new StringBuffer();
-        toString(s);
-        error("    " + s + "\n" + 
-          "The type of the right sub-expression, \"" + 
-          right.typeName() + "\", is not assignable to the variable" +
-          ", of type \"" + left.typeName() + "\".\n");
-      }
+      TypeDecl source = getInit().type();
+      TypeDecl dest = type();
+      if(!source.assignConversionTo(dest, getInit()))
+        error("can not assign " + name() + " of type " + dest.typeName() +
+              " a value of type " + source.typeName());
     }
   }
 
+  // 5.2
   public void FieldDeclaration.typeCheck() {
     if(hasInit()) {
       TypeDecl source = getInit().type();
       TypeDecl dest = type();
-      if(source.assignConversionTo(dest, getInit()))
-        return;
-      StringBuffer s = new StringBuffer();
-      toString(s);
-      error("    " + s + "\n" +
-        "The type of the right sub-expression, \"" + 
-        source.typeName() + "\", is not assignable to the field" +
-        ", of type \"" + dest.typeName() + "\".\n");
+      if(!source.assignConversionTo(dest, getInit()))
+        error("can not assign " + name() + " of type " + dest.typeName() +
+              " a value of type " + source.typeName());
     }
   }
 
@@ -43,146 +35,67 @@ aspect TypeCheck {
   public void AssignSimpleExpr.typeCheck() {
     if(!getDest().isVariable())
       error("left hand side is not a variable");
-    TypeDecl source = sourceType();
-    TypeDecl dest = getDest().type();
-    if(!source.isIllegal() && source.assignConversionTo(dest, getSource()))
-      return;
-    StringBuffer s = new StringBuffer();
-    toString(s);
-    error("    " + s + "\n" +
-        "The type of the right sub-expression, \"" + 
-        getSource().type().typeName() + "\", is not assignable to the variable" +
-        ", of type \"" + getDest().type().typeName() + "\".\n");
+    else if(!sourceType().assignConversionTo(getDest().type(), getSource()) && !sourceType().isUnknown())
+      error("can not assign " + getDest().varDecl().name() + " of type " + getDest().type().typeName() +
+            " a value of type " + sourceType().typeName());
   }
   
   public void AssignExpr.typeCheck() {
     if(!getDest().isVariable())
       error("left hand side is not a variable");
-    TypeDecl source = sourceType();
-    TypeDecl dest = getDest().type();
-    if(getSource().type().isPrimitive() && getDest().type().isPrimitive())
-      return;
-//    if(source != illegalType() && getsource.narrowingConversionTo(dest))
-//      return;
-       // TODO: getSource().representableIn(dest);
-    StringBuffer s = new StringBuffer();
-    toString(s);
-    error("    " + s + "\n" +
-        "The type of the right sub-expression, \"" + 
-        getSource().type().typeName() + "\", is not assignable to the variable" +
-        ", of type \"" + getDest().type().typeName() + "\".\n");
+    else {
+      TypeDecl source = sourceType();
+      TypeDecl dest = getDest().type();
+      if(getSource().type().isPrimitive() && getDest().type().isPrimitive())
+        return;
+      error("can not assign " + getDest().varDecl().name() + " of type " + getDest().type().typeName() +
+            " a value of type " + sourceType().typeName());
+    }
   }
 
-  public void AssignMulExpr.typeCheck() {
-    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
-      error("Operator * does not operate on boolean types");
-    }
+  public void AssignMultiplicativeExpr.typeCheck() {
+    if(sourceType().isBoolean() || getDest().type().isBoolean())
+      error("Multiplicative operators do not operate on boolean types");
     super.typeCheck();
   }
-  public void AssignDivExpr.typeCheck() {
-    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
-      error("Operator / does not operate on boolean types");
-    }
-    super.typeCheck();
-  }
-  public void AssignModExpr.typeCheck() {
-    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
-      error("Operator % does not operate on boolean types");
-    }
-    super.typeCheck();
-  }
+  
   public void AssignPlusExpr.typeCheck() {
     if(!getDest().isVariable())
       error("left hand side is not a variable");
-    if(getDest().type().isString() && !(getSource().type().isVoid()))
+    else if(getDest().type().isString() && !(getSource().type().isVoid()))
       return;
-    if(getSource().type().isBoolean() || getDest().type().isBoolean()) {
+    else if(getSource().type().isBoolean() || getDest().type().isBoolean())
       error("Operator + does not operate on boolean types");
-    }
-    if(getSource().type().isPrimitive() && getDest().type().isPrimitive())
+    else if(getSource().type().isPrimitive() && getDest().type().isPrimitive())
       return;
-    TypeDecl source = sourceType();
-    TypeDecl dest = getDest().type();
-    StringBuffer s = new StringBuffer();
-    toString(s);
-    error("    " + s + "\n" +
-        "The type of the right sub-expression, \"" + 
-        getSource().type().typeName() + "\", is not assignable to the variable" +
-        ", of type \"" + getDest().type().typeName() + "\".\n");
+    else
+      error("can not assign " + getDest().varDecl().name() + " of type " + getDest().type().typeName() +
+            " a value of type " + sourceType().typeName());
   }
   public void AssignMinusExpr.typeCheck() {
-    if(sourceType().isBoolean() || getDest().type().isBoolean()) {
+    if(sourceType().isBoolean() || getDest().type().isBoolean())
       error("Operator - does not operate on boolean types");
-    }
     super.typeCheck();
   }
-  public void AssignLShiftExpr.typeCheck() {
-    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType()) {
-      error("Operator << does only operate on integral types");
-    }
+  
+  public void AssignShiftExpr.typeCheck() {
+    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType())
+      error("Shift operators only operate on integral types");
     super.typeCheck();
   }
-  public void AssignRShiftExpr.typeCheck() {
-    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType()) {
-      error("Operator >> does only operate on integral types");
-    }
-    super.typeCheck();
-  }
-  public void AssignURShiftExpr.typeCheck() {
-    if(!sourceType().isIntegralType() || !getDest().type().isIntegralType()) {
-      error("Operator >>> does only operate on integral types");
-    }
-    super.typeCheck();
+  
+  public void AssignBitwiseExpr.typeCheck() {
+    TypeDecl source = sourceType();
+    TypeDecl dest = getDest().type();
+    if(source.isIntegralType() && dest.isIntegralType())
+      super.typeCheck();
+    else if(source.isBoolean() && dest.isBoolean())
+      super.typeCheck();
+    else
+      error("Operator only operates on integral and boolean types");
   }
 
-  public void AssignAndExpr.typeCheck() {
-    TypeDecl source = sourceType();
-    TypeDecl dest = getDest().type();
-    if(source.isIntegralType() && dest.isIntegralType()) {
-      super.typeCheck();
-    }
-    else if(source.isBoolean() && dest.isBoolean()) {
-      super.typeCheck();
-    }
-    else {
-      error("Operator & only operates on integral and boolean types");
-    }
-  }
-  public void AssignOrExpr.typeCheck() {
-    TypeDecl source = sourceType();
-    TypeDecl dest = getDest().type();
-    if(source.isIntegralType() && dest.isIntegralType()) {
-      super.typeCheck();
-    }
-    else if(source.isBoolean() && dest.isBoolean()) {
-      super.typeCheck();
-    }
-    else {
-      error("Operator | only operates on integral and boolean types");
-      error("    not " + source.typeName() + " and " + dest.typeName());
-    }
-  }
-  public void AssignXorExpr.typeCheck() {
-    TypeDecl source = sourceType();
-    TypeDecl dest = getDest().type();
-    if(source.isIntegralType() && dest.isIntegralType()) {
-      super.typeCheck();
-    }
-    else if(source.isBoolean() && dest.isBoolean()) {
-      super.typeCheck();
-    }
-    else {
-      error("Operator ^ only operates on integral and boolean types");
-    }
-  }
-
-  syn TypeDecl AssignExpr.sourceType() {
-    TypeDecl left = getDest().type();
-    TypeDecl right = getSource().type();
-    if(!right.isPrimitive())
-      return illegalType();
-    return right;
-  }
+  syn TypeDecl AssignExpr.sourceType() = getSource().type().isPrimitive() ? getSource().type() : unknownType();
   
   eq AssignPlusExpr.sourceType() {
     TypeDecl left = getDest().type();
@@ -190,7 +103,7 @@ aspect TypeCheck {
     if(!left.isString() && !right.isString())
       return super.sourceType();
     if(left.isVoid() || right.isVoid())
-      return illegalType();
+      return unknownType();
     return left.isString() ? left : right;
   }
   
@@ -203,7 +116,7 @@ aspect TypeCheck {
     for(int i = 0; i < decl().getNumParameter(); i++) {
       TypeDecl exprType = getArg(i).type();
       TypeDecl parmType = decl().getParameter(i).type();
-      if(!exprType.methodInvocationConversionTo(parmType) && !exprType.isUnknown() && !exprType.isIllegal() && !parmType.isUnknown() && !parmType.isIllegal()) {
+      if(!exprType.methodInvocationConversionTo(parmType) && !exprType.isUnknown() && !parmType.isUnknown()) {
         error("*The type " + exprType.typeName() + " of expr " +
             getArg(i) + " is not compatible with the method parameter " +
             decl().getParameter(i));
@@ -211,17 +124,17 @@ aspect TypeCheck {
     }
   }
           
-
+  // 15.13
   public void ArrayAccess.typeCheck() {
-    if(isQualified() && !(qualifier().type().dimension() > 0) && !qualifier().type().isUnknown() && !qualifier().type().isIllegal())
+    if(isQualified() && !qualifier().type().isArrayDecl() && !qualifier().type().isUnknown())
       error("the type " + qualifier().type().name() + " of the indexed element is not an array");
-    if(!getExpr().type().unaryNumericPromotion().isInt())
+    if(!getExpr().type().unaryNumericPromotion().isInt() || !getExpr().type().isIntegralType())
       error("array index must be int after unary numeric promotion which " + getExpr().type().typeName() + " is not");
   }
 
   public void ArrayInit.typeCheck() {
     TypeDecl initializerType = declType().componentType();
-    if(initializerType.isIllegal())
+    if(initializerType.isUnknown())
       error("the dimension of the initializer is larger than the expected dimension");
     for(int i = 0; i < getNumInit(); i++) {
       Expr e = getInit(i);
@@ -229,149 +142,87 @@ aspect TypeCheck {
         error("the type " + e.type().name() + " of the initializer is not compatible with " + initializerType.name()); 
     }
   }
-  
-  public void Binary.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    if(left.isNumericType() || right.isNumericType()) {
-      if(left.binaryNumericPromotion(right).isIllegal() && !left.isUnknown() && !right.isUnknown())
-        error(this + ", Left hand side " + left.typeName() + " is not compatible with right hand side " + right.typeName());
-    }
-    else if(!left.instanceOf(right) && !right.instanceOf(left) && !left.isUnknown() && !right.isUnknown()) {
-      StringBuffer leftString = new StringBuffer();
-      getLeftOperand().toString(leftString);
-      StringBuffer rightString = new StringBuffer();
-      getRightOperand().toString(rightString);
-      StringBuffer thisString = new StringBuffer();
-      toString(thisString);
-      error("    " + thisString + "\n" + 
-          "The type of the left hand side, \"" + 
-          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.typeName() + "\".\n");
-    }
+
+  // 15.17
+  public void MultiplicativeExpr.typeCheck() {
+    if(!getLeftOperand().type().isNumericType())
+      error(getLeftOperand().type().typeName() + " is not numeric");
+    if(!getRightOperand().type().isNumericType())
+      error(getRightOperand().type().typeName() + " is not numeric");
+  }
+
+  // 15.18
+  public void AdditiveExpr.typeCheck() {
+    if(!getLeftOperand().type().isNumericType())
+      error(getLeftOperand().type().typeName() + " is not numeric");
+    if(!getRightOperand().type().isNumericType())
+      error(getRightOperand().type().typeName() + " is not numeric");
   }
   
-  public void ArithmeticExpr.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    TypeDecl type = left.binaryNumericPromotion(right);
-    if(!left.isNumericType() && !left.isIllegal() && !left.isUnknown()) {
-      error("The type " + left.typeName() + " of the left hand side is not numeric");
-    }
-    if(!right.isNumericType() && !right.isIllegal() && !right.isUnknown()) {
-      error("The type " + right.typeName() + " of the right hand side is not numeric");
-    }
-    if(!type.isNumericType() && !left.isUnknown() && !right.isUnknown()) {
-      StringBuffer leftString = new StringBuffer();
-      getLeftOperand().toString(leftString);
-      StringBuffer rightString = new StringBuffer();
-      getRightOperand().toString(rightString);
-      StringBuffer thisString = new StringBuffer();
-      toString(thisString);
-      error("    " + thisString + "\n" + 
-          "The type of the left hand side, \"" + 
-          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.typeName() + "\".\n");
-    }
-  }
-
-  public void RelationalExpr.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    if(left.isNumericType() && !right.isNumericType()) {
-      error("The type \"" + right.typeName() + "\" of the right hand side is not numeric");
-    }
-    else if(!left.isNumericType() && right.isNumericType()) {
-      error("The type \"" + left.typeName() + "\" of the left hand side is not numeric");
-    }
-    else if(!left.isNumericType() && !right.isNumericType()) {
-      error("Neither the type \"" + left.typeName() + "\" of the left hand side, nor the type \"" + 
-            right.typeName() + "\" of the right hand side is numeric");
-    }
-  }
-
-  public void LogicalExpr.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    if(left.isBoolean() && !right.isBoolean()) {
-      error("The type \"" + right.typeName() + "\" of the right hand side is not boolean");
-    }
-    else if(!left.isBoolean() && right.isBoolean()) {
-      error("The type \"" + left.typeName() + "\" of the left hand side is not boolean");
-    }
-    else if(!left.isBoolean() && !right.isBoolean()) {
-      error("Neither the type \"" + left.typeName() + "\" of the left hand side, nor the type \"" + 
-            right.typeName() + "\" of the right hand side is boolean");
-    }
-  }
-
-  public void EQExpr.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    if(left.isNumericType() && right.isNumericType()) {
-      return;
-    }
-    else if(left.isBoolean() && right.isBoolean()) {
-      return;
-    }
-    else if((left.isReferenceType() || left.isNull()) && (right.isReferenceType() || right.isNull())) {
-      if(left.castingConversionTo(right) || right.castingConversionTo(left))
-        return;
-    }
-      StringBuffer leftString = new StringBuffer();
-      getLeftOperand().toString(leftString);
-      StringBuffer rightString = new StringBuffer();
-      getRightOperand().toString(rightString);
-      StringBuffer thisString = new StringBuffer();
-      toString(thisString);
-      error("    " + thisString + "\n" + 
-          "The type of the left hand side, \"" + 
-          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.typeName() + "\".\n");
-  }
-
-  public void NEExpr.typeCheck() {
-    TypeDecl left = getLeftOperand().type();
-    TypeDecl right = getRightOperand().type();
-    if(left.isNumericType() && right.isNumericType()) {
-      return;
-    }
-    else if(left.isBoolean() && right.isBoolean()) {
-      return;
-    }
-    else if((left.isReferenceType() || left.isNull()) && (right.isReferenceType() || right.isNull())) {
-      if(left.castingConversionTo(right) || right.castingConversionTo(left))
-        return;
-    }
-      StringBuffer leftString = new StringBuffer();
-      getLeftOperand().toString(leftString);
-      StringBuffer rightString = new StringBuffer();
-      getRightOperand().toString(rightString);
-      StringBuffer thisString = new StringBuffer();
-      toString(thisString);
-      error("    " + thisString + "\n" + 
-          "The type of the left hand side, \"" + 
-          left.typeName() + "\", is not compatible with the type of the right hand side,\"" +
-          right.typeName() + "\".\n");
-  }
-
-
-
-  // String add implicit cast conversion
+  // 15.18
   public void AddExpr.typeCheck() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
-    if(!left.isString() && !right.isString()) {
+    if(!left.isString() && !right.isString())
       super.typeCheck();
-    }
-    else if(left.isVoid()) {
+    else if(left.isVoid())
       error("The type void of the left hand side is not numeric");
-    }
-    else if(right.isVoid()) {
+    else if(right.isVoid())
       error("The type void of the right hand side is not numeric");
-    }
   }     
 
+  // 15.19
+  public void ShiftExpr.typeCheck() {
+    if(!getLeftOperand().type().isIntegralType())
+      error(getLeftOperand().type().typeName() + " is not integral");
+    if(!getRightOperand().type().isIntegralType())
+      error(getRightOperand().type().typeName() + " is not integral");
+  }
+  
+  // 15.22
+  public void BitwiseExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(left.isIntegralType() && right.isIntegralType())
+      return;
+    else if(left.isBoolean() && right.isBoolean())
+      return;
+    else
+      error(left.typeName() + " is not compatible with " + right.typeName());
+  }
+
+  // 15.20
+  public void RelationalExpr.typeCheck() {
+    if(!getLeftOperand().type().isNumericType())
+      error(getLeftOperand().type().typeName() + " is not numeric");
+    if(!getRightOperand().type().isNumericType())
+      error(getRightOperand().type().typeName() + " is not numeric");
+  }
+
+  // 15.23, 15.24
+  public void LogicalExpr.typeCheck() {
+    if(!getLeftOperand().type().isBoolean())
+      error(getLeftOperand().type().typeName() + " is not boolean");
+    if(!getRightOperand().type().isBoolean())
+      error(getRightOperand().type().typeName() + " is not boolean");
+  }
+
+  // 15.21
+  public void EqualityExpr.typeCheck() {
+    TypeDecl left = getLeftOperand().type();
+    TypeDecl right = getRightOperand().type();
+    if(left.isNumericType() && right.isNumericType())
+      return;
+    else if(left.isBoolean() && right.isBoolean())
+      return;
+    else if((left.isReferenceType() || left.isNull()) && (right.isReferenceType() || right.isNull())) {
+      if(left.castingConversionTo(right) || right.castingConversionTo(left))
+        return;
+    }
+    error(left.typeName() + " can not be compared to " + right.typeName());
+  }
+
+  // 15.20.2
   public void InstanceOfExpr.typeCheck() {
     TypeDecl relationalExpr = getExpr().type();
     TypeDecl referenceType = getTypeAccess().type();
@@ -385,58 +236,63 @@ aspect TypeCheck {
     if(getExpr().isTypeAccess())
       error("The relational expression " + getExpr() + " must not be a type name");
   }
-
+  
+  // 15.16
   public void CastExpr.typeCheck() {
     TypeDecl expr = getExpr().type();
     TypeDecl type = getTypeAccess().type();
-    if(!expr.castingConversionTo(type)) {
-      StringBuffer s = new StringBuffer();
-      toString(s);
-      error("    " + s + "\n" +
-          "An expression of type \"" + expr.typeName() + 
-          "\" cannot be cast into type \"" + type.typeName() + "\".\n");
-    }
-    if(!getTypeAccess().isTypeAccess()) {
+    if(!expr.castingConversionTo(type))
+      error(expr.typeName() + " can not be cast into " + type.typeName());
+    if(!getTypeAccess().isTypeAccess())
       error("" + getTypeAccess() + " is not a type access in cast expression");
-    }
   }
 
   public void ParExpr.typeCheck() {
     if(getExpr().isTypeAccess())
       error("" + getExpr() + " is a type and may not be used in parenthesized expression");
   }
-
+  
+  // 15.15.3
   public void PlusExpr.typeCheck() {
     if(!getOperand().type().isNumericType())
       error("unary plus only operates on numeric types");
   }
+  
+  // 15.15.4
   public void MinusExpr.typeCheck() {
     if(!getOperand().type().isNumericType())
       error("unary minus only operates on numeric types");
   }
 
+  // 15.15.5
   public void BitNotExpr.typeCheck() {
     if(!getOperand().type().isIntegralType())
       error("unary ~ only operates on integral types");
   }
 
+  // 15.15.6
   public void LogNotExpr.typeCheck() {
     if(!getOperand().type().isBoolean())
       error("unary ! only operates on boolean types");
   }
 
+  // 15.14
   public void PostfixExpr.typeCheck() {
     if(!getOperand().isVariable())
       error("postfix expressions only work on variables");
     if(!getOperand().type().isNumericType())
       error("postfix expressions only operates on numeric types");
   }
+
+  // 15.15.1
   public void PreIncExpr.typeCheck() {
     if(!getOperand().isVariable())
       error("prefix increment expression only work on variables");
     if(!getOperand().type().isNumericType())
       error("unary increment only operates on numeric types");
   }
+  
+  // 15.15.2
   public void PreDecExpr.typeCheck() {
     if(!getOperand().isVariable())
       error("prefix decrement expression only work on variables");
@@ -554,17 +410,15 @@ aspect TypeCheck {
     return this;
   }
   eq AbstractDot.getRight().enclosingInstance() = getLeft().type();
-
-  inh TypeDecl ConstructorDecl.illegalType();
-  eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = illegalType();
+  eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = unknownType();
 
   syn boolean ClassInstanceExpr.noEnclosingInstance() = isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
   
   public void ClassInstanceExpr.typeCheck() {
-    if(isQualified() && qualifier().isTypeAccess())
+    if(isQualified() && qualifier().isTypeAccess() && !qualifier().type().isUnknown())
       error("*** The expression in a qualified class instance expr must not be a type name");
     // 15.9
-    if(isQualified() && !type().isInnerClass() && !((ClassDecl)type()).superclass().isInnerClass()) {
+    if(isQualified() && !type().isInnerClass() && !((ClassDecl)type()).superclass().isInnerClass() && !type().isUnknown()) {
       error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
     }
     if(!type().isClassDecl()) {
@@ -590,7 +444,7 @@ aspect TypeCheck {
           enclosing = null;
         }
         else if(noEnclosingInstance()) {
-          enclosing = illegalType();
+          enclosing = unknownType();
         }
         else {
           enclosing = O;
@@ -600,13 +454,13 @@ aspect TypeCheck {
         if(!isQualified()) {
           if(noEnclosingInstance()) {
             System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.typeName() + " is in a static context when instantiated in " + this);
-            enclosing = illegalType();
+            enclosing = unknownType();
           }
           else {
             TypeDecl nest = hostType();
             while(nest != null && !nest.instanceOf(C.enclosingType()))
               nest = nest.enclosingType();
-            enclosing = nest == null ? illegalType() : nest;
+            enclosing = nest == null ? unknownType() : nest;
           }
         }
         else {
@@ -664,10 +518,11 @@ aspect TypeCheck {
     }
   }
 
+  // 15.25
   public void ConditionalExpr.typeCheck() {
     if(!getCondition().type().isBoolean())
       error("*** First expression must be a boolean in conditional operator");
-    if(type().isIllegal()) {
+    if(type().isUnknown() && !getTrueExpr().type().isUnknown() && !getFalseExpr().type().isUnknown()) {
       error("*** Operands in conditional operator does not match"); 
     }
   }

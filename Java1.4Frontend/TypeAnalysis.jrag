@@ -85,7 +85,7 @@ aspect TypeConversion {
     else return super.castingConversionTo(type);
   }
   
-  inh MethodDecl InterfaceDecl.illegalMethod();
+  inh MethodDecl InterfaceDecl.unknownMethod();
 
   eq InterfaceDecl.castingConversionTo(TypeDecl type) {
     if(type.isArrayDecl()) {
@@ -96,7 +96,6 @@ aspect TypeConversion {
       return !type.isFinal() || type.instanceOf(this); // Check this!
     }
     else if(type.isInterfaceDecl()) {
-      MethodDecl illegalMethod = illegalMethod();
       for(Iterator i1 = methodsIterator(); i1.hasNext(); ) {
         MethodDecl m = (MethodDecl)i1.next();
         for(Iterator iter = type.methodsSignature(m.signature()).iterator(); iter.hasNext(); ) {
@@ -140,7 +139,7 @@ aspect TypeConversion {
 }
 
 aspect NumericPromotion {
-  syn TypeDecl TypeDecl.unaryNumericPromotion() = illegalType();
+  syn TypeDecl TypeDecl.unaryNumericPromotion() = unknownType();
   // 5.6.1 Unary Numeric Promotion
   syn lazy TypeDecl NumericType.unaryNumericPromotion() = this;
   eq ByteType.unaryNumericPromotion() = (NumericType)typeInt();
@@ -148,10 +147,10 @@ aspect NumericPromotion {
   eq CharType.unaryNumericPromotion() = (NumericType)typeInt();
   
   // 5.6.2 Binary Numeric Promotion
-  syn TypeDecl TypeDecl.binaryNumericPromotion(TypeDecl type) = illegalType();
+  syn TypeDecl TypeDecl.binaryNumericPromotion(TypeDecl type) = unknownType();
   syn lazy TypeDecl NumericType.binaryNumericPromotion(TypeDecl type) {
     if(!type.isNumericType())
-      return illegalType();
+      return unknownType();
      return unaryNumericPromotion().instanceOf(type) ? type : unaryNumericPromotion();
   }
 
@@ -161,20 +160,24 @@ aspect TypeAnalysis {
   // 4.1 The Kinds of Types and Values
   syn boolean TypeDecl.isReferenceType() = false;
   eq ReferenceType.isReferenceType() = true;
-  eq IllegalType.isReferenceType() = true;
   eq UnknownType.isReferenceType() = true;
   syn boolean TypeDecl.isPrimitiveType() = false;
   eq PrimitiveType.isPrimitiveType() = true;
-  eq IllegalType.isPrimitiveType() = true;
   eq UnknownType.isPrimitiveType() = true;
   
   // 4.2 Primitive Types and Values
   syn boolean TypeDecl.isNumericType() = false;
   eq NumericType.isNumericType() = true;
+  eq UnknownType.isNumericType() = true;
+  
   syn boolean TypeDecl.isIntegralType() = false;
   eq IntegralType.isIntegralType() = true;
+  eq UnknownType.isIntegralType() = true;
+
   syn boolean TypeDecl.isBoolean() = false;
   eq BooleanType.isBoolean() = true;
+  eq UnknownType.isBoolean() = true;
+
   syn boolean TypeDecl.isByte() = false;
   eq ByteType.isByte() = true;
   syn boolean TypeDecl.isChar() = false;
@@ -183,6 +186,8 @@ aspect TypeAnalysis {
   eq ShortType.isShort() = true;
   syn boolean TypeDecl.isInt() = false;
   eq IntType.isInt() = true;
+  eq UnknownType.isInt() = true;
+
   syn boolean TypeDecl.isFloat() = false;
   eq FloatType.isFloat() = true;
   syn boolean TypeDecl.isLong() = false;
@@ -218,41 +223,27 @@ aspect TypeAnalysis {
   syn lazy boolean TypeDecl.isObject() = false;
   eq ClassDecl.isObject() = name().equals("Object") && packageName().equals("java.lang");
 
-  syn boolean TypeDecl.isIllegal() = false;
-  eq IllegalType.isIllegal() = true;
-
   syn boolean TypeDecl.isUnknown() = false;
   eq UnknownType.isUnknown() = true;
 
-  eq Program.getCompilationUnit().unknownType() = lookupType("primitive", "Unknown");
-  syn lazy TypeDecl Program.illegalType() = lookupType("primitive", "Illegal");
+  syn lazy TypeDecl Program.unknownType() = lookupType("primitive", "Unknown");
+  eq Program.getCompilationUnit().unknownType() = unknownType();
+  inh TypeDecl Expr.unknownType();
   
-  eq Program.getCompilationUnit().illegalType() = illegalType();
-  inh TypeDecl Expr.illegalType();
-  eq Program.getCompilationUnit().unknownField() = lookupType("primitive", "Unknown").findSingleVariable("unknown");
+  eq Program.getCompilationUnit().unknownField() = unknownType().findSingleVariable("unknown");
   public FieldDeclaration TypeDecl.findSingleVariable(String name) {
     return (FieldDeclaration)fields(name).iterator().next();
   }
-  eq Program.getCompilationUnit().illegalMethod() {
-    TypeDecl unknownType = lookupType("primitive", "Illegal");
-    for(Iterator iter = unknownType.memberMethods("illegal").iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl)iter.next();
-      return m;
-    }
-    throw new Error("Could not find method unknown in type Unknown");
-  }
   eq Program.getCompilationUnit().unknownMethod() {
-    TypeDecl unknownType = lookupType("primitive", "Unknown");
-    for(Iterator iter = unknownType.memberMethods("unknown").iterator(); iter.hasNext(); ) {
+    for(Iterator iter = unknownType().memberMethods("unknown").iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
       return m;
     }
     throw new Error("Could not find method unknown in type Unknown");
   }
-  eq Program.getCompilationUnit().illegalConstructor() = illegalConstructor(); 
-  syn lazy ConstructorDecl Program.illegalConstructor() {
-    TypeDecl unknownType = lookupType("primitive", "Unknown");
-    return (ConstructorDecl)unknownType.constructors().iterator().next();
+  eq Program.getCompilationUnit().unknownConstructor() = unknownConstructor(); 
+  syn lazy ConstructorDecl Program.unknownConstructor() {
+    return (ConstructorDecl)unknownType().constructors().iterator().next();
   }
 
   eq AbstractDot.type() = lastAccess().type();
@@ -287,8 +278,8 @@ aspect TypeAnalysis {
 
   eq Access.type() = unknownType();
   eq TypeAccess.type() = decl();
-  eq ArrayAccess.type() = isQualified() ? qualifier().type().componentType() : illegalType();
-  inh TypeDecl ArrayAccess.illegalType();
+  eq ArrayAccess.type() = isQualified() ? qualifier().type().componentType() : unknownType();
+  inh TypeDecl ArrayAccess.unknownType();
 
   eq VarAccess.type() = decl().type();
   eq MethodAccess.type() = decl().type();
@@ -319,27 +310,17 @@ aspect TypeAnalysis {
   }
 
   eq Unary.type() = getOperand().type();
-  eq PlusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();
-  eq MinusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();
-  eq BitNotExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : illegalType();
+  eq PlusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : unknownType();
+  eq MinusExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : unknownType();
+  eq BitNotExpr.type() = getOperand().type().isNumericType() ? ((NumericType)getOperand().type()).unaryNumericPromotion() : unknownType();
   
   eq CastExpr.type() = getTypeAccess().type();
 
-  eq Binary.type() {
-    if(getLeftOperand().type().isNumericType() && getRightOperand().type().isNumericType()) {
-      NumericType n1 = (NumericType)getLeftOperand().type();
-      NumericType n2 = (NumericType)getRightOperand().type();
-      return n1.binaryNumericPromotion(n2);
-    }
-    if(getLeftOperand().type() ==  getRightOperand().type())
-      return getLeftOperand().type();
-    return illegalType();
-  }
-
-  eq LShiftExpr.type() = getLeftOperand().type().isNumericType() ? ((NumericType)getLeftOperand().type()).unaryNumericPromotion() : illegalType();
-  eq RShiftExpr.type() = getLeftOperand().type().isNumericType() ? ((NumericType)getLeftOperand().type()).unaryNumericPromotion() : illegalType();
-  eq URShiftExpr.type() = getLeftOperand().type().isNumericType() ? ((NumericType)getLeftOperand().type()).unaryNumericPromotion() : illegalType();
-
+  // 15.17
+  eq MultiplicativeExpr.type() = getLeftOperand().type().binaryNumericPromotion(getRightOperand().type());
+  // 15.18
+  eq AdditiveExpr.type() = getLeftOperand().type().binaryNumericPromotion(getRightOperand().type());
+  // 15.18
   eq AddExpr.type() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
@@ -347,17 +328,36 @@ aspect TypeAnalysis {
       return super.type();
     else {
       if(left.isVoid() || right.isVoid())
-        return illegalType();
+        return unknownType();
       // pick the string type
       return left.isString() ? left : right;
     }
   }
 
+  // 15.19
+  eq ShiftExpr.type() = getLeftOperand().type().unaryNumericPromotion();
+
+  // 15.20, 15.21
   eq RelationalExpr.type() = typeBoolean();
+
+  // 15.23, 15.24
   eq LogicalExpr.type() = typeBoolean();
+
+  // 15.22
+  eq BitwiseExpr.type() {
+    if(getLeftOperand().type().isIntegralType() && getRightOperand().type().isIntegralType())
+      // 15.22.1
+      return getLeftOperand().type().binaryNumericPromotion(getRightOperand().type());
+    else if(getLeftOperand().type().isBoolean() && getRightOperand().type().isBoolean())
+      // 15.22.2
+      return getLeftOperand().type();
+    return unknownType();
+  }
   
+  // 15.20.2
   eq InstanceOfExpr.type() = typeBoolean();
 
+  // 15.25
   eq ConditionalExpr.type() {
     TypeDecl trueType = getTrueExpr().type();
     TypeDecl falseType = getFalseExpr().type();
@@ -373,7 +373,7 @@ aspect TypeAnalysis {
       if((falseType.isByte() || falseType.isShort() || falseType.isChar()) && 
          trueType.isInt() && getTrueExpr().isConstant() && getTrueExpr().representableIn(falseType))
         return falseType;
-      return ((NumericType)trueType).binaryNumericPromotion((NumericType)falseType);
+      return trueType.binaryNumericPromotion(falseType);
     }
     else if(trueType.isBoolean() && falseType.isBoolean()) {
       return trueType;
@@ -389,10 +389,10 @@ aspect TypeAnalysis {
         return falseType;
       if(falseType.assignConversionTo(trueType, null))
         return trueType;
-      return illegalType();
+      return unknownType();
     }
     else
-      return illegalType();
+      return unknownType();
   }
 
   eq ClassAccess.type() = lookupType("java.lang", "Class");
@@ -411,18 +411,11 @@ aspect TypeWideningAndIdentity {
   eq VoidType.instanceOf(TypeDecl type) = type.isSupertypeOfVoidType(this);
 
   eq UnknownType.instanceOf(TypeDecl type) = true;
-  eq IllegalType.instanceOf(TypeDecl type) = true;
-
   eq UnknownType.isSupertypeOfClassDecl(ClassDecl type) = true;
   eq UnknownType.isSupertypeOfInterfaceDecl(InterfaceDecl type) = true;
   eq UnknownType.isSupertypeOfArrayDecl(ArrayDecl type) = true;
   eq UnknownType.isSupertypeOfPrimitiveType(PrimitiveType type) = true;
   eq UnknownType.isSupertypeOfNullType(NullType type) = true;
-  eq IllegalType.isSupertypeOfClassDecl(ClassDecl type) = true;
-  eq IllegalType.isSupertypeOfInterfaceDecl(InterfaceDecl type) = true;
-  eq IllegalType.isSupertypeOfArrayDecl(ArrayDecl type) = true;
-  eq IllegalType.isSupertypeOfPrimitiveType(PrimitiveType type) = true;
-  eq IllegalType.isSupertypeOfNullType(NullType type) = true;
   
   syn boolean TypeDecl.isSupertypeOfClassDecl(ClassDecl type) = type == this;
   eq ClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
@@ -474,11 +467,6 @@ aspect TypeWideningAndIdentity {
     if(type.elementType().isPrimitive() && elementType().isPrimitive())
       return type.dimension() == dimension() && type.elementType() == elementType();
     return type.componentType().instanceOf(componentType());
-      
-    /*if(type.elementType().isReferenceType())
-      return type.dimension() == dimension() && type.elementType().instanceOf(elementType());
-    else
-      return type.dimension() == dimension() && type.elementType() == elementType();*/
   }  
 
   syn boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) = type == this;
