@@ -8,6 +8,61 @@ import java.util.*;
 
 class TestServer {
 
+  private static ArrayList readFileNames(BufferedReader in) throws IOException {
+    ArrayList list = new ArrayList();
+    String msg = in.readLine();
+    while(!msg.equals("end")) {
+      if(msg.length() > 5) {
+        msg = msg.substring(0, msg.length() - 5); // strip .java
+        msg = msg.replace(File.separatorChar, '.');
+        list.add(msg);
+      }
+      msg = in.readLine();
+    }
+    return list;
+  }
+
+  private static boolean hasOldCompilationUnit(ArrayList list, Program program, CompilationUnit[] cus) {
+    for(int i = 0; i < cus.length; i++) {
+      if(cus[i] != null) {
+        for(int j = 0; j < cus[i].getNumTypeDecl(); j++)
+          if(hasDuplicateTypeDeclaration(program, cus[i].getTypeDecl(j).fullName(), cus[i]))
+            return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean hasDuplicateTypeDeclaration(Program program, String typeName, CompilationUnit cu) {
+    for(int i = 0; i < program.getNumCompilationUnit(); i++)
+      for(int j = 0; j < program.getCompilationUnit(i).getNumTypeDecl(); j++)
+        if(program.getCompilationUnit(i).getTypeDecl(j).fullName().equals(typeName) && program.getCompilationUnit(i) != cu)
+          return true;
+    return false;
+  }
+  private static CompilationUnit[] loadCompilationUnits(ArrayList list, Program program) {
+    CompilationUnit[] cus = new CompilationUnit[list.size()];
+    for(int i = 0; i < list.size(); i++) {
+       String msg = (String)list.get(i);
+       System.out.println("Loading: " + msg);
+       CompilationUnit cu = program.getCompilationUnit(msg);
+       cus[i] = cu;
+       if(cu != null)
+         program.addCompilationUnit(cu);
+       else
+         System.out.println("Could not load " + msg);
+     }
+    return cus;
+  }
+
+  /*
+   * problems:
+   * command line classpath specifier (support this)
+   * exisiting classes in the same package (check for not only compilation unit but included classes)
+   * 
+   * 
+   */
+  
   public static void main(String args[]) {
     Program program = new Program();
     ServerSocket server = null;
@@ -42,71 +97,39 @@ class TestServer {
           System.out.println("Reset");
         }
         else {
-          String path = msg;
-          ClassFile.pushClassPath(msg);
-          msg = in.readLine();
+          String classPath = msg;
+          ArrayList list = readFileNames(in);
           boolean error = false;
           String errorMessage = "";
-          while (!msg.equals("end")) {
-            if(msg.length() > 5) {
-              msg = msg.substring(0, msg.length()-5);
-              System.out.println("Processing: " + msg);
-              try {
-                CompilationUnit cu = new ClassFile(msg).getCompilationUnit();
-                //CompilationUnit cu = JavaCompiler.parse(path + msg);
-                for(int k = 0; k < cu.getNumTypeDecl(); k++) {
-                  String name = ((TypeDecl)cu.getTypeDeclListNoTransform().getChildNoTransform(k)).fullName();
-                  for(int i = 0; i < program.getNumCompilationUnit(); i++) {
-                    CompilationUnit unit = program.getCompilationUnit(i);
-                    for(int j = 0; j < unit.getNumTypeDecl(); j++) {
-                      if(unit.getTypeDecl(j).fullName().equals(name)) {
-                        program = new Program();
-                      }
-                    }
-                  }
-                }
-                program.addCompilationUnit(cu);
-                String prettyPrint = cu.toString();
-                Collection collection = new LinkedList();
-                cu.errorCheck(collection);
+          try {
+            program.simpleReset();
+            program.initPaths();
+            program.pushClassPath(classPath);
 
-                System.out.println("Errors:");
-                for(Iterator iter = collection.iterator(); iter.hasNext(); ) {
-                  String s = (String)iter.next();
-                  System.out.println(s);
-                  if(!s.equals(""))
-                    error = true;
-                }
-              }
-              catch (FileNotFoundException e) {
-                System.err.println(e);
-                error = false;
-              }
-              catch (IOException e) {
-                e.printStackTrace();
-                error = true;
-              }
-              catch (Error e) {
-                errorMessage = msg + ".java:" + e.toString().substring(e.toString().indexOf(':')+2);
-                System.err.println(msg + ":" + e.toString().substring(e.toString().indexOf(':')+2));
-                e.printStackTrace();
-                //System.err.println(e);
-                //e.printStackTrace();
-                error = true;
-              }
-              catch (Exception e) {
-                errorMessage = msg + ":" + e.toString().substring(e.toString().indexOf(':')+2);
-                System.err.println(e.toString().substring(e.toString().indexOf(':')+2));
-                e.printStackTrace();
-                error = true;
-              }
+            CompilationUnit[] cus = loadCompilationUnits(list, program);
+            Collection collection = new LinkedList();
+            for(int i = 0; i < list.size(); i++) {
+              CompilationUnit cu = cus[i];
+              if(cu != null)
+                cu.errorCheck(collection);
             }
-            msg = in.readLine();
+            System.out.println("Errors:");
+            for(Iterator iter = collection.iterator(); iter.hasNext(); ) {
+              String s = (String)iter.next();
+              System.out.println(s);
+              if(!s.equals(""))
+                error = true;
+            }
+          } catch (Throwable e) {
+            errorMessage = msg + ".java:" + e.toString().substring(e.toString().indexOf(':')+2);
+            System.err.println(msg + ":" + e.toString().substring(e.toString().indexOf(':')+2));
+            e.printStackTrace();
+            error = true;
           }
           out.println(error ? "error:" + errorMessage : "ok");
           out.flush();
           System.out.println("Done");
-          ClassFile.popClassPath();
+          program.popClassPath();
         }
         out.close();
         in.close();
