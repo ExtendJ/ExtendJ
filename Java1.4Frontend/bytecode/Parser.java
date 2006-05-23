@@ -220,7 +220,7 @@ public class Parser {
 		print("\n");
 	}
 
-	public CompilationUnit parse(TypeDecl outerTypeDecl, CONSTANT_Class_Info outerClassInfo) 
+	public CompilationUnit parse(TypeDecl outerTypeDecl, CONSTANT_Class_Info outerClassInfo, AST.Program classPath) 
         throws FileNotFoundException, IOException {
 		//InputStream file = ClassLoader.getSystemResourceAsStream(name);
 
@@ -250,7 +250,7 @@ public class Parser {
     cu.addTypeDecl(typeDecl);
 		parseFields(typeDecl);
 		parseMethods(typeDecl);
-		new Attributes(this, typeDecl, outerTypeDecl);
+		new Attributes(this, typeDecl, outerTypeDecl, classPath);
     
     is.close();
     is = null;

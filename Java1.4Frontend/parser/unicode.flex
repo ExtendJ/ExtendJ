@@ -46,6 +46,34 @@ UnicodeInputCharacter:
 
 only an even number of '\' is eligible to start a Unicode escape sequence
 
+int numConsecutiveBackSlash = 0;
+
+  char current = next();
+  if(current == '\')
+    numConsecutiveBackSlash++;
+  else
+    numConsecutiveBackSlash = 0;
+
+  boolean isEven = numConsecutiveBackSlash & 0x01 == 0;
+  if(isEven && lookahead() == 'u') {
+    // UnicodeEscape found
+    while(lookahead() == 'u')
+      next();
+    // The next four characters must be hexadecimal digits or else a compile-time error is thrown
+    int result = 0;
+    for(int i = 0; i < 4; i++) {
+      char c = next();
+      int value = Character.digit(c, 16);
+      if(value == -1)
+        throw new Error("Invalid Unicode Escape");
+      result <<= 4;
+      result += value;
+    }
+    return result;
+  }
+  return current;
+
+
 */
 
 package parser;
@@ -84,11 +112,11 @@ HexDigit        = [0-9a-fA-F]
       int c = zzBuffer[k];
 
       if (c >= 'a')
-        c-= 'a'-10;
+        c = 10 + c - 'a';
       else if (c >= 'A')
-        c-= 'A'-10;
+        c = 10 + c - 'A';
       else
-        c-= '0';
+        c = c - '0';
 
       r <<= 4;
       r += c;

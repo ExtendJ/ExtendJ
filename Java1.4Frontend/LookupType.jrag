@@ -42,7 +42,7 @@ aspect SpecialClasses {
 
 aspect LookupFullyQualifiedTypes {
   syn lazy boolean Program.hasPackage(String packageName) {
-    return ClassFile.isPackage(packageName);
+    return isPackage(packageName);
   }
   // The scope of a declaration of an observable top level package is all observable compilation units
   eq Program.getCompilationUnit().hasPackage(String packageName) = hasPackage(packageName);
@@ -78,32 +78,16 @@ aspect LookupFullyQualifiedTypes {
           return type;
       }
     }
-
-    long startTime = System.currentTimeMillis();
-    ClassFile classFile = new ClassFile(fullName);
-    if(classFile.exists()) {
-      try {
-        CompilationUnit u = classFile.getCompilationUnit();
-        addCompilationUnit(u);
-        getCompilationUnit(getNumCompilationUnit()-1);
-        classFileReadTime += (System.currentTimeMillis() - startTime);
-        for(int j = 0; j < u.getNumTypeDecl(); j++) {
-          if(u.getTypeDecl(j).name().equals(typeName))
-            return u.getTypeDecl(j);
-        }
-        throw new Error("No type named " + typeName + " in file " + fullName + ", " + u.pathName() + ", " + u.relativeName());
+    
+    CompilationUnit u = getCompilationUnit(fullName);
+    if(u != null) {
+      addCompilationUnit(u);
+      getCompilationUnit(getNumCompilationUnit()-1);
+      for(int j = 0; j < u.getNumTypeDecl(); j++) {
+        if(u.getTypeDecl(j).name().equals(typeName))
+          return u.getTypeDecl(j);
       }
-      catch (FileNotFoundException e) {
-        //System.out.println("Classfile for type: " + fullName  + " not found");
-      }
-      catch (Exception e) {
-        System.err.println("Error loading " + fullName + " on demand");
-        e.printStackTrace();
-      }
-      catch (Error e) {
-        System.err.println("Error loading " + fullName + " on demand");
-        e.printStackTrace();
-      }
+      throw new Error("No type named " + typeName + " in file " + fullName + ", " + u.pathName() + ", " + u.relativeName());
     }
     return null;
   }

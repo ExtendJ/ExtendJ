@@ -40,7 +40,7 @@ class JavaPrettyPrinter {
       try {
         Reader reader = new FileReader(name);
         JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
-        CompilationUnit unit = ((Program)parser.parse(scanner)).getCompilationUnit(0);
+        CompilationUnit unit = (CompilationUnit)parser.parse(scanner);
         unit.setFromSource(true);
         unit.setRelativeName(name);
         unit.setPathName(".");
@@ -72,7 +72,6 @@ class JavaPrettyPrinter {
     long rewriteAndUpdateTime = System.currentTimeMillis();
     if(Program.verbose())
       System.out.println("Updating remote attribute collections");
-    program.updateRemoteAttributeCollections(files.size());
     rewriteAndUpdateTime = System.currentTimeMillis() - rewriteAndUpdateTime;
     if(Program.verbose())
       System.out.println("Pretty printing source code");

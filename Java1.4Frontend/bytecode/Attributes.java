@@ -19,10 +19,10 @@ class Attributes {
 	private CONSTANT_Info constantValue;
 
 	public Attributes(Parser parser) {
-		this(parser, null, null);
+		this(parser, null, null, null);
 	}
 	
-	public Attributes(Parser parser, TypeDecl typeDecl, TypeDecl outerTypeDecl) {
+	public Attributes(Parser parser, TypeDecl typeDecl, TypeDecl outerTypeDecl, AST.Program classPath) {
 		p = parser;
 		exceptionList = new List();
 		isSynthetic = false;
@@ -42,7 +42,7 @@ class Attributes {
 			} else if(attribute_name.equals("ConstantValue") && attribute_length == 2) {
 				constantValues();
 			} else if (attribute_name.equals("InnerClasses")) {
-				innerClasses(typeDecl, outerTypeDecl);
+				innerClasses(typeDecl, outerTypeDecl, classPath);
 			} else if (attribute_name.equals("Synthetic")) {
 				isSynthetic = true;
 			} else {
@@ -53,7 +53,7 @@ class Attributes {
 	}
 
 	
-	public void innerClasses(TypeDecl typeDecl, TypeDecl outerTypeDecl) {
+	public void innerClasses(TypeDecl typeDecl, TypeDecl outerTypeDecl, AST.Program classPath) {
 		int number_of_classes = this.p.u2();
     if(Parser.VERBOSE)
 		  p.println("    Number of classes: " + number_of_classes);
@@ -106,13 +106,11 @@ class Attributes {
           if(Parser.VERBOSE)
             p.println("Begin processing: " + inner_class_name);
           try {
-            AST.ClassFile file = new AST.ClassFile(inner_class_name);
-            if(file.exists()) {
-              //Parser p = new Parser(file.buffer(), file.size(), this.p.name);
-              Parser p = new Parser(file.is, this.p.name);
-              p.parse(typeDecl, outer_class_info);
-              file.is.close();
-              file.is = null;
+            java.io.InputStream is = classPath.getInputStream(inner_class_name);
+            if(is != null) {
+              Parser p = new Parser(is, this.p.name);
+              p.parse(typeDecl, outer_class_info, classPath);
+              is.close();
             }
             else {
               System.out.println("Error: ClassFile " + inner_class_name

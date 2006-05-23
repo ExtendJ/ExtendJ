@@ -10,7 +10,7 @@ class ByteCodeParser {
 			System.out.println("Processing: " + args[i]);
 			try {
 				Parser p = new Parser(args[i]);
-				program.addCompilationUnit(p.parse(null, null));
+				program.addCompilationUnit(p.parse(null, null, program));
 
 			} catch (FileNotFoundException e) {
 				System.out.println("Error: " + args[i] + " not found");

@@ -1,0 +1,153 @@
+aspect AnonymousClasses {
+
+  eq ParameterDeclaration.getTypeAccess().hostType() = hostType().isAnonymous() ? ((ClassDecl)hostType()).superclass() : hostType();
+  
+  inh TypeDecl AnonymousDecl.superType();
+  eq ClassInstanceExpr.getTypeDecl().superType() = getAccess().type();
+  eq Program.getCompilationUnit().superType() = null;
+
+  inh ConstructorDecl AnonymousDecl.constructorDecl();
+  eq ClassInstanceExpr.getTypeDecl().constructorDecl() {
+    Collection c = getAccess().type().constructors();
+    SimpleSet maxSpecific = mostSpecificConstructor(c);
+    if(maxSpecific.size() == 1)
+      return (ConstructorDecl)maxSpecific.iterator().next();
+    return unknownConstructor();
+  }
+  eq Program.getCompilationUnit().constructorDecl() = null;
+  
+  public Access TypeDecl.createQualifiedAccess() {
+    if(isLocalClass() || isAnonymous()) {
+      return new TypeAccess(name());
+    }
+    else if(!isTopLevelType()) {
+      return enclosingType().createQualifiedAccess().qualifiesAccess(new TypeAccess(name()));
+    }
+    else {
+      return new TypeAccess(packageName(), name());
+    }
+  }
+
+  public Access PrimitiveType.createQualifiedAccess() {
+    return new TypeAccess("primitive", name());
+  }
+  
+  protected static int ASTNode.anonymousIndex = 0;
+
+  syn lazy Opt AnonymousDecl.getSuperClassAccessOpt() {
+    if(superType().isInterfaceDecl())
+      return new Opt(typeObject().createQualifiedAccess());
+    else
+      return new Opt(superType().createQualifiedAccess());
+  }
+  syn lazy List AnonymousDecl.getImplementsList() {
+    if(superType().isInterfaceDecl())
+      return new List().add(superType().createQualifiedAccess());
+    else
+      return new List();
+  }
+
+  rewrite AnonymousDecl {
+    when(noConstructor())
+    to AnonymousDecl {
+      setModifiers(new Modifiers(new List().add(new Modifier("final"))));
+      
+      ConstructorDecl constructor = (ConstructorDecl)constructorDecl().fullCopy();
+      addBodyDecl(constructor);
+
+      String name = "Anonymous" + anonymousIndex++;
+      setIdDecl(new IdDecl(name));
+      constructor.setIdDecl(new IdDecl(name));
+
+      List parameterList = new List();
+      for(int i = 0; i < constructorDecl().getNumParameter(); i++) {
+        parameterList.add(
+          new ParameterDeclaration(
+            constructorDecl().getParameter(i).type().createQualifiedAccess(),
+            constructorDecl().getParameter(i).name()
+          )
+        );
+      }
+      constructor.setParameterList(parameterList);
+      
+      List argList = new List();
+      for(int i = 0; i < constructor.getNumParameter(); i++)
+        argList.add(new VarAccess(constructor.getParameter(i).name()));
+      constructor.setConstructorInvocation(
+        new ExprStmt(
+          new SuperConstructorAccess(argList, "super")
+        )
+      );
+      constructor.setBlock(new Block());
+
+      Set set = new HashSet();
+      for(int i = 0; i < getNumBodyDecl(); i++) {
+        if(getBodyDecl(i) instanceof InstanceInitializer) {
+          InstanceInitializer init = (InstanceInitializer)getBodyDecl(i);
+          set.addAll(init.exceptions());
+        }
+        else if(getBodyDecl(i) instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)getBodyDecl(i);
+          if(f.isInstanceVariable()) {
+            set.addAll(f.exceptions());
+          }
+        }
+      }
+      List exceptionList = new List();
+      for(Iterator iter = set.iterator(); iter.hasNext(); ) {
+        TypeDecl exceptionType = (TypeDecl)iter.next();
+        if(exceptionType.isNull())
+          exceptionType = typeNullPointerException();
+        exceptionList.add(exceptionType.createQualifiedAccess());
+      }
+      constructor.setExceptionList(exceptionList);
+      return this;
+    }
+  }
+  inh TypeDecl AnonymousDecl.typeNullPointerException();
+
+
+  syn lazy Collection FieldDeclaration.exceptions() {
+    Set set = new HashSet();
+    if(isInstanceVariable() && hasInit()) {
+      collectExceptions(set, this);
+      for(Iterator iter = set.iterator(); iter.hasNext(); ) {
+        TypeDecl typeDecl = (TypeDecl)iter.next();
+        if(!getInit().reachedException(typeDecl))
+          iter.remove();
+      }
+    }
+    return set;
+  }
+
+  syn lazy Collection InstanceInitializer.exceptions() {
+    Set set = new HashSet();
+    collectExceptions(set, this);
+    for(Iterator iter = set.iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      if(!getBlock().reachedException(typeDecl))
+        iter.remove();
+    }
+    return set;
+  }
+
+  protected void ASTNode.collectExceptions(Collection c, ASTNode target) {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).collectExceptions(c, target);
+  }
+
+  protected void ThrowStmt.collectExceptions(Collection c, ASTNode target) {
+    super.collectExceptions(c, target);
+    TypeDecl exceptionType = getExpr().type();
+    if(exceptionType == typeNull())
+      exceptionType = typeNullPointerException();
+    c.add(exceptionType);
+  }
+
+  protected void MethodAccess.collectExceptions(Collection c, ASTNode target) {
+    super.collectExceptions(c, target);
+    for(int i = 0; i < decl().getNumException(); i++)
+      c.add(decl().getException(i).type());
+  }
+
+}

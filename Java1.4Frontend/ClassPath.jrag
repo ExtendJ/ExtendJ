@@ -1,7 +1,115 @@
 import java.io.File;
 import java.util.*;
+import parser.*;
+import beaver.*;
 
 aspect ClassPath {
+  syn String CompilationUnit.relativeName() = relativeName;
+  syn String CompilationUnit.pathName() = pathName;
+  syn boolean CompilationUnit.fromSource() = fromSource;
+
+  // add a filename to the list of source files to process
+  public void Program.addSourceFile(String name) {
+    sourceFiles.addSourceFile(name);
+  }
+
+  // iterate over all source files and demand-loaded compilation units
+  public Iterator Program.compilationUnitIterator() {
+    initPaths();
+    return new Iterator() {
+      int index = 0;
+      public boolean hasNext() {
+        return getNumCompilationUnit() < index || !sourceFiles.isEmpty();
+      }
+      public Object next() {
+        if(getNumCompilationUnit() == index) {
+          String typename = (String)sourceFiles.keySet().iterator().next();
+          CompilationUnit u = getCompilationUnit(typename);
+          if(u != null) {
+            addCompilationUnit(u);
+            getCompilationUnit(getNumCompilationUnit()-1);
+          }
+          else
+            throw new Error("File " + value + " not found");
+        }
+        return getCompilationUnit(index++);
+      }
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
+    };
+  }
+  
+  // get the input stream for a compilation unit specified using
+  // a canonical name. This is used by the bytecode reader to load
+  // nested types
+  public InputStream Program.getInputStream(String name) {
+    initPaths();
+    try {
+      for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
+        PathPart part = (PathPart)iter.next();
+        if(part.selectCompilationUnit(name))
+          return part.is;
+      }
+    }
+    catch(IOException e) {
+    }
+    throw new Error("Could not find nested type " + name);
+  }
+    
+  // load a compilation unit from disc using the following rules:
+  //   1) specified on the command line
+  //   2) class file not older than source file
+  //   3) source file
+  public CompilationUnit Program.getCompilationUnit(String name) {
+    initPaths();
+    try {
+      if(sourceFiles.selectCompilationUnit(name))
+        return sourceFiles.getCompilationUnit();
+      PathPart sourcePart = null;
+      PathPart classPart = null;
+      for(Iterator iter = sourcePath.iterator(); iter.hasNext() && sourcePart == null; ) {
+        PathPart part = (PathPart)iter.next();
+        if(part.selectCompilationUnit(name))
+          sourcePart = part;
+      }
+      for(Iterator iter = classPath.iterator(); iter.hasNext() && classPart == null; ) {
+        PathPart part = (PathPart)iter.next();
+        if(part.selectCompilationUnit(name))
+          classPart = part;
+      }
+      
+      if(classPart != null && sourcePart != null)
+        return classPart.age >= sourcePart.age ? 
+          classPart.getCompilationUnit() : sourcePart.getCompilationUnit();
+      else if(classPart != null)
+        return classPart.getCompilationUnit();
+      else if(sourcePart != null)
+        return sourcePart.getCompilationUnit();
+      return null;
+    }
+    catch(IOException e) {
+    }
+    return null;
+  }
+  
+  // is there a package named name on the path
+  public boolean Program.isPackage(String name) {
+    if(sourceFiles.hasPackage(name))
+      return true;
+    for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
+      PathPart part = (PathPart)iter.next();
+      if(part.hasPackage(name))
+        return true;
+    }
+    for(Iterator iter = sourcePath.iterator(); iter.hasNext(); ) {
+      PathPart part = (PathPart)iter.next();
+      if(part.hasPackage(name))
+        return true;
+    }
+    return false;
+  }
+
   private String CompilationUnit.relativeName;
   private String CompilationUnit.pathName;
   private boolean CompilationUnit.fromSource;
@@ -15,378 +123,404 @@ aspect ClassPath {
   public void CompilationUnit.setFromSource(boolean value) {
     fromSource = value;
   }
-  
-  syn String CompilationUnit.relativeName() = relativeName;
-  syn String CompilationUnit.pathName() = pathName;
-  syn boolean CompilationUnit.fromSource() = fromSource;
 
-  class ClassFile {
-    private boolean exists;
-    public InputStream is;
-    //private static byte[] buf; // caused problems with nested classes
-    private byte[] buf;
-    private int size;
-    private boolean isSource = false;
-    private long age;
+  private boolean Program.pathsInitialized = false;
+  private java.util.ArrayList Program.classPath;
+  private java.util.ArrayList Program.sourcePath;
+  private FileNamesPart Program.sourceFiles = new FileNamesPart();
 
-    private static boolean pathsInitialized = false;
-    public static java.util.ArrayList classPath;
-    public static java.util.ArrayList sourcePath;
-
-    private static HashSet packages = new HashSet();
-
-    public static void pushClassPath(String name) {
-      initPaths();
-      sourcePath.add(new File(name));
+  public void Program.pushClassPath(String name) {
+    PathPart part = PathPart.createSourcePath(name, this);
+    if(part != null) {
+      sourcePath.add(part);
+      System.out.println("Pushing source path " + name);
     }
-    public static void popClassPath() {
-      sourcePath.remove(sourcePath.size()-1);
+    else
+      throw new Error("Could not push source path " + name);
+    part = PathPart.createClassPath(name, this);
+    if(part != null) {
+      classPath.add(part);
+      System.out.println("Pushing class path " + name);
     }
+  }
+  public void Program.popClassPath() {
+    sourcePath.remove(sourcePath.size()-1);
+    classPath.remove(classPath.size()-1);
+  }
 
-    private static ArrayList sourceFiles = new ArrayList();
-    public static void addSourceFile(String name) {
-      initPaths();
-      sourceFiles.add(name);
-    }
-    private static HashSet processedSourceFiles = new HashSet();
-    public static boolean processedSourceFile(String name) {
-      initPaths();
-      return processedSourceFiles.contains(name);
-    }
+  public void Program.initPaths() {
+    if(!pathsInitialized) {
+      pathsInitialized = true;
 
-    private static void initPaths() {
-      if(!pathsInitialized) {
-        pathsInitialized = true;
-  
-        sourceFiles = new ArrayList();
-        processedSourceFiles = new HashSet();
-        
-        //System.err.println("Initializing class paths");
-        
-        ArrayList classPaths = new ArrayList();
-        ArrayList sourcePaths = new ArrayList();
-        
-        String[] bootclasspaths;
-        if(Program.hasValueForOption("-bootclasspath"))
-          bootclasspaths = Program.getValueForOption("-bootclasspath").split(File.pathSeparator);
+      //System.err.println("Initializing class paths");
+      
+      ArrayList classPaths = new ArrayList();
+      ArrayList sourcePaths = new ArrayList();
+      
+      String[] bootclasspaths;
+      if(Program.hasValueForOption("-bootclasspath"))
+        bootclasspaths = Program.getValueForOption("-bootclasspath").split(File.pathSeparator);
+      else
+        bootclasspaths = System.getProperty("sun.boot.class.path").split(File.pathSeparator);
+      for(int i = 0; i < bootclasspaths.length; i++) {
+        classPaths.add(bootclasspaths[i]);
+        //System.err.println("Adding classpath " + bootclasspaths[i]);
+      }
+      
+      String[] extdirs;
+      if(Program.hasValueForOption("-extdirs"))
+        extdirs = Program.getValueForOption("-extdirs").split(File.pathSeparator);
+      else
+        extdirs = System.getProperty("java.ext.dirs").split(File.pathSeparator);
+      for(int i = 0; i < extdirs.length; i++) {
+        classPaths.add(extdirs[i]);
+        //System.err.println("Adding classpath " + extdirs[i]);
+      }
+
+      String[] userClasses = null;
+      if(Program.hasValueForOption("-classpath"))
+        userClasses = Program.getValueForOption("-classpath").split(File.pathSeparator);
+      else {
+        String s = System.getProperty("java.class.path");
+        if(s != null && s.length() > 0)
+          userClasses = s.split(File.pathSeparator);
         else
-          bootclasspaths = System.getProperty("sun.boot.class.path").split(File.pathSeparator);
-        for(int i = 0; i < bootclasspaths.length; i++) {
-          classPaths.add(bootclasspaths[i]);
-          //System.err.println("Adding classpath " + bootclasspaths[i]);
+          userClasses = ".".split(File.pathSeparator);
+      }
+      if(!Program.hasValueForOption("-sourcepath")) {
+        for(int i = 0; i < userClasses.length; i++) {
+          classPaths.add(userClasses[i]);
+          sourcePaths.add(userClasses[i]);
+          //System.err.println("Adding classpath/sourcepath " + userClasses[i]);
         }
+      }
+      else {
+        for(int i = 0; i < userClasses.length; i++) {
+          classPaths.add(userClasses[i]);
+          //System.err.println("Adding classpath " + userClasses[i]);
+        }
+        userClasses = Program.getValueForOption("-sourcepath").split(File.pathSeparator);
+        for(int i = 0; i < userClasses.length; i++) {
+          sourcePaths.add(userClasses[i]);
+          //System.err.println("Adding sourcepath " + userClasses[i]);
+        }
+      }
         
-        String[] extdirs;
-        if(Program.hasValueForOption("-extdirs"))
-          extdirs = Program.getValueForOption("-extdirs").split(File.pathSeparator);
-        else
-          extdirs = System.getProperty("java.ext.dirs").split(File.pathSeparator);
-        for(int i = 0; i < extdirs.length; i++) {
-          classPaths.add(extdirs[i]);
-          //System.err.println("Adding classpath " + extdirs[i]);
+      classPath = new ArrayList();
+      sourcePath = new ArrayList();
+      
+      for(Iterator iter = classPaths.iterator(); iter.hasNext(); ) {
+        String s = (String)iter.next();
+        PathPart part = PathPart.createClassPath(s, this);
+        if(part != null) {
+          classPath.add(part);
+          //System.out.println("Adding classpath " + s);
         }
-
-        String[] userClasses = null;
-        if(Program.hasValueForOption("-classpath"))
-          userClasses = Program.getValueForOption("-classpath").split(File.pathSeparator);
-        else {
-          String s = System.getProperty("java.class.path");
-          if(s != null && s.length() > 0)
-            userClasses = s.split(File.pathSeparator);
-          else
-            userClasses = ".".split(File.pathSeparator);
+        else if(Program.verbose())
+          System.out.println("Warning: Could not use " + s + " as class path");
+      }
+      for(Iterator iter = sourcePaths.iterator(); iter.hasNext(); ) {
+        String s = (String)iter.next();
+        PathPart part = PathPart.createSourcePath(s, this);
+        if(part != null) {
+          sourcePath.add(part);
+          //System.out.println("Adding sourcepath " + s);
         }
-        if(!Program.hasValueForOption("-sourcepath")) {
-          for(int i = 0; i < userClasses.length; i++) {
-            classPaths.add(userClasses[i]);
-            sourcePaths.add(userClasses[i]);
-            //System.err.println("Adding classpath/sourcepath " + userClasses[i]);
-          }
-        }
-        else {
-          for(int i = 0; i < userClasses.length; i++) {
-            classPaths.add(userClasses[i]);
-            //System.err.println("Adding classpath " + userClasses[i]);
-          }
-          userClasses = Program.getValueForOption("-sourcepath").split(File.pathSeparator);
-          for(int i = 0; i < userClasses.length; i++) {
-            sourcePaths.add(userClasses[i]);
-            //System.err.println("Adding sourcepath " + userClasses[i]);
-          }
-        }
-          
-        classPath = new ArrayList();
-        sourcePath = new ArrayList();
-        
-        for(Iterator iter = classPaths.iterator(); iter.hasNext(); ) {
-          String s = (String)iter.next();
-          File f = new File(s);
-          if(f.isFile()) {
-            try {
-              ZipFile zip = new ZipFile(f);
-              classPath.add(zip);
-              for (Enumeration e = zip.entries() ; e.hasMoreElements() ;) {
-                ZipEntry entry = (ZipEntry)e.nextElement();
-                String pathName = new File(entry.getName()).getParent();
-                if(!packages.contains(pathName)) {
-                  int pos = 0;
-                  while(pathName != null && -1 != (pos = pathName.indexOf(File.separatorChar, pos + 1))) {
-                    String n = pathName.substring(0, pos);
-                    if(!packages.contains(n)) {
-                      //System.out.println("Adding: " + n);
-                      packages.add(n);
-                    }
-                  }
-                  //System.out.println("Adding: " + pathName);
-                  packages.add(pathName);
-                }
-              }
-            } catch (IOException e) {
-            }
-          }
-          else if(f.isDirectory()) {
-            classPath.add(f);
-          }
-        }
-        for(Iterator iter = sourcePaths.iterator(); iter.hasNext(); ) {
-          String s = (String)iter.next();
-          File f = new File(s);
-          if(f.isFile()) {
-            try {
-              ZipFile zip = new ZipFile(f);
-              sourcePath.add(zip);
-              for (Enumeration e = zip.entries() ; e.hasMoreElements() ;) {
-                ZipEntry entry = (ZipEntry)e.nextElement();
-                String pathName = new File(entry.getName()).getParent();
-                //System.out.println("Adding: " + pathName);
-                packages.add(pathName);
-              }
-            } catch (IOException e) {
-            }
-          }
-          else if(f.isDirectory()) {
-            sourcePath.add(f);
-          }
-        }
-        
+        else if(Program.verbose())
+          System.out.println("Warning: Could not use " + s + " as source path");
       }
     }
-
-    static boolean isPackage(String name) {
-      name = name.replace('.', File.separatorChar);
-      if(packages.contains(name)) {
-        return true;
-      }
-      initPaths();
-      for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
-        Object o = iter.next();
-        if(o instanceof File) {
-          File classFile = new File((File)o, name);
-          if(classFile.isDirectory()) {
-            packages.add(name);
-            return true;
-          }
-        }
-      }
-      for(Iterator iter = sourcePath.iterator(); iter.hasNext(); ) {
-        Object o = iter.next();
-        if(o instanceof File) {
-          File classFile = new File((File)o, name);
-          if(classFile.isDirectory()) {
-            packages.add(name);
-            return true;
-          }
-        }
-      }
-      return false;
-    }
-
-    long startTime;
-    String fullName;
+  }
     
-    String pathName;
-    String relativeName;
+  class PathPart {
+    public InputStream is;
+    protected String pathName; 
+    protected String relativeName;
+    protected String fullName;
+    long age;
+    Program program;
+    
+    private static parser.JavaParser parser = new parser.JavaParser();
+    
+    protected PathPart() {
+    }
 
-    boolean found = false;
+    protected boolean isSource;
+    protected String fileSuffix() {
+      return isSource ? ".java" : ".class";
+    }
 
-    public ClassFile(String name) {
-      initPaths();
-      fullName = name;
-      startTime = System.currentTimeMillis();
-      String fileName = name.replace('.', File.separatorChar);
-      name = name.replace('.', '/');
-      //System.out.println("Trying to load classfile " + name);
-      exists = false;
-      isSource = false;
-      age = 0;
+    public static PathPart createSourcePath(String fileName, Program program) {
+      PathPart p = createPathPart(fileName);
+      if(p != null) {
+        p.isSource = true;
+        p.program = program;
+      }
+      return p;
+    }
+
+    public static PathPart createClassPath(String fileName, Program program) {
+      PathPart p = createPathPart(fileName);
+      if(p != null) {
+        p.isSource = false;
+        p.program = program;
+      }
+      return p;
+    }
+
+    private static PathPart createPathPart(String s) {
       try {
-        for(Iterator iter = sourcePath.iterator(); iter.hasNext(); ) {
-          Object o = iter.next();
-          if(o instanceof ZipFile) {
-            ZipFile zip = (ZipFile)o;
-            ZipEntry zipEntry;
-            zipEntry = zip.getEntry(name + ".java");
-            if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
-              //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
-              size = (int)zipEntry.getSize();
-              if(is != null) is.close();
-              is = zip.getInputStream(zipEntry);
-              //fillBuf(is, size);
-              //is.close();
-              exists = true;
-              isSource = true;
-              age = zipEntry.getTime();
-              pathName = zip.getName();
-              relativeName = name;
-            }
-          }
-          else if(o instanceof File) {
-            File classFile;
-            classFile = new File((File)o, fileName + ".java");
-            if(classFile.isFile() && classFile.lastModified() > age) {
-              //System.out.println("Found " + fileName + " in " + classFile.toString() + ", size: " + classFile.length());
-              size = (int)classFile.length();
-              if(is != null) is.close();
-              is = new FileInputStream(classFile);
-              //fillBuf(is, size);
-              //is.close();
-              exists = true;
-              isSource = true;
-              age = classFile.lastModified();
-              pathName = classFile.getPath();
-              relativeName = fileName;
-            }
-          }
-        }
-        for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
-          Object o = iter.next();
-          if(o instanceof ZipFile) {
-            ZipFile zip = (ZipFile)o;
-            ZipEntry zipEntry;
-            zipEntry = zip.getEntry(name + ".class");
-            if(zipEntry != null && !zipEntry.isDirectory() && zipEntry.getTime() > age) {
-              //System.out.println("Found " + name + " in " + zip.toString() + ", size: " + zipEntry.getSize());
-              size = (int)zipEntry.getSize();
-              if(is != null) is.close();
-              is = zip.getInputStream(zipEntry);
-              //fillBuf(is, size);
-              //is.close();
-              exists = true;
-              isSource = false;
-              age = zipEntry.getTime();
-              pathName = zip.getName();
-              relativeName = name;
-            }
-          }
-          else if(o instanceof File) {
-            File classFile;
-            classFile = new File((File)o, fileName + ".class");
-            if(classFile.isFile() && classFile.lastModified() > age) {
-              //System.out.println("Found " + fileName + " in " + classFile.toString() + ", size: " + classFile.length());
-              size = (int)classFile.length();
-              if(is != null) is.close();
-              is = new FileInputStream(classFile);
-              //fillBuf(is, size);
-              //is.close();
-              exists = true;
-              isSource = false;
-              age = classFile.lastModified();
-              pathName = classFile.getPath();
-              relativeName = fileName;
-            }
-          }
-        }
-        for(Iterator iter = sourceFiles.iterator(); iter.hasNext(); ) {
-          String s = (String)iter.next();
-          if(s.endsWith(File.separatorChar + fileName + ".java")) {
-            File classFile;
-            classFile = new File(s);
-            if(classFile.isFile()) {
-              //System.out.println("Found " + fileName + " in " + classFile.toString() + ", size: " + classFile.length());
-              size = (int)classFile.length();
-              if(is != null) is.close();
-              is = new FileInputStream(classFile);
-              //fillBuf(is, size);
-              //is.close();
-              exists = true;
-              isSource = true;
-              age = classFile.lastModified();
-              pathName = classFile.getPath();
-              relativeName = fileName;
-              processedSourceFiles.add(s);
-            }
-          }
-        }
+        File f = new File(s);
+        if(f.isDirectory())
+          return new FolderPart(f);
+        else if(f.isFile())
+          return new ZipFilePart(new ZipFile(f));
+      } catch (IOException e) {
+        // error in path
       }
-      catch(IOException e) {
-      }
+      return null;
     }
 
-    private void fillBuf(InputStream is, int size) {
-      int n = 0;
-      try {
-        //if(buf == null || buf.length < size) // caused problems with nested classes
-        //  buf = new byte[size];
-        buf = new byte[size];
-        while (n < size)
-          n = n + is.read(buf, n, size - n);
-      }
-      catch(IOException e) {
-        throw new Error("Could not fill buffert, error at " + n);
-      }
-    }
+    // is there a package with the specified name on this path part
+    public boolean hasPackage(String name) { return false; }
+    
+    // select a compilation unit from a canonical name
+    // returns true of the compilation unit exists on this path
+    public boolean selectCompilationUnit(String canonicalName) throws IOException { return false; }
 
-    public byte[] buffer() {
-      return buf;
-    }
-    public int size() {
-      return size;
-    }
-
-    public boolean exists() {
-      return exists;
-    }
-
-    public CompilationUnit getCompilationUnit() throws Exception  {
+    // load the return currently selected compilation unit
+    public CompilationUnit getCompilationUnit() {
+      long startTime = System.currentTimeMillis();
       if(!isSource) {
-        if(Program.verbose())
-          System.out.print("Loading .class file: " + fullName + " ");
-        
-        //fillBuf(is, size());
-        //is.close();
-        //is = null;
-        
-        //CompilationUnit u = new bytecode.Parser(buffer(), size(), fullName).parse(null, null);
-        CompilationUnit u = new bytecode.Parser(is, fullName).parse(null, null);
-        u.setPathName(pathName);
-        u.setRelativeName(relativeName + ".class");
-        u.setFromSource(false);
-        
-        is.close();
-        is = null;
-        
-        if(Program.verbose())
-          System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
-        return u;
+        try {
+          if(Program.verbose())
+            System.out.print("Loading .class file: " + fullName + " ");
+          CompilationUnit u = new bytecode.Parser(is, fullName).parse(null, null, program);
+          u.setPathName(pathName);
+          u.setRelativeName(relativeName + ".class");
+          u.setFromSource(false);
+          
+          is.close();
+          is = null;
+          
+          if(Program.verbose())
+            System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
+          return u;
+        } catch (Exception e) {
+          throw new Error("Error loading " + fullName, e);
+        }
       } 
       else {
-        if(Program.verbose())
-          System.out.print("Loading .java file: " + fullName + " ");
-          
-        parser.JavaScanner scanner = new parser.JavaScanner(new parser.UnicodeEscapes(is));
-        parser.JavaParser parser = new parser.JavaParser();
-        CompilationUnit u = ((Program)parser.parse(scanner)).getCompilationUnit(0);
-        is.close();
-        is = null;
+        try {  
+          if(Program.verbose())
+            System.out.print("Loading .java file: " + fullName + " ");
+            
+          parser.JavaScanner scanner = new parser.JavaScanner(new parser.Unicode(is));
+          CompilationUnit u = (CompilationUnit)parser.parse(scanner);
+          is.close();
+          is = null;
         
-        u.setPathName(pathName);
-        u.setRelativeName(relativeName + ".java");
-        u.setFromSource(true);
-        if(Program.verbose())
-          System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
-        return u;
+          u.setPathName(pathName);
+          u.setRelativeName(relativeName + ".java");
+          u.setFromSource(true);
+          
+          if(Program.verbose())
+            System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
+          return u;
+        } catch (JavaParser.SourceError e) {
+          throw new JavaParser.SourceError(pathName + relativeName + ": " + e.getMessage());
+        } catch (Exception e) {
+          throw new Error(fullName + ": " + e.getMessage(), e);
+        }
       }
     }
   }
 
+  // load files from a folder
+  class FolderPart extends PathPart {
+    private HashMap map = new HashMap();
+    private File folder;
+
+    public FolderPart(File folder) {
+      this.folder = folder;
+    }
+
+    public boolean hasPackage(String name) {
+      return filesInPackage(name) != null;
+    }
+
+    public boolean hasCompilationUnit(String canonicalName) {
+      int index = canonicalName.lastIndexOf('.');
+      String packageName = index == -1 ? "" : canonicalName.substring(0, index);
+      String typeName = canonicalName.substring(index + 1, canonicalName.length());
+      Collection c = filesInPackage(packageName);
+      return c != null && c.contains(typeName + fileSuffix());
+    }
+    
+    private Collection filesInPackage(String packageName) {
+      if(!map.containsKey(packageName)) {
+        File f = new File(folder, packageName.replace('.', File.separatorChar));
+        Collection c = Collections.EMPTY_LIST;
+        if(f.exists() && f.isDirectory()) {
+          String[] files = f.list();
+          if(files.length > 0) {
+            c = new HashSet();
+            for(int i = 0; i < files.length; i++)
+              c.add(files[i]);
+          }
+        }
+        else
+          c = null;
+        map.put(packageName, c);
+      }
+      return (Collection)map.get(packageName);
+    }
+    
+    public boolean selectCompilationUnit(String canonicalName) throws IOException {
+      if(hasCompilationUnit(canonicalName)) {
+        String fileName = canonicalName.replace('.', File.separatorChar);
+        File classFile = new File(folder, fileName + fileSuffix());
+        if(classFile.isFile()) {
+          is = new FileInputStream(classFile);
+          age = classFile.lastModified();
+          pathName = classFile.getPath();
+          relativeName = fileName;
+          fullName = canonicalName;
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+
+  // load files in a zip file
+  class ZipFilePart extends PathPart {
+    private HashSet set = new HashSet();
+    private ZipFile file;
+
+    public boolean hasPackage(String name) {
+      return set.contains(name);
+    }
+
+    public ZipFilePart(ZipFile file) {
+      this.file = file;
+      // process all entries in the zip file
+      for (Enumeration e = file.entries() ; e.hasMoreElements() ;) {
+        ZipEntry entry = (ZipEntry)e.nextElement();
+        String pathName = new File(entry.getName()).getParent();
+        if(pathName != null)
+          pathName = pathName.replace(File.separatorChar, '.');
+        if(!set.contains(pathName)) {
+          int pos = 0;
+          while(pathName != null && -1 != (pos = pathName.indexOf('.', pos + 1))) {
+            String n = pathName.substring(0, pos);
+            if(!set.contains(n)) {
+              set.add(n);
+            }
+          }
+          set.add(pathName);
+        }
+        set.add(entry.getName());
+      }
+    }
+
+    public boolean selectCompilationUnit(String canonicalName) throws IOException {
+      String name = canonicalName.replace('.', '/'); // ZipFiles do always use '/' as separator
+      name = name + fileSuffix();
+      if(set.contains(name)) {
+        ZipEntry zipEntry = file.getEntry(name);
+        if(zipEntry != null && !zipEntry.isDirectory()) {
+          is = file.getInputStream(zipEntry);
+          age = zipEntry.getTime();
+          pathName = file.getName();
+          relativeName = name;
+          fullName = canonicalName;
+          return true;
+        }
+      }
+      return false;
+    }
+  }
+  
+  // load files specified explicitly (on the command line)
+  class FileNamesPart extends PathPart {
+    private HashMap sourceFiles = new HashMap();
+    private HashSet packages = new HashSet();
+
+    public FileNamesPart() {
+      isSource = true;
+    }
+
+    public boolean hasPackage(String name) { return packages.contains(name); }
+    public boolean isEmpty() { return sourceFiles.isEmpty(); }
+    public Set keySet() { return sourceFiles.keySet(); }
+
+    public boolean selectCompilationUnit(String canonicalName) throws IOException {
+      if(sourceFiles.containsKey(canonicalName)) {
+        String f = (String)sourceFiles.get(canonicalName);
+        File classFile = new File(f);
+        if(classFile.isFile()) {
+          is = new FileInputStream(classFile);
+          pathName = "";
+          relativeName = f;
+          fullName = canonicalName;
+          sourceFiles.remove(canonicalName);
+          return true;
+        }
+      }
+      return false;
+    }
+    public void addSourceFile(String name) {
+      String canonicalName = canonicalName(name);
+      sourceFiles.put(canonicalName, name);
+      String pathName = canonicalName;
+      if(!packages.contains(pathName)) {
+        int pos = 0;
+        while(pathName != null && -1 != (pos = pathName.indexOf('.', pos + 1))) {
+          String n = pathName.substring(0, pos);
+          if(!packages.contains(n))
+            packages.add(n);
+        }
+      }
+    }
+    private static String canonicalName(String fileName) {
+      try {
+        Reader reader = new FileReader(fileName);
+        JavaScanner scanner = new JavaScanner(new Unicode(reader));
+        StringBuffer packageName = new StringBuffer();
+        Symbol sym = scanner.nextToken();
+        if(sym.getId() == JavaParser.Terminals.PACKAGE) {
+          while(true) {
+            sym = scanner.nextToken();
+            if(sym.getId() == JavaParser.Terminals.SEMICOLON)
+              break;
+            packageName.append(sym.value);
+          }
+        }
+        reader.close();
+        if(packageName.length() != 0)
+          packageName.append(".");
+        int begin = fileName.lastIndexOf(File.separatorChar);
+        begin = begin + 1;
+       int end = fileName.lastIndexOf('.');
+        packageName.append(fileName.substring(begin, end));
+        return packageName.toString();
+      } catch (Exception e) {
+      }
+      return fileName;
+    }
+  }
+
+  // remove user defined classes from this program but keep library classes
+  public void Program.simpleReset() {
+    lookupType_String_String_values = new SimpleMap();
+    hasPackage_String_values = new SimpleMap();
+    List list = new List();
+    for(int i = 0; i < getNumCompilationUnit(); i++) {
+      String p = getCompilationUnit(i).packageName();
+      if(p.startsWith("java") || p.startsWith("primitive"))
+        list.add(getCompilationUnit(i));
+    }
+    setCompilationUnitList(list);
+  }
 }

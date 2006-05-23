@@ -1,0 +1,113 @@
+import java.util.*;
+
+aspect Names {
+  // simple names
+  syn String ParseName.name() = getIdUse().getID();
+  syn String PackageOrTypeAccess.name() = getIdUse().getID();
+  syn String AmbiguousAccess.name() = getIdUse().getID();
+  syn String VarAccess.name() = getIdUse().getID();
+  syn String MethodAccess.name() = getIdUse().getID();
+  syn String ConstructorAccess.name() = "this";
+  syn String SuperConstructorAccess.name() = "super";
+  syn String TypeAccess.name() = getIdUse().getID();
+  
+  syn String PackageAccess.name() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++)
+      s.append(getPackage(i).getID() + ".");
+    return s.toString();
+  }
+  
+  syn String TypeAccess.packageName() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++) {
+      if(i > 0) s.append(".");
+      s.append(getPackage(i).getID());
+    }
+    return s.toString();
+  }
+  
+  syn String PackageAccess.packageName() {
+    StringBuffer s = new StringBuffer();
+    if(hasPrevExpr() && prevExpr().isPackageAccess()) {
+      s.append(((PackageAccess)prevExpr()).packageName());
+      s.append(".");
+    }
+    for(int i = 0; i < getNumPackage(); i++) {
+      if(i > 0) s.append(".");
+      s.append(getPackage(i).getID());
+    }
+    return s.toString();
+  }
+
+
+  // human readable qualified names
+  syn String TypeAccess.nameWithPackage() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackage(); i++)
+      s.append(getPackage(i).getID() + ".");
+    s.append(name());
+    return s.toString();
+  }
+
+  syn String SingleTypeImportDecl.typeName() {
+    Access a = getAccess().lastAccess();
+    String name = a.isTypeAccess() ? ((TypeAccess)a).nameWithPackage() : "";
+    while(a.hasPrevExpr() && a.prevExpr() instanceof Access) {
+      Access pred = (Access)a.prevExpr();
+      if(pred.isTypeAccess())
+        name = ((TypeAccess)pred).nameWithPackage() + "." + name;
+      a = pred;
+    }
+    return name;
+  }
+  syn String TypeImportOnDemandDecl.typeName() {
+    Access a = getAccess().lastAccess();
+    String name = a.isTypeAccess() ? ((TypeAccess)a).nameWithPackage() : "";
+    while(a.hasPrevExpr() && a.prevExpr() instanceof Access) {
+      Access pred = (Access)a.prevExpr();
+      if(pred.isTypeAccess())
+        name = ((TypeAccess)pred).nameWithPackage() + "." + name;
+      a = pred;
+    }
+    return name;
+  }
+
+}
+
+aspect TypeName {
+  syn String TypeDecl.name() = getIdDecl().getID();
+
+  syn lazy String TypeDecl.fullName() {
+    String packageName = packageName();
+    if(packageName.equals(""))
+      return name();
+    return packageName + "." + name();
+  }
+
+  syn lazy String TypeDecl.typeName() {
+    String packageName = packageName();
+    if(packageName.equals("") || packageName.equals("primitive"))
+      return name();
+    return packageName + "." + name();
+  }
+  eq ArrayDecl.typeName() = componentType().typeName() + "[]";
+
+  inh lazy String TypeDecl.packageName();
+  eq CompilationUnit.getTypeDecl().packageName() = packageName();
+  eq CompilationUnit.getImportDecl().packageName() = packageName();
+
+  eq TypeDecl.getBodyDecl().packageName() = packageName().equals("") ?
+    name() : packageName() + "." + name();
+
+  syn lazy String CompilationUnit.packageName() {
+    StringBuffer s = new StringBuffer();
+    for(int i = 0; i < getNumPackageDecl(); i++) {
+      s.append(getPackageDecl(i).getID());
+      if(i + 1 < getNumPackageDecl()) s.append(".");
+    }
+    return s.toString();
+  }
+}
+
+
