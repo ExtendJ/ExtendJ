@@ -12,7 +12,7 @@ class JavaDumpTree {
       try {
         Reader reader = new FileReader(args[i]);
         JavaParser parser = new JavaParser();
-        JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
+        JavaScanner scanner = new JavaScanner(new Unicode(new BufferedReader(reader)));
         CompilationUnit unit = ((Program)parser.parse(scanner)).getCompilationUnit(0);
       	reader.close();
         program.addCompilationUnit(unit);

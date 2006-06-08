@@ -39,7 +39,7 @@ class JavaPrettyPrinter {
       String name = (String)iter.next();
       try {
         Reader reader = new FileReader(name);
-        JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
+        JavaScanner scanner = new JavaScanner(new Unicode(new BufferedReader(reader)));
         CompilationUnit unit = (CompilationUnit)parser.parse(scanner);
         unit.setFromSource(true);
         unit.setRelativeName(name);
