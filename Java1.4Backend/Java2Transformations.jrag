@@ -1,9 +1,11 @@
 aspect Java2Transformations {
-  public void Program.java2Transformation(int length) {
-    for(int i = 0; i < length; i++)
-      getCompilationUnit(i).java2Transformation();
+  // generic traversal of the tree
+  public void ASTNode.java2Transformation() {
+    for(int i = 0; i < getNumChild(); i++) {
+        getChild(i).java2Transformation();
+    }
   }
-
+  
   public void CompilationUnit.java2Transformation() {
     for(int i = 0; i < getNumTypeDecl(); i++) {
       getTypeDecl(i).java2Transformation();
@@ -11,22 +13,9 @@ aspect Java2Transformations {
   }
   
   public void TypeDecl.java2Transformation() {
-    if(nestedTypes() != null) {
-      for(Iterator iter = nestedTypes().iterator(); iter.hasNext(); ) {
-        TypeDecl typeDecl = (TypeDecl)iter.next();
-        typeDecl.java2Transformation();
-      }
-    }
     super.java2Transformation();
-  }
-
-  // generic traversal of the tree but stop when a nested type is found
-  public void ASTNode.java2Transformation() {
-    for(int i = 0; i < getNumChild(); i++) {
-      ASTNode node = getChild(i);
-      if(!(node instanceof TypeDecl))
-        getChild(i).java2Transformation();
-    }
+    if(isNestedType())
+      enclosingType().addNestedType(this);
   }
 
   public void TypeAccess.java2Transformation() {
@@ -35,14 +24,6 @@ aspect Java2Transformations {
       hostType().addUsedNestedType(type());
   }
   
-  public void VarAccess.java2Transformation() {
-    super.java2Transformation();
-    Variable v = decl();
-    if(!v.isInstanceVariable() && !v.isClassVariable() && v.hostType() != hostType()) {
-      hostType().addUsedEnclosingVariable(v);
-    }
-  }
-
   public void MethodAccess.java2Transformation() {
     MethodDecl m = decl();
     
@@ -52,6 +33,18 @@ aspect Java2Transformations {
     }
     else if(!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
       superAccessorTarget().createSuperAccessor(m);
+    }
+    super.java2Transformation();
+  }
+
+  public void VarAccess.java2Transformation() {
+    Variable v = decl();
+    if(v instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration)v;
+      if(f.isPrivate() && !hostType().hasField(v.name())) {
+        f.accessorIndex();
+        f.accessorWriteIndex();
+      }
     }
     super.java2Transformation();
   }
@@ -102,9 +95,4 @@ aspect Java2Transformations {
    return node;
   }
   private static int ASTNode.replacePos = 0;
-
-
-
-
-  
 }

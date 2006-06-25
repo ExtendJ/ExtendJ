@@ -46,7 +46,6 @@ class JavaCompiler {
       for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
         CompilationUnit unit = (CompilationUnit)iter.next();
         if(unit.fromSource()) {
-          unit.updateRemoteAttributeCollections();
           Collection errors = new LinkedList();
           if(Program.verbose())
             System.out.println("Error checking " + unit.relativeName());
