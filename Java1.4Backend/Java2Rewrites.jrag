@@ -18,7 +18,7 @@ aspect Java2Rewrites {
   syn String TypeDecl.referenceClassName() {
     throw new Error("referenceClassName not supported for " + name() + " of type " + getClass().getName());
   }
-  //eq ReferenceType.referenceClassName() = fullName();
+  
   eq ReferenceType.referenceClassName() = constantPoolName().replace('/', '.');
   eq ArrayDecl.referenceClassName() = typeDescriptor().replace('/', '.');
 
@@ -29,36 +29,6 @@ aspect Java2Rewrites {
   eq ArrayDecl.referenceClassFieldName() = "array" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
   
   inh TypeDecl AssertStmt.hostType();
-
-  rewrite AssertStmt {
-    to Stmt {
-      // add field to hold cached result as a side-effect
-      FieldDeclaration f = hostType().createStaticClassField(hostType().referenceClassFieldName());
-      FieldDeclaration assertionsDisabled = hostType().createAssertionsDisabled();
-      Expr condition = getfirst();
-      List args = new List();
-      if(hasExpr())
-        args.add(getExpr());
-      return new IfStmt(
-        new LogNotExpr(
-          new ParExpr(
-            new OrLogicalExpr(
-              new BoundFieldAccess(assertionsDisabled),
-              condition
-            )
-          )
-        ),
-        new ThrowStmt(
-          new ClassInstanceExpr(
-            lookupType("java.lang", "AssertionError").createQualifiedAccess(),
-            args,
-            new Opt()
-          )
-        ),
-        new Opt()
-      );
-    }
-  }
   
   // lazily build a static field for assertionsDisabled 
   private FieldDeclaration TypeDecl.createAssertionsDisabled = null;
@@ -84,8 +54,10 @@ aspect Java2Rewrites {
       )
     );
     getBodyDeclList().insertChild(createAssertionsDisabled, 0);
-    //addBodyDecl(createAssertionsDisabled);
-    createAssertionsDisabled.isFinal = true;
+    // explicit read to trigger possible rewrites
+    createAssertionsDisabled = (FieldDeclaration)getBodyDeclList().getChild(0);
+    // transform the generated initalization, e.g., the ClassAccess construct
+    createAssertionsDisabled.java2Transformation();
     return createAssertionsDisabled;
   }
 
@@ -108,8 +80,7 @@ aspect Java2Rewrites {
       }
     };
     createStaticClassField.put(name, f);
-    addMemberField(f);
-    return f;
+    return addMemberField(f);
   }
 
   // lazily build a static class$ method in this type declaration
@@ -194,8 +165,7 @@ aspect Java2Rewrites {
         return true;
       }
     };
-    addMemberMethod(createStaticClassMethod);
-    return createStaticClassMethod;
+    return addMemberMethod(createStaticClassMethod);
   }
   
 }

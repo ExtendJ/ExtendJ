@@ -5,10 +5,14 @@ import java.io.*;
 import parser.*;
 
 class JavaPrettyPrinter {
-
   public static void main(String args[]) {
+    if(!compile(args))
+      System.exit(1);
+  }
+  
+  public static boolean compile(String args[]) {
     Program program = new Program();
-    program.initOptions();
+    program.initOptions();    
     program.addKeyValueOption("-classpath");
     program.addKeyValueOption("-sourcepath");
     program.addKeyValueOption("-bootclasspath");
@@ -17,96 +21,51 @@ class JavaPrettyPrinter {
     program.addKeyOption("-verbose");
     program.addKeyOption("-version");
     program.addKeyOption("-help");
-    
+    program.addKeyOption("-g");
+
     program.addOptions(args);
     Collection files = program.files();
-    
+
     if(program.hasOption("-version")) {
       printVersion();
-      return;
+      return false;
     }
     if(program.hasOption("-help") || files.isEmpty()) {
       printUsage();
-      return;
+      return false;
     }
-    
-    long initParseTime = System.currentTimeMillis();
-    program = new Program();
-    JavaParser parser = new JavaParser();
-    initParseTime = System.currentTimeMillis() - initParseTime;
-    long parseTime = System.currentTimeMillis();
+
     for(Iterator iter = files.iterator(); iter.hasNext(); ) {
       String name = (String)iter.next();
-      try {
-        Reader reader = new FileReader(name);
-        JavaScanner scanner = new JavaScanner(new Unicode(new BufferedReader(reader)));
-        CompilationUnit unit = (CompilationUnit)parser.parse(scanner);
-        unit.setFromSource(true);
-        unit.setRelativeName(name);
-        unit.setPathName(".");
-      	reader.close();
-        
-        //long parse = System.currentTimeMillis();
-        program.addCompilationUnit(unit);
-        //program.parseTime += System.currentTimeMillis() - parse;
-      } catch (Error e) {
-        if(e.getMessage() != null) {
-          System.err.println(name + ": " + e.getMessage());
-          System.exit(1);
-        }
-        e.printStackTrace();
-        System.exit(1);
-      } catch (RuntimeException e) {
-        if(e.getMessage() != null) {
-          System.err.println(name + ": " + e.getMessage());
-          System.exit(1);
-        }
-        e.printStackTrace();
-        System.exit(1);
-      } catch (IOException e) {
-      } catch (Exception e) {
-        e.printStackTrace();
-      }
+      program.addSourceFile(name);
     }
-    parseTime = System.currentTimeMillis() - parseTime;
-    long rewriteAndUpdateTime = System.currentTimeMillis();
-    if(Program.verbose())
-      System.out.println("Updating remote attribute collections");
-    rewriteAndUpdateTime = System.currentTimeMillis() - rewriteAndUpdateTime;
+
+    try {
+      for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
+        CompilationUnit unit = (CompilationUnit)iter.next();
+        if(unit.fromSource()) {
+          Collection errors = new LinkedList();
+          unit.errorCheck(errors);
+          if(!errors.isEmpty()) {
+            System.out.println("Errors:");
+            for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
+              String s = (String)iter2.next();
+              System.out.println(s);
+            }
+            return false;
+          }
+        }
+      }
+    } catch (Error e) {
+      System.err.println(e.getMessage());
+      return false;
+    }
+
     if(Program.verbose())
       System.out.println("Pretty printing source code");
-    program.prettyPrint(files.size());
-    long errorCheckTime = System.currentTimeMillis();
-    if(Program.verbose())
-      System.out.println("Error checking source code");
-    if(program.errorCheck(files.size())) {
-      errorCheckTime = System.currentTimeMillis() - errorCheckTime;
-      //long code = System.currentTimeMillis() - start - program.parseTime;
-      /*
-      System.err.println("InitParser: " + initParseTime);
-      System.err.println("Parse: " + parseTime);
-      System.err.println("ClassFileReadTime: " + program.classFileReadTime);
-      System.err.println("String computation: " + (program.stringComputation - program.classFileReadTime));
-      System.err.println("Print time: " + program.printTime);
-      System.err.println("Error check time: " + errorCheckTime);
-      System.err.println("Number of files: " + files.size());
-      */
-      System.exit(1);
-      
-    }
-    errorCheckTime = System.currentTimeMillis() - errorCheckTime;
-    //long code = System.currentTimeMillis() - start - program.parseTime;
-    /*
-    System.err.println("InitParser: " + initParseTime);
-    System.err.println("Parse: " + parseTime);
-    System.err.println("ClassFileReadTime: " + program.classFileReadTime);
-    System.err.println("String computation: " + (program.stringComputation - program.classFileReadTime));
-    System.err.println("Print time: " + program.printTime);
-    System.err.println("Error check time: " + errorCheckTime);
-    System.err.println("Number of files: " + files.size());
-    */
+    System.out.println(program.toString());
+    return true;
   }
-
 
   protected static void printUsage() {
     printVersion();

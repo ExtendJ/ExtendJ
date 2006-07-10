@@ -7,8 +7,10 @@ aspect Java2Transformations {
   }
   
   public void CompilationUnit.java2Transformation() {
-    for(int i = 0; i < getNumTypeDecl(); i++) {
-      getTypeDecl(i).java2Transformation();
+    if(fromSource()) {
+      for(int i = 0; i < getNumTypeDecl(); i++) {
+        getTypeDecl(i).java2Transformation();
+      }
     }
   }
   
@@ -31,7 +33,16 @@ aspect Java2Transformations {
     MethodDecl m = decl();
     
     if(m.isPrivate() && !hostType().hasMethod(name())) {
-      addPrivateMethodAccessor();
+      /* Access to private methods in enclosing types:
+      The original MethodAccess is replaced with an access to an accessor method
+      built by createAccessor(). This method is built lazily and differs from
+      normal MethodDeclarations in the following ways:
+      1) The method in the class file should always be static and the signature
+         is thus changed to include a possible this reference as the first argument. 
+      2) The method is always invoked using INVOKESTATIC
+      3) The flags must indicate that the method is static and package private
+      */
+      replace(this).with(decl().createAccessor().createBoundAccess(getArgList()));
       return;
     }
     else if(!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
@@ -56,7 +67,7 @@ aspect Java2Transformations {
   // remote collection / demand driven creation of accessor
   public void ClassInstanceExpr.java2Transformation() {
     super.java2Transformation();
-    // touch accessorIndex go force creation of private constructorAccessor
+    // touch accessorIndex to force creation of private constructorAccessor
     if(decl().isPrivate() && type() != hostType()) {
       decl().accessorIndex();
     }
@@ -89,6 +100,39 @@ aspect Java2Transformations {
       FieldDeclaration f = hostType().createStaticClassField(prevExpr().type().referenceClassFieldName());
     }
     
+  }
+
+  public void AssertStmt.java2Transformation() {
+    super.java2Transformation();
+    // add field to hold cached result as a side-effect
+    FieldDeclaration f = hostType().createStaticClassField(hostType().referenceClassFieldName());
+    FieldDeclaration assertionsDisabled = hostType().createAssertionsDisabled();
+    Expr condition = getfirst();
+    List args = new List();
+    if(hasExpr())
+      args.add(getExpr());
+    Stmt stmt = 
+      new IfStmt(
+        new LogNotExpr(
+          new ParExpr(
+            new OrLogicalExpr(
+              new BoundFieldAccess(assertionsDisabled),
+              condition
+            )
+          )
+        ),
+        new ThrowStmt(
+          new ClassInstanceExpr(
+            lookupType("java.lang", "AssertionError").createQualifiedAccess(),
+            args,
+            new Opt()
+          )
+        ),
+        new Opt()
+      );
+     
+    replace(this).with(stmt);
+    stmt.java2Transformation();
   }
   
   // imperative transformation of the AST

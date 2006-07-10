@@ -1,14 +1,10 @@
 aspect GenerateClassfile {
-    
-  public void Program.generateClassfile(int length) {
-    for(int i = 0; i < length; i++)
-      getCompilationUnit(i).generateClassfile();
-  }
-
   public void CompilationUnit.generateClassfile() {
-    for(int i = 0; i < getNumTypeDecl(); i++) {
-      getTypeDecl(i).generateClassfile();
-      getTypeDecl(i).clear();
+    if(fromSource()) {
+      for(int i = 0; i < getNumTypeDecl(); i++) {
+        getTypeDecl(i).generateClassfile();
+        getTypeDecl(i).clear();
+      }
     }
   }
   
@@ -19,188 +15,12 @@ aspect GenerateClassfile {
     }
   }
 
-  public boolean ASTNode.clear() {
-    boolean empty = true;
-    for(int i = 0; i < getNumChild(); i++) {
-      if(!getChild(i).clear())
-        empty = false;
-      else
-        setChild(null, i);
-    }
-    if(empty) {
-      setParent(null);
-    }
-    if(flush())
-      flushCache();
-    return empty;
-  }
-
-  syn boolean ASTNode.flush() = true;
-  
-  eq TypeDecl.flush() = false;
-  eq LocalClassDeclStmt.flush() = true;
-  eq AnonymousDecl.flush() = true;
-  
-  eq MethodDecl.flush() = false;
-  eq FieldDeclaration.flush() = false;
-  eq ConstructorDecl.flush() = false;
-  
-  public boolean TypeDecl.clear() {
-    bytecodes(constantPool()).clearCodeGeneration();
-    for(int i = 0; i < getNumBodyDecl(); i++)
-      getBodyDecl(i).clear();
-    attributes_computed = false;
-    attributes_value = null;
-    clinit_attributes_computed = false;
-    clinit_attributes_value = null;
-    constantPool_computed = false;
-    constantPool_value = null;
-    bytecodes_ConstantPool_values = null;
-    return false;
-  }
-  public boolean LocalClassDeclStmt.clear() {
-    for(int i = 0; i < getNumChild(); i++)
-      getChild(i).clear();
-    setParent(null);
-    flushCache();
-    return true;
-  }
-  public boolean AnonymousDecl.clear() {
-    for(int i = 0; i < getNumChild(); i++)
-      getChild(i).clear();
-    setParent(null);
-    flushCache();
-    return true;
-  }
-
-  public boolean MethodDecl.clear() {
-    if(hasBlock())
-      getBlock().clear();
-    //bytecodes(hostType().constantPool()).clearCodeGeneration();
-    bytecodes_ConstantPool_values = null;
-    return false;
-  }
-
-  public boolean FieldDeclaration.clear() {
-    return false;
-  }
-
-  public boolean ConstructorDecl.clear() {
-    getBlock().clear();
-    //bytecodes(hostType().constantPool()).clearCodeGeneration();
-    bytecodes_ConstantPool_values = null;
-    return false;
-  }
-
-
-  public void InterfaceDecl.generateClassfile() {
-    super.generateClassfile();
-    String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
-    if(Program.verbose()) System.out.println("Writing class file to " + fileName);
-    try {
-      ConstantPool cp = constantPool();
-      // force building of constant pool
-      cp.addClass(constantPoolName());
-      cp.addClass("java/lang/Object");
-      for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-        cp.addClass(getSuperInterfaceId(i).type().constantPoolName());
-      }
-      for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
-        FieldDeclaration field = (FieldDeclaration) iter.next();
-        cp.addUtf8(field.name());
-        cp.addUtf8(field.type().typeDescriptor());
-        field.attributes();
-      }
-      for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
-        Object obj = iter.next();
-        if(obj instanceof MethodDecl) {
-          MethodDecl m = (MethodDecl) obj;
-          cp.addUtf8(m.getIdDecl().getID()); // name()
-          cp.addUtf8(m.descName());
-          m.attributes();
-        }
-      }
-      attributes();
-      
-      cp.addClass("java.lang.Object");
-      
-      if(hasClinit()) {
-        cp.addUtf8("<clinit>");
-        cp.addUtf8("()V");
-        clinit_attributes();
-      }
-
-      // actual classfile generation
-      File dest = new File(fileName);
-      File parentFile = dest.getParentFile();
-      if(parentFile != null)
-        parentFile.mkdirs();
-
-      FileOutputStream f = new FileOutputStream(fileName);
-      DataOutputStream out = new DataOutputStream(new BufferedOutputStream(f));
-      out.writeInt(0xCAFEBABE);
-      out.writeChar(0);
-      out.writeChar(48);
-      cp.emit(out);
-      int flags = flags();
-      if(isNestedType())
-        flags = mangledFlags(flags);
-      if(isInterfaceDecl())
-        flags |= Modifiers.ACC_INTERFACE;
-      out.writeChar(flags);
-      out.writeChar(cp.addClass(constantPoolName()));
-      out.writeChar(cp.addClass("java.lang.Object"));
-      if(getNumSuperInterfaceId() == 1 && getSuperInterfaceId(0).type().isObject())
-        out.writeChar(0);
-      else
-        out.writeChar(getNumSuperInterfaceId());
-      for(int i = 0; i < getNumSuperInterfaceId(); i++) {
-        TypeDecl typeDecl = getSuperInterfaceId(i).type();
-        if(typeDecl.isInterfaceDecl())
-          out.writeChar(cp.addClass(typeDecl.constantPoolName()));
-      }
-      Collection fields = bcFields();
-      out.writeChar(fields.size());
-      for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
-        FieldDeclaration field = (FieldDeclaration) iter.next();
-        out.writeChar(field.flags());
-        out.writeChar(cp.addUtf8(field.name()));
-        out.writeChar(cp.addUtf8(field.type().typeDescriptor()));
-        out.writeChar(field.attributes().size());
-        for(Iterator itera = field.attributes().iterator(); itera.hasNext();)
-          ((Attribute)itera.next()).emit(out);
-      }
-      Collection methods = bcMethods();
-      out.writeChar(methods.size() + (hasClinit() ? 1 : 0));
-      for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
-        BodyDecl b = (BodyDecl)iter.next();
-        b.generateMethod(out, cp);
-      }
-      if(hasClinit()) {
-        out.writeChar(Modifiers.ACC_STATIC);
-        out.writeChar(cp.addUtf8("<clinit>"));
-        out.writeChar(cp.addUtf8("()V"));
-        out.writeChar(clinit_attributes().size());
-        for(Iterator itera = clinit_attributes().iterator(); itera.hasNext();)
-          ((Attribute)itera.next()).emit(out);
-      }
-      out.writeChar(attributes().size());
-      for(Iterator itera = attributes().iterator(); itera.hasNext();)
-        ((Attribute)itera.next()).emit(out);
-
-      out.close();
-    } catch (IOException e) {
-      e.printStackTrace();
-    }
-  }
-
   public void ClassDecl.generateClassfile() {
     super.generateClassfile();
     String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
     if(Program.verbose()) System.out.println("Writing class file to " + fileName);
     try {
       ConstantPool cp = constantPool();
-      //cp.addUtf8("Synthetic");
 
       // force building of constant pool
       cp.addClass(constantPoolName());
@@ -331,11 +151,111 @@ aspect GenerateClassfile {
     }
   }
   
+  public void InterfaceDecl.generateClassfile() {
+    super.generateClassfile();
+    String fileName = destinationPath() + File.separator + constantPoolName() + ".class";
+    if(Program.verbose()) System.out.println("Writing class file to " + fileName);
+    try {
+      ConstantPool cp = constantPool();
+      // force building of constant pool
+      cp.addClass(constantPoolName());
+      cp.addClass("java/lang/Object");
+      for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+        cp.addClass(getSuperInterfaceId(i).type().constantPoolName());
+      }
+      for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
+        FieldDeclaration field = (FieldDeclaration) iter.next();
+        cp.addUtf8(field.name());
+        cp.addUtf8(field.type().typeDescriptor());
+        field.attributes();
+      }
+      for(Iterator iter = bcMethods().iterator(); iter.hasNext(); ) {
+        Object obj = iter.next();
+        if(obj instanceof MethodDecl) {
+          MethodDecl m = (MethodDecl) obj;
+          cp.addUtf8(m.getIdDecl().getID()); // name()
+          cp.addUtf8(m.descName());
+          m.attributes();
+        }
+      }
+      attributes();
+      
+      if(hasClinit()) {
+        cp.addUtf8("<clinit>");
+        cp.addUtf8("()V");
+        clinit_attributes();
+      }
+
+      // actual classfile generation
+      File dest = new File(fileName);
+      File parentFile = dest.getParentFile();
+      if(parentFile != null)
+        parentFile.mkdirs();
+
+      FileOutputStream f = new FileOutputStream(fileName);
+      DataOutputStream out = new DataOutputStream(new BufferedOutputStream(f));
+      out.writeInt(0xCAFEBABE);
+      out.writeChar(0);
+      out.writeChar(48);
+      cp.emit(out);
+      int flags = flags();
+      if(isNestedType())
+        flags = mangledFlags(flags);
+      if(isInterfaceDecl())
+        flags |= Modifiers.ACC_INTERFACE;
+      out.writeChar(flags);
+      out.writeChar(cp.addClass(constantPoolName()));
+      out.writeChar(cp.addClass("java/lang/Object"));
+      if(getNumSuperInterfaceId() == 1 && getSuperInterfaceId(0).type().isObject())
+        out.writeChar(0);
+      else
+        out.writeChar(getNumSuperInterfaceId());
+      for(int i = 0; i < getNumSuperInterfaceId(); i++) {
+        TypeDecl typeDecl = getSuperInterfaceId(i).type();
+        if(typeDecl.isInterfaceDecl())
+          out.writeChar(cp.addClass(typeDecl.constantPoolName()));
+      }
+      Collection fields = bcFields();
+      out.writeChar(fields.size());
+      for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
+        FieldDeclaration field = (FieldDeclaration) iter.next();
+        out.writeChar(field.flags());
+        out.writeChar(cp.addUtf8(field.name()));
+        out.writeChar(cp.addUtf8(field.type().typeDescriptor()));
+        out.writeChar(field.attributes().size());
+        for(Iterator itera = field.attributes().iterator(); itera.hasNext();)
+          ((Attribute)itera.next()).emit(out);
+      }
+      Collection methods = bcMethods();
+      out.writeChar(methods.size() + (hasClinit() ? 1 : 0));
+      for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
+        BodyDecl b = (BodyDecl)iter.next();
+        b.generateMethod(out, cp);
+      }
+      if(hasClinit()) {
+        out.writeChar(Modifiers.ACC_STATIC);
+        out.writeChar(cp.addUtf8("<clinit>"));
+        out.writeChar(cp.addUtf8("()V"));
+        out.writeChar(clinit_attributes().size());
+        for(Iterator itera = clinit_attributes().iterator(); itera.hasNext();)
+          ((Attribute)itera.next()).emit(out);
+      }
+      out.writeChar(attributes().size());
+      for(Iterator itera = attributes().iterator(); itera.hasNext();)
+        ((Attribute)itera.next()).emit(out);
+
+      out.close();
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+  }
+
+  
   public void BodyDecl.generateMethod(DataOutputStream out, ConstantPool cp) throws IOException {
   }
   public void MethodDecl.generateMethod(DataOutputStream out, ConstantPool cp) throws IOException {
     out.writeChar(flags());
-    out.writeChar(cp.addUtf8(getIdDecl().getID())); // name()
+    out.writeChar(cp.addUtf8(name()));
     out.writeChar(cp.addUtf8(descName()));
     out.writeChar(attributes().size());
     for(Iterator itera = attributes().iterator(); itera.hasNext();)
@@ -355,7 +275,7 @@ aspect GenerateClassfile {
   public void BodyDecl.touchMethod(ConstantPool cp) {
   }
   public void MethodDecl.touchMethod(ConstantPool cp) {
-    cp.addUtf8(getIdDecl().getID()); // name()
+    cp.addUtf8(name());
     cp.addUtf8(descName());
     attributes();
   }
@@ -394,4 +314,78 @@ aspect GenerateClassfile {
   syn boolean BodyDecl.isBytecodeMethod() = false;
   eq MethodDecl.isBytecodeMethod() = true;
   eq ConstructorDecl.isBytecodeMethod() = true;
+
+
+
+  // Remove method bodies and cached attributes after the class file has been generated
+  public boolean ASTNode.clear() {
+    boolean empty = true;
+    for(int i = 0; i < getNumChild(); i++) {
+      if(!getChild(i).clear())
+        empty = false;
+      else
+        setChild(null, i);
+    }
+    if(empty) {
+      setParent(null);
+    }
+    if(flush())
+      flushCache();
+    return empty;
+  }
+
+  syn boolean ASTNode.flush() = true;
+  
+  eq TypeDecl.flush() = false;
+  eq LocalClassDeclStmt.flush() = true;
+  eq AnonymousDecl.flush() = true;
+  
+  eq MethodDecl.flush() = false;
+  eq FieldDeclaration.flush() = false;
+  eq ConstructorDecl.flush() = false;
+  
+  public boolean TypeDecl.clear() {
+    bytecodes(constantPool()).clearCodeGeneration();
+    for(int i = 0; i < getNumBodyDecl(); i++)
+      getBodyDecl(i).clear();
+    attributes_computed = false;
+    attributes_value = null;
+    clinit_attributes_computed = false;
+    clinit_attributes_value = null;
+    constantPool_computed = false;
+    constantPool_value = null;
+    bytecodes_ConstantPool_values = null;
+    return false;
+  }
+  public boolean LocalClassDeclStmt.clear() {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).clear();
+    setParent(null);
+    flushCache();
+    return true;
+  }
+  public boolean AnonymousDecl.clear() {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).clear();
+    setParent(null);
+    flushCache();
+    return true;
+  }
+
+  public boolean MethodDecl.clear() {
+    if(hasBlock())
+      getBlock().clear();
+    bytecodes_ConstantPool_values = null;
+    return false;
+  }
+
+  public boolean FieldDeclaration.clear() {
+    return false;
+  }
+
+  public boolean ConstructorDecl.clear() {
+    getBlock().clear();
+    bytecodes_ConstantPool_values = null;
+    return false;
+  }
 }

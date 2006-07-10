@@ -75,7 +75,6 @@ class JavaCompiler {
       System.err.println(e.getMessage());
       e.printStackTrace();
     }
-    //AST.SimpleMap.mapStats();
     return true;
   }
 
