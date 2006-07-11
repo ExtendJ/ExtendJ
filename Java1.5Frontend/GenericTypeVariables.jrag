@@ -25,10 +25,10 @@ aspect GenericTypeVariables {
 }
 
 aspect GenericTypeVariablesMembers {
-  eq TypeVariable.methods(String name) {
+  eq TypeVariable.memberMethods(String name) {
     Collection list = new HashSet();
     for(int i = 0; i < getNumTypeBound(); i++) {
-      for(Iterator iter = getTypeBound(i).type().methods(name).iterator(); iter.hasNext(); ) {
+      for(Iterator iter = getTypeBound(i).type().memberMethods(name).iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
         if(!decl.isPrivate())
           list.add(decl);
@@ -37,16 +37,16 @@ aspect GenericTypeVariablesMembers {
     return list;
   }
   
-  eq TypeVariable.fields() {
-    ArrayList list = new ArrayList();
+  eq TypeVariable.fields(String name) {
+    SimpleSet set = SimpleSet.emptySet;
     for(int i = 0; i < getNumTypeBound(); i++) {
-      for(Iterator iter = getTypeBound(i).type().fields().iterator(); iter.hasNext(); ) {
+      for(Iterator iter = getTypeBound(i).type().fields(name).iterator(); iter.hasNext(); ) {
         FieldDeclaration decl = (FieldDeclaration)iter.next();
-        if(!decl.isPrivate() && !list.contains(decl))
-          list.add(decl);
+        if(!decl.isPrivate())
+          set = set.add(decl);
       }
     }
-    return list;
+    return set;
   }
 
 }
@@ -81,11 +81,11 @@ aspect GenricTypeVariablesTypeAnalysis {
 
     for(int i = 0; i < getNumTypeBound(); i++) {
       TypeDecl type = getTypeBound(i).type();
-      for(Iterator iter = type.methods().iterator(); iter.hasNext(); ) {
+      for(Iterator iter = type.methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         for(int j = i+1; j < getNumTypeBound(); j++) {
           TypeDecl destType = getTypeBound(j).type();
-          for(Iterator destIter = destType.methods(m.name()).iterator(); destIter.hasNext(); ) {
+          for(Iterator destIter = destType.memberMethods(m.name()).iterator(); destIter.hasNext(); ) {
             MethodDecl n = (MethodDecl)destIter.next();
             if(m.sameSignature(n) && m.type() != n.type()) {
               error(errorPrefix() + "the two bounds, " + type.name() + " and " + destType.name() + ", in type variable " + name() + 
@@ -102,16 +102,12 @@ aspect GenricTypeVariablesTypeAnalysis {
   
   
   eq TypeVariable.instanceOf(TypeDecl type) = type.isSupertypeOfTypeVariable(this);
-  public boolean TypeVariable.isSupertypeOfClassDecl(ClassDecl type) {
-    return true;
-  //  return super.isSupertypeOfClassDecl(type);
-    /*
+  eq TypeVariable.isSupertypeOfClassDecl(ClassDecl type) {
     for(int i = 0; i < getNumTypeBound(); i++)
       if(!type.instanceOf(getTypeBound(i).type())) {
         return false;
       }
     return true;
-    */
   }
   /*
   public boolean TypeVariable.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
@@ -121,7 +117,7 @@ aspect GenricTypeVariablesTypeAnalysis {
     return super.isSupertypeOfArrayDecl(type);
   }
   */
-  public boolean TypeDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+  syn boolean TypeDecl.isSupertypeOfTypeVariable(TypeVariable type) {
     //System.err.print("  is " + type.fullName() + " a subtype of " + fullName() + "? ");
     if(type == this) {
       //System.err.println("yes");

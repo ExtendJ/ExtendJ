@@ -23,21 +23,21 @@ aspect EnhancedFor {
 	syn lazy boolean TypeDecl.isIterable() = instanceOf(lookupType("java.util", "Collection"));
   
 	// variable lookup
-  inh Collection EnhancedForStmt.lookupVariable(String name);
+  inh SimpleSet EnhancedForStmt.lookupVariable(String name);
 	eq EnhancedForStmt.getParameter().lookupVariable(String name) = localLookupVariable(name);
 	eq EnhancedForStmt.getExpr().lookupVariable(String name) = localLookupVariable(name);
 	eq EnhancedForStmt.getStmt().lookupVariable(String name) = localLookupVariable(name);
+
+  eq EnhancedForStmt.getParameter().nameType() = NameType.TYPE_NAME;
   
   EnhancedForStmt implements VariableScope;
   eq EnhancedForStmt.getParameter().outerScope() = this;
   eq EnhancedForStmt.getExpr().outerScope() = this;
   eq EnhancedForStmt.getStmt().outerScope() = this;
 
-	syn Collection EnhancedForStmt.localLookupVariable(String name) {
+	syn SimpleSet EnhancedForStmt.localLookupVariable(String name) {
 		if(getParameter().getIdDecl().getID().equals(name)) {
-			Collection list = new ArrayList(1);
-			list.add(getParameter());
-			return list;
+      return SimpleSet.emptySet.add(getParameter());
     }
  	  return lookupVariable(name);
 	}
@@ -62,21 +62,20 @@ aspect EnhancedFor {
   eq EnhancedForStmt.break_label(CodeGeneration gen) = end_label(gen);
   eq EnhancedForStmt.continue_label(CodeGeneration gen) = update_label(gen);
 
-  // Used in name check for continue statement
-  eq EnhancedForStmt.isLoop() = true;
- 
+  eq EnhancedForStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
+  eq EnhancedForStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
+
   // Unreachable Statements
   eq EnhancedForStmt.canCompleteNormally() = reachable();
   eq EnhancedForStmt.getStmt().reachable() = reachable();
 
   // Definite Assignment
-  eq EnhancedForStmt.checkReturnDA(Variable v) = getStmt().checkReturnDA(v);
   eq EnhancedForStmt.isDAafter(Variable v) {
     if(!isDAbefore(v))
       return false;
-    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+    for(Iterator iter = targetBreaks().iterator(); iter.hasNext(); ) {
       BreakStmt stmt = (BreakStmt)iter.next();
-      if(!stmt.isDAtest(v))
+      if(!stmt.isDAafterReachedFinallyBlocks(v))
         return false;
     }
     return isDAbefore(v);
@@ -84,12 +83,10 @@ aspect EnhancedFor {
   eq EnhancedForStmt.getExpr().isDAbefore(Variable v) = isDAbefore(v);
   eq EnhancedForStmt.getStmt().isDAbefore(Variable v) = isDAbefore(v);
 
-  eq EnhancedForStmt.checkReturnDU(Variable v) = getStmt().checkReturnDU(v);
-
   eq EnhancedForStmt.isDUafter(Variable v) {
-    for(Iterator iter = breakTarget(); iter.hasNext(); ) {
+    for(Iterator iter = targetBreaks().iterator(); iter.hasNext(); ) {
       BreakStmt stmt = (BreakStmt)iter.next();
-      if(!stmt.isDUtest(v))
+      if(!stmt.isDUafterReachedFinallyBlocks(v))
         return false;
     }
     return isDUbefore(v);

@@ -3,21 +3,44 @@ IdDecl type_variable =
 	;
 
 ClassDecl class_declaration =
-		modifiers_opt.m CLASS IDENTIFIER.id type_parameters.p super_opt.s interfaces_opt.i class_body.b 
+		modifiers.m CLASS IDENTIFIER.id type_parameters.p super_opt.s interfaces_opt.i class_body.b 
 		{:  return new GenericClassDecl(m, new IdDecl(id), s, i, b, p, new List(), new Opt());  :}
+	|	            CLASS IDENTIFIER.id type_parameters.p super_opt.s interfaces_opt.i class_body.b 
+		{:  return new GenericClassDecl(new Modifiers(new List()), new IdDecl(id), s, i, b, p, new List(), new Opt());  :}
 	;
+
+Opt super_opt =
+  {: return new Opt(); :}
+  | super.s {: return s; :}
+  ;
+
+List interfaces_opt =
+    {: return new List(); :}
+  | interfaces.i {: return i; :}
+  ;
+
+List extends_interfaces_opt =
+                       {: return new List(); :}
+  | extends_interfaces {: return extends_interfaces; :}
+  ;
+  
 InterfaceDecl interface_declaration =
-		modifiers_opt.m INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces_opt.i interface_body.b 
+		modifiers.m INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces_opt.i interface_body.b 
 		{:  return new GenericInterfaceDecl(m, new IdDecl(id), i, b, p, new List(), new Opt());  :}
+	|             INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces_opt.i interface_body.b 
+		{:  return new GenericInterfaceDecl(new Modifiers(new List()), new IdDecl(id), i, b, p, new List(), new Opt());  :}
 	;
 
 Access class_or_interface_type =
-		class_or_interface.t LT type_argument_list_1.l {:  return new ParTypeAccess(t, l);  :}
+		name.t LT type_argument_list_1.l {:  return new ParTypeAccess(t, l);  :}
+  | class_or_interface_type.t DOT IDENTIFIER.id {: return t.qualifiesAccess(new ParseName(new IdUse(id))); :}
+  | class_or_interface_type.t DOT IDENTIFIER.id LT type_argument_list_1.l 
+    {: return new ParTypeAccess(t.qualifiesAccess(new ParseName(new IdUse(id))), l); :}
 	;
 Access array_type =
-    	class_or_interface.t LT type_argument_list_1.l DOT name.n dims.d 
+    	name.t LT type_argument_list_1.l DOT name.n dims.d 
     	{:  return new ArrayTypeAccess(new ParTypeAccess(t, l).qualifiesAccess(n), d.getNumChild());  :}
-	|	class_or_interface.t LT type_argument_list_1.l dims.d 
+	|	name.t LT type_argument_list_1.l dims.d 
 		{:  return new ArrayTypeAccess(new ParTypeAccess(t, l), d.getNumChild());  :}
 	;
 
@@ -48,6 +71,11 @@ Access wildcard_3 =
 	|	QUESTION EXTENDS reference_type_3.t  {: return new WildcardExtends(t); :}
 	|	QUESTION SUPER reference_type_3.t    {: return new WildcardSuper(t); :}
 	;
+
+Opt subclass_body_opt =
+    {: return new Opt(); :}
+  | subclass_body {: return subclass_body; :}
+  ;
 
 Expr class_instance_creation_expression =
 	 	NEW type_arguments.a class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
@@ -109,18 +137,15 @@ Access type_argument_3 =
 		reference_type_3.t {:  return t;  :}
 	|	wildcard_3.w {: return w; :}
 	;
-Access class_or_interface =
-		class_or_interface.t LT type_argument_list_1.l DOT name.n 
-		{:  return new ParTypeAccess(t, l).qualifiesAccess(n);  :}
-	;
+  
 Access reference_type_1 =
 		reference_type.t GT {:  return t;  :}
-	|	class_or_interface.t LT type_argument_list_2.l {:  return new ParTypeAccess(t, l);  :}
+	|	name.t LT type_argument_list_2.l {:  return new ParTypeAccess(t, l);  :}
 	;
 	
 Access reference_type_2 =
 		reference_type.t RSHIFT {:  return t;  :}
-	|	class_or_interface.t LT type_argument_list_3.l {:  return new ParTypeAccess(t, l);  :}
+	|	name.t LT type_argument_list_3.l {:  return new ParTypeAccess(t, l);  :}
 	;
 	
 Access reference_type_3 =
@@ -151,13 +176,13 @@ List type_parameter_list_1 =
 	;
 	
 TypeVariable type_parameter =
-		type_variable.v {:  return new TypeVariable(new Modifiers(), v, new List(), new List());  :}
+		type_variable.v              {:  return new TypeVariable(new Modifiers(), v, new List(), new List());  :}
 	|	type_variable.v type_bound.l {:  return new TypeVariable(new Modifiers(), v, new List(), l); :}
 	;
 	
 TypeVariable type_parameter_1 =
-		type_variable.v GT {:  return new TypeVariable(new Modifiers(), v, new List(), new List());  :}
-|	type_variable.v type_bound_1.l {:  return new TypeVariable(new Modifiers(), v, new List(), l);  :}
+		type_variable.v GT             {:  return new TypeVariable(new Modifiers(), v, new List(), new List());  :}
+  |	type_variable.v type_bound_1.l {:  return new TypeVariable(new Modifiers(), v, new List(), l);  :}
 	;
 	
 List type_bound =
@@ -188,10 +213,5 @@ Access additional_bound_1 =
 		AND reference_type_1.t {:  return t;  :}
 	;
 
-BodyDecl class_member_declaration =
-		modifiers_opt.m CLASS IDENTIFIER.id type_parameters.p super_opt.s interfaces_opt.i class_body.b 
-		{:  return new MemberClass(new GenericClassDecl(m, new IdDecl(id), s, i, b, p, new List(), new Opt()));  :}
-	;
-	
 Opt class_body_opt = {: return new Opt(); :}
     |  class_body.b {:  return new Opt(b);  :};

@@ -3,10 +3,11 @@ import AST.*;
 import java.util.*;
 import java.io.*;
 import parser.*;
+import beaver.Symbol;
 
 class JavaCompiler {
-  
- public static void main(String args[]) {
+
+  public static void main(String args[]) {
     if(!compile(args))
       System.exit(1);
   }
@@ -22,6 +23,7 @@ class JavaCompiler {
     program.addKeyOption("-verbose");
     program.addKeyOption("-version");
     program.addKeyOption("-help");
+    program.addKeyOption("-g");
     
     program.addOptions(args);
     Collection files = program.files();
@@ -35,44 +37,45 @@ class JavaCompiler {
       return false;
     }
     
-    JavaParser parser = new JavaParser();
     for(Iterator iter = files.iterator(); iter.hasNext(); ) {
       String name = (String)iter.next();
-      try {
-        Reader reader = new FileReader(name);
-        JavaScanner scanner = new JavaScanner(new UnicodeEscapes(new BufferedReader(reader)));
-        CompilationUnit unit = ((Program)parser.parse(scanner)).getCompilationUnit(0);
-        unit.setFromSource(true);
-        unit.setRelativeName(name);
-        unit.setPathName(".");
-      	reader.close();
-        program.addCompilationUnit(unit);
-      } catch (Error e) {
-        if(e.getMessage() != null)
-          System.err.println(name + ": " + e.getMessage());
-        else
-          e.printStackTrace();
-        return false;
-      } catch (RuntimeException e) {
-        if(e.getMessage() != null)
-          System.err.println(name + ": " + e.getMessage());
-        else
-          e.printStackTrace();
-        return false;
-      } catch (IOException e) {
-      } catch (Exception e) {
-        System.err.println(e);
-        e.printStackTrace();
+      program.addSourceFile(name);
+    }
+
+    try {
+      for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
+        CompilationUnit unit = (CompilationUnit)iter.next();
+        if(unit.fromSource()) {
+          Collection errors = new LinkedList();
+          if(Program.verbose())
+            System.out.println("Error checking " + unit.relativeName());
+          long time = System.currentTimeMillis();
+          unit.errorCheck(errors);
+          time = System.currentTimeMillis()-time;
+          if(Program.verbose())
+            System.out.println("Error checking " + unit.relativeName() + " done in " + time + " ms");
+          if(!errors.isEmpty()) {
+            System.out.println("Errors:");
+            for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
+              String s = (String)iter2.next();
+              System.out.println(s);
+            }
+            return false;
+          }
+          else {
+            unit.java2Transformation();
+            unit.generateClassfile();
+          }
+        }
       }
-    }
-    program.updateRemoteAttributeCollections(files.size());
-    if(!program.errorCheck(files.size())) {
-      program.generateClassfile(files.size());
-      return true;
-    }
-    else {
+    } catch (JavaParser.SourceError e) {
+      System.err.println(e.getMessage());
       return false;
+    } catch (Exception e) {
+      System.err.println(e.getMessage());
+      e.printStackTrace();
     }
+    return true;
   }
 
   protected static void printUsage() {
@@ -92,7 +95,7 @@ class JavaCompiler {
   }
 
   protected static void printVersion() {
-    System.out.println("Java1.5Frontend (http://jastadd.cs.lth.se) Version R20050930");
+    System.out.println("Java1.4Frontend + Backend (http://jastadd.cs.lth.se) Version R20060127");
   }
 
 }

@@ -1,5 +1,5 @@
 aspect StaticImports {
-  eq CompilationUnit.getImportDecl().handlesException(TypeDecl exceptionType, Expr expr) {
+  eq CompilationUnit.getImportDecl().handlesException(TypeDecl exceptionType) {
     return !exceptionType.isUncheckedException();
   }
 
@@ -31,95 +31,77 @@ aspect StaticImports {
   // Lookup Variable
   syn boolean SingleStaticImportDecl.hasField() = type().hasField(name());
   
-  syn Collection ImportDecl.localLookupVariable(String name) = new ArrayList(0);
-  syn Collection SingleStaticImportDecl.localLookupVariable(String name) {
-    ArrayList list = new ArrayList(0);
-    if(!name().equals(name))
-      return list;
-    list.addAll(type().findVariable(name));
-    for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+  syn SimpleSet ImportDecl.localLookupVariable(String name) = SimpleSet.emptySet;
+  syn SimpleSet SingleStaticImportDecl.localLookupVariable(String name) {
+    if(!name().equals(name)) return SimpleSet.emptySet;
+    SimpleSet set = SimpleSet.emptySet;
+    for(Iterator iter = type().memberFields(name).iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
-      if(!v.isStatic())
-        iter.remove();
+      if(v.isStatic())
+        set = set.add(v);
     }
-    return list;
+    return set;
   }
-  syn Collection StaticImportOnDemandDecl.localLookupVariable(String name) {
-    ArrayList list = new ArrayList(0);
-    list.addAll(type().findVariable(name));
-    for(Iterator iter = list.iterator(); iter.hasNext(); ) {
+  syn SimpleSet StaticImportOnDemandDecl.localLookupVariable(String name) {
+    SimpleSet set = SimpleSet.emptySet;
+    for(Iterator iter = type().memberFields(name).iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
-      if(!v.isStatic())
-        iter.remove();
+      if(v.isStatic())
+        set = set.add(v);
     }
-    return list;
+    return set;
   }
 
   // Delegate variable lookup to imports
-  inh Collection CompilationUnit.lookupVariable(String name);
+  inh SimpleSet CompilationUnit.lookupVariable(String name);
   eq CompilationUnit.getTypeDecl().lookupVariable(String name) {
-    ArrayList list = new ArrayList(0);
+    SimpleSet set = SimpleSet.emptySet;
     for(int i = 0; i < getNumImportDecl(); i++) {
-      if(!getImportDecl(i).isOnDemand())
-        list.addAll(getImportDecl(i).localLookupVariable(name));
+      if(!getImportDecl(i).isOnDemand()) {
+        for(Iterator iter = getImportDecl(i).localLookupVariable(name).iterator(); iter.hasNext(); ) {
+          Variable v = (Variable)iter.next();
+          set = set.add(v);
+        }
+      }
     }
-    if(!list.isEmpty())
-      return list;
+    if(!set.isEmpty())
+      return set;
     for(int i = 0; i < getNumImportDecl(); i++) {
-      if(getImportDecl(i).isOnDemand())
-        list.addAll(getImportDecl(i).localLookupVariable(name));
+      if(getImportDecl(i).isOnDemand()) {
+        for(Iterator iter = getImportDecl(i).localLookupVariable(name).iterator(); iter.hasNext(); ) {
+          Variable v = (Variable)iter.next();
+          set = set.add(v);
+        }
+      }
     }
-    if(!list.isEmpty())
-      return list;
+    if(!set.isEmpty())
+      return set;
     return lookupVariable(name);
   }
 
   // Lookup Method
   syn boolean SingleStaticImportDecl.hasMethod() = type().hasMethod(name());
   
-  syn MethodCollection ImportDecl.localLookupMethod(String name) = MethodCollection.emptyCollection();
-  syn MethodCollection SingleStaticImportDecl.localLookupMethod(String name) {
-    if(!name().equals(name))
-      return MethodCollection.emptyCollection();
-    MethodCollection list = type().remoteLookupMethod(name);
-    for(MethodCollection.MethodIterator iter = list.iterator(); iter.hasNext(); ) {
-      MethodDecl mDecl = (MethodDecl)iter.next();
-      if(!mDecl.isStatic())
-        list = iter.remove();
-    }
-    return list;
-  }
-  syn MethodCollection StaticImportOnDemandDecl.localLookupMethod(String name) {
-    MethodCollection list = type().remoteLookupMethod(name);
-    for(MethodCollection.MethodIterator iter = list.iterator(); iter.hasNext(); ) {
-      MethodDecl mDecl = (MethodDecl)iter.next();
-      if(!mDecl.isStatic())
-        list = iter.remove();
-    }
-    return list;
-  }
+  syn Collection ImportDecl.localLookupMethod(String name) = Collections.EMPTY_LIST;
+  
+  syn Collection SingleStaticImportDecl.localLookupMethod(String name) = !name().equals(name) ?
+    Collections.EMPTY_LIST : removeInstanceMethods(type().memberMethods(name));
+    
+  syn Collection StaticImportOnDemandDecl.localLookupMethod(String name) = 
+    removeInstanceMethods(type().memberMethods(name));
+  
   // Delegate method lookup to imports
-  inh MethodCollection CompilationUnit.lookupMethod(String name);
+  inh Collection CompilationUnit.lookupMethod(String name);
   eq CompilationUnit.getTypeDecl().lookupMethod(String name) {
-    MethodCollection list = MethodCollection.emptyCollection();
-    for(int i = 0; i < getNumImportDecl(); i++) {
-      if(!getImportDecl(i).isOnDemand()) {
-        for(MethodCollection.MethodIterator iter = getImportDecl(i).localLookupMethod(name).iterator(); iter.hasNext();) {
-          MethodDecl decl = (MethodDecl)iter.next();
-          list = list.add(decl);
-        }
-      }
-    }
-    if(!list.isEmpty())
+    Collection list = new ArrayList();
+    for(int i = 0; i < getNumImportDecl(); i++)
+      if(!getImportDecl(i).isOnDemand())
+        list.addAll(getImportDecl(i).localLookupMethod(name));
+    if(!list.isEmpty()) 
       return list;
-    for(int i = 0; i < getNumImportDecl(); i++) {
-      if(getImportDecl(i).isOnDemand()) {
-        for(MethodCollection.MethodIterator iter = getImportDecl(i).localLookupMethod(name).iterator(); iter.hasNext();) {
-          MethodDecl decl = (MethodDecl)iter.next();
-          list = list.add(decl);
-        }
-      }
-    }
+    for(int i = 0; i < getNumImportDecl(); i++)
+      if(getImportDecl(i).isOnDemand())
+        list.addAll(getImportDecl(i).localLookupMethod(name));
     if(!list.isEmpty())
       return list;
     return lookupMethod(name);

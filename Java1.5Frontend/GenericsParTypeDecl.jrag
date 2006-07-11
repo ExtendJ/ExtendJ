@@ -17,16 +17,16 @@ aspect GenericsParTypeDecl {
   eq GenericClassDecl.getParTypeDecl().genericDecl() = this;
   eq GenericInterfaceDecl.getParTypeDecl().genericDecl() = this;
   eq ParClassDecl.getBodyDecl(int index).genericDecl() {
-    if(getBodyDecl(index) instanceof MemberType) {
-      MemberType m = (MemberType)getBodyDecl(index);
-      return extractSingleType(genericDecl().remoteLookupType(m.getTypeDecl().name()));
+    if(getBodyDecl(index) instanceof MemberTypeDecl) {
+      MemberTypeDecl m = (MemberTypeDecl)getBodyDecl(index);
+      return extractSingleType(genericDecl().memberTypes(m.getTypeDecl().name()));
     }
     return genericDecl();
   }
   eq ParInterfaceDecl.getBodyDecl(int index).genericDecl() {
-    if(getBodyDecl(index) instanceof MemberType) {
-      MemberType m = (MemberType)getBodyDecl(index);
-      return extractSingleType(genericDecl().remoteLookupType(m.getTypeDecl().name()));
+    if(getBodyDecl(index) instanceof MemberTypeDecl) {
+      MemberTypeDecl m = (MemberTypeDecl)getBodyDecl(index);
+      return extractSingleType(genericDecl().memberTypes(m.getTypeDecl().name()));
     }
     return genericDecl();
   }
@@ -35,14 +35,14 @@ aspect GenericsParTypeDecl {
   eq MethodDecl.visibleTypeParameters() = !isStatic();
   eq FieldDeclaration.visibleTypeParameters() = !isStatic();
   eq StaticInitializer.visibleTypeParameters() = false;
-  eq MemberType.visibleTypeParameters() = !isStatic();
+  eq MemberTypeDecl.visibleTypeParameters() = !isStatic();
   
   public Access TypeDecl.createTypeVariableAccess() {
     return createQualifiedAccess();
     //throw new Error("Operation createTypeVariableAcess() is not supported by " + getClass().getName());
   }
   public Access TypeVariable.createTypeVariableAccess() {
-    return new TypeDot(enclosingType().createQualifiedAccess(), new TypeAccess(new List(), new IdUse(name())));
+    return enclosingType().createQualifiedAccess().qualifiesAccess(new TypeAccess(new List(), new IdUse(name())));
   }
 
   syn boolean TypeDecl.isTypeVariable() = false;
@@ -65,6 +65,7 @@ aspect GenericsParTypeDecl {
   }
 
   public Access ParTypeDecl.createQualifiedAccess() {
+    System.out.println("Creating qualified access to " + fullName());
     List packageList = new List();
     List typeArgumentList = (List)getArgumentList().fullCopy();
     if(isTopLevelType()) {
@@ -76,8 +77,7 @@ aspect GenericsParTypeDecl {
     }
     IdUse idUse = new IdUse(getIdDecl().getID());
     if(!isTopLevelType()) {
-      return new TypeDot(
-        enclosingType().createQualifiedAccess(),
+      return enclosingType().createQualifiedAccess().qualifiesAccess(
         new ParameterizedTypeAccess(packageList, idUse, typeArgumentList)
       );
     }
