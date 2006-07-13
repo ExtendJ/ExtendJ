@@ -1,0 +1,260 @@
+aspect AutoBoxing {
+
+  // 5.1.7 Boxing Conversion
+
+  syn boolean TypeDecl.boxingConversionTo(TypeDecl typeDecl) = false;
+  eq PrimitiveType.boxingConversionTo(TypeDecl typeDecl) = boxed() == typeDecl;
+
+  // Mapping between Primitive type and corresponding boxed Reference type
+  syn lazy TypeDecl TypeDecl.boxed() = unknownType();
+  eq BooleanType.boxed() = lookupType("java.lang", "Boolean");
+  eq ByteType.boxed() = lookupType("java.lang", "Byte");
+  eq CharType.boxed() = lookupType("java.lang", "Character");
+  eq ShortType.boxed() = lookupType("java.lang", "Short");
+  eq IntType.boxed() = lookupType("java.lang", "Integer");
+  eq LongType.boxed() = lookupType("java.lang", "Long");
+  eq FloatType.boxed() = lookupType("java.lang", "Float");
+  eq DoubleType.boxed() = lookupType("java.lang", "Double");
+
+  // Code generation for Boxing Conversion
+  refine CodeGeneration void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    if(type.unboxed() == this)
+      boxed().emitBoxingOperation(gen);
+  }
+  void ReferenceType.byteToThis(CodeGeneration gen) {
+    unboxed().byteToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  void ReferenceType.charToThis(CodeGeneration gen) {
+    unboxed().charToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  void ReferenceType.shortToThis(CodeGeneration gen) {
+    unboxed().shortToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  void ReferenceType.intToThis(CodeGeneration gen) {
+    unboxed().intToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  void ReferenceType.longToThis(CodeGeneration gen) {
+    unboxed().longToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  void ReferenceType.floatToThis(CodeGeneration gen) {
+    unboxed().floatToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  void ReferenceType.doubleToThis(CodeGeneration gen) {
+    unboxed().doubleToThis(gen);
+    emitBoxingOperation(gen);
+  }
+  protected void TypeDecl.emitBoxingOperation(CodeGeneration gen) {
+    // Box the value on the stack into this Reference type
+    String classname = constantPoolName();
+    String desc = "(" + unboxed().typeDescriptor() + ")" + typeDescriptor();
+    String name = "valueOf";
+    int index = gen.constantPool().addMethodref(classname, name, desc);
+    gen.emit(Bytecode.INVOKESTATIC, variableSize() - unboxed().variableSize()).add2(index);
+  }
+
+  // 5.1.8 Unboxing Conversion
+
+  syn boolean TypeDecl.unboxingConversionTo(TypeDecl typeDecl) = false;
+  eq ReferenceType.unboxingConversionTo(TypeDecl typeDecl) = unboxed() == typeDecl;
+
+  // Mapping between Reference type and corresponding unboxed Primitive type
+  syn lazy TypeDecl TypeDecl.unboxed() = unknownType();
+  eq ReferenceType.unboxed() {
+    if(packageName().equals("java.lang") && isTopLevelType()) {
+      String n = name();
+      if(n.equals("Boolean")) return lookupType("primitive", "boolean");
+      if(n.equals("Byte")) return lookupType("primitive", "byte");
+      if(n.equals("Character")) return lookupType("primitive", "char");
+      if(n.equals("Short")) return lookupType("primitive", "short");
+      if(n.equals("Integer")) return lookupType("primitive", "int");
+      if(n.equals("Long")) return lookupType("primitive", "long");
+      if(n.equals("Float")) return lookupType("primitive", "float");
+      if(n.equals("Double")) return lookupType("primitive", "double");
+    }
+    return unknownType();
+  }
+
+  // Code generation for Unboxing Conversion
+  refine CodeGeneration public void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    if(type.isPrimitive()) {
+      emitUnboxingOperation(gen);
+      unboxed().emitCastTo(gen, type);
+    }
+    else 
+      CodeGeneration.ReferenceType.emitCastTo(gen, type);
+  }
+  protected void TypeDecl.emitUnboxingOperation(CodeGeneration gen) {
+    // Unbox the value on the stack from this Reference type
+    String classname = constantPoolName();
+    String desc = "(" + ")" + unboxed().typeDescriptor();
+    String name = unboxed().name() + "Value";
+    int index = gen.constantPool().addMethodref(classname, name, desc);
+    gen.emit(Bytecode.INVOKEVIRTUAL, unboxed().variableSize() - 1).add2(index);
+  }
+
+
+  // 5.2 Assignment Conversion
+  refine TypeAnalysis eq TypeDecl.assignConversionTo(TypeDecl type, Expr expr) {
+    if(TypeAnalysis.TypeDecl.assignConversionTo(type, expr))
+      return true;
+    if(!boxed().isUnknown() && boxed().wideningConversionTo(type))
+      return true;
+    if(!unboxed().isUnknown() && unboxed().wideningConversionTo(type))
+      return true;
+    boolean sourceIsConstant = expr != null ? expr.isConstant() : false;
+    if(sourceIsConstant && (isInt() || isChar() || isShort() || isByte()) &&
+        (type.unboxed().isByte() || type.unboxed().isShort() || type.unboxed().isChar()) &&
+        narrowingConversionTo(type) && expr.representableIn(type))
+      return true;
+    return false;
+  }
+
+  // 5.3 Method Invocation Conversion
+  refine TypeAnalysis eq TypeDecl.methodInvocationConversionTo(TypeDecl type) {
+    if(TypeAnalysis.TypeDecl.methodInvocationConversionTo(type))
+      return true;
+    if(!boxed().isUnknown() && boxed().wideningConversionTo(type))
+      return true;
+    if(!unboxed().isUnknown() && unboxed().wideningConversionTo(type))
+      return true;
+    return false;
+  }
+
+  // 5.5 Casting Conversion
+  refine TypeAnalysis eq TypeDecl.castingConversionTo(TypeDecl type) {
+    if(TypeAnalysis.TypeDecl.castingConversionTo(type))
+      return true;
+    if(boxingConversionTo(type))
+      return true;
+    if(unboxingConversionTo(type))
+      return true;
+    return false;
+  }
+
+  // 5.6.1 Unary Numeric Promotion
+  eq ReferenceType.unaryNumericPromotion() = unboxed().unaryNumericPromotion();
+
+  // 5.6.2 Binary Numeric Promotion
+  eq ReferenceType.binaryNumericPromotion(TypeDecl type) =
+    unboxed().binaryNumericPromotion(type);
+  refine TypeAnalysis eq NumericType.binaryNumericPromotion(TypeDecl type) {
+    if(type.isReferenceType())
+      type = type.unboxed();
+    return TypeAnalysis.NumericType.binaryNumericPromotion(type);
+  }
+
+  eq ReferenceType.isNumericType() = 
+    !unboxed().isUnknown() && unboxed().isNumericType();
+
+  eq ReferenceType.isPrimitive() =
+    !unboxed().isUnknown() && unboxed().isPrimitive();
+
+  // Affects type checking of 14.9 If, 14.10 Assert, 14.12 While, 14.13 Do, 14.14 For 
+  eq ReferenceType.isBoolean() = unboxed().isBoolean();
+  // Code generation need to add unboxing if the conditional is a Boxed value
+  // this is done by inserting a new node with an explicit cast
+
+  // Generate unboxing code for conditions
+  // 14.9 If, 14.12 While, 14.13 Do, 14.14 For
+  // 
+  // emitEvalBranch is used to emit the condition from these constructs
+  // refine behavior to include unboxing of the value when needed
+  refine CreateBCode public void Expr.emitEvalBranch(CodeGeneration gen) {
+    if(type().isReferenceType()) {
+      createBCode(gen);
+      type().emitUnboxingOperation(gen);
+      gen.emitCompare(Bytecode.IFEQ, false_label(gen));
+      gen.emitGoto(true_label(gen));
+    }
+    else {
+      CreateBCode.Expr.emitEvalBranch(gen);
+    }
+  }
+
+
+  // 14.11 Switch
+
+  // 15.12.2 Determine Method Signature
+
+ 
+  // 15.14.2 Postix Increment Operator ++
+  // 15.14.3 Postix Decrement Operator --
+  refine CreateBCode public void Unary.emitPostfix(CodeGeneration gen, int constant) {
+    Expr operand = getOperand();
+    while(operand instanceof ParExpr)
+      operand = ((ParExpr)operand).getExpr();
+    Access access = ((Access)operand).lastAccess();
+    access.createAssignLoadDest(gen);
+    if(needsPush())
+      access.createPushAssignmentResult(gen);
+    TypeDecl type = access.type().binaryNumericPromotion(typeInt());
+    access.type().emitCastTo(gen, type); // Added for AutoBoxing
+    type.emitPushConstant(gen, constant);
+    type.add(gen);
+    type.emitCastTo(gen, access.type());
+    access.emitStore(gen);
+  }
+
+  // 15.15.1 Prefix Increment Operator ++
+  // 15.15.2 Prefix Decrement Operator --
+  refine CreateBCode public void Unary.emitPrefix(CodeGeneration gen, int constant) {
+    Expr operand = getOperand();
+    while(operand instanceof ParExpr)
+      operand = ((ParExpr)operand).getExpr();
+    Access access = ((Access)operand).lastAccess();
+    access.createAssignLoadDest(gen);
+    TypeDecl type = access.type().binaryNumericPromotion(typeInt());
+    access.type().emitCastTo(gen, type); // Added for AutoBoxing
+    type.emitPushConstant(gen, constant);
+    type.add(gen);
+    type.emitCastTo(gen, access.type());
+    if(needsPush())
+      access.createPushAssignmentResult(gen);
+    access.emitStore(gen);
+  }
+
+
+
+
+
+
+
+
+  // 15.15.6 Logical Complement Operator !
+  // type()
+
+  // 15.21.2 Boolean Equality Operators == and !=
+  // If the operands of an equality operator are both of type boolean, or if
+  // one operand is of type boolean and the other is of type Boolean, then
+  // the operation is boolean equality. The boolean equality operators are
+  // associative. If one of the operands is of type Boolean it is subjected
+  // to unboxing conversion (§5.1.8)
+
+  // 15.22.2 Boolean Logical Operators &, ^, and |
+  // emitCastTo(), type()
+ 
+  // When both operands of a &, ^, or | operator are of type boolean or
+  // Boolean, then the type of the bitwise operator expression is boolean.
+  // In all cases, the operands are subject to unboxing conversion (§5.1.8)
+  // as necessary.
+
+  // 15.23 Conditional-And Operator &&
+  // Each operand of && must be of type boolean or Boolean, or a compile-time error occurs.
+  // At run time, the left-hand operand expression is evaluated first; if
+  // the result has type Boolean, it is subjected to unboxing conversion
+  // (§5.1.8);
+
+  // 15.24 Conditional-Or Operator ||
+  // See 15.23
+
+  // 15.25 Conditional Operator ? :
+  // See Spec
+
+
+}
