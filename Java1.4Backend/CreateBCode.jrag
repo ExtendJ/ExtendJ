@@ -1,7 +1,10 @@
 import java.util.*;
 import java.io.*;
 aspect CreateBCode {
-
+  inh TypeDecl Stmt.hostType();
+  inh TypeDecl CatchClause.hostType();
+  inh TypeDecl Case.hostType();
+  
   syn lazy boolean TypeDecl.hasClinit() {
     for(int i = 0; i < getNumBodyDecl(); i++) {
       BodyDecl b = getBodyDecl(i);
@@ -976,9 +979,9 @@ aspect CreateBCode {
   }
 
   // branch to this label if the expression is false
-  syn lazy int Expr.false_label(CodeGeneration gen) = getParent().definesLabel() ? condition_false_label(gen) : gen.label();
+  syn lazy int Expr.false_label() = getParent().definesLabel() ? condition_false_label() : hostType().constantPool().newLabel();
   // branch to this label if the expression is true
-  syn lazy int Expr.true_label(CodeGeneration gen) = getParent().definesLabel() ? condition_true_label(gen) : gen.label();
+  syn lazy int Expr.true_label() = getParent().definesLabel() ? condition_true_label() : hostType().constantPool().newLabel();
   
   // these nodes defines labels for their children
   syn boolean ASTNode.definesLabel() = false;
@@ -998,49 +1001,49 @@ aspect CreateBCode {
   eq ForStmt.definesLabel() = true;
  
   // provide labels for these control statement conditions
-  eq IfStmt.getCondition().condition_false_label(CodeGeneration gen) = else_branch_label(gen);
-  eq IfStmt.getCondition().condition_true_label(CodeGeneration gen) = then_branch_label(gen);
-  eq WhileStmt.getCondition().condition_false_label(CodeGeneration gen) = end_label(gen);
-  eq WhileStmt.getCondition().condition_true_label(CodeGeneration gen) = stmt_label(gen);
-  eq DoStmt.getCondition().condition_false_label(CodeGeneration gen) = end_label(gen);
-  eq DoStmt.getCondition().condition_true_label(CodeGeneration gen) = begin_label(gen);
-  eq ForStmt.getCondition().condition_false_label(CodeGeneration gen) = end_label(gen);
-  eq ForStmt.getCondition().condition_true_label(CodeGeneration gen) = begin_label(gen);
+  eq IfStmt.getCondition().condition_false_label() = else_branch_label();
+  eq IfStmt.getCondition().condition_true_label() = then_branch_label();
+  eq WhileStmt.getCondition().condition_false_label() = end_label();
+  eq WhileStmt.getCondition().condition_true_label() = stmt_label();
+  eq DoStmt.getCondition().condition_false_label() = end_label();
+  eq DoStmt.getCondition().condition_true_label() = begin_label();
+  eq ForStmt.getCondition().condition_false_label() = end_label();
+  eq ForStmt.getCondition().condition_true_label() = begin_label();
   
   // propagate labels downwards for complex boolean expressions
-  inh int Expr.condition_false_label(CodeGeneration gen);
-  eq Program.getCompilationUnit(int i).condition_false_label(CodeGeneration gen) {
+  inh int Expr.condition_false_label();
+  eq Program.getCompilationUnit(int i).condition_false_label() {
     throw new Error("condition_false_label not implemented");
   }
-  inh int Expr.condition_true_label(CodeGeneration gen);
-  eq Program.getCompilationUnit(int i).condition_true_label(CodeGeneration gen) {
+  inh int Expr.condition_true_label();
+  eq Program.getCompilationUnit(int i).condition_true_label() {
     throw new Error("condition_true_label not implemented");
   }
   
-  eq LogNotExpr.getOperand().condition_false_label(CodeGeneration gen) = true_label(gen);
-  eq LogNotExpr.getOperand().condition_true_label(CodeGeneration gen) = false_label(gen);
+  eq LogNotExpr.getOperand().condition_false_label() = true_label();
+  eq LogNotExpr.getOperand().condition_true_label() = false_label();
 
-  eq ConditionalExpr.getCondition().condition_false_label(CodeGeneration gen) = else_branch_label(gen);
-  eq ConditionalExpr.getCondition().condition_true_label(CodeGeneration gen) = then_branch_label(gen);
-  eq ConditionalExpr.getTrueExpr().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq ConditionalExpr.getTrueExpr().condition_true_label(CodeGeneration gen) = true_label(gen);
-  eq ConditionalExpr.getFalseExpr().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq ConditionalExpr.getFalseExpr().condition_true_label(CodeGeneration gen) = true_label(gen);
+  eq ConditionalExpr.getCondition().condition_false_label() = else_branch_label();
+  eq ConditionalExpr.getCondition().condition_true_label() = then_branch_label();
+  eq ConditionalExpr.getTrueExpr().condition_false_label() = false_label();
+  eq ConditionalExpr.getTrueExpr().condition_true_label() = true_label();
+  eq ConditionalExpr.getFalseExpr().condition_false_label() = false_label();
+  eq ConditionalExpr.getFalseExpr().condition_true_label() = true_label();
   
-  eq RelationalExpr.getLeftOperand().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq RelationalExpr.getLeftOperand().condition_true_label(CodeGeneration gen) = true_label(gen);
-  eq RelationalExpr.getRightOperand().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq RelationalExpr.getRightOperand().condition_true_label(CodeGeneration gen) = true_label(gen);
+  eq RelationalExpr.getLeftOperand().condition_false_label() = false_label();
+  eq RelationalExpr.getLeftOperand().condition_true_label() = true_label();
+  eq RelationalExpr.getRightOperand().condition_false_label() = false_label();
+  eq RelationalExpr.getRightOperand().condition_true_label() = true_label();
 
-  eq AndLogicalExpr.getLeftOperand().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq AndLogicalExpr.getLeftOperand().condition_true_label(CodeGeneration gen) = next_test_label(gen);
-  eq AndLogicalExpr.getRightOperand().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq AndLogicalExpr.getRightOperand().condition_true_label(CodeGeneration gen) = true_label(gen);
+  eq AndLogicalExpr.getLeftOperand().condition_false_label() = false_label();
+  eq AndLogicalExpr.getLeftOperand().condition_true_label() = next_test_label();
+  eq AndLogicalExpr.getRightOperand().condition_false_label() = false_label();
+  eq AndLogicalExpr.getRightOperand().condition_true_label() = true_label();
   
-  eq OrLogicalExpr.getLeftOperand().condition_false_label(CodeGeneration gen) = next_test_label(gen);
-  eq OrLogicalExpr.getLeftOperand().condition_true_label(CodeGeneration gen) = true_label(gen);
-  eq OrLogicalExpr.getRightOperand().condition_false_label(CodeGeneration gen) = false_label(gen);
-  eq OrLogicalExpr.getRightOperand().condition_true_label(CodeGeneration gen) = true_label(gen);
+  eq OrLogicalExpr.getLeftOperand().condition_false_label() = next_test_label();
+  eq OrLogicalExpr.getLeftOperand().condition_true_label() = true_label();
+  eq OrLogicalExpr.getRightOperand().condition_false_label() = false_label();
+  eq OrLogicalExpr.getRightOperand().condition_true_label() = true_label();
 
   syn boolean Expr.canBeTrue() = !isFalse();
   eq ParExpr.canBeTrue() = getExpr().canBeTrue();
@@ -1067,12 +1070,12 @@ aspect CreateBCode {
   public void LogicalExpr.createBCode(CodeGeneration gen) { emitBooleanCondition(gen); }
   protected void Expr.emitBooleanCondition(CodeGeneration gen) {
     emitEvalBranch(gen);
-    int end_label = gen.label();
-    gen.addLabel(false_label(gen));
+    int end_label = hostType().constantPool().newLabel();
+    gen.addLabel(false_label());
     BooleanType.push(gen, false);
     gen.emitGoto(end_label);
     gen.changeStackDepth(-1); // discard false from stack depth computation
-    gen.addLabel(true_label(gen));
+    gen.addLabel(true_label());
     BooleanType.push(gen, true);
     gen.addLabel(end_label);
   }
@@ -1081,10 +1084,10 @@ aspect CreateBCode {
     if(type().isBoolean())
       emitBooleanCondition(gen);
     else {
-      int endBranch = gen.label();
+      int endBranch = hostType().constantPool().newLabel();
       getCondition().emitEvalBranch(gen);
       if(getCondition().canBeTrue()) {
-        gen.addLabel(then_branch_label(gen));
+        gen.addLabel(then_branch_label());
         getTrueExpr().createBCode(gen);
         getTrueExpr().type().emitCastTo(gen, type());
         if(getCondition().canBeFalse()) {
@@ -1093,25 +1096,25 @@ aspect CreateBCode {
         }
       }
       if(getCondition().canBeFalse()) {
-        gen.addLabel(else_branch_label(gen));
+        gen.addLabel(else_branch_label());
         getFalseExpr().createBCode(gen);
         getFalseExpr().type().emitCastTo(gen, type());
       }
       gen.addLabel(endBranch);
     }
   }
-  syn lazy int ConditionalExpr.else_branch_label(CodeGeneration gen) = gen.label();
-  syn lazy int ConditionalExpr.then_branch_label(CodeGeneration gen) = gen.label();
+  syn lazy int ConditionalExpr.else_branch_label() = hostType().constantPool().newLabel();
+  syn lazy int ConditionalExpr.then_branch_label() = hostType().constantPool().newLabel();
   
   public void Expr.emitEvalBranch(CodeGeneration gen) {
     if(isTrue())
-      gen.emitGoto(true_label(gen));
+      gen.emitGoto(true_label());
     else if(isFalse())
-      gen.emitGoto(false_label(gen));
+      gen.emitGoto(false_label());
     else {
       createBCode(gen);
-      gen.emitCompare(Bytecode.IFEQ, false_label(gen));
-      gen.emitGoto(true_label(gen));
+      gen.emitCompare(Bytecode.IFEQ, false_label());
+      gen.emitGoto(true_label());
     }
   }
   
@@ -1121,46 +1124,46 @@ aspect CreateBCode {
   
   public void AndLogicalExpr.emitEvalBranch(CodeGeneration gen) {
     getLeftOperand().emitEvalBranch(gen);
-    gen.addLabel(next_test_label(gen));
+    gen.addLabel(next_test_label());
     if(getLeftOperand().canBeTrue()) {
       getRightOperand().emitEvalBranch(gen);
       if(getRightOperand().canBeTrue())
-        gen.emitGoto(true_label(gen));
+        gen.emitGoto(true_label());
     }
   }
-  syn lazy int AndLogicalExpr.next_test_label(CodeGeneration gen) = gen.label();
+  syn lazy int AndLogicalExpr.next_test_label() = hostType().constantPool().newLabel();
   
   public void OrLogicalExpr.emitEvalBranch(CodeGeneration gen) {
     getLeftOperand().emitEvalBranch(gen);
-    gen.addLabel(next_test_label(gen));
+    gen.addLabel(next_test_label());
     if(getLeftOperand().canBeFalse()) {
       getRightOperand().emitEvalBranch(gen);
       if(getRightOperand().canBeFalse())
-        gen.emitGoto(false_label(gen));
+        gen.emitGoto(false_label());
     }
   }
-  syn lazy int OrLogicalExpr.next_test_label(CodeGeneration gen) = gen.label();
+  syn lazy int OrLogicalExpr.next_test_label() = hostType().constantPool().newLabel();
   
   public void ConditionalExpr.emitEvalBranch(CodeGeneration gen) {
-    int endBranch = gen.label();
+    int endBranch = hostType().constantPool().newLabel();
     getCondition().emitEvalBranch(gen);
-    gen.addLabel(then_branch_label(gen));
+    gen.addLabel(then_branch_label());
     if(getCondition().canBeTrue()) {
       getTrueExpr().emitEvalBranch(gen);
-      gen.emitGoto(true_label(gen));
+      gen.emitGoto(true_label());
     }  
-    gen.addLabel(else_branch_label(gen));
+    gen.addLabel(else_branch_label());
     if(getCondition().canBeFalse()) {
       getFalseExpr().emitEvalBranch(gen);
-      gen.emitGoto(true_label(gen));
+      gen.emitGoto(true_label());
     }
   }
   
   public void RelationalExpr.emitEvalBranch(CodeGeneration gen) {
     if(isTrue())
-      gen.emitGoto(true_label(gen));
+      gen.emitGoto(true_label());
     else if(isFalse())
-      gen.emitGoto(false_label(gen));
+      gen.emitGoto(false_label());
     else {
       TypeDecl type = getLeftOperand().type();
       if(type.isNumericType()) {
@@ -1174,8 +1177,8 @@ aspect CreateBCode {
         getLeftOperand().createBCode(gen);
         getRightOperand().createBCode(gen);
       }
-      compareBranch(gen, true_label(gen), type);
-      gen.emitGoto(false_label(gen));
+      compareBranch(gen, true_label(), type);
+      gen.emitGoto(false_label());
     }
   }
 
@@ -1214,13 +1217,13 @@ aspect CreateBCode {
     super.createBCode(gen);
   }
 
-  syn lazy int LabeledStmt.label(CodeGeneration gen) = gen.label();
-  syn lazy int LabeledStmt.end_label(CodeGeneration gen) = gen.label();
+  syn lazy int LabeledStmt.label() = hostType().constantPool().newLabel();
+  syn lazy int LabeledStmt.end_label() = hostType().constantPool().newLabel();
   public void LabeledStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    gen.addLabel(label(gen));
+    gen.addLabel(label());
     getStmt().createBCode(gen);
-    gen.addLabel(end_label(gen));
+    gen.addLabel(end_label());
   }
 
   public void ExprStmt.createBCode(CodeGeneration gen) {
@@ -1238,19 +1241,19 @@ aspect CreateBCode {
     return null;
   }
 
-  syn lazy int SwitchStmt.end_label(CodeGeneration gen) = gen.label();
+  syn lazy int SwitchStmt.end_label() = hostType().constantPool().newLabel();
 
   public void SwitchStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    int cond_label = gen.label();
-    int switch_label = gen.label();
+    int cond_label = hostType().constantPool().newLabel();
+    int switch_label = hostType().constantPool().newLabel();
 
     gen.emitGoto(cond_label);
     for(int i= 0; i < getNumCase(); i++) {
       getCase(i).createBCode(gen);
     }
     if(canCompleteNormally())
-      gen.emitGoto(end_label(gen));
+      gen.emitGoto(end_label());
     gen.addLabel(cond_label);
     getExpr().createBCode(gen);
 
@@ -1309,7 +1312,7 @@ aspect CreateBCode {
         gen.add4(offset);
       }
     }
-    gen.addLabel(end_label(gen));
+    gen.addLabel(end_label());
   }
 
   private int SwitchStmt.emitPad(CodeGeneration gen) {
@@ -1330,7 +1333,7 @@ aspect CreateBCode {
     return 0;
   }
 
-  syn lazy int Case.label(CodeGeneration gen) = gen.label();
+  syn lazy int Case.label(CodeGeneration gen) = hostType().constantPool().newLabel();
 
   public void Case.createBCode(CodeGeneration gen) {
     gen.addLabel(label(gen));
@@ -1338,13 +1341,13 @@ aspect CreateBCode {
       getStmt(i).createBCode(gen);
   }
 
-  syn lazy int IfStmt.else_branch_label(CodeGeneration gen) = gen.label();
-  syn lazy int IfStmt.then_branch_label(CodeGeneration gen) = gen.label();
+  syn lazy int IfStmt.else_branch_label() = hostType().constantPool().newLabel();
+  syn lazy int IfStmt.then_branch_label() = hostType().constantPool().newLabel();
   public void IfStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    int elseBranch = else_branch_label(gen);
-    int thenBranch = then_branch_label(gen);
-    int endBranch = gen.label();
+    int elseBranch = else_branch_label();
+    int thenBranch = then_branch_label();
+    int endBranch = hostType().constantPool().newLabel();
     getCondition().emitEvalBranch(gen);
     gen.addLabel(thenBranch);
     //if(getCondition().canBeTrue()) {
@@ -1358,98 +1361,97 @@ aspect CreateBCode {
     gen.addLabel(endBranch);
   }
 
-  syn lazy int WhileStmt.cond_label(CodeGeneration gen) = gen.label();
-  syn lazy int WhileStmt.end_label(CodeGeneration gen) = gen.label();
-  syn lazy int WhileStmt.stmt_label(CodeGeneration gen) = gen.label();
+  syn lazy int WhileStmt.cond_label() = hostType().constantPool().newLabel();
+  syn lazy int WhileStmt.end_label() = hostType().constantPool().newLabel();
+  syn lazy int WhileStmt.stmt_label() = hostType().constantPool().newLabel();
 
   public void WhileStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    gen.addLabel(cond_label(gen));
+    gen.addLabel(cond_label());
     getCondition().emitEvalBranch(gen);
-    gen.addLabel(stmt_label(gen));
+    gen.addLabel(stmt_label());
     if(getCondition().canBeTrue()) {
       getStmt().createBCode(gen);
       if(getStmt().canCompleteNormally())
-        gen.emitGoto(cond_label(gen));
+        gen.emitGoto(cond_label());
     }
-    gen.addLabel(end_label(gen));
+    gen.addLabel(end_label());
   }
 
-  syn lazy int DoStmt.begin_label(CodeGeneration gen) = gen.label();
-  syn lazy int DoStmt.cond_label(CodeGeneration gen) = gen.label();
-  syn lazy int DoStmt.end_label(CodeGeneration gen) = gen.label();
+  syn lazy int DoStmt.begin_label() = hostType().constantPool().newLabel();
+  syn lazy int DoStmt.cond_label() = hostType().constantPool().newLabel();
+  syn lazy int DoStmt.end_label() = hostType().constantPool().newLabel();
 
   public void DoStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    gen.addLabel(begin_label(gen));
+    gen.addLabel(begin_label());
     getStmt().createBCode(gen);
-    gen.addLabel(cond_label(gen));
+    gen.addLabel(cond_label());
     getCondition().emitEvalBranch(gen);
-    gen.addLabel(end_label(gen));
+    gen.addLabel(end_label());
   }
 
-  syn lazy int ForStmt.cond_label(CodeGeneration gen) = gen.label();
-  syn lazy int ForStmt.begin_label(CodeGeneration gen) = gen.label();
-  syn lazy int ForStmt.update_label(CodeGeneration gen) = gen.label();
-  syn lazy int ForStmt.end_label(CodeGeneration gen) = gen.label();
+  syn lazy int ForStmt.cond_label() = hostType().constantPool().newLabel();
+  syn lazy int ForStmt.begin_label() = hostType().constantPool().newLabel();
+  syn lazy int ForStmt.update_label() = hostType().constantPool().newLabel();
+  syn lazy int ForStmt.end_label() = hostType().constantPool().newLabel();
 
   public void ForStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     for (int i=0; i<getNumInitStmt(); i++) {
       getInitStmt(i).createBCode(gen);
     }
-    gen.addLabel(cond_label(gen));
+    gen.addLabel(cond_label());
     getCondition().emitEvalBranch(gen);
     if(getCondition().canBeTrue()) {
-      gen.addLabel(begin_label(gen));
+      gen.addLabel(begin_label());
       getStmt().createBCode(gen);
-      gen.addLabel(update_label(gen));	
+      gen.addLabel(update_label());	
       for (int i=0; i<getNumUpdateStmt(); i++)
         getUpdateStmt(i).createBCode(gen);
-      gen.emitGoto(cond_label(gen));
+      gen.emitGoto(cond_label());
     }
     if(canCompleteNormally()) {
-      gen.addLabel(end_label(gen));
+      gen.addLabel(end_label());
     }
     gen.addVariableScopeLabel(variableScopeEndLabel(gen));
   }
   
-  syn int Stmt.break_label(CodeGeneration gen) {
+  syn int Stmt.break_label() {
     throw new UnsupportedOperationException("Can not break at this statement of type " + getClass().getName());
   }
-  eq ForStmt.break_label(CodeGeneration gen) = end_label(gen);
-  eq WhileStmt.break_label(CodeGeneration gen) = end_label(gen);
-  eq DoStmt.break_label(CodeGeneration gen) = end_label(gen);
-  eq LabeledStmt.break_label(CodeGeneration gen) = end_label(gen);
-  eq SwitchStmt.break_label(CodeGeneration gen) = end_label(gen);
-  //eq TryStmt.break_label(CodeGeneration gen) =  label_finally(gen);
-  eq TryStmt.break_label(CodeGeneration gen) =  label_finally(gen);
+  eq ForStmt.break_label() = end_label();
+  eq WhileStmt.break_label() = end_label();
+  eq DoStmt.break_label() = end_label();
+  eq LabeledStmt.break_label() = end_label();
+  eq SwitchStmt.break_label() = end_label();
+  eq TryStmt.break_label() =  label_finally();
 
   public void BreakStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     for(Iterator iter = finallyList().iterator(); iter.hasNext(); ) {
       FinallyHost stmt = (FinallyHost)iter.next();
-      gen.emitJsr(stmt.label_finally_block(gen));
+      gen.emitJsr(stmt.label_finally_block());
     }
-    gen.emitGoto(targetStmt().break_label(gen));
+    gen.emitGoto(targetStmt().break_label());
   }
 
-  syn int Stmt.continue_label(CodeGeneration gen) {
+  syn int Stmt.continue_label() {
     throw new UnsupportedOperationException("Can not continue at this statement");
   }
-  eq ForStmt.continue_label(CodeGeneration gen) = update_label(gen);
-  eq WhileStmt.continue_label(CodeGeneration gen) = cond_label(gen);
-  eq DoStmt.continue_label(CodeGeneration gen) = cond_label(gen);
-  eq LabeledStmt.continue_label(CodeGeneration gen) = getStmt().continue_label(gen);
-  eq TryStmt.continue_label(CodeGeneration gen) = label_finally(gen);
+  eq ForStmt.continue_label() = update_label();
+  eq WhileStmt.continue_label() = cond_label();
+  eq DoStmt.continue_label() = cond_label();
+  eq LabeledStmt.continue_label() = getStmt().continue_label();
+  eq TryStmt.continue_label() = label_finally();
 
   public void ContinueStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     for(Iterator iter = finallyList().iterator(); iter.hasNext(); ) {
       FinallyHost stmt = (FinallyHost)iter.next();
-      gen.emitJsr(stmt.label_finally_block(gen));
+      gen.emitJsr(stmt.label_finally_block());
     }
-    gen.emitGoto(targetStmt().continue_label(gen));
+    gen.emitGoto(targetStmt().continue_label());
   }
 
   public void ReturnStmt.createBCode(CodeGeneration gen) {
@@ -1470,7 +1472,7 @@ aspect CreateBCode {
       }
       for(Iterator iter = finallyList().iterator(); iter.hasNext(); ) {
         FinallyHost stmt = (FinallyHost)iter.next();
-        gen.emitJsr(stmt.label_finally_block(gen));
+        gen.emitJsr(stmt.label_finally_block());
       }
       if(!finallyList().isEmpty()) {
         type.emitLoadLocal(gen, resultSaveLocalNum());
@@ -1480,7 +1482,7 @@ aspect CreateBCode {
     else {
       for(Iterator iter = finallyList().iterator(); iter.hasNext(); ) {
         FinallyHost stmt = (FinallyHost)iter.next();
-        gen.emitJsr(stmt.label_finally_block(gen));
+        gen.emitJsr(stmt.label_finally_block());
       }
       gen.emitReturn();
     }
@@ -1491,87 +1493,87 @@ aspect CreateBCode {
     getExpr().createBCode(gen);
     gen.emitThrow();
   }
-  syn lazy int FinallyHost.label_finally_block(CodeGeneration gen);
+  syn lazy int FinallyHost.label_finally_block();
 
-  syn lazy int TryStmt.label_begin(CodeGeneration gen) = gen.label();
-  syn lazy int TryStmt.label_block_end(CodeGeneration gen) = gen.label();
-  syn lazy int TryStmt.label_end(CodeGeneration gen) = gen.label();
-  syn lazy int TryStmt.label_finally(CodeGeneration gen) = gen.label();
-  eq TryStmt.label_finally_block(CodeGeneration gen) = gen.label();
-  syn lazy int TryStmt.label_exception_handler(CodeGeneration gen) = gen.label();
-  syn lazy int TryStmt.label_catch_end(CodeGeneration gen) = gen.label();
+  syn lazy int TryStmt.label_begin() = hostType().constantPool().newLabel();
+  syn lazy int TryStmt.label_block_end() = hostType().constantPool().newLabel();
+  syn lazy int TryStmt.label_end() = hostType().constantPool().newLabel();
+  syn lazy int TryStmt.label_finally() = hostType().constantPool().newLabel();
+  eq TryStmt.label_finally_block() = hostType().constantPool().newLabel();
+  syn lazy int TryStmt.label_exception_handler() = hostType().constantPool().newLabel();
+  syn lazy int TryStmt.label_catch_end() = hostType().constantPool().newLabel();
 
   public void TryStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    gen.addLabel(label_begin(gen));
+    gen.addLabel(label_begin());
     getBlock().createBCode(gen);
     if(getBlock().canCompleteNormally())
-      gen.emitGoto(label_finally(gen));
-    gen.addLabel(label_block_end(gen));
+      gen.emitGoto(label_finally());
+    gen.addLabel(label_block_end());
     for(int i = 0; i < getNumCatchClause(); i++) {
       getCatchClause(i).createBCode(gen);
       if(getCatchClause(i).getBlock().canCompleteNormally()) {
         if(!hasFinally())
-          gen.emitGoto(label_finally(gen));
+          gen.emitGoto(label_finally());
         else
-          gen.emitGoto(label_catch_end(gen));
+          gen.emitGoto(label_catch_end());
       }
     }
     
-    gen.addLabel(label_catch_end(gen));
+    gen.addLabel(label_catch_end());
     if(hasFinally() && getNumCatchClause() > 0) {
-      gen.emitJsr(label_finally_block(gen));
+      gen.emitJsr(label_finally_block());
       if(canCompleteNormally())
-        gen.emitGoto(label_end(gen));
+        gen.emitGoto(label_end());
     }
     
-    gen.addLabel(label_finally(gen));
+    gen.addLabel(label_finally());
     if(hasFinally()) {
       if(getBlock().canCompleteNormally()) {
-        gen.emitJsr(label_finally_block(gen));
+        gen.emitJsr(label_finally_block());
         if(canCompleteNormally())
-          gen.emitGoto(label_end(gen));
+          gen.emitGoto(label_end());
       }
-      gen.addLabel(label_exception_handler(gen));
+      gen.addLabel(label_exception_handler());
       emitExceptionHandler(gen);
-      gen.addLabel(label_finally_block(gen));
+      gen.addLabel(label_finally_block());
       emitFinallyBlock(gen);
     }
-    gen.addLabel(label_end(gen));
+    gen.addLabel(label_end());
     gen.createExceptionTable(this);
   }
 
-  syn lazy int CatchClause.label(CodeGeneration gen) = gen.label();
+  syn lazy int CatchClause.label() = hostType().constantPool().newLabel();
   public void CatchClause.createBCode(CodeGeneration gen) {
-    gen.addLabel(label(gen));
+    gen.addLabel(label());
     // add 1 to stack depth
     gen.changeStackDepth(1);
     getParameter().type().emitStoreLocal(gen, getParameter().localNum());
     getBlock().createBCode(gen);
   }
 
-  syn lazy int SynchronizedStmt.label_begin(CodeGeneration gen) = gen.label();
-  syn lazy int SynchronizedStmt.label_end(CodeGeneration gen) = gen.label();
-  syn lazy int SynchronizedStmt.label_finally(CodeGeneration gen) = gen.label();
-  eq SynchronizedStmt.label_finally_block(CodeGeneration gen) = gen.label();
-  syn lazy int SynchronizedStmt.label_exception_handler(CodeGeneration gen) = gen.label();
+  syn lazy int SynchronizedStmt.label_begin() = hostType().constantPool().newLabel();
+  syn lazy int SynchronizedStmt.label_end() = hostType().constantPool().newLabel();
+  syn lazy int SynchronizedStmt.label_finally() = hostType().constantPool().newLabel();
+  eq SynchronizedStmt.label_finally_block() = hostType().constantPool().newLabel();
+  syn lazy int SynchronizedStmt.label_exception_handler() = hostType().constantPool().newLabel();
 
   public void SynchronizedStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     getExpr().createBCode(gen);
     emitMonitorEnter(gen);
-    gen.addLabel(label_begin(gen));
+    gen.addLabel(label_begin());
     getBlock().createBCode(gen);
-    gen.addLabel(label_finally(gen));
+    gen.addLabel(label_finally());
     if(getBlock().canCompleteNormally()) {
-      gen.emitJsr(label_finally_block(gen));
-      gen.emitGoto(label_end(gen));
+      gen.emitJsr(label_finally_block());
+      gen.emitGoto(label_end());
     }
-    gen.addLabel(label_exception_handler(gen));
+    gen.addLabel(label_exception_handler());
     emitExceptionHandler(gen);
-    gen.addLabel(label_finally_block(gen));
+    gen.addLabel(label_finally_block());
     emitFinallyBlock(gen);
-    gen.addLabel(label_end(gen));
+    gen.addLabel(label_end());
     gen.createExceptionTable(this);
   }
 
@@ -1594,8 +1596,8 @@ aspect CreateBCode {
       // add method to perform lookup as a side-effect
       MethodDecl m = hostType().createStaticClassMethod();
 
-      int next_label = gen.label();
-      int end_label = gen.label();
+      int next_label = hostType().constantPool().newLabel();
+      int end_label = hostType().constantPool().newLabel();
       f.emitLoadField(gen, hostType());
       gen.emitBranchNonNull(next_label);
       
