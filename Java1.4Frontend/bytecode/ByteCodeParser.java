@@ -21,7 +21,6 @@ class ByteCodeParser {
 		}
 
 		System.out.println("Result:");
-		program.prettyPrint(args.length);
-		//program.errorCheck(args.length);
+    System.out.println(program);
 	}
 }

@@ -30,21 +30,30 @@ aspect ErrorCheck {
     return sourceFile() + ":" + location() + ":\n" + "  *** Semantic Error: ";
   }
 
-  protected String ASTNode.errors = null;
+  protected java.util.ArrayList CompilationUnit.errors = new java.util.ArrayList();
+
+  //protected String ASTNode.errors = null;
   
   protected void ASTNode.error(String s) {
-    s = errorPrefix() + s;
-    if(errors == null)
-      errors = s;
-    else
-      errors = errors + "\n" + s;
+    ASTNode node = this;
+    while(node != null && !(node instanceof CompilationUnit))
+      node = node.getParent();
+    CompilationUnit cu = (CompilationUnit)node;
+    cu.errors.add(errorPrefix() + s);
+    //s = errorPrefix() + s;
+    //if(errors == null)
+    //  errors = s;
+    //else
+    //  errors = errors + "\n" + s;
   }
-
+  
+  /*
   protected boolean ASTNode.hasErrors() {
     return errors != null;
   }
+  */
 
-  public void ASTNode.errorCheck(Collection collection) {
+  public void ASTNode.collectErrors(/*Collection collection*/) {
     nameCheck();
     typeCheck();
     accessControl();
@@ -52,22 +61,30 @@ aspect ErrorCheck {
     checkUnreachableStmt();
     definiteAssignment();
     checkModifiers();
+    /*
     if(hasErrors())
       collection.add(errors);
+    */
     for(int i = 0; i < getNumChild(); i++) {
-      getChild(i).errorCheck(collection);
+      getChild(i).collectErrors(/*collection*/);
     }
   }
 
   public void Program.errorCheck(Collection collection) {
-    if(hasErrors())
-      collection.add(errors);
+    //if(hasErrors())
+    //  collection.add(errors);
     for(Iterator iter = compilationUnitIterator(); iter.hasNext(); ) {
       CompilationUnit cu = (CompilationUnit)iter.next();
       if(cu.fromSource()) {
-        cu.errorCheck(collection);
+        cu.collectErrors(/*collection*/);
+        collection.addAll(cu.errors);
       }
     }
+  }
+
+  public void CompilationUnit.errorCheck(Collection collection) {
+    collectErrors();
+    collection.addAll(errors);
   }
   
   public boolean Program.errorCheck() {
