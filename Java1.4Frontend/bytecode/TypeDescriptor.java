@@ -9,6 +9,7 @@ import AST.Modifiers;
 import AST.Opt;
 import AST.ParameterDeclaration;
 import AST.ParseName;
+import AST.PrimitiveTypeAccess;
 
 
 class TypeDescriptor {
@@ -31,21 +32,21 @@ class TypeDescriptor {
 		char c = s.charAt(0);
 		switch (c) {
 		case 'B':
-			return new ParseName(new IdUse("byte"));
+			return new PrimitiveTypeAccess("byte");
 		case 'C':
-			return new ParseName(new IdUse("char"));
+			return new PrimitiveTypeAccess("char");
 		case 'D':
-			return new ParseName(new IdUse("double"));
+			return new PrimitiveTypeAccess("double");
 		case 'F':
-			return new ParseName(new IdUse("float"));
+			return new PrimitiveTypeAccess("float");
 		case 'I':
-			return new ParseName(new IdUse("int"));
+			return new PrimitiveTypeAccess("int");
 		case 'J':
-			return new ParseName(new IdUse("long"));
+			return new PrimitiveTypeAccess("long");
 		case 'S':
-			return new ParseName(new IdUse("short"));
+			return new PrimitiveTypeAccess("short");
 		case 'Z':
-			return new ParseName(new IdUse("boolean"));
+			return new PrimitiveTypeAccess("boolean");
 		case 'L':
 			return this.p.fromClassName(s.substring(1, s.length() - 1));
 		case '[':
@@ -54,7 +55,7 @@ class TypeDescriptor {
         i++;
 			return new ArrayTypeAccess(type(s.substring(i)), i);
 		case 'V':
-			return new ParseName(new IdUse("void"));
+			return new PrimitiveTypeAccess("void");
 		default:
 			this.p.println("Error: unknown type in TypeDescriptor");
       throw new Error("Error: unknown Type in TypeDescriptor: " + s);
@@ -85,36 +86,36 @@ class TypeDescriptor {
 		char c = s.charAt(0);
 		switch (c) {
 		case 'B':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("byte")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("byte"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'C':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("char")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("char"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'D':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("double")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("double"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'F':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("float")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("float"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'I':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("int")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("int"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'J':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("long")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("long"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'S':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("short")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("short"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'Z':
-			l.add(new ParameterDeclaration(new Modifiers(), new ParseName(
-					new IdUse("boolean")), new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), 
+					new PrimitiveTypeAccess("boolean"), new IdDecl("p" + l.getNumChild())));
 			return s.substring(1);
 		case 'L':
 			//String[] strings = s.substring(1).split("\\;", 2);
@@ -147,28 +148,28 @@ class TypeDescriptor {
 		char c = s.charAt(0);
 		switch (c) {
 		case 'B':
-			typeAccess.setAccess(new ParseName(new IdUse("byte")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("byte"));
 			return s.substring(1);
 		case 'C':
-			typeAccess.setAccess(new ParseName(new IdUse("char")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("char"));
 			return s.substring(1);
 		case 'D':
-			typeAccess.setAccess(new ParseName(new IdUse("double")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("double"));
 			return s.substring(1);
 		case 'F':
-			typeAccess.setAccess(new ParseName(new IdUse("float")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("float"));
 			return s.substring(1);
 		case 'I':
-			typeAccess.setAccess(new ParseName(new IdUse("int")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("int"));
 			return s.substring(1);
 		case 'J':
-			typeAccess.setAccess(new ParseName(new IdUse("long")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("long"));
 			return s.substring(1);
 		case 'S':
-			typeAccess.setAccess(new ParseName(new IdUse("short")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("short"));
 			return s.substring(1);
 		case 'Z':
-			typeAccess.setAccess(new ParseName(new IdUse("boolean")));
+			typeAccess.setAccess(new PrimitiveTypeAccess("boolean"));
 			return s.substring(1);
 		case 'L':
 			//String[] strings = s.substring(1).split("\\;", 2);
