@@ -2,7 +2,6 @@ package bytecode;
 
 import AST.Access;
 import AST.ArrayTypeAccess;
-import AST.IdDecl;
 import AST.IdUse;
 import AST.List;
 import AST.Modifiers;
@@ -87,54 +86,49 @@ class TypeDescriptor {
 		switch (c) {
 		case 'B':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("byte"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("byte"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'C':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("char"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("char"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'D':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("double"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("double"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'F':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("float"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("float"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'I':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("int"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("int"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'J':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("long"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("long"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'S':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("short"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("short"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'Z':
 			l.add(new ParameterDeclaration(new Modifiers(), 
-					new PrimitiveTypeAccess("boolean"), new IdDecl("p" + l.getNumChild())));
+					new PrimitiveTypeAccess("boolean"), "p" + l.getNumChild()));
 			return s.substring(1);
 		case 'L':
-			//String[] strings = s.substring(1).split("\\;", 2);
-			//l.add(new ParameterDeclaration(new Modifiers(),
-			//		this.p.fromClassName(strings[0]),
-			//		new IdDecl("p" + l.getNumChild())));
-			//return strings[1];
       int pos = s.indexOf(';');
       String s1 = s.substring(1, pos);
       String s2 = s.substring(pos+1, s.length());
 			l.add(new ParameterDeclaration(new Modifiers(),
 					this.p.fromClassName(s1),
-					new IdDecl("p" + l.getNumChild())));
+					"p" + l.getNumChild()));
 			return s2;
 		case '[':
       int i = 1;
       while(s.charAt(i) == '[') i++;
       ArrayTypeAccess typeAccess = new ArrayTypeAccess(null, i);
-			l.add(new ParameterDeclaration(new Modifiers(), typeAccess, new IdDecl("p" + l.getNumChild())));
+			l.add(new ParameterDeclaration(new Modifiers(), typeAccess, "p" + l.getNumChild()));
 			return arrayTypeList(s.substring(i), typeAccess);
 		default:
 			this.p.println("Error: unknown Type \"" + c + "\" in TypeDescriptor");

@@ -3,7 +3,6 @@ package bytecode;
 import java.io.FileNotFoundException;
 
 import AST.ClassDecl;
-import AST.IdDecl;
 import AST.InterfaceDecl;
 import AST.List;
 import AST.MemberClassDecl;
@@ -86,7 +85,7 @@ class Attributes {
         if (inner_class_info.name().equals(p.classInfo.name())) {
           if(Parser.VERBOSE)
             p.println("      Class " + inner_class_name + " is inner");
-          typeDecl.setIdDecl(new IdDecl(inner_name));
+          typeDecl.setID(inner_name);
           typeDecl.setModifiers(Parser.modifiers(inner_class_access_flags & 0x041f));
           if (this.p.outerClassInfo != null && this.p.outerClassInfo.name().equals(outer_class_info.name())) {
             MemberTypeDecl m = null;

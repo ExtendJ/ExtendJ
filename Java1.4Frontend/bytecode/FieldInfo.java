@@ -2,7 +2,6 @@ package bytecode;
 
 import AST.BodyDecl;
 import AST.FieldDeclaration;
-import AST.IdDecl;
 import AST.Opt;
 
 class FieldInfo {
@@ -29,7 +28,7 @@ class FieldInfo {
 		FieldDeclaration f = new FieldDeclaration(
 				this.p.modifiers(flags),
 				fieldDescriptor.type(),
-				new IdDecl(name),
+				name,
 				new Opt()
 		);
 		if(attributes.constantValue() != null)

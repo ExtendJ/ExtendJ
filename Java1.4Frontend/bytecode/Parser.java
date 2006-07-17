@@ -246,7 +246,7 @@ public class Parser {
 		parseConstantPool();
 		CompilationUnit cu = new CompilationUnit();
 		TypeDecl typeDecl = parseTypeDecl();
-		cu.setPackageDeclList(classInfo.packageDecl());
+		cu.setPackageDecl(classInfo.packageDecl());
     cu.addTypeDecl(typeDecl);
 		parseFields(typeDecl);
 		parseMethods(typeDecl);
@@ -286,7 +286,7 @@ public class Parser {
 		if ((flags & 0x0200) == 0) {
 			ClassDecl decl = new ClassDecl();
 			decl.setModifiers(modifiers);
-			decl.setIdDecl(parseThisClass());
+			decl.setID(parseThisClass());
 			Access superClass = parseSuperClass();
 			decl.setSuperClassAccessOpt(superClass == null ? new Opt()
 					: new Opt(superClass));
@@ -298,7 +298,7 @@ public class Parser {
 		} else {
 			InterfaceDecl decl = new InterfaceDecl();
 			decl.setModifiers(modifiers);
-			decl.setIdDecl(parseThisClass());
+			decl.setID(parseThisClass());
 			Access superClass = parseSuperClass();
 			decl.setSuperInterfaceIdList(
 					parseInterfaces(
@@ -309,11 +309,11 @@ public class Parser {
 	}
 
 
-	public IdDecl parseThisClass() {
+	public String parseThisClass() {
 		int index = u2();
 		CONSTANT_Class_Info info = (CONSTANT_Class_Info) constantPool[index];
 		classInfo = info;
-		return new IdDecl(info.simpleName());
+		return info.simpleName();
 	}
 
 	public Access parseSuperClass() {

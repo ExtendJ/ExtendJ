@@ -98,14 +98,14 @@ Access qualified_name =
     name.n DOT IDENTIFIER.i   {: return n.qualifiesAccess(new ParseName(new IdUse(i))); :}
   ;
 CompilationUnit compilation_unit =
-    package_declaration.p import_declarations.i type_declarations.t {: return new CompilationUnit(p, i, t); :}
-  |                       import_declarations.i type_declarations.t {: return new CompilationUnit(new List(), i, t); :}
-  | package_declaration.p                       type_declarations.t {: return new CompilationUnit(p, new List(), t); :}
-  |                                             type_declarations.t {: return new CompilationUnit(new List(), new List(), t); :}
-  | package_declaration.p import_declarations.i                     {: return new CompilationUnit(p, i, new List()); :}
-  |                       import_declarations.i                     {: return new CompilationUnit(new List(), i, new List()); :}
-  | package_declaration.p                                           {: return new CompilationUnit(p, new List(), new List()); :}
-  |                                                                 {: return new CompilationUnit(new List(), new List(), new List()); :}
+    package_declaration.p import_declarations.i type_declarations.t {: return new CompilationUnit(p.getID(), i, t); :}
+  |                       import_declarations.i type_declarations.t {: return new CompilationUnit("", i, t); :}
+  | package_declaration.p                       type_declarations.t {: return new CompilationUnit(p.getID(), new List(), t); :}
+  |                                             type_declarations.t {: return new CompilationUnit("", new List(), t); :}
+  | package_declaration.p import_declarations.i                     {: return new CompilationUnit(p.getID(), i, new List()); :}
+  |                       import_declarations.i                     {: return new CompilationUnit("", i, new List()); :}
+  | package_declaration.p                                           {: return new CompilationUnit(p.getID(), new List(), new List()); :}
+  |                                                                 {: return new CompilationUnit("", new List(), new List()); :}
   ;
 List import_declarations =
     import_declaration.i                       {: return new List().add(i); :}
@@ -115,18 +115,18 @@ List type_declarations =
     type_declaration.t                         {: return !(t instanceof EmptyType) ? new List().add(t) : new List() ; :}
   | type_declarations.l type_declaration.t     {: return !(t instanceof EmptyType) ? l.add(t) : l; :}
   ;
-List package_declaration =
+IdUse package_declaration =
     PACKAGE name_decl.n SEMICOLON              {: return n; :}
   ;
-List name_decl =
+IdUse name_decl =
     simple_name_decl.s        {: return s; :}
   | qualified_name_decl.q     {: return q; :}
   ;
-List simple_name_decl =
-    IDENTIFIER.i              {: return new List().add(new IdDecl(i)); :}
+IdUse simple_name_decl =
+    IDENTIFIER.i              {: return new IdUse(i); :}
   ;
-List qualified_name_decl =
-    name_decl.n DOT IDENTIFIER.i {: return n.add(new IdDecl(i)); :}
+IdUse qualified_name_decl =
+    name_decl.n DOT IDENTIFIER.i {: return new IdUse(n.getID() + "." + i); :}
   ;
 ImportDecl import_declaration =
     single_type_import_declaration.s           {: return s; :}
@@ -141,7 +141,7 @@ ImportDecl type_import_on_demand_declaration =
 TypeDecl type_declaration =
     class_declaration.c                        {: return c; :}
   | interface_declaration.i                    {: return i; :}
-  | SEMICOLON                                  {: return new EmptyType(new Modifiers(), new IdDecl("EmptyType"), new Opt(), new List()); :}
+  | SEMICOLON                                  {: return new EmptyType(new Modifiers(), "EmptyType", new Opt(), new List()); :}
   ;
 Modifiers modifiers =
     modifier.m                                 {: Modifiers ms = new Modifiers(); ms.addModifier(m); return ms; :}
@@ -162,21 +162,21 @@ Modifier modifier =
   ;
 ClassDecl class_declaration =
     modifiers.m CLASS IDENTIFIER.id super.s interfaces.i class_body.b 
-                                               {: return new ClassDecl(m, new IdDecl(id), s, i, b); :}
+                                               {: return new ClassDecl(m, id, s, i, b); :}
   |             CLASS IDENTIFIER.id super.s interfaces.i class_body.b 
-                                               {: return new ClassDecl(new Modifiers(), new IdDecl(id), s, i, b); :}
+                                               {: return new ClassDecl(new Modifiers(), id, s, i, b); :}
   | modifiers.m CLASS IDENTIFIER.id         interfaces.i class_body.b 
-                                               {: return new ClassDecl(m, new IdDecl(id), new Opt(), i, b); :}
+                                               {: return new ClassDecl(m, id, new Opt(), i, b); :}
   |             CLASS IDENTIFIER.id         interfaces.i class_body.b 
-                                               {: return new ClassDecl(new Modifiers(), new IdDecl(id), new Opt(), i, b); :}
+                                               {: return new ClassDecl(new Modifiers(), id, new Opt(), i, b); :}
   | modifiers.m CLASS IDENTIFIER.id super.s              class_body.b 
-                                               {: return new ClassDecl(m, new IdDecl(id), s, new List(), b); :}
+                                               {: return new ClassDecl(m, id, s, new List(), b); :}
   |             CLASS IDENTIFIER.id super.s              class_body.b 
-                                               {: return new ClassDecl(new Modifiers(), new IdDecl(id), s, new List(), b); :}
+                                               {: return new ClassDecl(new Modifiers(), id, s, new List(), b); :}
   | modifiers.m CLASS IDENTIFIER.id                      class_body.b 
-                                               {: return new ClassDecl(m, new IdDecl(id), new Opt(), new List(), b); :}
+                                               {: return new ClassDecl(m, id, new Opt(), new List(), b); :}
   |             CLASS IDENTIFIER.id                      class_body.b 
-                                               {: return new ClassDecl(new Modifiers(), new IdDecl(id), new Opt(), new List(), b); :}
+                                               {: return new ClassDecl(new Modifiers(), id, new Opt(), new List(), b); :}
   ;
 Opt super =
     EXTENDS class_type.c                       {: return new Opt(c); :}
@@ -222,7 +222,7 @@ VariableDecl variable_declarator =
   | variable_declarator_id.v EQ variable_initializer.i {: v.setInit(i); return v; :}
   ;
 VariableDecl variable_declarator_id =
-    IDENTIFIER.id                              {: return new VariableDecl(new IdDecl(id), new List(), new Opt()); :}
+    IDENTIFIER.id                              {: return new VariableDecl(id, new List(), new Opt()); :}
   | variable_declarator_id.v LBRACK RBRACK     {: v.addEmptyBracket(new EmptyBracket()); return v; :}
   ;
 Expr variable_initializer =
@@ -253,8 +253,8 @@ MethodDecl method_header =
   ;
                                                                 
 MethodDecl method_declarator =
-    IDENTIFIER.id LPAREN formal_parameter_list.l RPAREN {: return new MethodDecl(null, null, new IdDecl(id), l, new List(), null, new Opt()); :}
-  | IDENTIFIER.id LPAREN                         RPAREN {: return new MethodDecl(null, null, new IdDecl(id), new List(), new List(), null, new Opt()); :}
+    IDENTIFIER.id LPAREN formal_parameter_list.l RPAREN {: return new MethodDecl(null, null, id, l, new List(), null, new Opt()); :}
+  | IDENTIFIER.id LPAREN                         RPAREN {: return new MethodDecl(null, null, id, new List(), new List(), null, new Opt()); :}
   | method_declarator.m LBRACK RBRACK                   {: m.addEmptyBracket(new EmptyBracket()); return m; :}
   ;
 List formal_parameter_list =
@@ -262,8 +262,8 @@ List formal_parameter_list =
   | formal_parameter_list.l COMMA formal_parameter.f    {: return l.add(f); :}
   ;
 ParameterDeclaration formal_parameter =
-                type.t variable_declarator_id.v {: return new ParameterDeclaration(new Modifiers(), t, v.getIdDecl(), v.getEmptyBracketList()); :}
-  | modifiers.m type.t variable_declarator_id.v {: return new ParameterDeclaration(m, t, v.getIdDecl(),v.getEmptyBracketList()); :}
+                type.t variable_declarator_id.v {: return new ParameterDeclaration(new Modifiers(), t, v.getID(), v.getEmptyBracketList()); :}
+  | modifiers.m type.t variable_declarator_id.v {: return new ParameterDeclaration(m, t, v.getID(), v.getEmptyBracketList()); :}
   ;
 List throws =
     THROWS class_type_list.l                   {: return l; :}
@@ -284,21 +284,21 @@ InstanceInitializer instance_initializer =
   ;
 ConstructorDecl constructor_declaration =
     modifiers.m IDENTIFIER.id LPAREN formal_parameter_list.pl RPAREN throws.tl constructor_body.b
-    {: b.setModifiers(m); b.setIdDecl(new IdDecl(id)); b.setParameterList(pl); b.setExceptionList(tl); return b; :}
+    {: b.setModifiers(m); b.setID(id); b.setParameterList(pl); b.setExceptionList(tl); return b; :}
   |             IDENTIFIER.id LPAREN formal_parameter_list.pl RPAREN throws.tl constructor_body.b
-    {: b.setIdDecl(new IdDecl(id)); b.setParameterList(pl); b.setExceptionList(tl); return b; :}
+    {: b.setID(id); b.setParameterList(pl); b.setExceptionList(tl); return b; :}
   | modifiers.m IDENTIFIER.id LPAREN                          RPAREN throws.tl constructor_body.b
-    {: b.setModifiers(m); b.setIdDecl(new IdDecl(id)); b.setExceptionList(tl); return b; :}
+    {: b.setModifiers(m); b.setID(id); b.setExceptionList(tl); return b; :}
   |             IDENTIFIER.id LPAREN                          RPAREN throws.tl constructor_body.b
-    {: b.setIdDecl(new IdDecl(id)); b.setExceptionList(tl); return b; :}
+    {: b.setID(id); b.setExceptionList(tl); return b; :}
   | modifiers.m IDENTIFIER.id LPAREN formal_parameter_list.pl RPAREN           constructor_body.b
-    {: b.setModifiers(m); b.setIdDecl(new IdDecl(id)); b.setParameterList(pl); return b; :}
+    {: b.setModifiers(m); b.setID(id); b.setParameterList(pl); return b; :}
   |             IDENTIFIER.id LPAREN formal_parameter_list.pl RPAREN           constructor_body.b
-    {: b.setIdDecl(new IdDecl(id)); b.setParameterList(pl); return b; :}
+    {: b.setID(id); b.setParameterList(pl); return b; :}
   | modifiers.m IDENTIFIER.id LPAREN                          RPAREN           constructor_body.b
-    {: b.setModifiers(m); b.setIdDecl(new IdDecl(id)); return b; :}
+    {: b.setModifiers(m); b.setID(id); return b; :}
   |             IDENTIFIER.id LPAREN                          RPAREN           constructor_body.b
-    {: b.setIdDecl(new IdDecl(id)); return b; :}
+    {: b.setID(id); return b; :}
  ;
 ConstructorDecl constructor_body =
 		LBRACE explicit_constructor_invocation.c block_statements.l RBRACE
@@ -321,10 +321,10 @@ ExprStmt explicit_constructor_invocation =
     {: return new ExprStmt(n.qualifiesAccess(new SuperConstructorAccess(l, new IdUse("super")))); :}
   ;
 InterfaceDecl interface_declaration =
-    modifiers.m INTERFACE IDENTIFIER.id extends_interfaces.i interface_body.b {: return new InterfaceDecl(m, new IdDecl(id), i, b); :}
-  |             INTERFACE IDENTIFIER.id extends_interfaces.i interface_body.b {: return new InterfaceDecl(new Modifiers(), new IdDecl(id), i, b); :}
-  | modifiers.m INTERFACE IDENTIFIER.id                      interface_body.b {: return new InterfaceDecl(m, new IdDecl(id), new List(), b); :}
-  |             INTERFACE IDENTIFIER.id                      interface_body.b {: return new InterfaceDecl(new Modifiers(), new IdDecl(id), new List(), b); :}
+    modifiers.m INTERFACE IDENTIFIER.id extends_interfaces.i interface_body.b {: return new InterfaceDecl(m, id, i, b); :}
+  |             INTERFACE IDENTIFIER.id extends_interfaces.i interface_body.b {: return new InterfaceDecl(new Modifiers(), id, i, b); :}
+  | modifiers.m INTERFACE IDENTIFIER.id                      interface_body.b {: return new InterfaceDecl(m, id, new List(), b); :}
+  |             INTERFACE IDENTIFIER.id                      interface_body.b {: return new InterfaceDecl(new Modifiers(), id, new List(), b); :}
   ;
 List extends_interfaces =
     EXTENDS interface_type.i                    {: return new List().add(i); :}
@@ -424,10 +424,10 @@ EmptyStmt empty_statement =
     SEMICOLON                                  {: return new EmptyStmt(); :}
   ;
 LabeledStmt labeled_statement =
-    IDENTIFIER.id COLON statement.s            {: return new LabeledStmt(new IdDecl(id), s); :}
+    IDENTIFIER.id COLON statement.s            {: return new LabeledStmt(id, s); :}
   ;
 LabeledStmt labeled_statement_no_short_if =
-    IDENTIFIER.id COLON statement_no_short_if.s {: return new LabeledStmt(new IdDecl(id), s); :}
+    IDENTIFIER.id COLON statement_no_short_if.s {: return new LabeledStmt(id, s); :}
   ;
 ExprStmt expression_statement =
     statement_expression.e SEMICOLON           {: return e; :}
@@ -511,12 +511,12 @@ List statement_expression_list =
   | statement_expression_list.l COMMA statement_expression.e {: return l.add(e); :}
   ;
 BreakStmt break_statement =
-    BREAK IDENTIFIER.id SEMICOLON              {: return new BreakStmt(new Opt(new IdUse(id))); :}
-  | BREAK               SEMICOLON              {: return new BreakStmt(new Opt()); :}
+    BREAK IDENTIFIER.id SEMICOLON              {: return new BreakStmt(id); :}
+  | BREAK               SEMICOLON              {: return new BreakStmt(""); :}
   ; 
 ContinueStmt continue_statement =
-    CONTINUE IDENTIFIER.id SEMICOLON           {: return new ContinueStmt(new Opt(new IdUse(id))); :}
-  | CONTINUE               SEMICOLON           {: return new ContinueStmt(new Opt()); :}
+    CONTINUE IDENTIFIER.id SEMICOLON           {: return new ContinueStmt(id); :}
+  | CONTINUE               SEMICOLON           {: return new ContinueStmt(""); :}
   ;
 ReturnStmt return_statement =
     RETURN expression.e SEMICOLON              {: return new ReturnStmt(new Opt(e)); :}
@@ -584,7 +584,7 @@ Expr class_instance_creation_expression =
     {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b)); :}
   ;
 Opt subclass_body =
-    class_body.b                               {: return new Opt(new AnonymousDecl(new Modifiers(), new IdDecl("Anonymous"), b)); :}
+    class_body.b                               {: return new Opt(new AnonymousDecl(new Modifiers(), "Anonymous", b)); :}
   ;
 List argument_list_opt =
                                                {: return new List(); :}

@@ -3,7 +3,6 @@ package bytecode;
 import AST.Block;
 import AST.BodyDecl;
 import AST.ConstructorDecl;
-import AST.IdDecl;
 import AST.List;
 import AST.MethodDecl;
 import AST.Opt;
@@ -39,7 +38,7 @@ class MethodInfo {
 		if(isConstructor()) {
 			return new ConstructorDecl(
 				this.p.modifiers(flags),
-				new IdDecl(name),
+				name,
         Parser.isInnerClass ? methodDescriptor.parameterListSkipFirst() : methodDescriptor.parameterList(),
 				attributes.exceptionList(),
         new Opt(),
@@ -50,7 +49,7 @@ class MethodInfo {
 			return new MethodDecl(
 				this.p.modifiers(flags),
 				methodDescriptor.type(),
-				new IdDecl(name),
+				name,
 				methodDescriptor.parameterList(),
 				new List(),
 				attributes.exceptionList(),

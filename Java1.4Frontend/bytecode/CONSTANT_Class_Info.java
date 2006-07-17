@@ -5,7 +5,6 @@ import AST.Dot;
 import AST.IdUse;
 import AST.ParseName;
 import AST.List;
-import AST.IdDecl;
 
 
 class CONSTANT_Class_Info extends CONSTANT_Info {
@@ -29,36 +28,18 @@ class CONSTANT_Class_Info extends CONSTANT_Info {
 
 	public String simpleName() {
 		String name = name();
-		//name = name.replaceAll("\\$", ".");
 		name = name.replace('$', '.');
-		//String[] names = name.split("\\.");
-		//return names[names.length - 1];
     int pos = name.lastIndexOf('.');
     return name.substring(pos + 1, name.length());
 	}
 	
-	public List packageDecl() {
+	public String packageDecl() {
 		String name = name();
-		//name = name.replaceAll("\\$", ".");
 		name = name.replace('$', '.');
-		//String[] names = name.split("\\.");
-		//List list = new List();
-		//for(int i = 0 ; i < names.length - 1; i++) {
-		//	list.add(new IdDecl(names[i]));
-		//}
-    int index = -1;
-    int pos = 0;
-    List list = new List();
-    do {
-      pos = name.indexOf('.', index+1);
-      if(pos == -1)
-        pos = name.length();
-      String s = name.substring(index+1, pos);
-      if(pos != name.length())
-        list.add(new IdDecl(s));
-      index = pos;
-    } while(pos != name.length());
-		return list;
+    int pos = name.lastIndexOf('.');
+    if(pos == -1)
+      return "";
+    return name.substring(0, pos);
 	}
 
 	public Access access() {
