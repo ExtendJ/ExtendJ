@@ -92,10 +92,10 @@ Access name =
   | qualified_name.q          {: return q; :}
   ;
 Access simple_name =
-    IDENTIFIER.i              {: return new ParseName(new IdUse(i)); :}
+    IDENTIFIER.i              {: return new ParseName(i); :}
   ;
 Access qualified_name =
-    name.n DOT IDENTIFIER.i   {: return n.qualifiesAccess(new ParseName(new IdUse(i))); :}
+    name.n DOT IDENTIFIER.i   {: return n.qualifiesAccess(new ParseName(i)); :}
   ;
 CompilationUnit compilation_unit =
     package_declaration.p import_declarations.i type_declarations.t {: return new CompilationUnit(p.getID(), i, t); :}
@@ -312,13 +312,13 @@ ConstructorDecl constructor_body =
 	;
 ExprStmt explicit_constructor_invocation =
     THIS LPAREN argument_list_opt.l RPAREN SEMICOLON 
-    {: return new ExprStmt(new ConstructorAccess(l, new IdUse("this"))); :}
+    {: return new ExprStmt(new ConstructorAccess(l, "this")); :}
   | SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON 
-    {: return new ExprStmt(new SuperConstructorAccess(l, new IdUse("super"))); :}
+    {: return new ExprStmt(new SuperConstructorAccess(l, "super")); :}
   | primary.p DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON
-    {: return new ExprStmt(p.qualifiesAccess(new SuperConstructorAccess(l, new IdUse("super")))); :}
+    {: return new ExprStmt(p.qualifiesAccess(new SuperConstructorAccess(l, "super"))); :}
   | name.n DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON
-    {: return new ExprStmt(n.qualifiesAccess(new SuperConstructorAccess(l, new IdUse("super")))); :}
+    {: return new ExprStmt(n.qualifiesAccess(new SuperConstructorAccess(l, "super"))); :}
   ;
 InterfaceDecl interface_declaration =
     modifiers.m INTERFACE IDENTIFIER.id extends_interfaces.i interface_body.b {: return new InterfaceDecl(m, id, i, b); :}
@@ -572,16 +572,16 @@ Expr class_instance_creation_expression =
     NEW class_or_interface_type.t LPAREN argument_list_opt.l RPAREN 
     {: return new ClassInstanceExpr(t, l, new Opt()); :}
   | primary.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, new Opt())); :}
+    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, new Opt())); :}
   | name.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, new Opt())); :}
+    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, new Opt())); :}
     
   | NEW class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body.b 
     {: return new ClassInstanceExpr(t, l, b); :}
   | primary.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN subclass_body.b
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b )); :}
+    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, b )); :}
   | name.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN subclass_body.b
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(new IdUse(id)), l, b)); :}
+    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, b)); :}
   ;
 Opt subclass_body =
     class_body.b                               {: return new Opt(new AnonymousDecl(new Modifiers(), "Anonymous", b)); :}
@@ -619,33 +619,31 @@ List dims =
   | dims.l LBRACK RBRACK                       {: return l.add(new Dims(new Opt())); :}
   ;
 Access field_access =
-    primary.p DOT IDENTIFIER.id                {: return p.qualifiesAccess(new ParseName(new IdUse(id))); :}
+    primary.p DOT IDENTIFIER.id                {: return p.qualifiesAccess(new ParseName(id)); :}
   | SUPER DOT IDENTIFIER.id 
-    {: return new SuperAccess("super").qualifiesAccess(new ParseName(new IdUse(id))); :}
+    {: return new SuperAccess("super").qualifiesAccess(new ParseName(id)); :}
   | name.n DOT SUPER DOT IDENTIFIER.id
-    {: return n.qualifiesAccess(new SuperAccess("super")).qualifiesAccess(new ParseName(new IdUse(id))); :}
+    {: return n.qualifiesAccess(new SuperAccess("super")).qualifiesAccess(new ParseName(id)); :}
   ;
 Access method_invocation =
       name.n LPAREN argument_list_opt.l RPAREN {: 
                                                              if(n instanceof AbstractDot) {    
                                                                AbstractDot d = (AbstractDot)n; 
                                                                ParseName pn = (ParseName)d.extractLast();
-                                                               IdUse idUse = pn.getIdUseNoTransform();
-                                                               d.replaceLast(new MethodAccess(l, idUse));
+                                                               d.replaceLast(new MethodAccess(l, pn.getID()));
                                                                return d;
                                                              }
                                                              else {
                                                                ParseName pn = (ParseName)n;
-                                                               IdUse idUse = pn.getIdUseNoTransform();
-                                                               return new MethodAccess(l, idUse);
+                                                               return new MethodAccess(l, pn.getID());
                                                              }
                                                                :}
    | primary.p DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN 
-     {: return p.qualifiesAccess(new MethodAccess(l, new IdUse(id))); :}
+     {: return p.qualifiesAccess(new MethodAccess(l, id)); :}
    | SUPER DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-     {: return new SuperAccess("super").qualifiesAccess(new MethodAccess(l, new IdUse(id))); :}
+     {: return new SuperAccess("super").qualifiesAccess(new MethodAccess(l, id)); :}
    | name.n DOT SUPER DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-     {: return n.qualifiesAccess(new SuperAccess("super")).qualifiesAccess(new MethodAccess(l, new IdUse(id))); :}
+     {: return n.qualifiesAccess(new SuperAccess("super")).qualifiesAccess(new MethodAccess(l, id)); :}
    ;
 Access array_access =
     name.n LBRACK expression.e RBRACK                 {: return n.qualifiesAccess(new ArrayAccess(e)); :}

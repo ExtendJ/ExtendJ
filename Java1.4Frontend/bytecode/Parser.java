@@ -347,19 +347,13 @@ public class Parser {
         pos = s.length();
       String name = s.substring(index+1, pos);
       if(index == -1) {
-		    result = new ParseName(new IdUse(name));
+		    result = new ParseName(name);
       }
       else {
-			  result = new Dot(result, new ParseName(new IdUse(name)));
+			  result = new Dot(result, new ParseName(name));
       }
       index = pos;
     } while(pos != s.length());
-    
-		//String[] names = s.split("/");
-		//Access result = new ParseName(new IdUse(names[0]));
-		//for (int i = 1; i < names.length; i++) {
-		//	result = new Dot(result, new ParseName(new IdUse(names[i])));
-		//}
 		return result;
 
 	}

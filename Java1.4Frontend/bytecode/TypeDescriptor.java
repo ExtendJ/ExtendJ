@@ -2,7 +2,6 @@ package bytecode;
 
 import AST.Access;
 import AST.ArrayTypeAccess;
-import AST.IdUse;
 import AST.List;
 import AST.Modifiers;
 import AST.Opt;

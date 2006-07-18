@@ -90,45 +90,17 @@ aspect Variables {
 }
 
 aspect VariableDeclarationTransformation {
-
-  // Transform Parameter -> ParameterDeclaration (dimension at type only)
-  /*
-  rewrite Parameter {
-    when(!(this instanceof ParameterDeclaration))
-    to Parameter new ParameterDeclaration(
-          getModifiers(),
-          getNumEmptyBracket() == 0 ? getTypeAccess() : 
-            new ArrayTypeAccess(getTypeAccess(), getNumEmptyBracket()),
-          name()
-      );
-  }*/
-
-  public ParameterDeclaration.ParameterDeclaration(Modifiers m, Access a, String i) {
-    this(m, a, i, new List());
-  }
-
-  /*
-  // MethodDecl dimension at type only
-  rewrite MethodDecl {
-    when(getNumEmptyBracket() > 0)
-    to MethodDecl {
-      //setTypeAccess(getTypeAccess().qualifiesAccess(new ArrayNameAccess(getNumEmptyBracket(), false)));
-      setTypeAccess(new ArrayTypeAccess(getTypeAccess(), getNumEmptyBracket()));
-      setEmptyBracketList(new List());
-      return this;
-    }
-  }
-  */
-
   // FieldDecl with single VariableDecl -> FieldDeclaration
   rewrite FieldDecl {
     when(getNumVariableDecl() == 1)
     to FieldDeclaration {
-      return getVariableDecl(0).createFieldDeclarationFrom(getModifiers(), getTypeAccess());
+      FieldDeclaration decl = getVariableDecl(0).createFieldDeclarationFrom(getModifiers(), getTypeAccess());
+      decl.setStart(start); // copy location information
+      return decl;
     }
   }
 
-  // FieldDecl with multiple VariableDecl -> FieldDecl with single VariableDecl +
+  // FieldDecl with multiple VariableDecl -> FieldDeclaration+
   rewrite FieldDecl in TypeDecl.getBodyDecl() {
     when(getNumVariableDecl() > 1)
     to List {
@@ -155,7 +127,7 @@ aspect VariableDeclarationTransformation {
     }
   }
 
-  // VarDeclStmt with multiple VariableDecl -> VarDeclStmt with single VarialbeDecl +
+  // VarDeclStmt with multiple VariableDecl -> VariableDeclaration+
   rewrite VarDeclStmt in Block.getStmt() {
     when(getNumVariableDecl() > 1)
     to List createVariableDeclarationList();
@@ -173,34 +145,36 @@ aspect VariableDeclarationTransformation {
     List varList = new List();
     for(int j = 0; j < getNumVariableDecl(); j++) {
       varList.add(
-          getVariableDecl(j).createVariableDeclarationFrom(
-            (Modifiers)getModifiers().fullCopy(),
-            (Access)getTypeAccess().fullCopy()
-            )
-          );
+        getVariableDecl(j).createVariableDeclarationFrom(
+          (Modifiers)getModifiers().fullCopy(),
+          (Access)getTypeAccess().fullCopy()
+        )
+      );
     }
     return varList;
   }
 
   public VariableDeclaration VariableDecl.createVariableDeclarationFrom(Modifiers modifiers, Access type) {
-    return new VariableDeclaration(
+    VariableDeclaration decl = new VariableDeclaration(
       modifiers,
       getNumEmptyBracket() == 0 ? type : 
         new ArrayTypeAccess(type, getNumEmptyBracket()),
       getID(),
       getInitOpt()
     );
+    decl.setStart(start); // copy location information
+    return decl;
   }
 
   public FieldDeclaration VariableDecl.createFieldDeclarationFrom(Modifiers modifiers, Access type) {
-    return new FieldDeclaration(
+    FieldDeclaration decl = new FieldDeclaration(
       modifiers,
       getNumEmptyBracket() == 0 ? type : 
         new ArrayTypeAccess(type, getNumEmptyBracket()),
       getID(),
       getInitOpt()
     );
+    decl.setStart(start); // copy location information
+    return decl;
   }
-
-  
 }

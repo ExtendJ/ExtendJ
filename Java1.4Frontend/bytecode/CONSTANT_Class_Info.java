@@ -2,7 +2,6 @@ package bytecode;
 
 import AST.Access;
 import AST.Dot;
-import AST.IdUse;
 import AST.ParseName;
 import AST.List;
 
@@ -44,12 +43,7 @@ class CONSTANT_Class_Info extends CONSTANT_Info {
 
 	public Access access() {
 		String name = name();
-		//name = name.replaceAll("\\$", ".");
 		name = name.replace('$', '.');
-		//String[] names = name.split("\\.");
-		//Access result = new ParseName(new IdUse(names[0]));
-		//for (int i = 1; i < names.length; i++)
-		//	result = new Dot(result, new ParseName(new IdUse(names[i])));
 		int index = -1;
     int pos = 0;
     Access result = null;
@@ -59,10 +53,10 @@ class CONSTANT_Class_Info extends CONSTANT_Info {
         pos = name.length();
       String s = name.substring(index+1, pos);
       if(index == -1) {
-		    result = new ParseName(new IdUse(s));
+		    result = new ParseName(s);
       }
       else {
-			  result = new Dot(result, new ParseName(new IdUse(s)));
+			  result = new Dot(result, new ParseName(s));
       }
       index = pos;
     } while(pos != name.length());
