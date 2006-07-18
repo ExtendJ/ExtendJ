@@ -153,7 +153,7 @@ aspect GenericsTypeAnalysis {
 
 
   eq ParameterizedTypeAccess.type() {
-    //System.err.println("Computing type for parameterized type access " + getIdUse().getID());
+    //System.err.println("Computing type for parameterized type access " + getID());
     if(decl() instanceof GenericTypeDecl) {
       GenericTypeDecl decl = (GenericTypeDecl)decl();
       //System.err.println("  need to lookupParTypeDecl");
@@ -361,13 +361,13 @@ aspect GenericsNameBinding {
     when(getTypeAccess() instanceof TypeAccess)
     to TypeAccess {
       TypeAccess t = (TypeAccess)getTypeAccess();
-      return new ParameterizedTypeAccess(t.getPackageList(), t.getIdUse(), getTypeArgumentList());
+      return new ParameterizedTypeAccess(t.getPackage(), t.getID(), getTypeArgumentList());
     }
     when(getTypeAccess() instanceof Dot && ((Dot)getTypeAccess()).getRight() instanceof TypeAccess)
     to TypeAccess {
       Dot dot = (Dot)getTypeAccess();
       TypeAccess t = (TypeAccess)dot.getRight();
-      dot.setRight(new ParameterizedTypeAccess(t.getPackageList(), t.getIdUse(), getTypeArgumentList()));
+      dot.setRight(new ParameterizedTypeAccess(t.getPackage(), t.getID(), getTypeArgumentList()));
       return dot;
     }
   }
@@ -380,7 +380,7 @@ aspect GenericsNameBinding {
   /*
   rewrite TypeAccess {
     when(isExactTypeAccess() && decl().isGenericType())
-    to RawTypeAccess new RawTypeAccess(getPackageList(), getIdUse());
+    to RawTypeAccess new RawTypeAccess(getPackage(), getID());
   }
   */
 
@@ -410,7 +410,7 @@ aspect GenericsNameBinding {
         list.add(decl.getTypeParameter(i).createQualifiedAccess());
       }
       System.out.println("Rewriting rawaccess of " + name() + " at " + location());
-      return new RawTypeAccess(getPackageList(), getIdUse(), list);
+      return new RawTypeAccess(getPackage(), getID(), list);
     }
   }
 
@@ -522,7 +522,7 @@ aspect LookupParTypeDecl {
   }
   public Access ParameterizedTypeAccess.substitute(ParTypeDecl parTypeDecl) {
     // can find context
-    return new ParameterizedTypeAccess((List)getPackageList().fullCopy(), (IdUse)getIdUse().fullCopy(),
+    return new ParameterizedTypeAccess(getPackage(), getID(),
       getTypeArgumentList().substitute(parTypeDecl));
   }
   
@@ -532,7 +532,7 @@ aspect LookupParTypeDecl {
   }
   public Access ParameterizedTypeAccess.substituteReturnType(ParTypeDecl parTypeDecl) {
     // can find context
-    return new ParameterizedTypeAccess((List)getPackageList().fullCopy(), (IdUse)getIdUse().fullCopy(),
+    return new ParameterizedTypeAccess(getPackage(), getID(),
       getTypeArgumentList().substitute(parTypeDecl));
   }
   
@@ -542,7 +542,7 @@ aspect LookupParTypeDecl {
   }
   public Access ParameterizedTypeAccess.substituteParameterType(ParTypeDecl parTypeDecl) {
     // can find context
-    return new ParameterizedTypeAccess((List)getPackageList().fullCopy(), (IdUse)getIdUse().fullCopy(),
+    return new ParameterizedTypeAccess(getPackage(), getID(),
       getTypeArgumentList().substitute(parTypeDecl));
   }
 
@@ -563,7 +563,7 @@ aspect LookupParTypeDecl {
           new ParameterDeclaration(
             (Modifiers)p.getModifiers().fullCopy(),
             p.getTypeAccess().substituteParameterType(parTypeDecl),
-            (IdDecl)p.getIdDecl().fullCopy()
+            p.getID()
           )
         );
       }
@@ -572,7 +572,7 @@ aspect LookupParTypeDecl {
         list.add(
           new TypeVariable(
             (Modifiers)tv.getModifiers().fullCopy(),
-            (IdDecl)tv.getIdDecl().fullCopy(),
+            tv.getID(),
             (List)tv.getBodyDeclList().fullCopy(),
             tv.getTypeBoundList().substitute(parTypeDecl)
           )
@@ -607,7 +607,7 @@ aspect LookupParTypeDecl {
     // build parameterized type decl using arguments from distant type access
     ParClassDecl typeDecl = params.isRawAccess() ? new RawClassDecl() : new ParClassDecl();
     typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-    typeDecl.setIdDecl((IdDecl)getIdDecl().fullCopy());
+    typeDecl.setID(getID());
     
     addParTypeDecl(typeDecl);
 
@@ -655,7 +655,7 @@ aspect LookupParTypeDecl {
     typeDecl.setTypeParameterList(getTypeParameterList().substitute(typeDecl));
     
     typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-    typeDecl.setIdDecl((IdDecl)getIdDecl().fullCopy());
+    typeDecl.setID(getID());
     typeDecl.setSuperInterfaceIdList(getSuperInterfaceIdList().substitute(typeDecl));
     
     for(int i = 0; i < getNumBodyDecl(); i++) {
@@ -671,7 +671,7 @@ aspect LookupParTypeDecl {
     MethodDecl m = new MethodDecl(
       (Modifiers)getModifiers().fullCopy(),
       getTypeAccess().substituteReturnType(parTypeDecl),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       getParameterList().substitute(parTypeDecl),
       new List(),
       getExceptionList().substitute(parTypeDecl),
@@ -682,7 +682,7 @@ aspect LookupParTypeDecl {
   public BodyDecl ConstructorDecl.p(ParTypeDecl parTypeDecl) {
     ConstructorDecl c = new ConstructorDecl(
       (Modifiers)getModifiers().fullCopy(),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       getParameterList().substitute(parTypeDecl),
       getExceptionList().substitute(parTypeDecl),
       new Opt(),
@@ -693,9 +693,6 @@ aspect LookupParTypeDecl {
 
   protected String ASTNode.dumpString() {
     return getClass().getName();
-  }
-  protected String IdUse.dumpString() {
-    return super.dumpString() + "[" + getID() + "]";
   }
   protected void ASTNode.dumpNoRewrite(int indent) {
     StringBuffer s = new StringBuffer();
@@ -712,7 +709,7 @@ aspect LookupParTypeDecl {
     FieldDeclaration f = new FieldDeclaration(
       (Modifiers)getModifiers().fullCopy(),
       getTypeAccess().substituteReturnType(parTypeDecl),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       new Opt()
     );
     return f;
@@ -731,7 +728,7 @@ aspect LookupParTypeDecl {
   public ClassDecl ClassDecl.p(ParTypeDecl parTypeDecl) {
     ClassDecl c = new ClassDecl(
       (Modifiers)getModifiers().fullCopy(),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       (Opt)getSuperClassAccessOpt().fullCopy(),
       getImplementsList().substitute(parTypeDecl),
       new List()
@@ -743,7 +740,7 @@ aspect LookupParTypeDecl {
   public ClassDecl GenericClassDecl.p(ParTypeDecl parTypeDecl) {
     GenericClassDecl c = new GenericClassDecl(
       (Modifiers)getModifiers().fullCopy(),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       (Opt)getSuperClassAccessOpt().fullCopy(),
       getImplementsList().substitute(parTypeDecl),
       new List(),
@@ -762,7 +759,7 @@ aspect LookupParTypeDecl {
   public InterfaceDecl InterfaceDecl.p(ParTypeDecl parTypeDecl) {
     InterfaceDecl c = new InterfaceDecl(
       (Modifiers)getModifiers().fullCopy(),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       getSuperInterfaceIdList().substitute(parTypeDecl),
       new List()
     );
@@ -773,7 +770,7 @@ aspect LookupParTypeDecl {
   public InterfaceDecl GenericInterfaceDecl.p(ParTypeDecl parTypeDecl) {
     GenericInterfaceDecl c = new GenericInterfaceDecl(
       (Modifiers)getModifiers().fullCopy(),
-      (IdDecl)getIdDecl().fullCopy(),
+      getID(),
       getSuperInterfaceIdList().substitute(parTypeDecl),
       new List(),
       (List)getTypeParameterList().fullCopy(),
@@ -787,7 +784,7 @@ aspect LookupParTypeDecl {
 
   syn lazy CompilationUnit Program.wildcards() {
     CompilationUnit cu = new CompilationUnit(
-      new List().add(new IdDecl("wildcards")),
+      "wildcards",
       new List(),
       new List()
     );
@@ -815,14 +812,14 @@ aspect LookupParTypeDecl {
   public TypeDecl Wildcard.buildTypeDecl() {
     return new WildcardType(
       new Modifiers(new List().add(new Modifier("public"))),
-      new IdDecl("?"),
+      "?",
       new List()
     );
   }
   public TypeDecl WildcardExtends.buildTypeDecl() {
     return new WildcardExtendsType(
       new Modifiers(new List().add(new Modifier("public"))),
-      new IdDecl("? extends " + getAccess().type().fullName()),
+      "? extends " + getAccess().type().fullName(),
       new List(),
       getAccess().type().createQualifiedAccess()
     );
@@ -830,7 +827,7 @@ aspect LookupParTypeDecl {
   public TypeDecl WildcardSuper.buildTypeDecl() {
     return new WildcardSuperType(
       new Modifiers(new List().add(new Modifier("public"))),
-      new IdDecl("? super " + getAccess().type().fullName()),
+      "? super " + getAccess().type().fullName(),
       new List(),
       getAccess().type().createQualifiedAccess()
     );
