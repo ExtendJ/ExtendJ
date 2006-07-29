@@ -84,6 +84,6 @@ class JavaPrettyPrinter {
   }
 
   protected static void printVersion() {
-    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060127");
+    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060729");
   }
 }
