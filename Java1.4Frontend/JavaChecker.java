@@ -3,18 +3,16 @@ import AST.*;
 import java.util.*;
 import java.io.*;
 import parser.*;
-import beaver.Symbol;
 
-class JavaCompiler {
+class JavaChecker {
 
   public static void main(String args[]) {
-    if(!compile(args))
-      System.exit(1);
+    compile(args);
   }
-  
+
   public static boolean compile(String args[]) {
     Program program = new Program();
-    program.initOptions();    
+    program.initOptions();
     program.addKeyValueOption("-classpath");
     program.addKeyValueOption("-sourcepath");
     program.addKeyValueOption("-bootclasspath");
@@ -23,7 +21,6 @@ class JavaCompiler {
     program.addKeyOption("-verbose");
     program.addKeyOption("-version");
     program.addKeyOption("-help");
-    program.addKeyOption("-g");
     
     program.addOptions(args);
     Collection files = program.files();
@@ -47,13 +44,7 @@ class JavaCompiler {
         CompilationUnit unit = (CompilationUnit)iter.next();
         if(unit.fromSource()) {
           Collection errors = new LinkedList();
-          if(Program.verbose())
-            System.out.println("Error checking " + unit.relativeName());
-          long time = System.currentTimeMillis();
           unit.errorCheck(errors);
-          time = System.currentTimeMillis()-time;
-          if(Program.verbose())
-            System.out.println("Error checking " + unit.relativeName() + " done in " + time + " ms");
           if(!errors.isEmpty()) {
             System.out.println("Errors:");
             for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
@@ -62,18 +53,11 @@ class JavaCompiler {
             }
             return false;
           }
-          else {
-            unit.java2Transformation();
-            unit.generateClassfile();
-          }
         }
       }
-    } catch (JavaParser.SourceError e) {
+    } catch (Error e) {
       System.err.println(e.getMessage());
       return false;
-    } catch (Exception e) {
-      System.err.println(e.getMessage());
-      e.printStackTrace();
     }
     return true;
   }
@@ -81,8 +65,8 @@ class JavaCompiler {
   protected static void printUsage() {
     printVersion();
     System.out.println(
-      "\nJavaCompiler\n\n" +
-      "Usage: java JavaCompiler <options> <source files>\n" +
+      "\nJavaPrettyPrinter\n\n" +
+      "Usage: java JavaPrettyPrinter <options> <source files>\n" +
       "  -verbose                  Output messages about what the compiler is doing\n" +
       "  -classpath <path>         Specify where to find user class files\n" +
       "  -sourcepath <path>        Specify where to find input source files\n" + 
@@ -95,7 +79,6 @@ class JavaCompiler {
   }
 
   protected static void printVersion() {
-    System.out.println("Java1.4Frontend + Backend (http://jastadd.cs.lth.se) Version R20060729");
+    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060729");
   }
-
 }
