@@ -23,46 +23,35 @@ aspect Annotations {
   Comment: This is common for all type declarations and need thus no specific
   implementation. */
 
+  // 9.6.1.1
+
   /* If an annotation a on an annotation declaration corresponds to an
   annotation type T, and T has a (meta-)annotation m that corresponds to
   annotation.Target, then m must have either an element whose matches the 
   annotated declaration, or a compile-time error occurs.*/
   public void Annotation.checkModifiers() {
     super.checkModifiers();
-    if(getAccess().type() instanceof AnnotationDecl) {
-      AnnotationDecl T = (AnnotationDecl)getAccess().type();
-      Annotation m = T.annotationTarget();
-      if(m != null && m.singleValueArgument() != null) {
-        Expr e = m.singleValueArgument();
-        if(e.varDecl() != null) {
-          Variable v = e.varDecl();
-          if(!v.hostType().fullName().equals("java.lang.annotation.ElementType") ||
-            !mayUseAnnotationTarget(v.name()))
-            error("annotation type " + T.typeName() + " is not applicable to this kind of declaration");
-        }
+    if(decl() instanceof AnnotationDecl) {
+      AnnotationDecl T = (AnnotationDecl)decl();
+      Annotation m = T.annotation("java.lang.annotation", "Target");
+      if(m != null && m.getNumElementValuePair() == 1 && m.getElementValuePair(0).getName().equals("value")) {
+        ElementValue v = m.getElementValuePair(0).getElementValue();
+        if(!v.validTarget(this))
+          error("annotation type " + T.typeName() + " is not applicable to this kind of declaration");
       }
     }
   }
-  syn Annotation AnnotationDecl.annotationTarget() {
-    for(int i = 0; i < getModifiers().getNumModifier(); i++) {
-      Modifier m = getModifiers().getModifier(i);
-      if(m instanceof Annotation) {
-        Annotation a = (Annotation)m;
-        if(a.getAccess().type().fullName().equals("java.lang.annotation.Target"))
-          return a;
-      }
-    }
-    return null;
+  syn boolean ElementValue.validTarget(Annotation a) = false;
+  eq ElementConstantValue.validTarget(Annotation a) {
+    Variable v = getExpr().varDecl();
+    if(v == null) return true;
+    return v.hostType().fullName().equals("java.lang.annotation.ElementType") && a.mayUseAnnotationTarget(v.name());
   }
-  syn Expr Annotation.singleValueArgument() {
-    if(getNumElementValuePair() != 1)
-      return null;
-    ElementValuePair pair = getElementValuePair(0);
-    if(!pair.getName().equals("value"))
-      return null;
-    if(!(pair.getElementValue() instanceof ElementConstantValue))
-      return null;
-    return ((ElementConstantValue)pair.getElementValue()).getExpr();
+  eq ElementArrayValue.validTarget(Annotation a) {
+    for(int i = 0;  i < getNumElementValue(); i++)
+      if(getElementValue(i).validTarget(a))
+        return true;
+    return false;
   }
   inh boolean Annotation.mayUseAnnotationTarget(String name);
   // 7.4.1
@@ -162,32 +151,224 @@ aspect Annotations {
       error(type().typeName() + " is not commensurate with " + getDefaultValue().type().typeName());
   }
 
-/*
+  // 9.6.1 Predefined Annotation Types
 
+  // 9.6.1.1 Target
+  public void ElementConstantValue.nameCheck() {
+    if(enclosingAnnotation().decl().fullName().equals("java.lang.annotation.Target")) {
+      Variable v = getExpr().varDecl();
+      if(v != null && v.hostType().fullName().equals("java.lang.annotation.ElementType"))
+        if(lookupElementTypeValue(v.name()) != this)
+          error("repeated annotation target");
+    }
+  }
+  inh ElementValue ElementConstantValue.lookupElementTypeValue(String name);
+  eq ElementArrayValue.getElementValue().lookupElementTypeValue(String name) =
+    definesElementTypeValue(name);
+  eq Program.getCompilationUnit().lookupElementTypeValue(String name) = null;
+  syn ElementValue ElementValue.definesElementTypeValue(String name) = null;
+  eq ElementConstantValue.definesElementTypeValue(String name) {
+    Variable v = getExpr().varDecl();
+    if(v != null && v.hostType().fullName().equals("java.lang.annotation.ElementType") && v.name().equals(name))
+      return this;
+    return null;
+  }
+  eq ElementArrayValue.definesElementTypeValue(String name) {
+    for(int i = 0; i < getNumElementValue(); i++)
+      if(getElementValue(i).definesElementTypeValue(name) != null)
+        return getElementValue(i).definesElementTypeValue(name);
+    return null;
+  }
 
-// 9.6.1 Predefined Annotation Types
+  // 9.6.1.2 Retention TODO
 
-// 9.6.1.1 Target
+  // 9.6.1.3 Inherited
+  /* Indicates that an annotation type is automatically inherited.  If an Inherited
+  meta-annotation is present on an annotation type declaration, and the user
+  queries the annotation type on a class declaration, and the class declaration
+  has no annotation for this type, then the class's superclass will automatically
+  be queried for the annotation type.  This process will be repeated until an
+  annotation for this type is found, or the top of the class hierarchy (Object)
+  is reached.  If no superclass has an annotation for this type, then the query
+  will indicate that the class in question has no such annotation.
 
-// 9.6.1.2 Retention
+  Note that this meta-annotation type has no effect if the annotated type is used
+  to annotate anything other than a class.  Note also that this meta-annotation
+  only causes annotations to be inherited from superclasses; annotations on
+  implemented interfaces have no effect.*/
 
-// 9.6.1.3 Inherited
+  syn Annotation Modifiers.annotation(String packageName, String annotationName) {
+    String qualifiedName = packageName.equals("") ? annotationName : (packageName + "." + annotationName);
+    for(int i = 0; i < getNumModifier(); i++)
+      if(getModifier(i) instanceof Annotation)
+        if(((Annotation)getModifier(i)).decl().fullName().equals(qualifiedName))
+          return (Annotation)getModifier(i);
+    return null;
+  }
+  syn Annotation TypeDecl.annotation(String packageName, String annotationName) =
+    getModifiers().annotation(packageName, annotationName);
 
-// 9.6.1.4 Override
+  eq ClassDecl.annotation(String packageName, String annotationName) {
+    Annotation a = super.annotation(packageName, annotationName);
+    if(a != null) return a;
+    if(hasSuperclass()) {
+      // If the queried annotation is itself annotation with @Inherited then
+      // delegate the query to the superclass
+      TypeDecl kind = lookupType(packageName, annotationName);
+      if(kind.annotation("java.lang.annotation", "Inherited") != null)
+        return superclass().annotation(packageName, annotationName);
+    }
+    return null;
+  }
 
-// 9.6.1.5 SupressWarnings
+  // 9.6.1.4 Override
+  public void Annotation.checkOverride() {
+    if(decl().fullName().equals("java.lang.annotation.Override") && enclosingBodyDecl() instanceof MethodDecl) {
+      MethodDecl m = (MethodDecl)enclosingBodyDecl();
+      if(!m.hostType().isClassDecl())
+        error("override annotation not valid for interface methods");
+      else {
+        boolean found = false;
+        for(Iterator iter = m.hostType().ancestorMethods(m.signature()).iterator(); iter.hasNext(); ) {
+          MethodDecl decl = (MethodDecl)iter.next();
+          if(m.overrides(decl) && decl.hostType().isClassDecl())
+            found = true;
+        }
+        if(!found)
+          error("method does not override a method from its superclass");
+      }
+    }
+  }
+  inh BodyDecl Annotation.enclosingBodyDecl();
 
-// 9.6.1.6 Deprecated
+  // 9.6.1.5 SuppressWarnings
+  /* The annotation type SuppressWarnings supports programmer control over warnings
+  otherwise issued by the Java compiler. It contains a single element that is an
+  array of String. If a program declaration is annotated with the annotation
+  @SuppressWarnings(value = {S1, ... , Sk}), then a Java compiler must not report
+  any warning identified by one of S1, ... , Sk if that warning would have been
+  generated as a result of the annotated declaration or any of its parts.
+  Unchecked warnings are identified by the string "unchecked"*/
+  inh boolean Access.withinSuppressWarnings(String s);
+  eq Program.getCompilationUnit().withinSuppressWarnings(String s) = false;
 
+  eq TypeDecl.getBodyDecl(int i).withinSuppressWarnings(String s) =
+    getBodyDecl(i).hasAnnotationSuppressWarnings(s) || hasAnnotationSuppressWarnings(s) ||
+    withinSuppressWarnings(s);
+  eq ClassDecl.getSuperClassAccess().withinSuppressWarnings(String s) =
+    hasAnnotationSuppressWarnings(s) || withinSuppressWarnings(s);
+  eq ClassDecl.getImplements().withinSuppressWarnings(String s) =
+    hasAnnotationSuppressWarnings(s) || withinSuppressWarnings(s);
+  eq InterfaceDecl.getSuperInterfaceId().withinSuppressWarnings(String s) =
+    hasAnnotationSuppressWarnings(s) || withinSuppressWarnings(s);
+  inh boolean TypeDecl.withinSuppressWarnings(String s);
 
-*/
-// 9.7 Annotations
+  syn boolean TypeDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
+  syn boolean BodyDecl.hasAnnotationSuppressWarnings(String s) = false;
+  eq MemberTypeDecl.hasAnnotationSuppressWarnings(String s) = getTypeDecl().hasAnnotationSuppressWarnings(s);
+  eq MethodDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
+  eq ConstructorDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
+  eq FieldDeclaration.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
+
+  syn boolean Modifiers.hasAnnotationSuppressWarnings(String s) {
+    Annotation a = annotation("java.lang.annotation", "SuppressWarnings");
+    if(a != null && a.getNumElementValuePair() == 1 && a.getElementValuePair(0).getName().equals("value"))
+      return a.getElementValuePair(0).getElementValue().hasValue(s);
+    return false;
+  }
+  syn boolean ElementValue.hasValue(String s) = false;
+  eq ElementConstantValue.hasValue(String s) =
+    getExpr().type().isString() &&
+    getExpr().isConstant() && 
+    getExpr().constant().stringValue().equals(s);
+  eq ElementArrayValue.hasValue(String s) {
+    for(int i = 0;  i < getNumElementValue(); i++)
+      if(getElementValue(i).hasValue(s))
+        return true;
+    return false;
+  }
+
+  // 9.6.1.6 Deprecated
+  /*A program element annotated @Deprecated is one that programmers are discouraged
+  from using, typically because it is dangerous, or because a better alternative
+  exists. A Java compiler must produce a warning when a deprecated type, method,
+  field, or constructor is used (overridden, invoked, or referenced by name)
+  unless:
+    * The use is within an entity that itself is is annotated with the annotation @Deprecated; or
+    * The declaration and use are both within the same outermost class; or
+    * The use site is within an entity that is annotated to suppress the
+      warning with the annotation @SuppressWarnings("deprecation") 
+  Use of the annotation @Deprecated on a local variable declaration or on a
+  parameter declaration has no effect.*/
+  syn boolean Modifiers.hasDeprecatedAnnotation() = annotation("java.lang.annotation", "Deprecated") != null;
+
+  syn boolean TypeDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
+  syn boolean MemberTypeDecl.isDeprecated() = getTypeDecl().isDeprecated();
+  syn boolean MethodDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
+  syn boolean ConstructorDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
+  syn boolean FieldDeclaration.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
+  syn boolean BodyDecl.isDeprecated() = false;
+
+  public void TypeAccess.checkModifiers() {
+    if(decl().isDeprecated() &&
+       !withinDeprecatedAnnotation() &&
+       hostType().topLevelType() != decl().topLevelType() &&
+       !withinSuppressWarnings("deprecation"))
+      error("warning: " + decl().typeName() + " has been deprecated");
+  }
+
+  public void MethodAccess.checkModifiers() {
+    if(decl().isDeprecated() &&
+      !withinDeprecatedAnnotation() &&
+      hostType().topLevelType() != decl().hostType().topLevelType() &&
+      !withinSuppressWarnings("deprecation"))
+        error("warning: " + decl().signature() + " in " + decl().hostType().typeName() + " has been deprecated");
+  }
+
+  public void VarAccess.checkModifiers() {
+    if(decl() instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration)decl();
+      if(f.isDeprecated() &&
+        !withinDeprecatedAnnotation() &&
+        hostType().topLevelType() != f.hostType().topLevelType() &&
+        !withinSuppressWarnings("deprecation"))
+          error("warning: " + f.name() + " in " + f.hostType().typeName() + " has been deprecated");
+    }
+  }
+
+  public void ConstructorAccess.checkModifiers() {
+    if(decl().isDeprecated() &&
+      !withinDeprecatedAnnotation() &&
+      hostType().topLevelType() != decl().hostType().topLevelType() &&
+      !withinSuppressWarnings("deprecation"))
+        error("warning: " + decl().signature() + " in " + decl().hostType().typeName() + " has been deprecated");
+  }
+
+  public void ClassInstanceExpr.checkModifiers() {
+    if(decl().isDeprecated() &&
+      !withinDeprecatedAnnotation() &&
+      hostType().topLevelType() != decl().hostType().topLevelType() &&
+      !withinSuppressWarnings("deprecation"))
+        error("warning: " + decl().signature() + " in " + decl().hostType().typeName() + " has been deprecated");
+  }
+
+  eq Program.getCompilationUnit().withinDeprecatedAnnotation() = false;
+  inh boolean Access.withinDeprecatedAnnotation();
+
+  eq TypeDecl.getBodyDecl(int i).withinDeprecatedAnnotation() =
+    getBodyDecl(i).isDeprecated() || isDeprecated() || withinDeprecatedAnnotation();
+  eq ClassDecl.getSuperClassAccess().withinDeprecatedAnnotation() = isDeprecated() || withinDeprecatedAnnotation();
+  eq ClassDecl.getImplements().withinDeprecatedAnnotation() = isDeprecated() || withinDeprecatedAnnotation();
+  eq InterfaceDecl.getSuperInterfaceId().withinDeprecatedAnnotation() = isDeprecated() || withinDeprecatedAnnotation();
+  inh boolean TypeDecl.withinDeprecatedAnnotation();
+
+  // 9.7 Annotations
 
   public void Annotation.typeCheck() {
-    if(!(getAccess().type() instanceof AnnotationDecl)) {
+    if(!decl().isAnnotationDecl()) {
       /* TypeName names the annotation type corresponding to the annotation. It is a
       compile-time error if TypeName does not name an annotation type.*/
-      error(getAccess().type().typeName() + " is not an annotation type");
+      error(decl().typeName() + " is not an annotation type");
     } else {
       TypeDecl typeDecl = decl();
       /* It is a compile-time error if a declaration is annotated with more than one
@@ -216,24 +397,17 @@ aspect Annotations {
           error("can not find element named " + pair.getName() + " in " + typeDecl.typeName());
       }
     }
+    checkOverride();
   }
 
   syn lazy TypeDecl Annotation.decl() = 
-    getAccess().type() instanceof AnnotationDecl ? getAccess().type() : unknownType();
+    getAccess().type().isAnnotationDecl() ? getAccess().type() : unknownType();
   inh TypeDecl Annotation.unknownType();
 
 
   inh Annotation Annotation.lookupAnnotation(TypeDecl typeDecl);
-  eq Modifiers.getModifier(int index).lookupAnnotation(TypeDecl typeDecl) {
-    for(int i = 0; i < getNumModifier(); i++) {
-      if(getModifier(i) instanceof Annotation) {
-        Annotation a = (Annotation)getModifier(i);
-        if(a.getAccess().type() == typeDecl)
-          return a;
-      }
-    }
-    return null;
-  }
+  eq Modifiers.getModifier(int index).lookupAnnotation(TypeDecl typeDecl) = 
+    annotation(typeDecl.packageName(), typeDecl.name());
   eq Program.getCompilationUnit(int i).lookupAnnotation(TypeDecl typeDecl) = null;
 
   syn ElementValue Annotation.elementValueFor(String name) {
@@ -252,9 +426,8 @@ aspect Annotations {
   /* The return type of this method defines the element type of the element-value
   pair. An ElementValueArrayInitializer is similar to a normal array initializer
   (§10.6), except that annotations are permitted in place of expressions.*/
-  syn TypeDecl ElementValuePair.type() {
-    Annotation a = (Annotation)getParent().getParent(); // TODO: replace hack with inherited attribute
-    Iterator iter = a.decl().memberMethods(getName()).iterator();
+  syn lazy TypeDecl ElementValuePair.type() {
+    Iterator iter = enclosingAnnotation().decl().memberMethods(getName()).iterator();
     if(iter.hasNext()) {
       MethodDecl m = (MethodDecl)iter.next();
       return m.type();
@@ -262,6 +435,11 @@ aspect Annotations {
     return unknownType();
   }
   inh TypeDecl ElementValuePair.unknownType();
+
+  inh Annotation ElementValuePair.enclosingAnnotation();
+  inh Annotation ElementValue.enclosingAnnotation();
+  eq Annotation.getElementValuePair().enclosingAnnotation() = this;
+  eq Program.getCompilationUnit().enclosingAnnotation() = null;
     
   /* An element type T is commensurate with an element value V if and only if one of the following conditions is true:
     * T is an array type E[] and either:
@@ -305,25 +483,38 @@ aspect Annotations {
   syn TypeDecl ElementValue.type() = unknownType();
   eq ElementConstantValue.type() = getExpr().type();
   inh TypeDecl ElementValue.unknownType();
-/*
-If the element type is not an annotation type or an array type, ElementValue
-must be a ConditionalExpression (§15.25)
 
-If the element type is an array type and the corresponding ElementValue is not
-an ElementValueArrayInitializer, an array value whose sole element is the value
-represented by the ElementValue is associated with the element. Otherwise, the
-value represented by ElementValue is associated with the element.
+  /* If the element type is not an annotation type or an array type, ElementValue
+  must be a ConditionalExpression (§15.25)
+  TODO: How to enforce this. Is this already enforced?
+  */
 
-An annotation on an annotation type declaration is known as a meta-annotation.
-An annotation type may be used to annotate its own declaration. More generally,
-circularities in the transitive closure of the "annotates" relation are
-permitted. For example, it is legal to annotate an annotation type declaration
-with another annotation type, and to annotate the latter type's declaration
-with the former type. (The pre-defined meta-annotation types contain several
-such circularities.)
+  /* If the element type is an array type and the corresponding ElementValue is not
+  an ElementValueArrayInitializer, an array value whose sole element is the value
+  represented by the ElementValue is associated with the element. Otherwise, the
+  value represented by ElementValue is associated with the element. */
+  rewrite ElementValuePair {
+    when(type().isArrayDecl() && getElementValue() instanceof ElementConstantValue)
+    to ElementValuePair {
+      setElementValue(new ElementArrayValue(new List().add(getElementValue())));
+      return this;
+    }
+  }
 
+  /* An annotation on an annotation type declaration is known as a meta-annotation.
+  An annotation type may be used to annotate its own declaration. More generally,
+  circularities in the transitive closure of the "annotates" relation are
+  permitted. For example, it is legal to annotate an annotation type declaration
+  with another annotation type, and to annotate the latter type's declaration
+  with the former type. (The pre-defined meta-annotation types contain several
+  such circularities.)
+  Comment: no problems with reference attributes.
+  */
+  syn boolean Annotation.isMetaAnnotation() = hostType().isAnnotationDecl();
+  inh TypeDecl Annotation.hostType();
+  syn boolean TypeDecl.isAnnotationDecl() = false;
+  eq AnnotationDecl.isAnnotationDecl() = true;
 
-*/
   // name binding
   eq Annotation.getAccess().nameType() = NameType.TYPE_NAME;
   eq ElementConstantValue.getExpr().nameType() = NameType.AMBIGUOUS_NAME;
