@@ -208,10 +208,7 @@ aspect Annotations {
   // 4.8.15
   public void Modifiers.addRuntimeVisibleAnnotationsAttribute(Collection c) {
     ConstantPool cp = hostType().constantPool();
-    Collection annotations = new ArrayList();
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i).isRuntimeVisible())
-        annotations.add(getModifier(i));
+    Collection annotations = runtimeVisibleAnnotations();
     if(!annotations.isEmpty())
       c.add(new AnnotationsAttribute(cp, annotations, "RuntimeVisibleAnnotations"));
   }
@@ -219,28 +216,21 @@ aspect Annotations {
   // 4.8.16
   public void Modifiers.addRuntimeInvisibleAnnotationsAttribute(Collection c) {
     ConstantPool cp = hostType().constantPool();
-    Collection annotations = new ArrayList();
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i).isRuntimeInvisible())
-        annotations.add(getModifier(i));
+    Collection annotations = runtimeInvisibleAnnotations();
     if(!annotations.isEmpty())
       c.add(new AnnotationsAttribute(cp, annotations, "RuntimeInvisibleAnnotations"));
   }
 
+  class AnnotationsAttribute extends HeaderAttribute {
+    public AnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
+      super(cp, name);
+      u2(annotations.size());
+      for(Iterator iter = annotations.iterator(); iter.hasNext(); )
+        ((Annotation)iter.next()).appendAsAttributeTo(this);
+    }
+  }
 
   inh TypeDecl Modifiers.hostType();
-  syn boolean Modifiers.hasRuntimeVisibleAnnotations() {
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i).isRuntimeVisible())
-        return true;
-    return false;
-  }
-  syn boolean Modifiers.hasRuntimeInvisibleAnnotations() {
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i).isRuntimeInvisible())
-        return true;
-    return false;
-  }
 
   // 4.8.15
   syn boolean Modifier.isRuntimeVisible() = false;
@@ -262,109 +252,59 @@ aspect Annotations {
     return v != null &&  v.name().equals("CLASS");
   }
 
-  class AnnotationsAttribute extends Attribute {
-    int attribute_name_index;
-    Collection/*AnnotationAttribute*/ annotationAttributes;
-    public AnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
-      attribute_name_index = cp.addUtf8(name);
-      annotationAttributes = new ArrayList(annotations.size());
-      for(Iterator iter = annotations.iterator(); iter.hasNext(); )
-        annotationAttributes.add(new AnnotationAttribute(cp, (Annotation)iter.next()));
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-      out.writeChar(attribute_name_index);
-      out.writeInt(size());
-      out.writeChar(annotationAttributes.size());
-      for(Iterator iter = annotationAttributes.iterator(); iter.hasNext(); ) {
-        AnnotationAttribute a = (AnnotationAttribute)iter.next();
-        a.emit(out);
-      }
-    }
-    public int size() {
-      int size = 2;
-      for(Iterator iter = annotationAttributes.iterator(); iter.hasNext(); ) {
-        AnnotationAttribute a = (AnnotationAttribute)iter.next();
-        size += a.size();
-      }
-      return size;
-    }
-  }
-
   // 4.8.17
   public void MethodDecl.addRuntimeVisibleParameterAnnotationsAttribute(Collection c) {
     boolean foundVisibleAnnotations = false;
-    for(int i = 0; i < getNumParameter() && !foundVisibleAnnotations; i++)
-      if(getParameter(i).getModifiers().hasRuntimeVisibleAnnotations())
-        foundVisibleAnnotations = true;
-    if(foundVisibleAnnotations) {
-      Collection annotations = new ArrayList(getNumParameter());
-      for(int i = 0; i < getNumParameter(); i++)
-        annotations.add(getParameter(i).getModifiers().runtimeVisibleAnnotationAttributes());
-      c.add(new ParameterAnnotationsAttribute(hostType().constantPool(), annotations, "RuntimeVisibleParameterAnnotations"));
+    Collection annotations = new ArrayList(getNumParameter());
+    for(int i = 0; i < getNumParameter(); i++) {
+      Collection a = getParameter(i).getModifiers().runtimeVisibleAnnotations();
+      if(!a.isEmpty()) foundVisibleAnnotations = true;
+      annotations.add(a);
     }
+    if(foundVisibleAnnotations)
+      c.add(new ParameterAnnotationsAttribute(hostType().constantPool(), annotations, "RuntimeVisibleParameterAnnotations"));
   }
 
-  public Collection Modifiers.runtimeVisibleAnnotationAttributes() {
+  public Collection Modifiers.runtimeVisibleAnnotations() {
     Collection annotations = new ArrayList();
     for(int i = 0; i < getNumModifier(); i++)
       if(getModifier(i).isRuntimeVisible())
-        annotations.add(new AnnotationAttribute(hostType().constantPool(), (Annotation)getModifier(i)));
+        annotations.add(getModifier(i));
     return annotations;
   }
 
   // 4.8.18
   public void MethodDecl.addRuntimeInvisibleParameterAnnotationsAttribute(Collection c) {
     boolean foundInvisibleAnnotations = false;
-    for(int i = 0; i < getNumParameter() && !foundInvisibleAnnotations; i++)
-      if(getParameter(i).getModifiers().hasRuntimeInvisibleAnnotations())
-        foundInvisibleAnnotations = true;
-    if(foundInvisibleAnnotations) {
-      Collection annotations = new ArrayList(getNumParameter());
-      for(int i = 0; i < getNumParameter(); i++)
-        annotations.add(getParameter(i).getModifiers().runtimeInvisibleAnnotationAttributes());
-      c.add(new ParameterAnnotationsAttribute(hostType().constantPool(), annotations, "RuntimeInvisibleParameterAnnotations"));
+    Collection annotations = new ArrayList(getNumParameter());
+    for(int i = 0; i < getNumParameter(); i++) {
+      Collection a = getParameter(i).getModifiers().runtimeInvisibleAnnotations();
+      if(!a.isEmpty()) foundInvisibleAnnotations = true;
+      annotations.add(a);
     }
+    if(foundInvisibleAnnotations)
+      c.add(new ParameterAnnotationsAttribute(hostType().constantPool(), annotations, "RuntimeInvisibleParameterAnnotations"));
   }
 
-  public Collection Modifiers.runtimeInvisibleAnnotationAttributes() {
+  public Collection Modifiers.runtimeInvisibleAnnotations() {
     Collection annotations = new ArrayList();
     for(int i = 0; i < getNumModifier(); i++)
       if(getModifier(i).isRuntimeInvisible())
-        annotations.add(new AnnotationAttribute(hostType().constantPool(), (Annotation)getModifier(i)));
+        annotations.add(getModifier(i));
     return annotations;
   }
 
-  class ParameterAnnotationsAttribute extends Attribute {
-    int attribute_name_index;
-    Collection annotations;
+  class ParameterAnnotationsAttribute extends HeaderAttribute {
     public ParameterAnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
-      attribute_name_index = cp.addUtf8(name);
-      this.annotations = annotations;
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-      out.writeChar(attribute_name_index);
-      out.writeInt(size());
-      out.writeByte(annotations.size());
+      super(cp, name);
+      u1(annotations.size());
       for(Iterator iter = annotations.iterator(); iter.hasNext(); ) {
         Collection c = (Collection)iter.next();
-        out.writeChar(c.size());
         for(Iterator inner = c.iterator(); inner.hasNext(); ) {
-          AnnotationAttribute a = (AnnotationAttribute)inner.next();
-          a.emit(out);
+          Annotation a = (Annotation)inner.next();
+          a.appendAsAttributeTo(this);
         }
       }
-    }
-    public int size() {
-      int size = 1;
-      for(Iterator iter = annotations.iterator(); iter.hasNext(); ) {
-        Collection c = (Collection)iter.next();
-        size += 2;
-        for(Iterator inner = c.iterator(); inner.hasNext(); ) {
-          AnnotationAttribute a = (AnnotationAttribute)inner.next();
-          size += a.size();
-        }
-      }
-      return size;
     }
   }
 
@@ -721,162 +661,88 @@ aspect Annotations {
   eq AnnotationMethodDecl.attributes() {
     Collection c = super.attributes();
     // 4.8.19
-    if(hasDefaultValue())
-      c.add(new AnnotationDefaultAttribute(hostType().constantPool(), getDefaultValue()));
+    if(hasDefaultValue()) {
+      HeaderAttribute attribute = new HeaderAttribute(hostType().constantPool(), "AnnotationDefault");
+      getDefaultValue().appendAsAttributeTo(attribute);
+      c.add(attribute);
+    }
     return c;
   }
 
-  // 4.8.19
-  class AnnotationDefaultAttribute extends Attribute {
-    int attribute_name_index;
-		int attribute_length;
-    ElementValueAttribute elementValueAttribute;
-    public AnnotationDefaultAttribute(ConstantPool p, ElementValue v) {
-      attribute_name_index = p.addUtf8("AnnotationDefault");
-      elementValueAttribute = v.createElementValueAttribute();
-      attribute_length = elementValueAttribute.size();
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-		  out.writeChar(attribute_name_index);
-		  out.writeInt(attribute_length);
-      elementValueAttribute.emit(out);
+  // 4.8.15
+  public void Annotation.appendAsAttributeTo(HeaderAttribute buf) {
+    ConstantPool cp = hostType().constantPool();
+    int type_index = cp.addUtf8(decl().typeDescriptor());
+    buf.u2(type_index);
+    buf.u2(getNumElementValuePair());
+    for(int i = 0; i < getNumElementValuePair(); i++) {
+      int name_index = cp.addUtf8(getElementValuePair(i).getName());
+      buf.u2(name_index);
+      getElementValuePair(i).getElementValue().appendAsAttributeTo(buf);
     }
   }
 
   // 4.8.15.1
-  public ElementValueAttribute ElementValue.createElementValueAttribute() {
-    throw new Error(getClass().getName() + " does not support createElementValueAttribute()");
+  public void ElementValue.appendAsAttributeTo(HeaderAttribute buf) {
+    throw new Error(getClass().getName() + " does not support appendAsAttributeTo(HeaderAttribute buf)");
+  }
+  public void ElementConstantValue.appendAsAttributeTo(HeaderAttribute buf) {
+    if(getExpr().isConstant()) {
+      char tag = getExpr().type().isString() ? 's' : getExpr().type().typeDescriptor().charAt(0);
+      int const_value_index = getExpr().type().addConstant(hostType().constantPool(), getExpr().constant());
+      buf.u1(tag);
+      buf.u2(const_value_index);
+    }
+    else if(getExpr().isClassAccess()) {
+      int const_class_index = hostType().constantPool().addUtf8(getExpr().type().typeDescriptor());
+      buf.u1('c');
+      buf.u2(const_class_index);
+    }
+    else {
+      Variable v = getExpr().varDecl();
+      if(v == null) throw new Error("Expected Enumeration constant");
+      int type_name_index = hostType().constantPool().addUtf8(v.type().constantPoolName().replace('/', '.'));
+      int const_name_index = hostType().constantPool().addUtf8(v.name());
+      buf.u1('e');
+      buf.u2(type_name_index);
+      buf.u2(const_name_index);
+    }
+  }
+  public void ElementAnnotationValue.appendAsAttributeTo(HeaderAttribute buf) {
+    buf.u1('@');
+    getAnnotation().appendAsAttributeTo(buf);
+  }
+  public void ElementArrayValue.appendAsAttributeTo(HeaderAttribute buf) {
+    buf.u1('[');
+    buf.u2(getNumElementValue());
+    for(int i = 0; i < getNumElementValue(); i++)
+      getElementValue(i).appendAsAttributeTo(buf);
   }
 
-  public ElementValueAttribute ElementConstantValue.createElementValueAttribute() {
-    if(getExpr().isConstant())
-      return new ElementConstantValueAttribute(hostType().constantPool(), this);
-    if(getExpr().isClassAccess())
-      return new ElementConstantClassAttribute(hostType().constantPool(), this);
-    return new ElementConstantEnumAttribute(hostType().constantPool(), this);
-  }
-  public ElementValueAttribute ElementAnnotationValue.createElementValueAttribute() {
-    return new ElementAnnotationValueAttribute(hostType().constantPool(), this);
-  }
-  public ElementValueAttribute ElementArrayValue.createElementValueAttribute() {
-    return new ElementArrayValueAttribute(hostType().constantPool(), this);
-  }
   inh TypeDecl ElementValue.hostType();
 
-  class ElementValueAttribute {
-	  public void emit(DataOutputStream out) throws IOException { throw new Error("Not implemented"); }
-    public int size() { throw new Error("Not implemented"); }
-  }
-  class ElementConstantValueAttribute extends ElementValueAttribute {
-    int const_value_index;
-    char tag;
-    public ElementConstantValueAttribute(ConstantPool p, ElementConstantValue v) {
-      Expr e = v.getExpr();
-      TypeDecl t = e.type();
-      Constant c = e.constant();
-      tag = t.isString() ? 's' : t.typeDescriptor().charAt(0);
-      const_value_index = t.addConstant(p, c);
+  class HeaderAttribute extends Attribute {
+    int attribute_name_index;
+    ByteArrayOutputStream buf = new ByteArrayOutputStream();
+    DataOutputStream output = new DataOutputStream(buf);
+
+    public HeaderAttribute(ConstantPool cp, String name) {
+      attribute_name_index = cp.addUtf8(name);
     }
-	  public void emit(DataOutputStream out) throws IOException {
-		  out.writeByte(tag);
-      out.writeChar(const_value_index);
+
+    public void emit(DataOutputStream out) throws IOException {
+      out.writeChar(attribute_name_index);
+      out.writeInt(buf.size());
+      buf.writeTo(out);
+      output.close();
+      buf.close();
     }
-    public int size() { return 3; }
-  }
-  class ElementConstantEnumAttribute extends ElementValueAttribute {
-    int type_name_index;
-    int const_name_index;
-    public ElementConstantEnumAttribute(ConstantPool cp, ElementConstantValue constantValue) {
-      Variable v = constantValue.getExpr().varDecl();
-      if(v == null) throw new Error("Expected Enumeration constant");
-      type_name_index = cp.addUtf8(v.type().constantPoolName().replace('/', '.'));
-      const_name_index = cp.addUtf8(v.name());
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-		  out.writeByte('e');
-      out.writeChar(type_name_index);
-      out.writeChar(const_name_index);
-    }
-    public int size() { return 5; }
-  }
-  class ElementConstantClassAttribute extends ElementValueAttribute {
-    int const_class_index;
-    public ElementConstantClassAttribute(ConstantPool cp, ElementConstantValue constantValue) {
-      const_class_index = cp.addUtf8(constantValue.getExpr().type().typeDescriptor());
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-		  out.writeByte('c');
-      out.writeChar(const_class_index);
-    }
-    public int size() { return 3; }
-  }
-  class ElementAnnotationValueAttribute extends ElementValueAttribute {
-    AnnotationAttribute annotationAttribute;
-    public ElementAnnotationValueAttribute(ConstantPool cp, ElementAnnotationValue v) {
-      annotationAttribute = new AnnotationAttribute(cp, v.getAnnotation());
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-		  out.writeByte('@');
-      annotationAttribute.emit(out);
-    }
-    public int size() { return 1 + annotationAttribute.size(); }
-  }
-  class ElementArrayValueAttribute extends ElementValueAttribute {
-    int num_values;
-    ElementValueAttribute[] elementValueAttribute;
-    public ElementArrayValueAttribute(ConstantPool cp, ElementArrayValue v) {
-      num_values = v.getNumElementValue();
-      elementValueAttribute = new ElementValueAttribute[num_values];
-      for(int i = 0; i < num_values; i++)
-        elementValueAttribute[i] = v.getElementValue(i).createElementValueAttribute();
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-      out.writeByte('[');
-      out.writeChar(num_values);
-      for(int i = 0; i < num_values; i++) {
-        elementValueAttribute[i].emit(out);
-      }
-    }
-    public int size() {
-      int size = 3;
-      for(int i = 0; i < num_values; i++) {
-        size = size + elementValueAttribute[i].size();
-      }
-      return size;
-    }
+    public int size() { return buf.size(); }
+    public void u1(int v) { try { output.writeByte(v); } catch(IOException e) {} }
+    public void u2(int v) { try { output.writeChar(v); } catch(IOException e) {} }
+    public void u4(int v) { try { output.writeInt(v); } catch(IOException e) {} }
+    public void bytes(byte[] data) { try { output.write(data, 0, data.length); } catch(IOException e) {} }
+    public void append(Attribute attribute) { try { attribute.emit(output); } catch(IOException e) {} }
   }
 
-  // 4.8.15
-
-  class AnnotationAttribute {
-    int type_index;
-    int num_element_value_pairs;
-    int[] name_index;
-    ElementValueAttribute[] value;
-    public AnnotationAttribute(ConstantPool cp, Annotation a) {
-      type_index = cp.addUtf8(a.decl().typeDescriptor());
-      num_element_value_pairs = a.getNumElementValuePair();
-      name_index = new int[num_element_value_pairs];
-      value = new ElementValueAttribute[num_element_value_pairs];
-      for(int i = 0; i < num_element_value_pairs; i++) {
-        name_index[i] = cp.addUtf8(a.getElementValuePair(i).getName());
-        value[i] = a.getElementValuePair(i).getElementValue().createElementValueAttribute();
-      }
-    }
-	  public void emit(DataOutputStream out) throws IOException {
-      out.writeChar(type_index);
-      out.writeChar(num_element_value_pairs);
-      for(int i = 0; i < num_element_value_pairs; i++) {
-        out.writeChar(name_index[i]);
-        value[i].emit(out);
-      }
-    }
-    public int size() {
-      int size = 4;
-      for(int i = 0; i < num_element_value_pairs; i++) {
-        size = size + 2 + value[i].size();
-      }
-      return size;
-    }
-  }
 } 
