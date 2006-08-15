@@ -83,11 +83,7 @@ aspect Annotations {
   /* The direct superinterface of an annotation type is always
   annotation.Annotation.*/
   syn List AnnotationDecl.getSuperInterfaceIdList() {
-    List list = new List();
-    TypeDecl typeDecl = lookupType("java.lang.annotation", "Annotation");
-    if(typeDecl != null)
-      list.add(typeDecl.createQualifiedAccess());
-    return list;
+    return new List().add(new TypeAccess("java.lang.annotation", "Annotation"));
   }
 
   public void AnnotationDecl.typeCheck() {
@@ -155,7 +151,7 @@ aspect Annotations {
 
   // 9.6.1.1 Target
   public void ElementConstantValue.nameCheck() {
-    if(enclosingAnnotation().decl().fullName().equals("java.lang.annotation.Target")) {
+    if(enclosingAnnotationDecl().fullName().equals("java.lang.annotation.Target")) {
       Variable v = getExpr().varDecl();
       if(v != null && v.hostType().fullName().equals("java.lang.annotation.ElementType"))
         if(lookupElementTypeValue(v.name()) != this)
@@ -223,7 +219,7 @@ aspect Annotations {
 
   // 9.6.1.4 Override
   public void Annotation.checkOverride() {
-    if(decl().fullName().equals("java.lang.annotation.Override") && enclosingBodyDecl() instanceof MethodDecl) {
+    if(decl().fullName().equals("java.lang.Override") && enclosingBodyDecl() instanceof MethodDecl) {
       MethodDecl m = (MethodDecl)enclosingBodyDecl();
       if(!m.hostType().isClassDecl())
         error("override annotation not valid for interface methods");
@@ -271,7 +267,7 @@ aspect Annotations {
   eq FieldDeclaration.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
 
   syn boolean Modifiers.hasAnnotationSuppressWarnings(String s) {
-    Annotation a = annotation("java.lang.annotation", "SuppressWarnings");
+    Annotation a = annotation("java.lang", "SuppressWarnings");
     if(a != null && a.getNumElementValuePair() == 1 && a.getElementValuePair(0).getName().equals("value"))
       return a.getElementValuePair(0).getElementValue().hasValue(s);
     return false;
@@ -300,7 +296,7 @@ aspect Annotations {
       warning with the annotation @SuppressWarnings("deprecation") 
   Use of the annotation @Deprecated on a local variable declaration or on a
   parameter declaration has no effect.*/
-  syn boolean Modifiers.hasDeprecatedAnnotation() = annotation("java.lang.annotation", "Deprecated") != null;
+  syn boolean Modifiers.hasDeprecatedAnnotation() = annotation("java.lang", "Deprecated") != null;
 
   syn boolean TypeDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
   syn boolean MemberTypeDecl.isDeprecated() = getTypeDecl().isDeprecated();
@@ -368,7 +364,8 @@ aspect Annotations {
     if(!decl().isAnnotationDecl()) {
       /* TypeName names the annotation type corresponding to the annotation. It is a
       compile-time error if TypeName does not name an annotation type.*/
-      error(decl().typeName() + " is not an annotation type");
+      if(!decl().isUnknown())
+        error(decl().typeName() + " is not an annotation type");
     } else {
       TypeDecl typeDecl = decl();
       /* It is a compile-time error if a declaration is annotated with more than one
@@ -380,9 +377,9 @@ aspect Annotations {
       values, or a compile-time error occurs. Annotations may, but are not
       required to, contain element-value pairs for elements with default values.*/
       for(int i = 0; i < typeDecl.getNumBodyDecl(); i++) {
-        if(typeDecl.getBodyDecl(i) instanceof AnnotationMethodDecl) {
-          AnnotationMethodDecl decl = (AnnotationMethodDecl)typeDecl.getBodyDecl(i);
-          if(!decl.hasDefaultValue() && elementValueFor(decl.name()) == null)
+        if(typeDecl.getBodyDecl(i) instanceof MethodDecl) {
+          MethodDecl decl = (MethodDecl)typeDecl.getBodyDecl(i);
+          if(elementValueFor(decl().name()) == null && (!(decl instanceof AnnotationMethodDecl) || !((AnnotationMethodDecl)decl).hasDefaultValue()))
             error("missing value for " + decl.name());
         }
       }
@@ -400,10 +397,7 @@ aspect Annotations {
     checkOverride();
   }
 
-  syn lazy TypeDecl Annotation.decl() = 
-    getAccess().type().isAnnotationDecl() ? getAccess().type() : unknownType();
-  inh TypeDecl Annotation.unknownType();
-
+  syn lazy TypeDecl Annotation.decl() = getAccess().type();
 
   inh Annotation Annotation.lookupAnnotation(TypeDecl typeDecl);
   eq Modifiers.getModifier(int index).lookupAnnotation(TypeDecl typeDecl) = 
@@ -427,7 +421,7 @@ aspect Annotations {
   pair. An ElementValueArrayInitializer is similar to a normal array initializer
   (§10.6), except that annotations are permitted in place of expressions.*/
   syn lazy TypeDecl ElementValuePair.type() {
-    Iterator iter = enclosingAnnotation().decl().memberMethods(getName()).iterator();
+    Iterator iter = enclosingAnnotationDecl().memberMethods(getName()).iterator();
     if(iter.hasNext()) {
       MethodDecl m = (MethodDecl)iter.next();
       return m.type();
@@ -436,10 +430,10 @@ aspect Annotations {
   }
   inh TypeDecl ElementValuePair.unknownType();
 
-  inh Annotation ElementValuePair.enclosingAnnotation();
-  inh Annotation ElementValue.enclosingAnnotation();
-  eq Annotation.getElementValuePair().enclosingAnnotation() = this;
-  eq Program.getCompilationUnit().enclosingAnnotation() = null;
+  inh TypeDecl ElementValuePair.enclosingAnnotationDecl();
+  inh TypeDecl ElementValue.enclosingAnnotationDecl();
+  eq Annotation.getElementValuePair().enclosingAnnotationDecl() = decl();
+  eq Program.getCompilationUnit().enclosingAnnotationDecl() = unknownType();
     
   /* An element type T is commensurate with an element value V if and only if one of the following conditions is true:
     * T is an array type E[] and either:
@@ -530,4 +524,169 @@ aspect Annotations {
     return set;
   }
 
+  // Add ACC_ANNOTATION flag to generated class file
+  public static final int Modifiers.ACC_ANNOTATION = 0x2000;
+  eq AnnotationDecl.flags() = super.flags() | Modifiers.ACC_ANNOTATION;
+
+  eq AnnotationMethodDecl.attributes() {
+    Collection c = super.attributes();
+    // 4.8.19
+    if(hasDefaultValue())
+      c.add(new AnnotationDefaultAttribute(hostType().constantPool(), getDefaultValue()));
+    return c;
+  }
+
+  // 4.8.19
+  class AnnotationDefaultAttribute extends Attribute {
+    int attribute_name_index;
+		int attribute_length;
+    ElementValueAttribute elementValueAttribute;
+    public AnnotationDefaultAttribute(ConstantPool p, ElementValue v) {
+      attribute_name_index = p.addUtf8("AnnotationDefault");
+      elementValueAttribute = v.createElementValueAttribute();
+      attribute_length = elementValueAttribute.size();
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeChar(attribute_name_index);
+		  out.writeInt(attribute_length);
+      elementValueAttribute.emit(out);
+    }
+  }
+
+  // 4.8.15.1
+  public ElementValueAttribute ElementValue.createElementValueAttribute() {
+    throw new Error(getClass().getName() + " does not support createElementValueAttribute()");
+  }
+
+  public ElementValueAttribute ElementConstantValue.createElementValueAttribute() {
+    if(getExpr().isConstant())
+      return new ElementConstantValueAttribute(hostType().constantPool(), this);
+    if(getExpr().isClassAccess())
+      return new ElementConstantClassAttribute(hostType().constantPool(), this);
+    return new ElementConstantEnumAttribute(hostType().constantPool(), this);
+  }
+  public ElementValueAttribute ElementAnnotationValue.createElementValueAttribute() {
+    return new ElementAnnotationValueAttribute(hostType().constantPool(), this);
+  }
+  public ElementValueAttribute ElementArrayValue.createElementValueAttribute() {
+    return new ElementArrayValueAttribute(hostType().constantPool(), this);
+  }
+  inh TypeDecl ElementValue.hostType();
+
+  class ElementValueAttribute {
+	  public void emit(DataOutputStream out) throws IOException { throw new Error("Not implemented"); }
+    public int size() { throw new Error("Not implemented"); }
+  }
+  class ElementConstantValueAttribute extends ElementValueAttribute {
+    int const_value_index;
+    char tag;
+    public ElementConstantValueAttribute(ConstantPool p, ElementConstantValue v) {
+      Expr e = v.getExpr();
+      TypeDecl t = e.type();
+      Constant c = e.constant();
+      tag = t.isString() ? 's' : t.typeDescriptor().charAt(0);
+      const_value_index = t.addConstant(p, c);
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeByte(tag);
+      out.writeChar(const_value_index);
+    }
+    public int size() { return 3; }
+  }
+  class ElementConstantEnumAttribute extends ElementValueAttribute {
+    int type_name_index;
+    int const_name_index;
+    public ElementConstantEnumAttribute(ConstantPool cp, ElementConstantValue constantValue) {
+      Variable v = constantValue.getExpr().varDecl();
+      if(v == null) throw new Error("Expected Enumeration constant");
+      type_name_index = cp.addUtf8(v.type().constantPoolName().replace('/', '.'));
+      const_name_index = cp.addUtf8(v.name());
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeByte('e');
+      out.writeChar(type_name_index);
+      out.writeChar(const_name_index);
+    }
+    public int size() { return 5; }
+  }
+  class ElementConstantClassAttribute extends ElementValueAttribute {
+    int const_class_index;
+    public ElementConstantClassAttribute(ConstantPool cp, ElementConstantValue constantValue) {
+      const_class_index = cp.addUtf8(constantValue.getExpr().type().typeDescriptor());
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeByte('c');
+      out.writeChar(const_class_index);
+    }
+    public int size() { return 3; }
+  }
+  class ElementAnnotationValueAttribute extends ElementValueAttribute {
+    AnnotationAttribute annotationAttribute;
+    public ElementAnnotationValueAttribute(ConstantPool cp, ElementAnnotationValue v) {
+      annotationAttribute = new AnnotationAttribute(cp, v.getAnnotation());
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+		  out.writeByte('@');
+      annotationAttribute.emit(out);
+    }
+    public int size() { return 1 + annotationAttribute.size(); }
+  }
+  class ElementArrayValueAttribute extends ElementValueAttribute {
+    int num_values;
+    ElementValueAttribute[] elementValueAttribute;
+    public ElementArrayValueAttribute(ConstantPool cp, ElementArrayValue v) {
+      num_values = v.getNumElementValue();
+      elementValueAttribute = new ElementValueAttribute[num_values];
+      for(int i = 0; i < num_values; i++)
+        elementValueAttribute[i] = v.getElementValue(i).createElementValueAttribute();
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+      out.writeByte('[');
+      out.writeChar(num_values);
+      for(int i = 0; i < num_values; i++) {
+        elementValueAttribute[i].emit(out);
+      }
+    }
+    public int size() {
+      int size = 3;
+      for(int i = 0; i < num_values; i++) {
+        size = size + elementValueAttribute[i].size();
+      }
+      return size;
+    }
+  }
+
+  // 4.8.15
+
+  class AnnotationAttribute {
+    int type_index;
+    int num_element_value_pairs;
+    int[] name_index;
+    ElementValueAttribute[] value;
+    public AnnotationAttribute(ConstantPool cp, Annotation a) {
+      type_index = cp.addUtf8(a.decl().typeDescriptor());
+      num_element_value_pairs = a.getNumElementValuePair();
+      name_index = new int[num_element_value_pairs];
+      value = new ElementValueAttribute[num_element_value_pairs];
+      for(int i = 0; i < num_element_value_pairs; i++) {
+        name_index[i] = cp.addUtf8(a.getElementValuePair(i).getName());
+        value[i] = a.getElementValuePair(i).getElementValue().createElementValueAttribute();
+      }
+    }
+	  public void emit(DataOutputStream out) throws IOException {
+      out.writeChar(type_index);
+      out.writeChar(num_element_value_pairs);
+      for(int i = 0; i < num_element_value_pairs; i++) {
+        out.writeChar(name_index[i]);
+        value[i].emit(out);
+      }
+    }
+    public int size() {
+      int size = 4;
+      for(int i = 0; i < num_element_value_pairs; i++) {
+        size = size + 2 + value[i].size();
+      }
+      return size;
+    }
+  }
 } 
