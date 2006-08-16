@@ -221,7 +221,7 @@ aspect Annotations {
       c.add(new AnnotationsAttribute(cp, annotations, "RuntimeInvisibleAnnotations"));
   }
 
-  class AnnotationsAttribute extends HeaderAttribute {
+  class AnnotationsAttribute extends Attribute {
     public AnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
       super(cp, name);
       u2(annotations.size());
@@ -294,7 +294,7 @@ aspect Annotations {
     return annotations;
   }
 
-  class ParameterAnnotationsAttribute extends HeaderAttribute {
+  class ParameterAnnotationsAttribute extends Attribute {
     public ParameterAnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
       super(cp, name);
       u1(annotations.size());
@@ -662,7 +662,7 @@ aspect Annotations {
     Collection c = super.attributes();
     // 4.8.19
     if(hasDefaultValue()) {
-      HeaderAttribute attribute = new HeaderAttribute(hostType().constantPool(), "AnnotationDefault");
+      Attribute attribute = new Attribute(hostType().constantPool(), "AnnotationDefault");
       getDefaultValue().appendAsAttributeTo(attribute);
       c.add(attribute);
     }
@@ -670,7 +670,7 @@ aspect Annotations {
   }
 
   // 4.8.15
-  public void Annotation.appendAsAttributeTo(HeaderAttribute buf) {
+  public void Annotation.appendAsAttributeTo(Attribute buf) {
     ConstantPool cp = hostType().constantPool();
     int type_index = cp.addUtf8(decl().typeDescriptor());
     buf.u2(type_index);
@@ -683,10 +683,10 @@ aspect Annotations {
   }
 
   // 4.8.15.1
-  public void ElementValue.appendAsAttributeTo(HeaderAttribute buf) {
-    throw new Error(getClass().getName() + " does not support appendAsAttributeTo(HeaderAttribute buf)");
+  public void ElementValue.appendAsAttributeTo(Attribute buf) {
+    throw new Error(getClass().getName() + " does not support appendAsAttributeTo(Attribute buf)");
   }
-  public void ElementConstantValue.appendAsAttributeTo(HeaderAttribute buf) {
+  public void ElementConstantValue.appendAsAttributeTo(Attribute buf) {
     if(getExpr().isConstant()) {
       char tag = getExpr().type().isString() ? 's' : getExpr().type().typeDescriptor().charAt(0);
       int const_value_index = getExpr().type().addConstant(hostType().constantPool(), getExpr().constant());
@@ -708,11 +708,11 @@ aspect Annotations {
       buf.u2(const_name_index);
     }
   }
-  public void ElementAnnotationValue.appendAsAttributeTo(HeaderAttribute buf) {
+  public void ElementAnnotationValue.appendAsAttributeTo(Attribute buf) {
     buf.u1('@');
     getAnnotation().appendAsAttributeTo(buf);
   }
-  public void ElementArrayValue.appendAsAttributeTo(HeaderAttribute buf) {
+  public void ElementArrayValue.appendAsAttributeTo(Attribute buf) {
     buf.u1('[');
     buf.u2(getNumElementValue());
     for(int i = 0; i < getNumElementValue(); i++)
@@ -720,29 +720,4 @@ aspect Annotations {
   }
 
   inh TypeDecl ElementValue.hostType();
-
-  class HeaderAttribute extends Attribute {
-    int attribute_name_index;
-    ByteArrayOutputStream buf = new ByteArrayOutputStream();
-    DataOutputStream output = new DataOutputStream(buf);
-
-    public HeaderAttribute(ConstantPool cp, String name) {
-      attribute_name_index = cp.addUtf8(name);
-    }
-
-    public void emit(DataOutputStream out) throws IOException {
-      out.writeChar(attribute_name_index);
-      out.writeInt(buf.size());
-      buf.writeTo(out);
-      output.close();
-      buf.close();
-    }
-    public int size() { return buf.size(); }
-    public void u1(int v) { try { output.writeByte(v); } catch(IOException e) {} }
-    public void u2(int v) { try { output.writeChar(v); } catch(IOException e) {} }
-    public void u4(int v) { try { output.writeInt(v); } catch(IOException e) {} }
-    public void bytes(byte[] data) { try { output.write(data, 0, data.length); } catch(IOException e) {} }
-    public void append(Attribute attribute) { try { attribute.emit(output); } catch(IOException e) {} }
-  }
-
 } 
