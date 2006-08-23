@@ -207,10 +207,7 @@ aspect TypeScopePropagation {
       }
       c = newSet;
     }
-    if(!c.isEmpty())
-      return c;
-    return SimpleSet.emptySet;
-    //return topLevelType().lookupType(name); // Fix to search imports
+    return c;
   }
 
   eq Block.getStmt(int index).lookupType(String name) {
@@ -370,63 +367,71 @@ aspect TypeScopePropagation {
         return SimpleSet.emptySet.add(getTypeDecl(i));
     }
   
+    SimpleSet set = SimpleSet.emptySet;
     // The scope of a type imported by a single-type-import declaration
     for(int i = 0; i < getNumImportDecl(); i++) {
-      if(getImportDecl(i) instanceof SingleTypeImportDecl) {
-        SingleTypeImportDecl decl = (SingleTypeImportDecl)getImportDecl(i);
-        TypeDecl type = decl.getAccess().type();
-        if(type != null && type.name().equals(name))
-          return SimpleSet.emptySet.add(type);
-      }
+      if(!getImportDecl(i).isOnDemand())
+        for(Iterator iter = getImportDecl(i).importedTypes(name).iterator(); iter.hasNext(); )
+          set = set.add(iter.next());
     }
+    if(!set.isEmpty()) return set;
     
     TypeDecl result = lookupType(packageName(), name);
     if(result != null)
       return SimpleSet.emptySet.add(result);
     
     // The scope of a type imported by a type-import-on-demand declaration
-    SimpleSet c = SimpleSet.emptySet;
     for(int i = 0; i < getNumImportDecl(); i++) {
-      ImportDecl decl = getImportDecl(i);
-      if(decl instanceof TypeImportOnDemandDecl) {
-        if(decl.getAccess() instanceof PackageAccess) {
-          PackageAccess pack = (PackageAccess)decl.getAccess();
-          result = lookupType(pack.getPackage(), name);
-          if(result != null && result.accessibleFromPackage(packageName()) && 
-                 result.fullName().equals(pack.packageName() + "." + name)) {
-            c = c.add(result);
-          }
-        }
-        else if(decl.getAccess().lastAccess().isTypeAccess()) {
-          TypeDecl type = decl.getAccess().lastAccess().type();
-          SimpleSet c_temp = type.memberTypes(name);
-          if(c_temp.size() == 1) {
-            result = (TypeDecl)c_temp.iterator().next();
-            if(result != null && result.accessibleFromPackage(packageName()) &&
-               result.fullName().equals(type.fullName() + "." + name)) {
-              c = c.add(result);
-            }
-          }
-        }
-        else {
-          //System.out.println("@@@@ demand import is not package access");
-        }
-      }
+      if(getImportDecl(i).isOnDemand())
+        for(Iterator iter = getImportDecl(i).importedTypes(name).iterator(); iter.hasNext(); )
+          set = set.add(iter.next());
     }
+    if(!set.isEmpty()) return set;
     
     result = lookupType(PRIMITIVE_PACKAGE_NAME, name);
     if(result != null) {
-      c = c.add(result);
+      set = set.add(result);
       //throw new Error("Found an unexpected lookup for primitive type " + name);
-      return c;
+      return set;
     }
     
+    // 7.5.5 Automatic Imports
     result = lookupType("java.lang", name);
     if(result != null) {
-      c = c.add(result);
-      return c;
+      set = set.add(result);
+      return set;
     }
-    return c;
+    return set;
   }
+  syn lazy SimpleSet ImportDecl.importedTypes(String name) = SimpleSet.emptySet;
+  eq SingleTypeImportDecl.importedTypes(String name) {
+    SimpleSet set = SimpleSet.emptySet;
+    if(getAccess().type().name().equals(name))
+      set = set.add(getAccess().type());
+    return set;
+  }
+  eq TypeImportOnDemandDecl.importedTypes(String name) {
+    SimpleSet set = SimpleSet.emptySet;
+    if(getAccess() instanceof PackageAccess) {
+      String packageName = ((PackageAccess)getAccess()).getPackage();
+      TypeDecl typeDecl = lookupType(packageName, name);
+      if(typeDecl != null && typeDecl.accessibleFromPackage(packageName()) &&
+         typeDecl.typeName().equals(packageName + "." + name)) // canonical names match
+        set = set.add(typeDecl);
+    }
+    else {
+      for(Iterator iter = getAccess().type().memberTypes(name).iterator(); iter.hasNext(); ) {
+        TypeDecl decl = (TypeDecl)iter.next();
+        if(decl.accessibleFromPackage(packageName()) &&
+           decl.typeName().equals(getAccess().typeName() + "." + name)) // canonical names match
+          set = set.add(decl);
+      }
+    }
+    return set;
+  }
+  inh TypeDecl TypeImportOnDemandDecl.lookupType(String packageName, String typeName);
+  inh String ImportDecl.packageName();
 
+  syn boolean ImportDecl.isOnDemand() = false;
+  eq TypeImportOnDemandDecl.isOnDemand() = true;
 }
