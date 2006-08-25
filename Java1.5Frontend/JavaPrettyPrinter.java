@@ -47,6 +47,7 @@ class JavaPrettyPrinter {
           Collection errors = new LinkedList();
           unit.errorCheck(errors);
           if(!errors.isEmpty()) {
+            System.out.println(unit.toString());
             System.out.println("Errors:");
             for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
               String s = (String)iter2.next();
