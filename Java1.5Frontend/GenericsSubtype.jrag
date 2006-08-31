@@ -1,0 +1,207 @@
+aspect GenericsSubtype {
+  // use of this in generic classes
+  // all references to this are compatible with the raw counterpart
+  eq GenericClassDecl.instanceOf(TypeDecl type) =
+    type.isSupertypeOfGenericClassDecl(this);
+  syn boolean TypeDecl.isSupertypeOfGenericClassDecl(GenericClassDecl type) =
+    isSupertypeOfClassDecl(type);
+  eq RawClassDecl.isSupertypeOfGenericClassDecl(GenericClassDecl type) =
+    erasure() == type;
+
+/*
+  eq ParClassDecl.instanceOf(TypeDecl type) =
+    type.isSupertypeOfParClassDecl(this);
+  syn boolean TypeDecl.isSupertypeOfParClassDecl(ParClassDecl type) =
+    this == type;
+  eq GenericClassDecl.isSupertypeOfParClassDecl(ParClassDecl type) =
+    this == type.genericTypeDecl();
+    */
+
+
+
+
+  eq WildcardExtendsType.instanceOf(TypeDecl type) = type.isSupertypeOfWildcardExtends(this);
+  public boolean TypeDecl.isSupertypeOfWildcardExtends(WildcardExtendsType type) {
+    return false;
+  }
+  public boolean WildcardExtendsType.isSupertypeOfWildcardExtends(WildcardExtendsType type) {
+    return type.extendsType().instanceOf(extendsType());
+  }
+  public boolean TypeVariable.isSupertypeOfWildcardExtends(WildcardExtendsType type) {
+    return type.extendsType().instanceOf(this);
+  }
+  public boolean WildcardExtendsType.isSupertypeOfTypeVariable(TypeVariable type) {
+    return type.instanceOf(extendsType());
+  }
+  
+  eq WildcardSuperType.instanceOf(TypeDecl type) = type.isSupertypeOfWildcardSuper(this);
+  public boolean TypeDecl.isSupertypeOfWildcardSuper(WildcardSuperType type) {
+    return false;
+  }
+  public boolean WildcardSuperType.isSupertypeOfWildcardSuper(WildcardSuperType type) {
+    return type.superType().instanceOf(superType());
+  }
+  public boolean TypeVariable.isSupertypeOfWildcardSuper(WildcardSuperType type) {
+    return type.superType().instanceOf(this);
+  }
+  public boolean WildcardSuperType.isSupertypeOfTypeVariable(TypeVariable type) {
+    return type.instanceOf(superType());
+  }
+  
+  syn boolean TypeDecl.isWildcard() = false;
+  eq WildcardType.isWildcard() = true;
+
+  syn boolean TypeDecl.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl instanceof WildcardExtendsType) {
+      WildcardExtendsType other = (WildcardExtendsType)typeDecl;
+      return instanceOf(other.extendsType());
+    }
+    else if(typeDecl instanceof WildcardSuperType) {
+      WildcardSuperType other = (WildcardSuperType)typeDecl;
+      return other.superType().instanceOf(this);
+    }
+    return false;
+  }
+  eq WildcardExtendsType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl instanceof WildcardExtendsType) {
+      WildcardExtendsType other = (WildcardExtendsType)typeDecl;
+      return extendsType().instanceOf(other.extendsType());
+    }
+    return false;
+  }
+  eq WildcardSuperType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl instanceof WildcardSuperType) {
+      WildcardSuperType other = (WildcardSuperType)typeDecl;
+      return other.superType().instanceOf(superType());
+    }
+    if(typeDecl instanceof WildcardExtendsType) {
+      return true; // Dragons?
+    }
+    return false;
+  }
+
+  eq ParTypeDecl.instanceOf(TypeDecl type) {
+    if(super.instanceOf(type))
+      return true;
+    if(type instanceof ParTypeDecl) {
+      ParTypeDecl typeDecl = (ParTypeDecl)type;
+      //System.err.println("Computing " + fullName() + " isSubtypeOf " + ((TypeDecl)typeDecl).fullName());
+      TypeDecl g1 = genericDecl();
+      TypeDecl g2 = typeDecl.genericDecl();
+      if(g1 == g2 && (isRawType() || type.isRawType()))
+        return true;
+      if(g1.instanceOf(g2)) {
+        //System.err.println("Checking type arguments");
+        if(getNumArgument() == typeDecl.getNumArgument()) {
+          for(int i = 0; i < getNumArgument(); i++) {
+            if(typeDecl.getArgument(i).type().isTypeVariable()) {
+              if(!getArgument(i).type().instanceOf(typeDecl.getArgument(i).type())) {
+                //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not subtypes");
+                return false;
+              }
+            }
+            else if(!getArgument(i).type().wildcardSubtype(typeDecl.getArgument(i).type())) {
+              //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not wildcard subtypes");
+              return false;
+            }
+          }
+          return true;
+        }
+        else {
+          //System.err.println("Number of type arguments does not match");
+        }
+      }
+      else {
+        //System.err.println("Generic type " + g1.fullName() + " is not an instanceof " + g2.fullName());
+      }
+    }
+    if(type instanceof GenericClassDecl && genericTypeDecl() == type)
+      return true;
+    Object that = this;
+    if(that instanceof ParClassDecl) {
+      ParClassDecl p = (ParClassDecl)that;
+      if(p.hasSuperclass() && p.superclass().instanceOf(type))
+        return true;
+      for(int i = 0; i < p.getNumImplements(); i++)
+        if(p.getImplements(i).type().instanceOf(type))
+          return true;
+    }
+    else if(that instanceof ParInterfaceDecl) {
+      ParInterfaceDecl p = (ParInterfaceDecl)that;
+      for(int i = 0; i < p.getNumSuperInterfaceId(); i++)
+        if(p.getSuperInterfaceId(i).type().instanceOf(type))
+          return true;
+    }
+    return false;
+  }
+  
+  
+  /*
+  public boolean TypeVariable.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+    return super.isSupertypeOfInterfaceDecl(type);
+  }
+  public boolean TypeVariable.isSupertypeOfArrayDecl(ArrayDecl type) {
+    return super.isSupertypeOfArrayDecl(type);
+  }
+  */
+  syn boolean TypeDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+    //System.err.print("  is " + type.fullName() + " a subtype of " + fullName() + "? ");
+    if(type == this) {
+      //System.err.println("yes");
+      return true;
+    }
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this)) {
+        //System.err.println("yes");
+        return true;
+      }
+    //System.err.println("no");
+    return false;
+    //return type == this;
+  }
+  /*
+  public boolean ClassDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+    if(super.isSupertypeOfTypeVariable(type))
+      return true;
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this))
+        return true;
+    return false;
+  }
+  public boolean InterfaceDecl.isSupertypeOfTypeVariable(TypeVariable type) {
+    if(super.isSupertypeOfTypeVariable(type))
+      return true;
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this))
+        return true;
+    return false;
+  }
+  public boolean TypeVariable.isSupertypeOfTypeVariable(TypeVariable type) {
+    if(super.isSupertypeOfTypeVariable(type))
+      return true;
+    for(int i = 0; i < type.getNumTypeBound(); i++)
+      if(type.getTypeBound(i).type().instanceOf(this))
+        return true;
+    return false;
+  }
+  */
+
+  eq TypeVariable.instanceOf(TypeDecl type) = type.isSupertypeOfTypeVariable(this);
+
+  //In addition to the above rules, a type variable is a direct supertype of its lower bound.
+  eq TypeVariable.isSupertypeOfClassDecl(ClassDecl type) {
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(!type.instanceOf(getTypeBound(i).type())) {
+        return false;
+      }
+    return true;
+  }
+  eq TypeVariable.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(!type.instanceOf(getTypeBound(i).type())) {
+        return false;
+      }
+    return true;
+  }
+
+}

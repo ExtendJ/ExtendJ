@@ -1,0 +1,128 @@
+aspect MethodSignature {
+    refine LookupMethod eq MethodAccess.decls() {
+    SimpleSet potentiallyApplicable = SimpleSet.emptySet;
+    // select potentially applicable methods
+    for(Iterator iter = lookupMethod(name()).iterator(); iter.hasNext(); ) {
+      MethodDecl decl = (MethodDecl)iter.next();
+      if(potentiallyApplicable(decl))
+        potentiallyApplicable = potentiallyApplicable.add(decl);
+    }
+
+    // first phase
+    SimpleSet maxSpecific = SimpleSet.emptySet;
+    for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+      MethodDecl decl = (MethodDecl)iter.next();
+      if(applicableBySubtyping(decl))
+        maxSpecific = mostSpecific(maxSpecific, decl);
+    }
+
+    // second phase
+    if(maxSpecific.isEmpty()) {
+      for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+        MethodDecl decl = (MethodDecl)iter.next();
+        if(applicableByMethodInvocationConversion(decl))
+          maxSpecific = mostSpecific(maxSpecific, decl);
+      }
+    }
+
+
+    // third phase
+    if(maxSpecific.isEmpty()) {
+      for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+        MethodDecl decl = (MethodDecl)iter.next();
+        if(decl.isVariableArity() && applicableVariableArity(decl))
+          maxSpecific = mostSpecific(maxSpecific, decl);
+      }
+    }
+    if(isQualified() ? qualifier().staticContextQualifier() : inStaticContext())
+      maxSpecific = removeInstanceMethods(maxSpecific);
+    return maxSpecific;
+  }
+
+  private SimpleSet MethodAccess.mostSpecific(SimpleSet maxSpecific, MethodDecl decl) {
+    if(maxSpecific.isEmpty())
+      maxSpecific = maxSpecific.add(decl);
+    else {
+      if(decl.moreSpecificThan((MethodDecl)maxSpecific.iterator().next()))
+        maxSpecific = SimpleSet.emptySet.add(decl);
+      else if(!((MethodDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+        maxSpecific = maxSpecific.add(decl);
+    }
+    return maxSpecific;
+  }
+
+  syn boolean MethodAccess.applicableBySubtyping(MethodDecl m) {
+    for(int i = 0; i < m.getNumParameter(); i++)
+      if(!getArg(i).type().instanceOf(m.getParameter(i).type()))
+        return false;
+    return true;
+  }
+
+  syn boolean MethodAccess.applicableByMethodInvocationConversion(MethodDecl m) {
+    for(int i = 0; i < m.getNumParameter(); i++)
+      if(!getArg(i).type().methodInvocationConversionTo(m.getParameter(i).type()))
+        return false;
+    return true;
+  }
+
+  syn boolean MethodAccess.applicableVariableArity(MethodDecl m) {
+    for(int i = 0; i < m.getNumParameter() - 1; i++)
+      if(!getArg(i).type().methodInvocationConversionTo(m.getParameter(i).type()))
+        return false;
+    for(int i = m.getNumParameter() - 1; i < getNumArg(); i++)
+      if(!getArg(i).type().methodInvocationConversionTo(m.lastParameter().type().componentType()))
+        return false;
+    return true;
+  }
+
+  // 15.12.2.1
+
+  /* A member method is potentially applicable to a method invocation if and only if
+     all of the following are true:
+    * The name of the member is identical to the name of the method in the method
+      invocation.
+    * The member is accessible (§6.6) to the class or interface in which the
+      method invocation appears.
+    * The arity of the member is lesser or equal to the arity of the method
+      invocation.
+    * If the member is a variable arity method with arity n, the arity of the
+      method invocation is greater or equal to n-1.
+    * If the member is a fixed arity method with arity n, the arity of the method
+      invocation is equal to n.
+    * TODO: If the method invocation includes explicit type parameters, and the member
+      is a generic method, then the number of actual type parameters is equal to
+      the number of formal type parameters.*/
+  syn boolean MethodAccess.potentiallyApplicable(MethodDecl m) {
+    if(!m.name().equals(name()))
+      return false;
+    if(!m.accessibleFrom(hostType()))
+      return false;
+    if(!(m.arity() <= arity()))
+      return false;
+    if(m.isVariableArity() && !(arity() >= m.arity()-1))
+      return false;
+    if(!m.isVariableArity() && !(m.arity() == arity()))
+      return false;
+    return true;
+  }
+  syn int MethodDecl.arity() = getNumParameter();
+  syn int MethodAccess.arity() = getNumArg();
+
+  // 15.12.3
+  // refine old type checking to be valid when using variable arity parameters
+  refine TypeCheck public void MethodAccess.typeCheck() {
+    if(isQualified() && decl().isAbstract() && qualifier().isSuperAccess())
+      error("may not access abstract methods in superclass");
+    if(!decl().isVariableArity() || invokesVariableArityAsArray()) {
+      for(int i = 0; i < decl().getNumParameter(); i++) {
+        TypeDecl exprType = getArg(i).type();
+        TypeDecl parmType = decl().getParameter(i).type();
+        if(!exprType.methodInvocationConversionTo(parmType) && !exprType.isUnknown() && !parmType.isUnknown()) {
+          error("#The type " + exprType.typeName() + " of expr " +
+            getArg(i) + " is not compatible with the method parameter " +
+            decl().getParameter(i));
+        }
+      }
+    }
+  }
+}
