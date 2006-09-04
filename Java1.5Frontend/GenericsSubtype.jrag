@@ -8,6 +8,12 @@ aspect GenericsSubtype {
   eq RawClassDecl.isSupertypeOfGenericClassDecl(GenericClassDecl type) =
     erasure() == type;
 
+  eq GenericInterfaceDecl.instanceOf(TypeDecl type) =
+    type.isSupertypeOfGenericInterfaceDecl(this);
+  syn boolean TypeDecl.isSupertypeOfGenericInterfaceDecl(GenericInterfaceDecl type) =
+    isSupertypeOfInterfaceDecl(type);
+  eq RawInterfaceDecl.isSupertypeOfGenericInterfaceDecl(GenericInterfaceDecl type) =
+    erasure() == type;
 /*
   eq ParClassDecl.instanceOf(TypeDecl type) =
     type.isSupertypeOfParClassDecl(this);
@@ -16,6 +22,29 @@ aspect GenericsSubtype {
   eq GenericClassDecl.isSupertypeOfParClassDecl(ParClassDecl type) =
     this == type.genericTypeDecl();
     */
+
+
+  //eq ParClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
+  //  return true;
+ // }
+
+  // 5.1.9 Unchecked Conversion
+  eq ParClassDecl.isSupertypeOfGenericClassDecl(GenericClassDecl type) {
+    // TODO: How to generate warnings
+    // For each RawTypeAccess that is being subject to unchecked conversion
+    return type.instanceOf(genericTypeDecl());
+  }
+  eq ParInterfaceDecl.isSupertypeOfGenericClassDecl(GenericClassDecl type) {
+    return type.instanceOf(genericTypeDecl());
+  }
+  eq ParInterfaceDecl.isSupertypeOfGenericInterfaceDecl(GenericInterfaceDecl type) {
+    return type.instanceOf(genericTypeDecl());
+  }
+
+
+  // 5.1.10 Capture Conversion
+  // TODO:
+
 
 
 
@@ -52,6 +81,7 @@ aspect GenericsSubtype {
   eq WildcardType.isWildcard() = true;
 
   syn boolean TypeDecl.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl == this) return true;
     if(typeDecl instanceof WildcardExtendsType) {
       WildcardExtendsType other = (WildcardExtendsType)typeDecl;
       return instanceOf(other.extendsType());
@@ -63,21 +93,20 @@ aspect GenericsSubtype {
     return false;
   }
   eq WildcardExtendsType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl == this) return true;
     if(typeDecl instanceof WildcardExtendsType) {
       WildcardExtendsType other = (WildcardExtendsType)typeDecl;
       return extendsType().instanceOf(other.extendsType());
     }
-    return false;
+    return extendsType().instanceOf(typeDecl);
   }
   eq WildcardSuperType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl == this) return true;
     if(typeDecl instanceof WildcardSuperType) {
       WildcardSuperType other = (WildcardSuperType)typeDecl;
       return other.superType().instanceOf(superType());
     }
-    if(typeDecl instanceof WildcardExtendsType) {
-      return true; // Dragons?
-    }
-    return false;
+    return typeDecl.instanceOf(superType());
   }
 
   eq ParTypeDecl.instanceOf(TypeDecl type) {
@@ -96,12 +125,12 @@ aspect GenericsSubtype {
           for(int i = 0; i < getNumArgument(); i++) {
             if(typeDecl.getArgument(i).type().isTypeVariable()) {
               if(!getArgument(i).type().instanceOf(typeDecl.getArgument(i).type())) {
-                //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not subtypes");
+                System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not subtypes");
                 return false;
               }
             }
             else if(!getArgument(i).type().wildcardSubtype(typeDecl.getArgument(i).type())) {
-              //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not wildcard subtypes");
+              System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not wildcard subtypes");
               return false;
             }
           }
@@ -116,6 +145,8 @@ aspect GenericsSubtype {
       }
     }
     if(type instanceof GenericClassDecl && genericTypeDecl() == type)
+      return true;
+    if(type instanceof GenericInterfaceDecl && genericTypeDecl() == type)
       return true;
     Object that = this;
     if(that instanceof ParClassDecl) {
@@ -144,6 +175,15 @@ aspect GenericsSubtype {
     return super.isSupertypeOfArrayDecl(type);
   }
   */
+
+  eq TypeVariable.isSupertypeOfArrayDecl(ArrayDecl type) {
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(type.instanceOf(getTypeBound(i).type())) {
+        return true;
+      }
+    return false;
+  }
+
   syn boolean TypeDecl.isSupertypeOfTypeVariable(TypeVariable type) {
     //System.err.print("  is " + type.fullName() + " a subtype of " + fullName() + "? ");
     if(type == this) {

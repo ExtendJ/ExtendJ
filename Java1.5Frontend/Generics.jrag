@@ -107,7 +107,7 @@ aspect GenericsErasure {
   eq ParClassDecl.erasure() = genericDecl();
   eq ParInterfaceDecl.erasure() = genericDecl();
   eq TypeVariable.erasure() = getTypeBound(0).type().erasure(); // Skip last erasure?
-  eq ArrayDecl.erasure() = elementType().erasure();
+  eq ArrayDecl.erasure() = elementType().erasure().arrayType();
 }
 
 aspect GenericsTypeCheck {
@@ -246,7 +246,7 @@ aspect GenericsNameBinding {
     if(isClassDecl() && isStatic() && !isTopLevelType()) {
       for(Iterator iter = lookupType(name).iterator(); iter.hasNext(); ) {
         TypeDecl d = (TypeDecl)iter.next();
-        if(d.isStatic() || instanceOf(d.enclosingType())) {
+        if(d.isStatic() || (d.enclosingType() != null && instanceOf(d.enclosingType()))) {
           c = c.add(d);
         }
       }
@@ -400,14 +400,16 @@ aspect LookupParTypeDecl {
       //getArgument(i).dumpTree(1);
       //a.getTypeArgument(i).dumpTree(1);
       if(!getArgument(i).sameSignature(a.getTypeArgument(i))) {
+        /*
         if(getArgument(i).typeSignature().equals(a.getTypeArgument(i).typeSignature())) {
-          System.out.println("Expected same structure");
+          System.out.println("Expected same structure when comparing " + typeSignature() + " with " + a.typeSignature());
           System.out.println("ParTypeDecl:");
           getArgument(i).dumpTree(1);
           System.out.println("ParameterizedTypeAccess:");
           a.getTypeArgument(i).dumpTree(1);
           throw new Error();
         }
+        */
         return false;
       }
     }
@@ -532,7 +534,7 @@ aspect LookupParTypeDecl {
 
     for(int i = 0; i < getNumParTypeDecl(); i++) {
       ParTypeDecl decl = (ParTypeDecl)getParTypeDecl(i);
-      if(i > 15) throw new Error("Too many parameterizations");
+      if(i > 35) throw new Error("Too many parameterizations");
       //System.out.println("Candidate: " + decl.typeSignature());
       if(decl.sameSignature(p)) {
         //System.out.println("Found!");
@@ -721,7 +723,7 @@ aspect LookupParTypeDecl {
     
     addParTypeDecl(typeDecl);
 
-    //System.err.println("Building instantiation of " + params.typeSignature());
+    System.err.println("Building instantiation of " + params.typeSignature());
     
     //System.err.println("Begin copying argument list");
     typeDecl.setArgumentList(createArgumentList(params));
@@ -769,6 +771,7 @@ aspect LookupParTypeDecl {
     typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
     typeDecl.setID(getID());
     addParTypeDecl(typeDecl);
+    System.err.println("Building instantiation of " + params.typeSignature());
     typeDecl.setArgumentList(createArgumentList(params));
     typeDecl.isFinal = true;
     return typeDecl;
@@ -808,7 +811,7 @@ aspect LookupParTypeDecl {
       BodyDecl b = f.p(this);
       b.isFinal = true;
       addBodyDecl(b);
-      set.add(b);
+      set = set.add(b);
     }
     return set;
   }
@@ -833,7 +836,7 @@ aspect LookupParTypeDecl {
         throw new Error("Expected Class or Interface");
       b.isFinal = true;
       addBodyDecl(b);
-      set.add(typeDecl);
+      set = set.add(typeDecl);
     }
     return set;
   }
@@ -1052,4 +1055,9 @@ aspect NewGenerics {
         return getTypeParameter(i);
     return super.lookupTypeVariable(name);
   }
+
+
+  //syn TypeDecl TypeDecl.genericDecl() = isTopLevelType() ? this : enclosingType().genericType().memberType(name());
+  //eq ParameterizedTypeDecl.genericDecl() = enclosingType() or getParent().getParent() or something;
+  //eq GenericTypeDecl.genericDecl() = this;
 }
