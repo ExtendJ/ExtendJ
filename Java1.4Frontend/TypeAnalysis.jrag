@@ -490,6 +490,112 @@ aspect TypeWideningAndIdentity {
   eq VoidType.isSupertypeOfVoidType(VoidType type) = true;
 }
 
+aspect NestedTypes {
+
+  
+  eq CompilationUnit.getTypeDecl().enclosingType() = null;
+  eq CompilationUnit.getImportDecl().enclosingType() = null;
+  
+  eq TypeDecl.getBodyDecl().enclosingType() = this;
+
+  inh TypeDecl TypeDecl.enclosingType();
+  syn TypeDecl TypeDecl.topLevelType() {
+    if(isTopLevelType())
+      return this;
+    return enclosingType().topLevelType();
+  }
+
+  syn Stmt Expr.enclosingStmt() {
+    ASTNode node = this;
+    while(node != null && !(node instanceof Stmt))
+      node = node.getParent();
+    return (Stmt)node;
+  }
+
+
+  // 8
+  inh boolean TypeDecl.isNestedType();
+  eq CompilationUnit.getTypeDecl().isNestedType() = false;
+  eq CompilationUnit.getImportDecl().isNestedType() = false;
+  eq TypeDecl.getBodyDecl().isNestedType() = true;
+
+  // 8
+  syn boolean TypeDecl.isTopLevelType() = !isNestedType();
+
+  // 8.5
+  inh boolean TypeDecl.isMemberType();
+  eq MemberClassDecl.getClassDecl().isMemberType() = true;
+  eq MemberInterfaceDecl.getInterfaceDecl().isMemberType() = true;
+  eq CompilationUnit.getTypeDecl().isMemberType() = false;
+  eq ClassInstanceExpr.getTypeDecl().isMemberType() = false;
+  
+  // 8.1.2
+  syn boolean TypeDecl.isInnerClass() = false;
+  eq ClassDecl.isInnerClass() = isNestedType() && !isStatic() && enclosingType().isClassDecl();
+  syn boolean TypeDecl.isInnerType() = (isLocalClass() || isAnonymous() || (isMemberType() && !isStatic())) && !inStaticContext();
+
+  syn boolean TypeDecl.isInnerTypeOf(TypeDecl typeDecl) = typeDecl == this || (isInnerType() && enclosingType().isInnerTypeOf(typeDecl));
+
+  inh boolean TypeDecl.isLocalClass();
+  eq CompilationUnit.getTypeDecl().isLocalClass() = false;
+  eq CompilationUnit.getImportDecl().isLocalClass() = false;
+  eq TypeDecl.getBodyDecl().isLocalClass() = false;
+  eq LocalClassDeclStmt.getClassDecl().isLocalClass() = true;
+  
+  syn TypeDecl TypeDecl.withinBodyThatSubclasses(TypeDecl type) {
+    if(instanceOf(type))
+      return this;
+    if(!isTopLevelType())
+      return enclosingType().withinBodyThatSubclasses(type);
+    return null;
+  }
+  
+  syn boolean TypeDecl.encloses(TypeDecl type) = type.enclosedBy(this);
+
+  syn boolean TypeDecl.enclosedBy(TypeDecl type) {
+    if(this == type)
+      return true;
+    if(isTopLevelType())
+      return false;
+    return enclosingType().enclosedBy(type);
+  }
+
+  eq CompilationUnit.getTypeDecl().hostPackage() = packageName();
+  eq CompilationUnit.getImportDecl().hostPackage() = packageName();
+
+  inh String TypeDecl.hostPackage();
+  inh String BodyDecl.hostPackage();
+  inh String Expr.hostPackage();
+  
+  syn TypeDecl TypeDecl.hostType() = this;
+  eq TypeDecl.getBodyDecl().hostType() = hostType();
+  eq TypeDecl.getModifiers().hostType() = hostType();
+  eq ClassInstanceExpr.getTypeDecl().hostType() = hostType();
+  eq PrimitiveType.getSuperClassAccess().hostType() = hostType();
+  eq ClassDecl.getSuperClassAccess().hostType() = hostType();
+  eq ClassDecl.getImplements().hostType() = hostType();
+  eq InterfaceDecl.getSuperInterfaceId().hostType() = hostType();
+  
+  eq Program.getCompilationUnit().hostType() = null;
+  eq CompilationUnit.getImportDecl().hostType() = null;
+  
+  inh TypeDecl BodyDecl.hostType();
+  inh TypeDecl Expr.hostType();
+  inh TypeDecl VariableDeclaration.hostType();
+  inh TypeDecl ParameterDeclaration.hostType();
+
+  inh BodyDecl Stmt.hostBodyDecl();
+  eq Program.getCompilationUnit().hostBodyDecl() { throw new UnsupportedOperationException(); }
+  eq InstanceInitializer.getBlock().hostBodyDecl() = this;
+  eq StaticInitializer.getBlock().hostBodyDecl() = this;
+  eq MethodDecl.getBlock().hostBodyDecl() = this;
+  eq ConstructorDecl.getBlock().hostBodyDecl() = this;
+  eq ConstructorDecl.getConstructorInvocation().hostBodyDecl() = this;
+  eq FieldDeclaration.getInit().hostBodyDecl() = this;
+ 
+
+}
+
 
 aspect SuperClasses {
 

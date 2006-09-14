@@ -24,7 +24,9 @@ aspect TypeHierarchyCheck {
           s.append(", ");
         s.append(getArg(i).type().typeName());
       }
-      s.append(")" + " in " + methodHost() + " matches " + this);
+      s.append(")" + " in " + methodHost() + " matches.");
+      if(singleCandidateDecl() != null)
+        s.append(" However, there is a method " + singleCandidateDecl().signature());
       error(s.toString());
     }
     if(decls().size() > 1) {
@@ -155,7 +157,7 @@ aspect TypeHierarchyCheck {
  
           // regardless of overriding
           // 8.4.6.3
-          if(m.type() != decl.type())
+          if(!m.mayOverrideReturn(decl))
             error("the return type of method " + m.signature() + " in " + m.hostType().typeName() + " does not match the return type of method " + decl.signature() + " in " + decl.hostType().typeName() + " and may thus not be overriden");
  
           // regardless of overriding
@@ -219,6 +221,8 @@ aspect TypeHierarchyCheck {
     }
   }
 
+  syn boolean MethodDecl.mayOverrideReturn(MethodDecl m) = type() == m.type();
+
   public void ClassDecl.nameCheck() {
     super.nameCheck();
     if(hasSuperClassAccess() && !getSuperClassAccess().type().isClassDecl())
@@ -253,7 +257,7 @@ aspect TypeHierarchyCheck {
               error("Xa static method may not hide an instance method");
             if(!n.isAbstract() && !n.isPublic())
               error("Xoverriding access modifier error");
-            if(m.type() != n.type())
+            if(!n.mayOverrideReturn(m))
               error("Xthe return type of method " + m.signature() + " in " + m.hostType().typeName() + 
                     " does not match the return type of method " + n.signature() + " in " + 
                     n.hostType().typeName() + " and may thus not be overriden");
@@ -276,7 +280,7 @@ aspect TypeHierarchyCheck {
         }
         for(Iterator i2 = interfacesMethodsSignature(m.signature()).iterator(); i2.hasNext(); ) {
           MethodDecl n = (MethodDecl)i2.next();
-          if(m.type() != n.type())
+          if(!n.mayOverrideReturn(m) && !m.mayOverrideReturn(n))
             error("Xthe return type of method " + m.signature() + " in " + m.hostType().typeName() + 
                   " does not match the return type of method " + n.signature() + " in " + 
                   n.hostType().typeName() + " and may thus not be overriden");
