@@ -79,6 +79,6 @@ class JavaChecker {
   }
 
   protected static void printVersion() {
-    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060729");
+    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060915");
   }
 }
