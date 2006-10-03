@@ -335,25 +335,19 @@ public class Parser {
 
 
 	public Access fromClassName(String s) {
-		//s = s.replaceAll("\\$", "/");
-		s = s.replace('$', '/');
-
-    int index = -1;
-    int pos = 0;
-    Access result = null;
-    do {
-      pos = s.indexOf('/', index+1);
-      if(pos == -1)
-        pos = s.length();
-      String name = s.substring(index+1, pos);
-      if(index == -1) {
-		    result = new ParseName(name);
-      }
-      else {
-			  result = new Dot(result, new ParseName(name));
-      }
-      index = pos;
-    } while(pos != s.length());
+    // Sample ClassName: a/b/c$d$e
+    // the package name ends at the last '/'
+    // after that follows a list of type names separated by '$'
+    // all except the first are nested types
+    
+    String packageName = "";
+    int index = s.lastIndexOf('/');
+    if(index != -1)
+      packageName = s.substring(0, index).replace('/', '.');
+    String[] typeNames = s.substring(index + 1).split("\\$");
+    Access result = new TypeAccess(packageName, typeNames[0]);
+    for(int i = 1; i < typeNames.length; i++)
+      result = result.qualifiesAccess(new TypeAccess(typeNames[i]));
 		return result;
 
 	}
