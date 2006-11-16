@@ -1,9 +1,32 @@
 import java.io.File;
 import java.util.*;
-import parser.*;
 import beaver.*;
 
 aspect ClassPath {
+  interface BytecodeReader {
+    CompilationUnit read(InputStream is, String fullName, Program p) throws FileNotFoundException, IOException;
+  }
+  interface PackageExtractor {
+    String extractPackageName(String fileName);
+  }
+  interface JavaParser {
+    CompilationUnit parse(InputStream is, String fileName) throws IOException, beaver.Parser.Exception;
+  }
+
+  public class ParseError extends Error {
+    public ParseError(String msg) { super(msg); }
+  }
+  public class LexicalError extends Error {
+    public LexicalError(String msg) { super(msg); }
+  }
+
+  protected BytecodeReader Program.bytecodeReader;
+  public void Program.initBytecodeReader(BytecodeReader r) { bytecodeReader = r; }
+  protected PackageExtractor Program.packageExtractor;
+  public void Program.initPackageExtractor(PackageExtractor e) { packageExtractor = e; }
+  protected JavaParser Program.javaParser;
+  public void Program.initJavaParser(JavaParser p) { javaParser = p; }
+
   syn String CompilationUnit.relativeName() = relativeName;
   syn String CompilationUnit.pathName() = pathName;
   syn boolean CompilationUnit.fromSource() = fromSource;
@@ -127,7 +150,7 @@ aspect ClassPath {
   private boolean Program.pathsInitialized = false;
   private java.util.ArrayList Program.classPath;
   private java.util.ArrayList Program.sourcePath;
-  private FileNamesPart Program.sourceFiles = new FileNamesPart();
+  private FileNamesPart Program.sourceFiles = new FileNamesPart(this);
 
   public void Program.pushClassPath(String name) {
     PathPart part = PathPart.createSourcePath(name, this);
@@ -240,9 +263,6 @@ aspect ClassPath {
     long age;
     Program program;
     
-    private static parser.JavaParser parser = new parser.JavaParser();
-    public static parser.JavaParser parser() { return parser; }
-    
     protected PathPart() {
     }
 
@@ -296,7 +316,9 @@ aspect ClassPath {
         try {
           if(Program.verbose())
             System.out.print("Loading .class file: " + fullName + " ");
-          CompilationUnit u = new bytecode.Parser(is, fullName).parse(null, null, program);
+
+          CompilationUnit u = program.bytecodeReader.read(is, fullName, program);
+          //CompilationUnit u = new bytecode.Parser(is, fullName).parse(null, null, program);
           u.setPathName(pathName);
           u.setRelativeName(relativeName);
           u.setFromSource(false);
@@ -316,8 +338,7 @@ aspect ClassPath {
           if(Program.verbose())
             System.out.print("Loading .java file: " + fullName + " ");
             
-          parser.JavaScanner scanner = new parser.JavaScanner(new parser.Unicode(is));
-          CompilationUnit u = (CompilationUnit)parser.parse(scanner);
+          CompilationUnit u = program.javaParser.parse(is, pathName + relativeName);
           is.close();
           is = null;
         
@@ -328,9 +349,12 @@ aspect ClassPath {
           if(Program.verbose())
             System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
           return u;
-        } catch (JavaParser.SourceError e) {
-          throw new JavaParser.SourceError(pathName + relativeName + ": " + e.getMessage());
+        } catch (ParseError e) {
+          throw e;
+        } catch (LexicalError e) {
+          throw e;
         } catch (Exception e) {
+          System.err.println("Unexpected error of kind " + e.getClass().getName());
           throw new Error(fullName + ": " + e.getMessage(), e);
         }
       }
@@ -448,8 +472,9 @@ aspect ClassPath {
     private HashMap sourceFiles = new HashMap();
     private HashSet packages = new HashSet();
 
-    public FileNamesPart() {
+    public FileNamesPart(Program p) {
       isSource = true;
+      program = p;
     }
 
     public boolean hasPackage(String name) { return packages.contains(name); }
@@ -484,31 +509,15 @@ aspect ClassPath {
         }
       }
     }
-    private static String canonicalName(String fileName) {
-      try {
-        Reader reader = new FileReader(fileName);
-        JavaScanner scanner = new JavaScanner(new Unicode(reader));
-        StringBuffer packageName = new StringBuffer();
-        Symbol sym = scanner.nextToken();
-        if(sym.getId() == JavaParser.Terminals.PACKAGE) {
-          while(true) {
-            sym = scanner.nextToken();
-            if(sym.getId() == JavaParser.Terminals.SEMICOLON)
-              break;
-            packageName.append(sym.value);
-          }
-        }
-        reader.close();
-        if(packageName.length() != 0)
-          packageName.append(".");
-        int begin = fileName.lastIndexOf(File.separatorChar);
-        begin = begin + 1;
-       int end = fileName.lastIndexOf('.');
-        packageName.append(fileName.substring(begin, end));
-        return packageName.toString();
-      } catch (Exception e) {
-      }
-      return fileName;
+    private String canonicalName(String fileName) {
+      StringBuffer packageName = new StringBuffer(
+        program.packageExtractor.extractPackageName(fileName)
+      );
+      int begin = fileName.lastIndexOf(File.separatorChar);
+      begin = begin + 1;
+      int end = fileName.lastIndexOf('.');
+      packageName.append(fileName.substring(begin, end));
+      return packageName.toString();
     }
   }
 

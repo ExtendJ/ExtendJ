@@ -4,25 +4,21 @@ import java.util.*;
 import java.io.*;
 import parser.*;
 
-class JavaChecker {
+class JavaChecker extends Frontend {
 
   public static void main(String args[]) {
     compile(args);
   }
 
   public static boolean compile(String args[]) {
-    Program program = new Program();
-    program.initOptions();
-    program.addKeyValueOption("-classpath");
-    program.addKeyValueOption("-sourcepath");
-    program.addKeyValueOption("-bootclasspath");
-    program.addKeyValueOption("-extdirs");
-    program.addKeyValueOption("-d");
-    program.addKeyOption("-verbose");
-    program.addKeyOption("-version");
-    program.addKeyOption("-help");
-    
-    program.addOptions(args);
+    return new JavaChecker().process(args);
+  }
+
+  public boolean process(String args[]) {
+    initReaders();
+    initOptions();
+    processArgs(args);
+
     Collection files = program.files();
     
     if(program.hasOption("-version")) {
@@ -62,23 +58,6 @@ class JavaChecker {
     return true;
   }
 
-  protected static void printUsage() {
-    printVersion();
-    System.out.println(
-      "\nJavaPrettyPrinter\n\n" +
-      "Usage: java JavaPrettyPrinter <options> <source files>\n" +
-      "  -verbose                  Output messages about what the compiler is doing\n" +
-      "  -classpath <path>         Specify where to find user class files\n" +
-      "  -sourcepath <path>        Specify where to find input source files\n" + 
-      "  -bootclasspath <path>     Override location of bootstrap class files\n" + 
-      "  -extdirs <dirs>           Override location of installed extensions\n" +
-      "  -d <directory>            Specify where to place generated class files\n" +
-      "  -help                     Print a synopsis of standard options\n" +
-      "  -version                  Print version information\n"
-    );
-  }
-
-  protected static void printVersion() {
-    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060915");
-  }
+  protected String name() { return "JavaPrettyPrinter"; }
+  protected String version() { return "R20060915"; }
 }

@@ -4,10 +4,14 @@ import AST.*;
 import java.io.*;
 
 
-public class Parser {
+public class Parser implements AST.BytecodeReader {
+  public CompilationUnit read(InputStream is, String fullName, Program p) throws FileNotFoundException, IOException {
+    return new Parser(is, fullName).parse(null, null, p);
+  }
+
   public static final boolean VERBOSE = false;
 
-	private DataInputStream is;
+  private DataInputStream is;
 	public CONSTANT_Class_Info classInfo;
 	public CONSTANT_Class_Info outerClassInfo;
   public String name;
@@ -23,6 +27,9 @@ public class Parser {
     this.name = name;
   }
   
+  public Parser() {
+    this("");
+  }
 	public Parser(String name) {
 		if (!name.endsWith(".class")) {
 			//name = name.replaceAll("\\.", "/") + ".class";
