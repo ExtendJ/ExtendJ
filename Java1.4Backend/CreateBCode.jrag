@@ -79,13 +79,19 @@ aspect CreateBCode {
   }
 
   public void MethodDecl.createBCode(CodeGeneration gen) {
+    try {
     if(hasBlock()) {
       gen.maxLocals = Math.max(gen.maxLocals, getBlock().localNum());
       getBlock().createBCode(gen);
     }
+    } catch (Error e) {
+      System.err.println(hostType().typeName() + ": " + this);
+      throw e;
+    }
   }
 
   public void ConstructorDecl.createBCode(CodeGeneration gen) {
+    try {
     boolean needsInit = true;
 
     if(hasConstructorInvocation()) {
@@ -149,6 +155,10 @@ aspect CreateBCode {
     }
     gen.maxLocals = Math.max(gen.maxLocals, getBlock().localNum());
     getBlock().createBCode(gen);
+    } catch (Error e) {
+      System.err.println(hostType().typeName() + ": " + this);
+      throw e;
+    }
   }
 
   public void ASTNode.createBCode(CodeGeneration gen) {
@@ -418,7 +428,7 @@ aspect CreateBCode {
     }
   }
 
-  private void VarAccess.createLoadQualifier(CodeGeneration gen) {
+  protected void VarAccess.createLoadQualifier(CodeGeneration gen) {
     Variable v = decl();
     if(v instanceof FieldDeclaration) {
       FieldDeclaration f = (FieldDeclaration)v;
@@ -450,7 +460,7 @@ aspect CreateBCode {
     return false;
   }
 
-  private TypeDecl VarAccess.fieldQualifierType() {
+  protected TypeDecl VarAccess.fieldQualifierType() {
     if(hasPrevExpr())
       return prevExpr().type();
     TypeDecl typeDecl = hostType();
@@ -461,6 +471,19 @@ aspect CreateBCode {
   
   public void MethodAccess.createBCode(CodeGeneration gen) {
     createLoadQualifier(gen);
+    if(decl().type().isUnknown()) {
+      System.err.println("Could not bind " + this);
+      for (int i = 0; i < getNumArg(); ++i) {
+        System.err.println("Argument " + getArg(i) + " is of type " + getArg(i).type().typeName());
+        if(getArg(i).varDecl() != null) System.err.println(getArg(i).varDecl() + " in " + getArg(i).varDecl().hostType().typeName());
+      }
+      if(isQualified())
+        System.err.println("Qualifier " + qualifier() + " is of type " + qualifier().type().typeName());
+      throw new Error("Could not bind " + this);
+    }
+    if(decl().getNumParameter() != getNumArg()) {
+      System.out.println(this + " does not have the same number of arguments as " + decl());
+    }
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // MethodInvocationConversion
@@ -531,7 +554,7 @@ aspect CreateBCode {
     return m;
   }
   
-  private void MethodAccess.createLoadQualifier(CodeGeneration gen) {
+  protected void MethodAccess.createLoadQualifier(CodeGeneration gen) {
     MethodDecl m = decl();
     if(hasPrevExpr()) {
       // load explicit qualifier
@@ -547,12 +570,19 @@ aspect CreateBCode {
     }
   }
 
-  private TypeDecl MethodAccess.methodQualifierType() {
+  protected TypeDecl MethodAccess.methodQualifierType() {
     if(hasPrevExpr())
       return prevExpr().type();
     TypeDecl typeDecl = hostType();
-    while(!typeDecl.hasMethod(name()))
+    while(typeDecl != null && !typeDecl.hasMethod(name()))
       typeDecl = typeDecl.enclosingType();
+    if(typeDecl == null) {
+      typeDecl = hostType();
+      while(typeDecl != null && !typeDecl.hasMethod(name())) {
+        System.err.println(typeDecl.typeName() + " does not have method named " + name());
+        typeDecl = typeDecl.enclosingType();
+      }
+    }
     return typeDecl;
   }
 
@@ -717,9 +747,12 @@ aspect CreateBCode {
     }
     else {
       TypeDecl enclosing = hostType();
-      while(!enclosing.hasType(innerClass.name()))
+      while(enclosing != null && !enclosing.hasType(innerClass.name()))
         enclosing = enclosing.enclosingType();
-      emitThis(gen, enclosing);
+      if(enclosing == null)
+        throw new Error(errorPrefix() + "Could not find enclosing for " + this);
+      else
+        emitThis(gen, enclosing);
     }
   }
   public void ClassInstanceExpr.createBCode(CodeGeneration gen) {
@@ -1207,7 +1240,8 @@ aspect CreateBCode {
       try {
         getStmt(i).createBCode(gen);
       } catch (Exception e) {
-        throw new Error("Error generating code for " + getStmt(i));
+        e.printStackTrace();
+        throw new Error("Error generating code for " + errorPrefix() + " " + getStmt(i));
       }
     }
     gen.addVariableScopeLabel(variableScopeEndLabel(gen));
