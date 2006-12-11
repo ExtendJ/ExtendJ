@@ -192,7 +192,7 @@ class Attributes {
         String s = p.getCONSTANT_Utf8_Info(signature_index).string();
         Signatures.ClassSignature classSignature = new Signatures.ClassSignature(s);
         if(classSignature.hasFormalTypeParameters())
-          typeDecl = typeDecl.makeGeneric(classSignature.typeParameters());
+          typeDecl = typeDecl.makeGeneric(classSignature);
       }
       else {
         super.processAttribute(attribute_name, attribute_length);

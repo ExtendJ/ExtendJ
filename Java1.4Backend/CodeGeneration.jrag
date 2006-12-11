@@ -182,6 +182,22 @@ aspect CodeGeneration {
     private HashMap uses = new HashMap();
     public void addLabel(int label) {
       Integer label_object = new Integer(label);
+      /*
+      if(pos() - 3 == bytes.lastGotoPos() && bytes.get(pos() - 3) == Bytecode.GOTO) {
+        if(uses.containsKey(label_object)) {
+          ArrayList array = (ArrayList)uses.get(label_object);
+          for(int i = 0; i < array.size(); i++) {
+            int p = ((Integer)array.get(i)).intValue();
+            if(pos() - 3 == p) {
+              //System.out.println("Found direct branch");
+              array.remove(i);
+              i--;
+            }
+          }
+          bytes.setPos(pos() - 3);
+        }
+      }
+      */
       address.put(label_object, new Integer(pos()));
       // Update all reference to this label
       if(uses.containsKey(label_object)) {
@@ -272,7 +288,7 @@ aspect CodeGeneration {
 
     public void emitGoto(int label) {
       int p = jump(label);
-      bytes.emit(Bytecode.GOTO).add2(p);
+      bytes.emitGoto(Bytecode.GOTO).add2(p);
     }
 
     public void emitJsr(int label) {
@@ -328,6 +344,7 @@ aspect CodeGeneration {
     private int size = 64;
     private byte[] bytes = new byte[size];
     private int pos = 0;
+    private int lastGotoPos = 0;
     ByteArray add(int i) {return add((byte)i);}
     ByteArray add(byte b) {
       if(pos >= size) {
@@ -342,6 +359,12 @@ aspect CodeGeneration {
     ByteArray add2(int index) { add(index >> 8).add(index & 0xff); return this; }
     ByteArray emit(byte b) {
       changeStackDepth(BytecodeDebug.stackChange(b));
+      add(b);
+      return this;
+    }
+    ByteArray emitGoto(byte b) {
+      changeStackDepth(BytecodeDebug.stackChange(b));
+      lastGotoPos = pos;
       add(b);
       return this;
     }
@@ -364,6 +387,8 @@ aspect CodeGeneration {
     }
     
     public int pos() {return pos;}
+    public int lastGotoPos() {return lastGotoPos;}
+    public void setPos(int index) { pos = index; }
     public int size() {return pos;}
     public byte get(int index) {return bytes[index];}
     public void set(int index, byte value) {bytes[index] = value;}

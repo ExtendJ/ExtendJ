@@ -2,7 +2,6 @@ import AST.*;
 
 import java.util.*;
 import java.io.*;
-import parser.*;
 import beaver.Symbol;
 
 class JavaCompiler {
@@ -14,6 +13,18 @@ class JavaCompiler {
   
   public static boolean compile(String args[]) {
     Program program = new Program();
+
+    program.initBytecodeReader(new bytecode.Parser());
+    program.initJavaParser(
+      new JavaParser() {
+        public CompilationUnit parse(InputStream is, String fileName) throws IOException, beaver.Parser.Exception {
+          return new parser.JavaParser().parse(is, fileName);
+        }
+      }
+    );
+    // extract package name from a source file without parsing the entire file
+    program.initPackageExtractor(new parser.JavaScanner());
+
     program.initOptions();    
     program.addKeyValueOption("-classpath");
     program.addKeyValueOption("-sourcepath");
@@ -37,12 +48,12 @@ class JavaCompiler {
       return false;
     }
     
-    for(Iterator iter = files.iterator(); iter.hasNext(); ) {
-      String name = (String)iter.next();
-      program.addSourceFile(name);
-    }
-
     try {
+      for(Iterator iter = files.iterator(); iter.hasNext(); ) {
+        String name = (String)iter.next();
+        program.addSourceFile(name);
+      }
+
       for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
         CompilationUnit unit = (CompilationUnit)iter.next();
         if(unit.fromSource()) {
@@ -68,7 +79,10 @@ class JavaCompiler {
           }
         }
       }
-    } catch (JavaParser.SourceError e) {
+    } catch (ParseError e) {
+      System.err.println(e.getMessage());
+      return false;
+    } catch (LexicalError e) {
       System.err.println(e.getMessage());
       return false;
     } catch (Exception e) {

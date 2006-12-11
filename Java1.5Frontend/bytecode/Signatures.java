@@ -54,14 +54,30 @@ public class Signatures {
     void classSignature() {
       if(next("<"))
         formalTypeParameters();
-      superclassSignature();
+      superclassSignature = parseSuperclassSignature();
       while(!eof()) {
-        superinterfaceSignature();
+        superinterfaceSignature.add(parseSuperinterfaceSignature());
       }
     }
 
     public boolean hasFormalTypeParameters() { return typeParameters != null; }
     public List typeParameters() { return typeParameters; }
+
+    public boolean hasSuperclassSignature() { return superclassSignature != null; }
+    public Access superclassSignature() { return superclassSignature; }
+    protected Access superclassSignature;
+
+    public boolean hasSuperinterfaceSignature() { return superinterfaceSignature.getNumChild() != 0; }
+    public List superinterfaceSignature() { return superinterfaceSignature; }
+    protected List superinterfaceSignature = new List(); 
+
+    Access parseSuperclassSignature() {
+      return classTypeSignature();
+    }
+
+    Access parseSuperinterfaceSignature() {
+      return classTypeSignature();
+    }
   }
 
   public static class MethodSignature extends Signatures {
@@ -153,13 +169,6 @@ public class Signatures {
     return fieldTypeSignature();
   }
 
-  void superclassSignature() {
-    classTypeSignature();
-  }
-
-  void superinterfaceSignature() {
-    classTypeSignature();
-  }
 
   Access fieldTypeSignature() {
     if(next("L"))

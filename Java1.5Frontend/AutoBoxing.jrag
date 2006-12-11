@@ -181,7 +181,7 @@ aspect AutoBoxing {
     !unboxed().isUnknown() && unboxed().isPrimitive();
 
   // Affects type checking of 14.9 If, 14.10 Assert, 14.12 While, 14.13 Do, 14.14 For 
-  eq ReferenceType.isBoolean() = unboxed().isBoolean();
+  eq ReferenceType.isBoolean() = fullName().equals("java.lang.Boolean") && unboxed().isBoolean();
   // Code generation need to add unboxing if the conditional is a Boxed value
   // this is done by inserting a new node with an explicit cast
 
@@ -244,6 +244,30 @@ aspect AutoBoxing {
     access.emitStore(gen);
   }
 
+  refine CreateBCode public void ArrayCreationExpr.createBCode(CodeGeneration gen) {
+    if(hasArrayInit()){
+      getArrayInit().createBCode(gen);
+    }
+    else {
+      for (int i=0; i<getNumDims(); i++) 
+        getDims(i).createBCode(gen);
+      if(type().componentType().isPrimitive() && !type().componentType().isReferenceType()) {
+        gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+      }
+      else {
+        if(numArrays() == 1) {
+          String n = type().componentType().arrayTypeDescriptor();
+          int index = gen.constantPool().addClass(n);
+          gen.emit(Bytecode.ANEWARRAY).add2(index);
+        }
+        else {
+          String n = type().arrayTypeDescriptor();
+          int index = gen.constantPool().addClass(n);
+          gen.emit(Bytecode.MULTIANEWARRAY, 1 - numArrays()).add2(index).add(numArrays());
+        }
+      }
+    }
+  }
 
 
 

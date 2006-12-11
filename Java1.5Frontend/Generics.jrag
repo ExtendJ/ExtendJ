@@ -14,20 +14,21 @@ aspect Generics {
 
   // Brute force replacesment with generic one in AST
   // make sure that the AST has not beed traversed yet!
-  public TypeDecl TypeDecl.makeGeneric(List typeParameters) {
+  public TypeDecl TypeDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
     return this;
   }
-  public TypeDecl ClassDecl.makeGeneric(List typeParameters) {
+  public TypeDecl ClassDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
+    System.out.println("Making " + getID() + " generic");
     ASTNode node = getParent();
     int index = node.getIndexOfChild(this);
     node.setChild(
       new GenericClassDecl(
         getModifiersNoTransform(),
         getID(),
-        getSuperClassAccessOptNoTransform(),
-        getImplementsListNoTransform(),
+        s.hasSuperclassSignature() ? new Opt(s.superclassSignature()) : getSuperClassAccessOptNoTransform(),
+        s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getImplementsListNoTransform(),
         getBodyDeclListNoTransform(),
-        typeParameters,
+        s.typeParameters(),
         new List(),
         new Opt()
       ),
@@ -35,16 +36,16 @@ aspect Generics {
     );
     return (TypeDecl)node.getChildNoTransform(index);
   }
-  public TypeDecl InterfaceDecl.makeGeneric(List typeParameters) {
+  public TypeDecl InterfaceDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
     ASTNode node = getParent();
     int index = node.getIndexOfChild(this);
     node.setChild(
       new GenericInterfaceDecl(
         getModifiersNoTransform(),
         getID(),
-        getSuperInterfaceIdListNoTransform(),
+        s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getSuperInterfaceIdListNoTransform(),
         getBodyDeclListNoTransform(),
-        typeParameters,
+        s.typeParameters(),
         new List(),
         new Opt()
       ),
@@ -52,7 +53,7 @@ aspect Generics {
     );
     return (TypeDecl)node.getChildNoTransform(index);
   }
-  public TypeDecl GenericTypeDecl.makeGeneric(List typeParameters) {
+  public TypeDecl GenericTypeDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
     return (TypeDecl)this;
   }
 
@@ -575,11 +576,12 @@ aspect LookupParTypeDecl {
     TypeDecl typeDecl = this;
     System.err.println("Searching for substitution for variable " + name());
     GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
+    /*
     TypeVariable v = (TypeVariable)((TypeDecl)g).lookupTypeVariable(name());
     if(v != null) {
       System.err.println("  found variable");
 
-    }
+    }*/
     for(int i = 0; i < g.getNumTypeParameter(); i++) {
       if(g.getTypeParameter(i) == typeDecl) {
         System.err.println("  found variable as parameter " + i);
@@ -792,7 +794,9 @@ aspect LookupParTypeDecl {
   }
   syn lazy List ParInterfaceDecl.getBodyDeclList() = new List();
 
+  /*
   syn lazy Collection ParTypeDecl.memberMethods(String name) {
+    System.out.println("Searching for methods in " + typeName());
     Collection set = new ArrayList();
     for(Iterator iter = genericTypeDecl().memberMethods(name).iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
@@ -802,6 +806,41 @@ aspect LookupParTypeDecl {
       set.add(b);
     }
     return set;
+  }*/
+
+  syn boolean ASTNode.usesTypeVariable() {
+    for(int i = 0; i < getNumChild(); i++)
+      if(getChild(i).usesTypeVariable())
+        return true;
+    return false;
+  }
+  eq MethodDecl.usesTypeVariable() = 
+    getModifiers().usesTypeVariable() || getTypeAccess().usesTypeVariable() ||
+    getParameterList().usesTypeVariable() || getExceptionList().usesTypeVariable();
+  eq TypeAccess.usesTypeVariable() = decl().isTypeVariable() || super.usesTypeVariable();
+  eq TypeVariableAccess.usesTypeVariable() = true;
+
+
+  public Iterator ParTypeDecl.methodsIterator() {
+    final ParTypeDecl host = this;
+    return new Iterator() {
+      private Iterator iter = genericTypeDecl().methodsIterator();
+      public boolean hasNext() {
+        return iter.hasNext();
+      }
+      public Object next() {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(m.usesTypeVariable()) {
+          BodyDecl b = m.p(host);
+          b.isFinal = true;
+          addBodyDecl(b);
+          return b;
+        } 
+        else
+          return m;
+      }
+      public void remove() { throw new UnsupportedOperationException(); }
+    };
   }
 
   syn lazy SimpleSet ParTypeDecl.memberFields(String name) {
@@ -859,14 +898,15 @@ aspect LookupParTypeDecl {
 
   public BodyDecl MethodDecl.p(ParTypeDecl parTypeDecl) {
     System.out.println("Begin substituting " + signature() + " in " + hostType().typeName() + " with " + parTypeDecl.typeSignature());
-    MethodDecl m = new MethodDecl(
+    MethodDecl m = new MethodDeclSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getTypeAccess().substituteReturnType(parTypeDecl),
       getID(),
       getParameterList().substitute(parTypeDecl),
       new List(),
       getExceptionList().substitute(parTypeDecl),
-      new Opt()
+      new Opt(),
+      this
     );
     System.out.println("End substituting " + signature());
     return m;
@@ -892,13 +932,14 @@ aspect LookupParTypeDecl {
   
 
   public BodyDecl ConstructorDecl.p(ParTypeDecl parTypeDecl) {
-    ConstructorDecl c = new ConstructorDecl(
+    ConstructorDecl c = new ConstructorDeclSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
       getParameterList().substitute(parTypeDecl),
       getExceptionList().substitute(parTypeDecl),
       new Opt(),
-      new Block()
+      new Block(),
+      this
     );
     return c;
   }

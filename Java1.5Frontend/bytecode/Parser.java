@@ -4,7 +4,14 @@ import AST.*;
 import java.io.*;
 import bytecode.Attributes.TypeAttributes;
 
-public class Parser implements Flags {
+public class Parser implements Flags, AST.BytecodeReader {
+
+  public CompilationUnit read(InputStream is, String fullName, Program p) throws FileNotFoundException, IOException {
+    return new Parser(is, fullName).parse(null, null, p);
+  }
+
+
+
   public static final boolean VERBOSE = false;
 
 	private DataInputStream is;
@@ -30,6 +37,10 @@ public class Parser implements Flags {
 		}
     this.name = name;
 	}
+
+  public Parser() {
+    this("");
+  }
 
   private static class DummyInputStream extends InputStream {
     byte[] bytes;

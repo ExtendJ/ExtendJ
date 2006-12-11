@@ -49,12 +49,12 @@ class JavaCompiler {
       return false;
     }
     
-    for(Iterator iter = files.iterator(); iter.hasNext(); ) {
-      String name = (String)iter.next();
-      program.addSourceFile(name);
-    }
-
     try {
+      for(Iterator iter = files.iterator(); iter.hasNext(); ) {
+        String name = (String)iter.next();
+        program.addSourceFile(name);
+      }
+
       for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
         CompilationUnit unit = (CompilationUnit)iter.next();
         if(unit.fromSource()) {
