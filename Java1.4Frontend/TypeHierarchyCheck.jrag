@@ -13,8 +13,8 @@ aspect TypeHierarchyCheck {
     if(isQualified() && qualifier().isPackageAccess() && !qualifier().isUnknown())
       error("The method " + decl().signature() + 
           " can not be qualified by a package name.");
-    if(isQualified() && qualifier().isSuperAccess() && decl().isAbstract())
-      error("Invoking an abstract method through super.method() is invalid");
+    if(isQualified() && decl().isAbstract() && qualifier().isSuperAccess())
+      error("may not access abstract methods in superclass");
     if(decls().isEmpty() && (!isQualified() || !qualifier().isUnknown())) {
       StringBuffer s = new StringBuffer();
       s.append("no method named " + name());
@@ -145,6 +145,7 @@ aspect TypeHierarchyCheck {
     // 8.4.6.4 & 9.4.1
     for(Iterator iter1 = localMethodsIterator(); iter1.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter1.next();
+      ASTNode target = m.hostType() == this ? m : this;
       
       //for(Iterator i2 = overrides(m).iterator(); i2.hasNext(); ) {
       for(Iterator i2 = ancestorMethods(m.signature()).iterator(); i2.hasNext(); ) {
@@ -152,12 +153,12 @@ aspect TypeHierarchyCheck {
         if(m.overrides(decl)) {
           // 8.4.6.1
           if(!m.isStatic() && decl.isStatic())
-            error("an instance method may not override a static method");
+            target.error("an instance method may not override a static method");
  
           // regardless of overriding
           // 8.4.6.3
           if(!m.mayOverrideReturn(decl))
-            error("the return type of method " + m.signature() + " in " + m.hostType().typeName() + " does not match the return type of method " + decl.signature() + " in " + decl.hostType().typeName() + " and may thus not be overriden");
+            target.error("the return type of method " + m.signature() + " in " + m.hostType().typeName() + " does not match the return type of method " + decl.signature() + " in " + decl.hostType().typeName() + " and may thus not be overriden");
  
           // regardless of overriding
           // 8.4.4
@@ -169,30 +170,30 @@ aspect TypeHierarchyCheck {
                 found = true;
             }
             if(!found && e.type().isUncheckedException())
-              error(m.signature() + " in " + m.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
+              target.error(m.signature() + " in " + m.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
                decl.signature() + " in " + decl.hostType().typeName());
           }
           // 8.4.6.3
           if(decl.isPublic() && !m.isPublic())
-            error("overriding access modifier error");
+            target.error("overriding access modifier error");
           // 8.4.6.3
           if(decl.isProtected() && !(m.isPublic() || m.isProtected()))
-            error("overriding access modifier error");
+            target.error("overriding access modifier error");
           // 8.4.6.3
           if((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate())
-            error("overriding access modifier error");
+            target.error("overriding access modifier error");
  
           // regardless of overriding
           if(decl.isFinal())
-            error("method " + m.signature() + " in " + hostType().typeName() + " can not override final method " + decl.signature() + " in " + decl.hostType().typeName());
+            target.error("method " + m.signature() + " in " + hostType().typeName() + " can not override final method " + decl.signature() + " in " + decl.hostType().typeName());
         }
         if(m.hides(decl)) {
           // 8.4.6.2
           if(m.isStatic() && !decl.isStatic())
-            error("a static method may not hide an instance method");
+            target.error("a static method may not hide an instance method");
           // 8.4.6.3
           if(m.type() != decl.type())
-            error("can not hide a method with a different return type");
+            target.error("can not hide a method with a different return type");
           // 8.4.4
           for(int i = 0; i < m.getNumException(); i++) {
             Access e = m.getException(i);
@@ -202,19 +203,19 @@ aspect TypeHierarchyCheck {
                 found = true;
             }
             if(!found)
-              error("may not throw more checked exceptions than hidden method");
+              target.error("may not throw more checked exceptions than hidden method");
           }
           // 8.4.6.3
           if(decl.isPublic() && !m.isPublic())
-            error("hiding access modifier error: public method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non public method " + m.signature() + " in " + m.hostType().typeName());
+            target.error("hiding access modifier error: public method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non public method " + m.signature() + " in " + m.hostType().typeName());
           // 8.4.6.3
           if(decl.isProtected() && !(m.isPublic() || m.isProtected()))
-            error("hiding access modifier error: protected method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non (public|protected) method " + m.signature() + " in " + m.hostType().typeName());
+            target.error("hiding access modifier error: protected method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non (public|protected) method " + m.signature() + " in " + m.hostType().typeName());
           // 8.4.6.3
           if((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate())
-            error("hiding access modifier error: default method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by private method " + m.signature() + " in " + m.hostType().typeName());
+            target.error("hiding access modifier error: default method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by private method " + m.signature() + " in " + m.hostType().typeName());
           if(decl.isFinal())
-            error("method " + m.signature() + " in " + hostType().typeName() + " can not hide final method " + decl.signature() + " in " + decl.hostType().typeName());
+            target.error("method " + m.signature() + " in " + hostType().typeName() + " can not hide final method " + decl.signature() + " in " + decl.hostType().typeName());
         }
       }
     }
