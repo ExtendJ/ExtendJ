@@ -9,6 +9,8 @@ import AST.MemberClassDecl;
 import AST.MemberInterfaceDecl;
 import AST.MemberTypeDecl;
 import AST.TypeDecl;
+import AST.ASTNode;
+import AST.ConstructorDecl;
 
 
 class Attributes {
@@ -67,9 +69,6 @@ class Attributes {
       if(inner_class_info_index > 0 && outer_class_info_index > 0 && inner_name_index >  0) {
         CONSTANT_Class_Info inner_class_info = this.p.getCONSTANT_Class_Info(inner_class_info_index);
         CONSTANT_Class_Info outer_class_info = this.p.getCONSTANT_Class_Info(outer_class_info_index);
-        if(inner_class_info == null || outer_class_info == null) {
-          System.out.println("Null");
-        }
         String inner_class_name = inner_class_info.name();
         String outer_class_name = outer_class_info.name();
 
@@ -87,6 +86,9 @@ class Attributes {
             p.println("      Class " + inner_class_name + " is inner");
           typeDecl.setID(inner_name);
           typeDecl.setModifiers(Parser.modifiers(inner_class_access_flags & 0x041f));
+          if((inner_class_access_flags & 0x0008) == 0) {
+            removeEnclosingThis(typeDecl);
+          }
           if (this.p.outerClassInfo != null && this.p.outerClassInfo.name().equals(outer_class_info.name())) {
             MemberTypeDecl m = null;
             if (typeDecl instanceof ClassDecl) {
@@ -130,6 +132,23 @@ class Attributes {
     }
     if(Parser.VERBOSE)
       p.println("    end");
+  }
+
+  private void removeEnclosingThis(ASTNode node) {
+    if(node instanceof ConstructorDecl) {
+      ConstructorDecl d = (ConstructorDecl)node;
+      List list = new List();
+      List old = d.getParameterListNoTransform();
+      for(int j = 1; j < old.getNumChild(); j++)
+        list.add(old.getChildNoTransform(j));
+      d.setParameterList(list);
+      return;
+    }
+    for(int i = 0; i < node.getNumChild(); i++) {
+      ASTNode child = node.getChildNoTransform(i);
+      if(child != null)
+        removeEnclosingThis(child);
+    }
   }
 	
 	private void exceptions() {

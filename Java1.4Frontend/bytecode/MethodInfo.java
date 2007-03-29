@@ -39,7 +39,7 @@ class MethodInfo {
 			return new ConstructorDecl(
 				this.p.modifiers(flags),
 				name,
-        Parser.isInnerClass ? methodDescriptor.parameterListSkipFirst() : methodDescriptor.parameterList(),
+        /*Parser.isInnerClass ? methodDescriptor.parameterListSkipFirst() :*/ methodDescriptor.parameterList(),
 				attributes.exceptionList(),
         new Opt(),
 				new Block()

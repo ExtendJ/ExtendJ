@@ -205,8 +205,10 @@ aspect ClassPath {
         userClasses = Program.getValueForOption("-classpath").split(File.pathSeparator);
       else {
         String s = System.getProperty("java.class.path");
-        if(s != null && s.length() > 0)
+        if(s != null && s.length() > 0) {
+          s = s + File.pathSeparator + "."; // TODO; This should not be necessary
           userClasses = s.split(File.pathSeparator);
+        }
         else
           userClasses = ".".split(File.pathSeparator);
       }
@@ -338,7 +340,7 @@ aspect ClassPath {
           if(Program.verbose())
             System.out.print("Loading .java file: " + fullName + " ");
             
-          CompilationUnit u = program.javaParser.parse(is, pathName + relativeName);
+          CompilationUnit u = program.javaParser.parse(is, fullName);
           is.close();
           is = null;
         
@@ -379,7 +381,8 @@ aspect ClassPath {
       String packageName = index == -1 ? "" : canonicalName.substring(0, index);
       String typeName = canonicalName.substring(index + 1, canonicalName.length());
       Collection c = filesInPackage(packageName);
-      return c != null && c.contains(typeName + fileSuffix());
+      boolean result = c != null && c.contains(typeName + fileSuffix());
+      return result;
     }
     
     private Collection filesInPackage(String packageName) {
@@ -408,13 +411,29 @@ aspect ClassPath {
         if(classFile.isFile()) {
           is = new FileInputStream(classFile);
           age = classFile.lastModified();
-          pathName = classFile.getPath();
+          pathName = classFile.getAbsolutePath();
           relativeName = fileName + fileSuffix();
           fullName = canonicalName;
+          if(fileSuffix().endsWith("java") && !canonicalName.equals(canonicalName(classFile.getPath()))) {
+              return false;
+          }
           return true;
         }
       }
       return false;
+    }
+    
+    private String canonicalName(String fileName) {
+      StringBuffer packageName = new StringBuffer(
+        program.packageExtractor.extractPackageName(fileName)
+      );
+      int begin = fileName.lastIndexOf(File.separatorChar);
+      begin = begin + 1;
+      int end = fileName.lastIndexOf('.');
+      if(end == -1)
+        return fileName;
+      packageName.append(fileName.substring(begin, end));
+      return packageName.toString();
     }
   }
 
@@ -487,7 +506,7 @@ aspect ClassPath {
         File classFile = new File(f);
         if(classFile.isFile()) {
           is = new FileInputStream(classFile);
-          pathName = "";
+          pathName = classFile.getAbsolutePath(); // TODO: check me"";
           relativeName = f;
           fullName = canonicalName;
           sourceFiles.remove(canonicalName);
