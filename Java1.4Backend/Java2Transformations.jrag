@@ -24,13 +24,41 @@ aspect Java2Transformations {
   // remote collection
   public void TypeAccess.java2Transformation() {
     super.java2Transformation();
-    if(type().isNestedType())
-      hostType().addUsedNestedType(type());
+    if(type().elementType().isNestedType())
+      hostType().addUsedNestedType(type().elementType());
   }
   
+  /*
+  public void Dot.java2Transformation() {
+    if(leftSide().isTypeAccess() && rightSide() instanceof ThisAccess) {
+      System.out.println("Replacing " + this);
+      Access a = new ThisAccess("this");
+      TypeDecl targetType = rightSide().type();
+      TypeDecl typeDecl = hostType();
+      while(typeDecl != null && typeDecl != targetType) {
+        a = a.qualifiesAccess(new VarAccess("this$0"));
+        typeDecl = typeDecl.enclosingType();
+      }
+      ASTNode result = replace(this).with(qualifyTailWith(a));
+      result.java2Transformation();
+      return;
+    }
+    super.java2Transformation();
+  }*/
+
   // remote collection / demand driven creation of accessor
   public void MethodAccess.java2Transformation() {
     MethodDecl m = decl();
+
+
+    /*if(!isQualified() && !m.isStatic()) {
+      TypeDecl typeDecl = hostType();
+      while(typeDecl != null && !typeDecl.hasMethod(name()))
+        typeDecl = typeDecl.enclosingType();
+      ASTNode result = replace(this).with(typeDecl.createQualifiedAccess().qualifiesAccess(new ThisAccess("this")).qualifiesAccess(new MethodAccess(name(), getArgList())));
+      result.java2Transformation();
+      return;
+    }*/
     
     if(m.isPrivate() && !hostType().hasMethod(name())) {
       /* Access to private methods in enclosing types:
@@ -42,7 +70,8 @@ aspect Java2Transformations {
       2) The method is always invoked using INVOKESTATIC
       3) The flags must indicate that the method is static and package private
       */
-      replace(this).with(decl().createAccessor().createBoundAccess(getArgList()));
+      ASTNode result = replace(this).with(decl().createAccessor().createBoundAccess(getArgList()));
+      //result.java2Transformation();
       return;
     }
     else if(!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {

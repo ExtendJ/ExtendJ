@@ -29,7 +29,7 @@ aspect LocalNum {
     throw new Error("Unsupported operation resultSaveLocalNum");
   }
 
-  syn lazy int MethodDecl.resultOffset() = type().isVoid() ? 0 : 1;
+  syn lazy int MethodDecl.resultOffset() = type().isVoid() ? 0 : type().variableSize();
   
   eq MethodDecl.getBlock().localNum() = offsetAfterParameters() + 
       resultOffset();
@@ -109,12 +109,22 @@ aspect LocalNum {
       return getStmt(index-1).localNum() + ((VariableDeclaration)getStmt(index-1)).type().variableSize();
     return getStmt(index-1).localNum();
   }
+  eq SwitchStmt.getCase(int index).localNum() = index == 0 ? localNum() : getCase(index-1).lastLocalNum();
+
+  syn int Case.lastLocalNum() {
+    if(getNumStmt() == 0) return localNum();
+    Stmt stmt = getStmt(getNumStmt()-1);
+    if(stmt instanceof VariableDeclaration)
+      return stmt.localNum() + ((VariableDeclaration)stmt).type().variableSize();
+    else
+      return stmt.localNum();
+  }
 
   eq TryStmt.getFinally().localNum() = localNum() + 2;
 
   eq CatchClause.getBlock().localNum() = getParameter().localNum() + getParameter().type().variableSize();
 
-  eq SynchronizedStmt.getBlock().localNum() = localNum() + 1;
+  eq SynchronizedStmt.getBlock().localNum() = localNum() + 3;
 
   syn int TypeDecl.variableSize() = 0;
   eq ReferenceType.variableSize() = 1;
