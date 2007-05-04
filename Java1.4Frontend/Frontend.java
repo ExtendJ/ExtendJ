@@ -61,6 +61,6 @@ public abstract class Frontend {
     return "Java1.4Frontend";
   }
   protected String version() {
-    return "R20060915";
+    return "R20070504";
   }
 }
