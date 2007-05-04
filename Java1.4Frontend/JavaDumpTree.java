@@ -46,7 +46,7 @@ class JavaDumpTree extends Frontend {
               String s = (String)iter2.next();
               System.out.println(s);
             }
-            unit.dumpTree(0);
+            System.out.println(unit.dumpTree());
             return false;
           }
         }
@@ -56,7 +56,7 @@ class JavaDumpTree extends Frontend {
       return false;
     }
 
-    program.dumpTree();
+    System.out.println(program.dumpTree());
     return true;
   }
 
