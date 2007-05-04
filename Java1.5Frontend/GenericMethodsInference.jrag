@@ -1,6 +1,33 @@
 import java.util.*;
 
 aspect GenericMethodsInference {
+  syn boolean TypeDecl.involvesTypeParameters() = false;
+  eq TypeVariable.involvesTypeParameters() = true;
+  eq ArrayDecl.involvesTypeParameters() = componentType().involvesTypeParameters();
+  eq ParClassDecl.involvesTypeParameters() {
+    for(int i = 0; i < getNumArgument(); i++)
+      if(getArgument(i).type().involvesTypeParameters())
+        return true;
+    return false;
+  }
+  eq ParInterfaceDecl.involvesTypeParameters() {
+    for(int i = 0; i < getNumArgument(); i++)
+      if(getArgument(i).type().involvesTypeParameters())
+        return true;
+    return false;
+  }
+  eq WildcardExtendsType.involvesTypeParameters() = extendsType().involvesTypeParameters();
+  eq WildcardSuperType.involvesTypeParameters() = superType().involvesTypeParameters();
+
+  inh TypeDecl Expr.assignConvertedType();
+  eq VariableDeclaration.getInit().assignConvertedType() = type();
+  eq FieldDeclaration.getInit().assignConvertedType() = type();
+  eq AssignSimpleExpr.getSource().assignConvertedType() = getDest().type();
+  eq ArrayInit.getInit().assignConvertedType() = declType().componentType();
+  eq ReturnStmt.getResult().assignConvertedType() = returnType();
+  eq Program.getCompilationUnit().assignConvertedType() = typeNull();
+
+
   syn boolean MethodAccess.nonParMethodAccess() = true;
   eq ParMethodAccess.nonParMethodAccess() = false;
 
@@ -14,7 +41,7 @@ aspect GenericMethodsInference {
       for(Iterator iter = arguments.iterator(); iter.hasNext(); ) {
         TypeDecl typeDecl = (TypeDecl)iter.next();
         if(typeDecl == null) typeDecl = typeObject();
-        list.add(typeDecl.createQualifiedAccess());
+        list.add(typeDecl.createBoundAccess());
       }
       return new ParMethodAccess(
         (List)getArgList().fullCopy(),
@@ -25,7 +52,7 @@ aspect GenericMethodsInference {
   }
 
   private Collection MethodAccess.computeConstraints() {
-    System.err.println("\n\n\nCompute Constraints");
+    //System.err.println("\n\n\nCompute Constraints");
     GenericMethodDecl decl = (GenericMethodDecl)decl();
     Constraints c = new Constraints();
     for(int i = 0; i < decl.getNumTypeParameter(); i++) {
@@ -36,41 +63,53 @@ aspect GenericMethodsInference {
     for(int i = 0; i < getNumArg(); i++) {
       TypeDecl F = decl.getParameter(i).type();
       TypeDecl A = getArg(i).type();
-      System.err.println("Processing argument " + i + ", Formal: " + F.fullName() + ", Argument: " + A.fullName());
-      System.out.println("Is Argument " + A.getClass().getName() + " subtype of Formal " + F.getClass().getName() + "? " + A.instanceOf(F));
+      //System.err.println("Processing argument " + i + ", Formal: " + F.fullName() + ", Argument: " + A.fullName());
+      //System.out.println("Is Argument " + A.getClass().getName() + " subtype of Formal " + F.getClass().getName() + "? " + A.instanceOf(F));
       if(A == F) {
         c.constraintEqual(A, F);
       }
       else if(A.methodInvocationConversionTo(F)) {
-        System.err.println("Assign convertible to");
+        //System.err.println("Assign convertible to");
         c.convertibleTo(A, F);
       }
       else if(F.methodInvocationConversionTo(A)) {
-        System.err.println("Assign convertible from");
+        //System.err.println("Assign convertible from");
         c.convertibleFrom(A, F);
       }
     }
     
-    c.printConstraints();
-    System.err.println("Resolving equality constraints");
+    //c.printConstraints();
+    //System.err.println("Resolving equality constraints");
     c.resolveEqualityConstraints();
-    c.printConstraints();
+    //c.printConstraints();
 
-    System.err.println("Resolving supertype constraints");
+    //System.err.println("Resolving supertype constraints");
     c.resolveSupertypeConstraints();
-    c.printConstraints();
+    //c.printConstraints();
 
-    System.err.println("Resolving unresolved type arguments");
+    //System.err.println("Resolving unresolved type arguments");
     c.resolveBounds();
-    c.printConstraints();
+    //c.printConstraints();
 
-    System.err.println("Arguments: ");
+    TypeDecl S = assignConvertedType();
+    TypeDecl R = decl.type();
+    // TODO: replace all uses of type variables in R with their inferred types
+    TypeDecl Rprime = R;
+    if(!R.isVoid()) {
+      c.convertibleFrom(S, R);
+      // TODO: add constrint S >> Rprime provided R is not void
+    }
+    c.resolveEqualityConstraints();
+    c.resolveSupertypeConstraints();
+    c.resolveBounds();
+
+    //System.err.println("Arguments: ");
     for(Iterator iter = c.typeArguments().iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl)iter.next();
-      System.err.println("  " + (t != null ? t.fullName() : "Unresolved"));
+      //System.err.println("  " + (t != null ? t.fullName() : "Unresolved"));
     }
 
-    System.err.println("End Compute Constraints\n\n");
+    //System.err.println("End Compute Constraints\n\n");
     return c.typeArguments();
   }
 
@@ -91,7 +130,7 @@ aspect GenericMethodsInference {
 
     public void addTypeVariable(TypeVariable T) {
       if(!typeVariables.contains(T)) {
-        System.out.println("Adding type variable " + T.fullName());
+        //System.out.println("Adding type variable " + T.fullName());
         typeVariables.add(T);
         constraintsMap.put(T, new ConstraintSet());
       }
@@ -197,7 +236,7 @@ aspect GenericMethodsInference {
             EC = intersect(EC, EST);
           }
           TypeDecl MEC = EC;
-          System.err.println(" MEC(" + T.fullName() + ") = " + MEC.fullName());
+          //System.err.println(" MEC(" + T.fullName() + ") = " + MEC.fullName());
           set.typeArgument = MEC;
         }
       }
@@ -210,7 +249,7 @@ aspect GenericMethodsInference {
       else if(t2.instanceOf(t1))
         return t2;
       else {
-        Set set = new HashSet();
+        HashSet set = new HashSet();
         for(Iterator iter = directSupertypes(t1).iterator(); iter.hasNext(); ) {
           TypeDecl t1Super = (TypeDecl)iter.next();
           set.add(intersect(t1Super, t2));
@@ -229,10 +268,10 @@ aspect GenericMethodsInference {
       }
     }
 
-    private Set directSupertypes(TypeDecl t) {
+    private HashSet directSupertypes(TypeDecl t) {
       if(t instanceof ClassDecl) {
         ClassDecl type = (ClassDecl)t;
-        Set set = new HashSet();
+        HashSet set = new HashSet();
         if(type.hasSuperclass())
           set.add(type.superclass());
         for(int i = 0; i < type.getNumImplements(); i++)
@@ -241,20 +280,37 @@ aspect GenericMethodsInference {
       }
       else if(t instanceof InterfaceDecl) {
         InterfaceDecl type = (InterfaceDecl)t;
-        Set set = new HashSet();
+        HashSet set = new HashSet();
         for(int i = 0; i < type.getNumSuperInterfaceId(); i++)
           set.add(type.getSuperInterfaceId(i).type());
         return set;
       }
       else if(t instanceof TypeVariable) {
         TypeVariable type = (TypeVariable)t;
-        Set set = new HashSet();
+        HashSet set = new HashSet();
         for(int i = 0; i < type.getNumTypeBound(); i++)
           set.add(type.getTypeBound(i).type());
         return set;
       }
       else
         throw new Error("Operation not supported for " + t.fullName() + ", " + t.getClass().getName());
+    }
+
+    private HashSet parameterizedSupertypes(TypeDecl t) {
+      HashSet result = new HashSet();
+      addParameterizedSupertypes(t, new HashSet(), result);
+      return result;
+    }
+    private void addParameterizedSupertypes(TypeDecl t, HashSet processed, HashSet result) {
+      if(!processed.contains(t)) {
+        processed.add(t);
+        if(t.isParameterizedType())
+          result.add(t);
+        for(Iterator iter = directSupertypes(t).iterator(); iter.hasNext(); ) {
+          TypeDecl typeDecl = (TypeDecl)iter.next();
+          addParameterizedSupertypes(typeDecl, processed, result);
+        }
+      }
     }
 
     public Collection typeArguments() {
@@ -270,44 +326,61 @@ aspect GenericMethodsInference {
     private void addSupertypeConstraint(TypeDecl T, TypeDecl A) {
       ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
       set.supertypeConstraints.add(A);
-      System.out.println(T.name() + " :> " + A.fullName());
+      //System.out.println(T.name() + " :> " + A.fullName());
     }
     private void addSubtypeConstraint(TypeDecl T, TypeDecl A) {
       ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
       set.subtypeConstraints.add(A);
-      System.out.println(T.name() + " <: " + A.fullName());
+      //System.out.println(T.name() + " <: " + A.fullName());
     }
     private void addEqualConstraint(TypeDecl T, TypeDecl A) {
       ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
       set.equaltypeConstraints.add(A);
-      System.out.println(T.name() + " = " + A.fullName());
+      //System.out.println(T.name() + " = " + A.fullName());
     }
     
     public void convertibleTo(TypeDecl A, TypeDecl F) {
-      System.out.println("Convertible to called with " + A.fullName() + " and " + F.fullName());
+      System.out.println("Convertible to called with " + A.fullName() + "(" + A.getClass().getName() + ")" + " and " + F.fullName() + "(" + F.getClass().getName() + ")");
+      // If F does not involve a type parameter Tj then con constraint is implied on Tj
+      if(!F.involvesTypeParameters())
+        return;
+      // If A is the type of null, no constraint is implied on Tj.
+      if(A.isNull())
+        return;
+      // If A is a primitive type, then A is converted to a reference type U via boxing conversion
+      // and this algorithm is applied recursively to the constraint U << F.
       if(A.isPrimitive()) {
-        // TODO: box and apply reursively on result
+        TypeDecl U = A.boxed();
+        convertibleTo(U, F);
       }
-      else if(F.isTypeVariable()) {
-        TypeVariable typeVariable = null;
+      // If F = Tj, then the constrint Tj :> A is implied
+      else if(F instanceof TypeVariable) {
+        TypeVariable Tj = null;
         for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
           TypeVariable t = (TypeVariable)iter.next();
           if(t == F)
-            typeVariable = (TypeVariable)F;
+            Tj = (TypeVariable)F;
           else if(t.name().equals(F.name())) {
-            System.out.println("Found other type variable with the same name");
-            typeVariable = t;
+            //System.out.println("Found other type variable with the same name");
+            Tj = t;
           }
         }
-        if(typeVariable != null)
-          addSupertypeConstraint(typeVariable, A);
+        if(Tj != null)
+          addSupertypeConstraint(Tj, A);
       }
+      // If F = U[], where the type U involves Tj, then if A is an array type V[]
+      // or a type variable with an upper bound that is an array type V[],
+      // where V is a reference type, this algorithm is applied recursively
+      // to the constraint V << U
       else if(F.isArrayDecl()) {
-        System.out.println("convertibleTo array decl");
+        //System.out.println("convertibleTo array decl");
         TypeDecl U = ((ArrayDecl)F).componentType();
+        if(!U.involvesTypeParameters())
+          return;
         if(A.isArrayDecl()) {
           TypeDecl V = ((ArrayDecl)A).componentType();
-          convertibleTo(V, U);
+          if(V.isReferenceType())
+            convertibleTo(V, U);
         }
         else if(A.isTypeVariable()) {
           TypeVariable t = (TypeVariable)A;
@@ -320,9 +393,53 @@ aspect GenericMethodsInference {
           }
         }
       }
-      // TODO: Bullet 4-6 (GenericTypes and Wildcards)
+      else if(F instanceof ParTypeDecl) {
+        for(Iterator iter = parameterizedSupertypes(A).iterator(); iter.hasNext(); ) {
+          ParTypeDecl PF = (ParTypeDecl)F;
+          ParTypeDecl PA = (ParTypeDecl)iter.next();
+          if(PF.genericDecl() == PA.genericDecl()) {
+            for(int i = 0; i < PF.getNumArgument(); i++) {
+              TypeDecl T = PF.getArgument(i).type();
+              if(T.involvesTypeParameters()) {
+                if(!T.isWildcard()) {
+                  TypeDecl U = T;
+                  TypeDecl V = PA.getArgument(i).type();
+                  constraintEqual(V, U);
+                }
+                else if(T instanceof WildcardExtendsType) {
+                  TypeDecl U = ((WildcardExtendsType)T).getAccess().type();
+                  TypeDecl S = PA.getArgument(i).type();
+                  if(!S.isWildcard()) {
+                    TypeDecl V = S;
+                    convertibleTo(V, U);
+                  }
+                  else if(S instanceof WildcardExtendsType) {
+                    TypeDecl V = ((WildcardExtendsType)S).getAccess().type();
+                    convertibleTo(V, U);
+                  }
+                }
+                else if(T instanceof WildcardSuperType) {
+                  TypeDecl U = ((WildcardSuperType)T).getAccess().type();
+                  TypeDecl S = PA.getArgument(i).type();
+                  if(!S.isWildcard()) {
+                    TypeDecl V = S;
+                    convertibleFrom(V, U);
+                  }
+                  else if(S instanceof WildcardSuperType) {
+                    TypeDecl V = ((WildcardSuperType)S).getAccess().type();
+                    convertibleFrom(V, U);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
+
+
     public void convertibleFrom(TypeDecl A, TypeDecl F) {
+      System.out.println("ConvertibleFrom called with " + A.fullName() + "(" + A.getClass().getName() + ")" + " and " + F.fullName() + "(" + F.getClass().getName() + ")");
       if(typeVariables.contains(F)) {
         addSubtypeConstraint(F, A);
       }
@@ -343,11 +460,61 @@ aspect GenericMethodsInference {
           }
         }
       }
+      else if(F instanceof ParTypeDecl) {
+        for(Iterator iter = parameterizedSupertypes(A).iterator(); iter.hasNext(); ) {
+          ParTypeDecl PF = (ParTypeDecl)F;
+          ParTypeDecl PA = (ParTypeDecl)iter.next();
+          ParTypeDecl H = PA;
+          ParTypeDecl G = PF;
+          if(H.genericDecl() != G.genericDecl()) {
+            // TODO: check me!
+          }
+          if(PF.genericDecl() == PA.genericDecl()) {
+            for(int i = 0; i < PF.getNumArgument(); i++) {
+              TypeDecl T = PF.getArgument(i).type();
+              if(T.involvesTypeParameters()) {
+                if(!T.isWildcard()) {
+                  // If F has the form G<U> where U is a type expression that involves T
+                  TypeDecl U = T;
+                  TypeDecl W = PA.getArgument(i).type();
+                  constraintEqual(W, U);
+                }
+                else if(T instanceof WildcardExtendsType) {
+                  TypeDecl U = ((WildcardExtendsType)T).getAccess().type();
+                  TypeDecl S = PA.getArgument(i).type();
+                  if(!S.isWildcard()) {
+                    TypeDecl W = S;
+                    convertibleTo(W, U);
+                  }
+                  else if(S instanceof WildcardExtendsType) {
+                    TypeDecl V = ((WildcardExtendsType)S).getAccess().type();
+                    convertibleTo(V, U);
+                  }
+                }
+                else if(T instanceof WildcardSuperType) {
+                  TypeDecl U = ((WildcardSuperType)T).getAccess().type();
+                  TypeDecl S = PA.getArgument(i).type();
+                  if(!S.isWildcard()) {
+                    TypeDecl V = S;
+                    convertibleFrom(V, U);
+                  }
+                  else if(S instanceof WildcardSuperType) {
+                    TypeDecl V = ((WildcardSuperType)S).getAccess().type();
+                    convertibleFrom(V, U);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
       // TODO: Bullet 4-6 (GenericTypes and Wildcards)
       
     }
     public void constraintEqual(TypeDecl A, TypeDecl F) {
+      System.out.println("ConstraintEqual called with " + A.fullName() + "(" + A.getClass().getName() + ")" + " and " + F.fullName() + "(" + F.getClass().getName() + ")");
       if(typeVariables.contains(F)) {
+        System.out.println("Add equal constraint");
         addEqualConstraint(F, A);
       }
       else if(F.isArrayDecl()) {
@@ -367,7 +534,42 @@ aspect GenericMethodsInference {
           }
         }
       }
-      // TODO: Bullet 4-6 (GenericTypes and Wildcards)
+      else if(F instanceof ParTypeDecl) {
+        // TODO: should look at supertypes of A as well
+        if(A instanceof ParTypeDecl) {
+          ParTypeDecl PF = (ParTypeDecl)F;
+          ParTypeDecl PA = (ParTypeDecl)A;
+          if(PF.genericDecl() == PA.genericDecl()) {
+            System.out.println("CompareEqual " + PF.typeName() + " to " + PA.typeName());
+            for(int i = 0; i < PF.getNumArgument(); i++) {
+              TypeDecl T = PF.getArgument(i).type();
+              if(T.involvesTypeParameters()) {
+                if(!(T instanceof WildcardType)) {
+                  TypeDecl U = T;
+                  TypeDecl V = PA.getArgument(i).type();
+                  constraintEqual(V, U);
+                }
+                else if(T instanceof WildcardExtendsType) {
+                  TypeDecl U = ((WildcardExtendsType)T).getAccess().type();
+                  TypeDecl S = PA.getArgument(i).type();
+                  if(S instanceof WildcardExtendsType) {
+                    TypeDecl V = ((WildcardExtendsType)S).getAccess().type();
+                    constraintEqual(V, U);
+                  }
+                }
+                else if(T instanceof WildcardSuperType) {
+                  TypeDecl U = ((WildcardSuperType)T).getAccess().type();
+                  TypeDecl S = PA.getArgument(i).type();
+                  if(S instanceof WildcardSuperType) {
+                    TypeDecl V = ((WildcardSuperType)S).getAccess().type();
+                    constraintEqual(V, U);
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

@@ -56,7 +56,7 @@ class CONSTANT_Class_Info extends CONSTANT_Info {
 		    result = new ParseName(s);
       }
       else {
-			  result = new Dot(result, new ParseName(s));
+			  result = result.qualifiesAccess(new ParseName(s));
       }
       index = pos;
     } while(pos != name.length());

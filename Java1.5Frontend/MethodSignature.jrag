@@ -1,5 +1,5 @@
 aspect MethodSignature {
-    refine LookupMethod eq MethodAccess.decls() {
+  refine LookupMethod eq MethodAccess.decls() {
     SimpleSet potentiallyApplicable = SimpleSet.emptySet;
     // select potentially applicable methods
     for(Iterator iter = lookupMethod(name()).iterator(); iter.hasNext(); ) {
@@ -39,7 +39,69 @@ aspect MethodSignature {
     return maxSpecific;
   }
 
-  private SimpleSet MethodAccess.mostSpecific(SimpleSet maxSpecific, MethodDecl decl) {
+  refine LookupConstructor eq ClassInstanceExpr.decls() {
+    TypeDecl typeDecl = hasTypeDecl() ? getTypeDecl() : getAccess().type();
+    return chooseConstructor(typeDecl.constructors(), getArgList());
+  }
+  refine LookupConstructor eq ConstructorAccess.decls() {
+    return chooseConstructor(lookupConstructor(), getArgList());
+  }
+  refine LookupConstructor eq SuperConstructorAccess.decls() {
+    Collection c = hasPrevExpr() && !prevExpr().isTypeAccess() ?
+      hostType().lookupSuperConstructor() : lookupSuperConstructor();
+    return chooseConstructor(c, getArgList());
+  }
+
+  protected static SimpleSet Expr.chooseConstructor(Collection constructors, List argList) {
+    SimpleSet potentiallyApplicable = SimpleSet.emptySet;
+    // select potentially applicable constructors
+    for(Iterator iter = constructors.iterator(); iter.hasNext(); ) {
+      ConstructorDecl decl = (ConstructorDecl)iter.next();
+      if(decl.potentiallyApplicable(argList))
+        potentiallyApplicable = potentiallyApplicable.add(decl);
+    }
+    // first phase
+    SimpleSet maxSpecific = SimpleSet.emptySet;
+    for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+      ConstructorDecl decl = (ConstructorDecl)iter.next();
+      if(decl.applicableBySubtyping(argList))
+        maxSpecific = mostSpecific(maxSpecific, decl);
+    }
+
+    // second phase
+    if(maxSpecific.isEmpty()) {
+      for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+        ConstructorDecl decl = (ConstructorDecl)iter.next();
+        if(decl.applicableByMethodInvocationConversion(argList))
+          maxSpecific = mostSpecific(maxSpecific, decl);
+      }
+    }
+
+    // third phase
+    if(maxSpecific.isEmpty()) {
+      for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+        ConstructorDecl decl = (ConstructorDecl)iter.next();
+        if(decl.isVariableArity() && decl.applicableVariableArity(argList))
+          maxSpecific = mostSpecific(maxSpecific, decl);
+      }
+    }
+    return maxSpecific;
+  }
+
+
+  protected static SimpleSet Expr.mostSpecific(SimpleSet maxSpecific, ConstructorDecl decl) {
+    if(maxSpecific.isEmpty())
+      maxSpecific = maxSpecific.add(decl);
+    else {
+      if(decl.moreSpecificThan((ConstructorDecl)maxSpecific.iterator().next()))
+        maxSpecific = SimpleSet.emptySet.add(decl);
+      else if(!((ConstructorDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+        maxSpecific = maxSpecific.add(decl);
+    }
+    return maxSpecific;
+  }
+
+  private static SimpleSet MethodAccess.mostSpecific(SimpleSet maxSpecific, MethodDecl decl) {
     if(maxSpecific.isEmpty())
       maxSpecific = maxSpecific.add(decl);
     else {
@@ -60,12 +122,34 @@ aspect MethodSignature {
     return true;
   }
 
+  syn boolean ConstructorDecl.applicableBySubtyping(List argList) {
+    if(getNumParameter() != argList.getNumChild())
+      return false;
+    for(int i = 0; i < getNumParameter(); i++) {
+      TypeDecl arg = ((Expr)argList.getChild(i)).type();
+      if(!arg.instanceOf(getParameter(i).type()))
+        return false;
+    }
+    return true;
+  }
+
   syn boolean MethodAccess.applicableByMethodInvocationConversion(MethodDecl m) {
     if(m.getNumParameter() != getNumArg())
       return false;
     for(int i = 0; i < m.getNumParameter(); i++)
       if(!getArg(i).type().methodInvocationConversionTo(m.getParameter(i).type()))
         return false;
+    return true;
+  }
+
+  syn boolean ConstructorDecl.applicableByMethodInvocationConversion(List argList) {
+    if(getNumParameter() != argList.getNumChild())
+      return false;
+    for(int i = 0; i < getNumParameter(); i++) {
+      TypeDecl arg = ((Expr)argList.getChild(i)).type();
+      if(!arg.methodInvocationConversionTo(getParameter(i).type()))
+        return false;
+    }
     return true;
   }
 
@@ -76,6 +160,20 @@ aspect MethodSignature {
     for(int i = m.getNumParameter() - 1; i < getNumArg(); i++)
       if(!getArg(i).type().methodInvocationConversionTo(m.lastParameter().type().componentType()))
         return false;
+    return true;
+  }
+
+  syn boolean ConstructorDecl.applicableVariableArity(List argList) {
+    for(int i = 0; i < getNumParameter() - 1; i++) {
+      TypeDecl arg = ((Expr)argList.getChild(i)).type();
+      if(!arg.methodInvocationConversionTo(getParameter(i).type()))
+        return false;
+    }
+    for(int i = getNumParameter() - 1; i < argList.getNumChild(); i++) {
+      TypeDecl arg = ((Expr)argList.getChild(i)).type();
+      if(!arg.methodInvocationConversionTo(lastParameter().type().componentType()))
+        return false;
+    }
     return true;
   }
 
@@ -109,6 +207,15 @@ aspect MethodSignature {
   }
   syn int MethodDecl.arity() = getNumParameter();
   syn int MethodAccess.arity() = getNumArg();
+
+  syn boolean ConstructorDecl.potentiallyApplicable(List argList) {
+    if(isVariableArity() && !(argList.getNumChild() >= arity()-1))
+      return false;
+    if(!isVariableArity() && !(arity() == argList.getNumChild()))
+      return false;
+    return true;
+  }
+  syn int ConstructorDecl.arity() = getNumParameter();
 
   // 15.12.3
   // refine old type checking to be valid when using variable arity parameters

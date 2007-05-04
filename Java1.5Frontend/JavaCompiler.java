@@ -26,16 +26,25 @@ class JavaCompiler {
     program.initPackageExtractor(new parser.JavaScanner());
 
     program.initOptions();    
+    program.addKeyOption("-version");
+    program.addKeyOption("-print");
+    program.addKeyOption("-g");
+    program.addKeyOption("-g:none");
+    program.addKeyOption("-g:lines,vars,source");
+    program.addKeyOption("-nowarn");
+    program.addKeyOption("-verbose");
+    program.addKeyOption("-deprecation");
     program.addKeyValueOption("-classpath");
     program.addKeyValueOption("-sourcepath");
     program.addKeyValueOption("-bootclasspath");
     program.addKeyValueOption("-extdirs");
     program.addKeyValueOption("-d");
-    program.addKeyOption("-verbose");
-    program.addKeyOption("-version");
+    program.addKeyValueOption("-encoding");
+    program.addKeyValueOption("-source");
+    program.addKeyValueOption("-target");
     program.addKeyOption("-help");
-    program.addKeyOption("-g");
-    
+    program.addKeyOption("-O");
+
     program.addOptions(args);
     Collection files = program.files();
     
@@ -47,7 +56,8 @@ class JavaCompiler {
       printUsage();
       return false;
     }
-    
+
+    printVersion();
     try {
       for(Iterator iter = files.iterator(); iter.hasNext(); ) {
         String name = (String)iter.next();

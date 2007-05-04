@@ -48,6 +48,54 @@ class Attributes {
 		return isSynthetic;
 	}
 
+    // 4.8.15.1
+    protected ElementValue readElementValue() {
+      char c = (char)p.u1();
+      switch (c) {
+        case 'e':
+          int type_name_index = this.p.u2();
+          String type_name = this.p.getCONSTANT_Utf8_Info(type_name_index).string();
+          // remove inital L and trailing ;
+          Access typeAccess = this.p.fromClassName(type_name.substring(1, type_name.length() - 1));
+          int const_name_index = this.p.u2();
+          String const_name = this.p.getCONSTANT_Utf8_Info(const_name_index).string();
+          return new ElementConstantValue(typeAccess.qualifiesAccess(new VarAccess(const_name)));
+        case 'B': case 'C': case 'D': case 'F': case 'I': case 'J': case 'S': case 'Z': case 's':
+          int const_value_index = p.u2();
+          Expr e = this.p.getCONSTANT_Info(const_value_index).expr();
+          return new ElementConstantValue(e);
+        case 'c':
+          int class_info_index = p.u2();
+          String descriptor = this.p.getCONSTANT_Utf8_Info(class_info_index).string();
+          e = new TypeDescriptor(p, descriptor).type();
+          return new ElementConstantValue(e);
+        case '@':
+          return new ElementAnnotationValue(readAnnotation());
+        case '[':
+          int index = p.u2();
+          List list = new List();
+          for(int i = 0; i < index; i++) 
+            list.add(readElementValue());
+          return new ElementArrayValue(list);
+        default:
+          throw new Error("AnnotationDefault tag " + c + " not supported");
+      }
+    }
+ 
+    // 4.8.15
+    protected Annotation readAnnotation() {
+      Access typeAccess = new FieldDescriptor(p, "").type();
+      int num_element_value_pairs = p.u2();
+      List list = new List();
+      for(int i = 0; i < num_element_value_pairs; i++) {
+        int element_name_index = p.u2();
+        String element_name = p.getCONSTANT_Utf8_Info(element_name_index).string();
+        ElementValue element_value = readElementValue();
+        list.add(new ElementValuePair(element_name, element_value));
+      }
+      return new Annotation("Annotation", typeAccess, list);
+    }
+
   public static class FieldAttributes extends Attributes {
 	  protected CONSTANT_Info constantValue;
     public FieldAttributes(Parser p) {
@@ -123,50 +171,6 @@ class Attributes {
       elementValue = readElementValue();
     }
  
-    // 4.8.15.1
-    private ElementValue readElementValue() {
-      char c = (char)p.u1();
-      switch (c) {
-        case 'e':
-          Access typeAccess = new CONSTANT_Class_Info(this.p).access();
-          int const_name_index = this.p.u2();
-          String const_name = this.p.getCONSTANT_Utf8_Info(const_name_index).string();
-          return new ElementConstantValue(typeAccess.qualifiesAccess(new VarAccess(const_name)));
-        case 'B': case 'C': case 'D': case 'F': case 'I': case 'J': case 'S': case 'Z': case 's':
-          int const_value_index = p.u2();
-          Expr e = this.p.getCONSTANT_Info(const_value_index).expr();
-          return new ElementConstantValue(e);
-        case 'c':
-          int class_info_index = p.u2();
-          String descriptor = this.p.getCONSTANT_Utf8_Info(class_info_index).string();
-          e = new TypeDescriptor(p, descriptor).type();
-          return new ElementConstantValue(e);
-        case '@':
-          return new ElementAnnotationValue(readAnnotation());
-        case '[':
-          int index = p.u2();
-          List list = new List();
-          for(int i = 0; i < index; i++) 
-            list.add(readElementValue());
-          return new ElementArrayValue(list);
-        default:
-          throw new Error("AnnotationDefault tag " + c + " not supported");
-      }
-    }
- 
-    // 4.8.15
-    private Annotation readAnnotation() {
-      Access typeAccess = new FieldDescriptor(p, "").type();
-      int num_element_value_pairs = p.u2();
-      List list = new List();
-      for(int i = 0; i < num_element_value_pairs; i++) {
-        int element_name_index = p.u2();
-        String element_name = p.getCONSTANT_Utf8_Info(element_name_index).string();
-        ElementValue element_value = readElementValue();
-        list.add(new ElementValuePair(element_name, elementValue));
-      }
-      return new Annotation("Annotation", typeAccess, list);
-    }
 
 	
   }
@@ -193,6 +197,22 @@ class Attributes {
         Signatures.ClassSignature classSignature = new Signatures.ClassSignature(s);
         if(classSignature.hasFormalTypeParameters())
           typeDecl = typeDecl.makeGeneric(classSignature);
+      }
+      else if(attribute_name.equals("RuntimeVisibleAnnotations")) {
+        int num_annotations = p.u2();
+        //System.out.println("RuntimeVisibleAnnotations: " + num_annotations);
+        for(int j = 0; j < num_annotations; j++) {
+          Annotation a = readAnnotation();
+          typeDecl.getModifiers().addModifier(a);
+        }
+      }
+      else if(attribute_name.equals("RuntimeInvisibleAnnotation")) {
+        int num_annotations = p.u2();
+        //System.out.println("RuntimeInvisibleAnnotations: " + num_annotations);
+        for(int j = 0; j < num_annotations; j++) {
+          Annotation a = readAnnotation();
+          typeDecl.getModifiers().addModifier(a);
+        }
       }
       else {
         super.processAttribute(attribute_name, attribute_length);
@@ -231,7 +251,7 @@ class Attributes {
   
           if (inner_class_info.name().equals(p.classInfo.name())) {
             if(Parser.VERBOSE)
-              p.println("      Class " + inner_class_name + " is inner");
+              p.println("      Class " + inner_class_name + " is inner (" + inner_name + ")");
             typeDecl.setID(inner_name);
             typeDecl.setModifiers(Parser.modifiers(inner_class_access_flags & 0x041f));
             if (this.p.outerClassInfo != null && this.p.outerClassInfo.name().equals(outer_class_info.name())) {

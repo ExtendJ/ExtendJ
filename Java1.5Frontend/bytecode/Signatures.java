@@ -147,10 +147,14 @@ public class Signatures {
   TypeVariable formalTypeParameter() {
     String id = identifier();
     List bounds = new List();
-    bounds.add(classBound());
+    Access classBound = classBound();
+    if(classBound != null)
+      bounds.add(classBound);
     while(next(":")) {
       bounds.add(interfaceBound());
     }
+    if(bounds.getNumChild() == 0)
+      bounds.add(new TypeAccess("java.lang", "Object"));
     return new TypeVariable(new Modifiers(new List()), id, new List(), bounds);
   }
 
@@ -160,7 +164,8 @@ public class Signatures {
       return fieldTypeSignature();
     }
     else {
-      return new TypeAccess("java.lang", "Object");
+      return null;
+      //return new TypeAccess("java.lang", "Object");
     }
   }
 

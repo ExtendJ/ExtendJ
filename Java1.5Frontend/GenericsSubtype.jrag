@@ -30,9 +30,16 @@ aspect GenericsSubtype {
   // 5.1.10 Capture Conversion
   // TODO:
 
-
-
-
+  eq WildcardType.subtype(TypeDecl type) = type.supertypeWildcard(this);
+  public boolean TypeDecl.supertypeWildcard(WildcardType type) {
+    return false;
+  }
+  public boolean TypeVariable.supertypeWildcard(WildcardType type) {
+    return typeObject().subtype(this);
+  }
+  public boolean WildcardExtendsType.supertypeWildcard(WildcardType type) {
+    return typeObject().subtype(this);
+  }
 
   eq WildcardExtendsType.subtype(TypeDecl type) = type.supertypeWildcardExtends(this);
   public boolean TypeDecl.supertypeWildcardExtends(WildcardExtendsType type) {
@@ -44,10 +51,20 @@ aspect GenericsSubtype {
   public boolean TypeVariable.supertypeWildcardExtends(WildcardExtendsType type) {
     return type.extendsType().subtype(this);
   }
+  public boolean WildcardType.supertypeWildcardExtends(WildcardExtendsType type) {
+    return true;
+  }
   public boolean WildcardExtendsType.supertypeTypeVariable(TypeVariable type) {
     return type.subtype(extendsType());
   }
-  
+
+  public boolean ClassDecl.supertypeWildcardExtends(WildcardExtendsType type) {
+    return type.extendsType() == this;
+  }
+  public boolean InterfaceDecl.supertypeWildcardExtends(WildcardExtendsType type) {
+    return type.extendsType() == this;
+  }
+
   eq WildcardSuperType.subtype(TypeDecl type) = type.supertypeWildcardSuper(this);
   public boolean TypeDecl.supertypeWildcardSuper(WildcardSuperType type) {
     return false;
@@ -63,7 +80,7 @@ aspect GenericsSubtype {
   }
   
   syn boolean TypeDecl.isWildcard() = false;
-  eq WildcardType.isWildcard() = true;
+  eq AbstractWildcardType.isWildcard() = true;
 
   syn boolean TypeDecl.wildcardSubtype(TypeDecl typeDecl) circular [true] {
     if(typeDecl == this) return true;
@@ -75,6 +92,23 @@ aspect GenericsSubtype {
       WildcardSuperType other = (WildcardSuperType)typeDecl;
       return other.superType().subtype(this);
     }
+    else if(typeDecl instanceof WildcardType) {
+      return true;
+    }
+    return false;
+  }
+  eq WildcardType.wildcardSubtype(TypeDecl typeDecl) {
+    if(typeDecl == this) return true;
+    if(typeDecl instanceof WildcardType)
+      return true;
+    else if(typeDecl instanceof WildcardExtendsType) {
+      WildcardExtendsType other = (WildcardExtendsType)typeDecl;
+      return typeObject().subtype(other.extendsType());
+    }
+    else if(typeDecl instanceof WildcardSuperType) {
+      WildcardSuperType other = (WildcardSuperType)typeDecl;
+      return other.superType().subtype(typeObject());
+    }
     return false;
   }
   eq WildcardExtendsType.wildcardSubtype(TypeDecl typeDecl) {
@@ -83,7 +117,9 @@ aspect GenericsSubtype {
       WildcardExtendsType other = (WildcardExtendsType)typeDecl;
       return extendsType().subtype(other.extendsType());
     }
-    return extendsType().subtype(typeDecl);
+    if(typeDecl instanceof WildcardType)
+      return true;
+    return false;
   }
   eq WildcardSuperType.wildcardSubtype(TypeDecl typeDecl) {
     if(typeDecl == this) return true;
@@ -91,19 +127,21 @@ aspect GenericsSubtype {
       WildcardSuperType other = (WildcardSuperType)typeDecl;
       return other.superType().subtype(superType());
     }
-    return typeDecl.subtype(superType());
+    if(typeDecl instanceof WildcardType)
+      return true;
+    return false;
   }
 
   eq ParClassDecl.supertypeClassDecl(ClassDecl type) {
-    System.out.println("Is ParClassDecl " + typeName() + " a supertype of ClassDecl " + type.typeName());
+    //System.out.println("Is ParClassDecl " + typeName() + " a supertype of ClassDecl " + type.typeName());
     if(!(type instanceof ParClassDecl))
       return super.supertypeClassDecl(type);
     ParClassDecl typeDecl = (ParClassDecl)type;
     if(typeDecl.genericDecl() == genericDecl()) {
       for(int i = 0; i < getNumArgument(); i++) {
-        System.out.println("Comparing argument " + typeDecl.getArgument(i).type().typeName() + " with " + getArgument(i).type().typeName());
+        //System.out.println("Comparing argument " + typeDecl.getArgument(i).type().typeName() + " with " + getArgument(i).type().typeName());
         if(!typeDecl.getArgument(i).type().subtype(getArgument(i).type())) {
-          System.out.println("Argument " + i + " does not match");
+          //System.out.println("Argument " + i + " does not match");
           return false;
         }
       }
@@ -114,9 +152,11 @@ aspect GenericsSubtype {
   }
 
   eq ParTypeDecl.subtype(TypeDecl type) {
-    System.out.println("Is ParTypeDecl " + typeName() + " a subtype of " + type.typeName());
+    //System.out.println("Is ParTypeDecl " + typeName() + " a subtype of " + type.typeName());
     if(super.subtype(type))
       return true;
+    if(isRawType() && !type.isRawType() && type instanceof ParTypeDecl)
+      return false;
     if(type instanceof ParTypeDecl) {
       ParTypeDecl typeDecl = (ParTypeDecl)type;
       //System.err.println("Computing " + fullName() + " isSubtypeOf " + ((TypeDecl)typeDecl).fullName());
@@ -125,18 +165,20 @@ aspect GenericsSubtype {
       if(g1 == g2 && (isRawType() || type.isRawType()))
         return true;
       if(g1.subtype(g2)) {
-        //System.err.println("Checking type arguments");
+        //System.out.println("Checking type arguments");
         if(getNumArgument() == typeDecl.getNumArgument()) {
           for(int i = 0; i < getNumArgument(); i++) {
             if(typeDecl.getArgument(i).type().isTypeVariable()) {
               if(!getArgument(i).type().subtype(typeDecl.getArgument(i).type())) {
-                System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not subtypes");
+                //System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not subtypes");
                 return false;
               }
             }
             else if(!getArgument(i).type().wildcardSubtype(typeDecl.getArgument(i).type())) {
               System.err.println("Argument " + getArgument(i).type().fullName() + " and " + typeDecl.getArgument(i).type().fullName() + " are not wildcard subtypes");
               return false;
+            }
+            else {
             }
           }
           return true;
@@ -190,17 +232,17 @@ aspect GenericsSubtype {
   }
 
   syn boolean TypeDecl.supertypeTypeVariable(TypeVariable type) circular [true] {
-    System.out.println("Is " + typeName() + " a supertype of TypeVariable " + type.typeName() + "?");
+    //System.out.println("Is " + typeName() + " a supertype of TypeVariable " + type.typeName() + "?");
     if(type == this) {
-      System.err.println("  " + type.fullName() + " is a subtype of " + fullName() + "! ");
+      //System.err.println("  " + type.fullName() + " is a subtype of " + fullName() + "! ");
       return true;
     }
     for(int i = 0; i < type.getNumTypeBound(); i++)
       if(type.getTypeBound(i).type().subtype(this)) {
-        System.err.println("  " + type.fullName() + " is a subtype of " + fullName() + "! ");
+        //System.err.println("  " + type.fullName() + " is a subtype of " + fullName() + "! ");
         return true;
       }
-    System.err.println("  " + type.fullName() + " is not a subtype of " + fullName() + "! ");
+    //System.err.println("  " + type.fullName() + " is not a subtype of " + fullName() + "! ");
     return false;
     //return type == this;
   }
@@ -209,9 +251,9 @@ aspect GenericsSubtype {
 
   //In addition to the above rules, a type variable is a direct supertype of its lower bound.
   eq TypeVariable.supertypeClassDecl(ClassDecl type) {
-    System.out.println("Is TypeVariable " + typeName() + " a supertype of ClassDecl " + type.typeName() + "?");
+    //System.out.println("Is TypeVariable " + typeName() + " a supertype of ClassDecl " + type.typeName() + "?");
     for(int i = 0; i < getNumTypeBound(); i++) {
-      System.out.println("Is ClassDecl " + type.typeName() + " a subtype of " + getTypeBound(i).type().typeName());
+      //System.out.println("Is ClassDecl " + type.typeName() + " a subtype of " + getTypeBound(i).type().typeName());
       if(!type.subtype(getTypeBound(i).type())) {
         return false;
       }

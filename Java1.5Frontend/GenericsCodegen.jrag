@@ -3,12 +3,14 @@ aspect GenericsCodegen {
    eq TypeVariable.typeDescriptor() = erasure().typeDescriptor();
    eq ParClassDecl.typeDescriptor() = erasure().typeDescriptor();
    eq ParInterfaceDecl.typeDescriptor() = erasure().typeDescriptor();
+   //eq WildcardType.typeDescriptor() = erasure().typeDescriptor();
 
   syn FieldDeclaration FieldDeclaration.erasedField() =
     (FieldDeclaration)hostType().erasure().memberFields(name()).iterator().next();
 
   syn MethodDecl MethodDecl.erasedMethod() = this;
   eq MethodDeclSubstituted.erasedMethod() = getOriginal().erasedMethod();
+  eq ParMethodDecl.erasedMethod() = genericMethodDecl().erasedMethod();
 
   refine CodeGeneration public void VarAccess.emitStore(CodeGeneration gen) {
     Variable v = decl();
@@ -63,7 +65,8 @@ aspect GenericsCodegen {
     createLoadQualifier(gen);
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
-      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type()); // MethodInvocationConversion
+      // the cast or boxing/unboxing operation must know the bound rather than the erased type
+      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // MethodInvocationConversion
     }
     if(!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()) {
       if(!hostType().instanceOf(prevExpr().type())) {
@@ -180,7 +183,7 @@ aspect GenericsCodegen {
 
 
    public Access RawClassDecl.createQualifiedAccess() {
-     System.out.println("Creating qualified access to RawClassDecl" + name());
+     //System.out.println("Creating qualified access to RawClassDecl" + name());
      List list = new List();
      for(int i = 0; i < getNumTypeParameter(); i++)
        list.add(getTypeParameter(i).erasure().createQualifiedAccess());

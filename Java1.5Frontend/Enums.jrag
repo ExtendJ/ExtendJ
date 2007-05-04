@@ -435,5 +435,39 @@ aspect Enums {
     }
   }
 
+  refine TypeCheck public void SwitchStmt.typeCheck() {
+     TypeDecl type = getExpr().type();
+    if((!type.isIntegralType() || type.isLong()) && !type.isEnumDecl())
+      error("Switch expression must be of char, byte, short, int, or enum type");
+  }
+
+  eq ConstCase.getValue().lookupVariable(String name)
+    = switchType().isEnumDecl() ? switchType().memberFields(name) : lookupVariable(name);
   
+  eq EnumConstant.isConstant() = true;
+ /* eq EnumConstant.constant() {
+  }*/
+  
+  refine TypeCheck public void ConstCase.typeCheck() {
+    if(switchType().isEnumDecl() && (!(getValue() instanceof VarAccess) || !(getValue().varDecl() instanceof EnumConstant)))
+      error("Unqualified enumeration constant required");
+    else
+      TypeCheck.ConstCase.typeCheck();
+  }
+  refine NameCheck eq ConstCase.constValue(Case c) {
+    if(switchType().isEnumDecl()) {
+      if(!(c instanceof ConstCase) || !getValue().isConstant())
+        return false;
+      return getValue().varDecl() == ((ConstCase)c).getValue().varDecl();
+    }
+    else
+      return NameCheck.ConstCase.constValue(c);
+  }
+  refine CreateBCode public void SwitchStmt.createBCode(CodeGeneration gen) {
+    if(getExpr().type().isEnumDecl()) {
+      super.createBCode(gen);
+    }
+    else
+      CreateBCode.SwitchStmt.createBCode(gen);
+  }
 }

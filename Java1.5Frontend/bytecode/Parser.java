@@ -220,7 +220,7 @@ public class Parser implements Flags, AST.BytecodeReader {
 	}
 
 	public void print(String s) {
-		//System.out.print(s);
+		System.out.print(s);
 	}
 
 	public void println(String s) {
@@ -366,7 +366,16 @@ public class Parser implements Flags, AST.BytecodeReader {
 
 
 	public Access fromClassName(String s) {
-		//s = s.replaceAll("\\$", "/");
+    String packageName = "";
+    int index = s.lastIndexOf('/');
+    if(index != -1)
+      packageName = s.substring(0, index).replace('/', '.');
+    String[] typeNames = s.substring(index + 1).split("\\$");
+    Access result = new TypeAccess(packageName, typeNames[0]);
+    for(int i = 1; i < typeNames.length; i++)
+      result = result.qualifiesAccess(new TypeAccess(typeNames[i]));
+		return result;
+    /*
 		s = s.replace('$', '/');
 
     int index = -1;
@@ -381,12 +390,12 @@ public class Parser implements Flags, AST.BytecodeReader {
 		    result = new ParseName(name);
       }
       else {
-			  result = new Dot(result, new ParseName(name));
+			  result = result.qualifiesAccess(new ParseName(name));
       }
       index = pos;
     } while(pos != s.length());
 		return result;
-
+    */
 	}
 
 	public static Modifiers modifiers(int flags) {

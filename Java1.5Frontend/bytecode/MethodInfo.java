@@ -63,7 +63,7 @@ class MethodInfo {
       parameterList.setChild(
         new VariableArityParameterDeclaration(
           p.getModifiersNoTransform(),
-          p.getTypeAccessNoTransform(),
+          ((ArrayTypeAccess)p.getTypeAccessNoTransform()).getAccessNoTransform(),
           p.getID(),
           p.getEmptyBracketListNoTransform()
         ),

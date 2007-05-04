@@ -4,6 +4,13 @@ aspect CovariantReturnTypes {
 
 aspect GenericMethods {
 
+  inh lazy GenericMethodDecl ParMethodDecl.genericMethodDecl();
+  eq GenericMethodDecl.getParMethodDecl(int i).genericMethodDecl() = this;
+  eq Program.getCompilationUnit().genericMethodDecl() = null;
+  inh lazy GenericConstructorDecl ParConstructorDecl.genericConstructorDecl();
+  eq GenericConstructorDecl.getParConstructorDecl(int i).genericConstructorDecl() = this;
+  eq Program.getCompilationUnit().genericConstructorDecl() = null;
+
   eq ParMethodAccess.decl() {
     if(super.decl() instanceof GenericMethodDecl) {
       GenericMethodDecl m = (GenericMethodDecl)super.decl();
@@ -13,7 +20,7 @@ aspect GenericMethods {
   }
 
   syn lazy MethodDecl GenericMethodDecl.lookupParMethodDecl(ParMethodAccess p) {
-    System.out.println("Begin lookupParMethodDecl " + signature() + " with " + p.typeSignature());
+    //System.out.println("Begin lookupParMethodDecl " + signature() + " with " + p.typeSignature());
     ParMethodDecl methodDecl = null;
     for(int i = 0; i < getNumParMethodDecl() && methodDecl == null; i++) {
       ParMethodDecl decl = getParMethodDecl(i);
@@ -33,34 +40,28 @@ aspect GenericMethods {
     if(methodDecl == null) {
       methodDecl = p(p);
     }
-    System.out.println("End lookupParMethodDecl " + signature() + " with " + p.typeSignature());
+    //System.out.println("End lookupParMethodDecl " + signature() + " with " + p.typeSignature());
     return methodDecl;
   }
 
   public ParMethodDecl GenericMethodDecl.p(ParMethodAccess p) {
-    System.out.println("Building parameterized version of " + signature() + " with " + p.typeSignature());
+    //System.out.println("Building parameterized version of " + signature() + " with " + p.typeSignature());
     ParMethodDecl methodDecl = new ParMethodDecl();
     addParMethodDecl(methodDecl);
     List list = new List();
     for(int i = 0; i < p.getNumTypeArgument(); i++) {
       TypeDecl arg = p.getTypeArgument(i).type();
-      if(arg.isTypeVariable()) {
-        list.add(arg.createTypeVariableAccess());
-      }
-      else {
-        list.add(arg.createQualifiedAccess());
-      }
+      list.add(arg.createBoundAccess());
     }
     methodDecl.setTypeArgumentList(list);
     methodDecl.setTypeParameterList(getTypeParameterList().substitute(methodDecl));
 
     methodDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-    methodDecl.setTypeAccess(getTypeAccess().substitute(methodDecl));
+    methodDecl.setTypeAccess(getTypeAccess().substituteReturnType(methodDecl));
     methodDecl.setID(getID());
     methodDecl.setParameterList(getParameterList().substitute(methodDecl));
     methodDecl.setExceptionList(getExceptionList().substitute(methodDecl));
-    //System.err.println("Built ParMethodDecl " + methodDecl.signature());
-    //p.dumpNoRewrite(2);
+    //System.err.println("Built ParMethodDecl " + methodDecl.dumpTreeNoRewrite());
     return methodDecl;
   }
 
@@ -68,6 +69,20 @@ aspect GenericMethods {
     return type().substitute(parMethodDecl);
   }
   public Access ParameterizedTypeAccess.substitute(ParMethodDecl parMethodDecl) {
+    return new ParameterizedTypeAccess(getPackage(), getID(),
+      getTypeArgumentList().substitute(parMethodDecl));
+  }
+  public Access Access.substituteReturnType(ParMethodDecl parMethodDecl) {
+    return type().substituteReturnType(parMethodDecl);
+  }
+  public Access ParameterizedTypeAccess.substituteReturnType(ParMethodDecl parMethodDecl) {
+    return new ParameterizedTypeAccess(getPackage(), getID(),
+      getTypeArgumentList().substitute(parMethodDecl));
+  }
+  public Access Access.substituteParameterType(ParMethodDecl parMethodDecl) {
+    return type().substituteParameterType(parMethodDecl);
+  }
+  public Access ParameterizedTypeAccess.substituteParameterType(ParMethodDecl parMethodDecl) {
     return new ParameterizedTypeAccess(getPackage(), getID(),
       getTypeArgumentList().substitute(parMethodDecl));
   }
@@ -79,12 +94,23 @@ aspect GenericMethods {
         Access a = (Access)node;
         list.add(a.substitute(parMethodDecl));
       }
+      else if(node instanceof VariableArityParameterDeclaration) {
+        VariableArityParameterDeclaration p = (VariableArityParameterDeclaration)node;
+        list.add(
+          new VariableArityParameterDeclaration(
+            (Modifiers)p.getModifiers().fullCopy(),
+            p.getTypeAccess().substituteParameterType(parMethodDecl),
+            p.getID(),
+            new List()
+          )
+        );
+      }
       else if(node instanceof ParameterDeclaration) {
         ParameterDeclaration p = (ParameterDeclaration)node;
         list.add(
           new ParameterDeclaration(
             (Modifiers)p.getModifiers().fullCopy(),
-            p.getTypeAccess().substitute(parMethodDecl),
+            p.getTypeAccess().substituteParameterType(parMethodDecl),
             p.getID()
           )
         );
@@ -107,35 +133,78 @@ aspect GenericMethods {
     return list;
   }
   public Access TypeDecl.substitute(ParMethodDecl parMethodDecl) {
-    return createQualifiedAccess();
+    return createBoundAccess();
   }
-
+  public Access TypeVariable.substitute(ParMethodDecl parMethodDecl) {
+    //System.err.println("Searching for substitution for variable " + name());
+    TypeDecl typeDecl = this;
+    GenericMethodDecl g = parMethodDecl.genericMethodDecl();
+    String name = name();// + "'" + g.uniqueMethodIndex();
+    for(int i = 0; i < g.getNumTypeParameter(); i++) {
+      //System.err.println("TypeParameter candidate " + g.getTypeParameter(i).name());
+      TypeDecl typeParameter = g.getTypeParameter(i);
+      if(typeParameter == typeDecl || typeParameter.name().equals(typeDecl.name())) {
+        typeDecl = parMethodDecl.getTypeArgument(i).type();
+        return typeDecl.createBoundAccess();
+      }
+    }
+    return typeDecl.createBoundAccess();
+  }
   public Access ArrayDecl.substitute(ParMethodDecl parMethodDecl) {
     Access result = elementType().substitute(parMethodDecl);
     return new ArrayTypeAccess(result, dimension());
   }
-  
-  public Access TypeVariable.substitute(ParMethodDecl parMethodDecl) {
-    System.err.println("Searching for substitution for variable " + name());
+  public Access ArrayDecl.substituteReturnType(ParMethodDecl parMethodDecl) {
+    return new ArrayTypeAccess(componentType().substituteReturnType(parMethodDecl), 1);
+  }
+  public Access TypeDecl.substituteReturnType(ParMethodDecl parMethodDecl) {
+    return createBoundAccess();
+  }
+  public Access TypeVariable.substituteReturnType(ParMethodDecl parMethodDecl) {
     TypeDecl typeDecl = this;
     GenericMethodDecl g = parMethodDecl.genericMethodDecl();
     for(int i = 0; i < g.getNumTypeParameter(); i++) {
-      System.err.println("TypeParameter candidate " + g.getTypeParameter(i).name());
-      if(g.getTypeParameter(i).name().equals(name())) {
-      //if(g.getTypeParameter(i) == typeDecl) {
-        System.err.println("Found!");
+      TypeDecl typeParameter = g.getTypeParameter(i);
+      if(typeParameter == typeDecl || typeParameter.name().equals(typeDecl.name())) {
         typeDecl = parMethodDecl.getTypeArgument(i).type();
-        return typeDecl.createTypeVariableAccess();
+        if(typeDecl instanceof WildcardExtendsType) {
+          WildcardExtendsType t = (WildcardExtendsType)typeDecl;
+          return t.extendsType().createBoundAccess();
+        }
+        else if(typeDecl instanceof WildcardSuperType) {
+          return typeObject().createBoundAccess();
+        }
+        return typeDecl.createBoundAccess();
       }
     }
-    return typeDecl.createQualifiedAccess();
+    return typeDecl.createBoundAccess();
+  }
+  public Access TypeDecl.substituteParameterType(ParMethodDecl parMethodDecl) {
+    return createBoundAccess();
+  }
+  public Access TypeVariable.substituteParameterType(ParMethodDecl parMethodDecl) {
+    TypeDecl typeDecl = this;
+    GenericMethodDecl g = parMethodDecl.genericMethodDecl();
+    for(int i = 0; i < g.getNumTypeParameter(); i++) {
+      TypeDecl typeParameter = g.getTypeParameter(i);
+      if(typeParameter == typeDecl || typeParameter.name().equals(typeDecl.name())) {
+        typeDecl = parMethodDecl.getTypeArgument(i).type();
+        if(typeDecl instanceof WildcardExtendsType) {
+          WildcardExtendsType t = (WildcardExtendsType)typeDecl;
+          return typeNull().createQualifiedAccess();
+        }
+        else if(typeDecl instanceof WildcardSuperType) {
+          WildcardSuperType t = (WildcardSuperType)typeDecl;
+          return t.superType().createBoundAccess();
+        }
+        return typeDecl.createBoundAccess();
+      }
+    }
+    return typeDecl.createBoundAccess();
   }
 
 
-  inh lazy GenericMethodDecl ParMethodDecl.genericMethodDecl();
-  eq GenericMethodDecl.getParMethodDecl().genericMethodDecl() = this;
-  eq Program.getCompilationUnit().genericMethodDecl() = null;
-  
+
 
   public boolean GenericMethodDecl.compatible(MethodAccess m) {
     if(!name().equals(m.name()))
@@ -154,7 +223,7 @@ aspect GenericMethods {
       for(int i = 0; i < decl.getNumTypeParameter(); i++) {
         for(int j = 0; j < decl.getTypeParameter(i).getNumTypeBound(); j++) {
           if(!p.getTypeArgument(i).type().instanceOf(decl.getTypeParameter(i).getTypeBound(j).type())) {
-            System.err.println("Type argument " + i + " is of type " + p.getTypeArgument(i).type().fullName() + " which is NOT a subtype of " + decl.getTypeParameter(i).getTypeBound(j).type().fullName());
+            //System.err.println("Type argument " + i + " is of type " + p.getTypeArgument(i).type().fullName() + " which is NOT a subtype of " + decl.getTypeParameter(i).getTypeBound(j).type().fullName());
             return false;
           }
         }
@@ -173,7 +242,7 @@ aspect GenericMethods {
       return false;
     for(int i = 0; i < getNumParameter(); i++) {
       if(!m.getArg(i).type().instanceOf(getParameter(i).type())) {
-        System.err.println("Argument " + i + " is of type " + m.getArg(i).type().fullName() + " which is NOT a subtype of " + getParameter(i).type().fullName());
+        //System.err.println("Argument " + i + " is of type " + m.getArg(i).type().fullName() + " which is NOT a subtype of " + getParameter(i).type().fullName());
         return false;
       }
       else {

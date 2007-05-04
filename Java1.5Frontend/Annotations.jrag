@@ -36,6 +36,8 @@ aspect Annotations {
       Annotation m = T.annotation("java.lang.annotation", "Target");
       if(m != null && m.getNumElementValuePair() == 1 && m.getElementValuePair(0).getName().equals("value")) {
         ElementValue v = m.getElementValuePair(0).getElementValue();
+        //System.out.println("ElementValue: \n" + v.dumpTree());
+        //System.out.println("Annotation: \n" + dumpTree());
         if(!v.validTarget(this))
           error("annotation type " + T.typeName() + " is not applicable to this kind of declaration");
       }
@@ -82,7 +84,7 @@ aspect Annotations {
 
   /* The direct superinterface of an annotation type is always
   annotation.Annotation.*/
-  syn List AnnotationDecl.getSuperInterfaceIdList() {
+  syn lazy List AnnotationDecl.getSuperInterfaceIdList() {
     return new List().add(new TypeAccess("java.lang.annotation", "Annotation"));
   }
 
@@ -110,7 +112,9 @@ aspect Annotations {
     if(isString()) return true;
     if(fullName().equals("java.lang.Class"))
       return true;
-    // TODO: include generic versions of Class
+    // include generic versions of Class
+    if(erasure().fullName().equals("java.lang.Class"))
+      return true;
     return false;
   }
   eq EnumDecl.isValidAnnotationMethodReturnType() = true;
@@ -325,12 +329,21 @@ aspect Annotations {
 
   syn Annotation Modifiers.annotation(String packageName, String annotationName) {
     String qualifiedName = packageName.equals("") ? annotationName : (packageName + "." + annotationName);
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i) instanceof Annotation)
-        if(((Annotation)getModifier(i)).decl().fullName().equals(qualifiedName))
-          return (Annotation)getModifier(i);
+    return searchAnnotation(qualifiedName);
+  }
+
+  public Annotation ASTNode.searchAnnotation(String name) {
+    for(int i = 0; i < getNumChild(); i++) {
+      Annotation a = getChild(i).searchAnnotation(name);
+      if(a != null)
+        return a;
+    }
     return null;
   }
+  public Annotation Annotation.searchAnnotation(String name) {
+    return type().fullName().equals(name) ? this : super.searchAnnotation(name);
+  }
+
   syn Annotation TypeDecl.annotation(String packageName, String annotationName) =
     getModifiers().annotation(packageName, annotationName);
 
@@ -340,6 +353,7 @@ aspect Annotations {
     if(hasSuperclass()) {
       // If the queried annotation is itself annotation with @Inherited then
       // delegate the query to the superclass
+      // TODO: split annotationName and search inner classes
       TypeDecl kind = lookupType(packageName, annotationName);
       if(kind.annotation("java.lang.annotation", "Inherited") != null)
         return superclass().annotation(packageName, annotationName);
@@ -530,8 +544,13 @@ aspect Annotations {
   syn lazy TypeDecl Annotation.decl() = getAccess().type();
 
   inh Annotation Annotation.lookupAnnotation(TypeDecl typeDecl);
-  eq Modifiers.getModifier(int index).lookupAnnotation(TypeDecl typeDecl) = 
-    annotation(typeDecl.packageName(), typeDecl.name());
+  inh Annotation ElementAnnotationValue.lookupAnnotation(TypeDecl typeDecl);
+  eq Modifiers.getModifier(int index).lookupAnnotation(TypeDecl typeDecl) {
+    return annotation(typeDecl.packageName(), typeDecl.fullName().substring(typeDecl.packageName().length() + 1, typeDecl.fullName().length()));
+  }
+  eq ElementAnnotationValue.getAnnotation().lookupAnnotation(TypeDecl typeDecl) =
+    getAnnotation().type() == typeDecl ? getAnnotation() : lookupAnnotation(typeDecl);
+
   eq Program.getCompilationUnit(int i).lookupAnnotation(TypeDecl typeDecl) = null;
 
   syn ElementValue Annotation.elementValueFor(String name) {
@@ -590,6 +609,10 @@ aspect Annotations {
       return false;
     return true;
   }
+  eq ElementAnnotationValue.commensurateWithTypeDecl(TypeDecl type) {
+    return type() == type;
+  }
+
   eq ArrayDecl.commensurateWith(ElementValue value) = value.commensurateWithArrayDecl(this);
   syn boolean ElementValue.commensurateWithArrayDecl(ArrayDecl type) = 
     type.componentType().commensurateWith(this);
@@ -606,6 +629,9 @@ aspect Annotations {
   }
   syn TypeDecl ElementValue.type() = unknownType();
   eq ElementConstantValue.type() = getExpr().type();
+  eq ElementAnnotationValue.type() = getAnnotation().type();
+
+  syn TypeDecl Annotation.type() = getAccess().type();
   inh TypeDecl ElementValue.unknownType();
 
   /* If the element type is not an annotation type or an array type, ElementValue
@@ -687,7 +713,7 @@ aspect Annotations {
     throw new Error(getClass().getName() + " does not support appendAsAttributeTo(Attribute buf)");
   }
   public void ElementConstantValue.appendAsAttributeTo(Attribute buf) {
-    if(getExpr().isConstant()) {
+    if(getExpr().isConstant() && !getExpr().type().isEnumDecl()) {
       char tag = getExpr().type().isString() ? 's' : getExpr().type().typeDescriptor().charAt(0);
       int const_value_index = getExpr().type().addConstant(hostType().constantPool(), getExpr().constant());
       buf.u1(tag);
@@ -701,7 +727,8 @@ aspect Annotations {
     else {
       Variable v = getExpr().varDecl();
       if(v == null) throw new Error("Expected Enumeration constant");
-      int type_name_index = hostType().constantPool().addUtf8(v.type().constantPoolName().replace('/', '.'));
+
+      int type_name_index = hostType().constantPool().addUtf8(v.type().typeDescriptor());
       int const_name_index = hostType().constantPool().addUtf8(v.name());
       buf.u1('e');
       buf.u2(type_name_index);
@@ -720,4 +747,7 @@ aspect Annotations {
   }
 
   inh TypeDecl ElementValue.hostType();
+
+  // provide error message for method calls in 
+  eq ElementConstantValue.getExpr().methodHost() = enclosingAnnotationDecl().typeName();
 } 
