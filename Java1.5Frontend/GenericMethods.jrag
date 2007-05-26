@@ -11,23 +11,27 @@ aspect GenericMethods {
   eq GenericConstructorDecl.getParConstructorDecl(int i).genericConstructorDecl() = this;
   eq Program.getCompilationUnit().genericConstructorDecl() = null;
 
+  /*
   eq ParMethodAccess.decl() {
     if(super.decl() instanceof GenericMethodDecl) {
       GenericMethodDecl m = (GenericMethodDecl)super.decl();
-      return (MethodDecl)m.lookupParMethodDecl(this);
+      ArrayList typeArguments = new ArrayList();
+      for(int i = 0; i < getNumTypeArgument(); i++)
+        typeArguments.add(getTypeArgument(i).type());
+      return (MethodDecl)m.lookupParMethodDecl(typeArguments);
     }
     return super.decl();
-  }
+  }*/
 
-  syn lazy MethodDecl GenericMethodDecl.lookupParMethodDecl(ParMethodAccess p) {
+  syn lazy MethodDecl GenericMethodDecl.lookupParMethodDecl(ArrayList typeArguments) {
     //System.out.println("Begin lookupParMethodDecl " + signature() + " with " + p.typeSignature());
     ParMethodDecl methodDecl = null;
     for(int i = 0; i < getNumParMethodDecl() && methodDecl == null; i++) {
       ParMethodDecl decl = getParMethodDecl(i);
       boolean match = true;
-      if(decl.getNumTypeArgument() == p.getNumTypeArgument()) {
+      if(decl.getNumTypeArgument() == typeArguments.size()) {
         for(int j = 0; j < decl.getNumTypeArgument(); j++) {
-          if(decl.getTypeArgument(j).type() != p.getTypeArgument(j).type())
+          if(decl.getTypeArgument(j).type() != typeArguments.get(j))
             match = false;
         }
       }
@@ -38,19 +42,19 @@ aspect GenericMethods {
         methodDecl = decl;
     }
     if(methodDecl == null) {
-      methodDecl = p(p);
+      methodDecl = p(typeArguments);
     }
     //System.out.println("End lookupParMethodDecl " + signature() + " with " + p.typeSignature());
     return methodDecl;
   }
 
-  public ParMethodDecl GenericMethodDecl.p(ParMethodAccess p) {
+  public ParMethodDecl GenericMethodDecl.p(ArrayList typeArguments) {
     //System.out.println("Building parameterized version of " + signature() + " with " + p.typeSignature());
     ParMethodDecl methodDecl = new ParMethodDecl();
     addParMethodDecl(methodDecl);
     List list = new List();
-    for(int i = 0; i < p.getNumTypeArgument(); i++) {
-      TypeDecl arg = p.getTypeArgument(i).type();
+    for(int i = 0; i < typeArguments.size(); i++) {
+      TypeDecl arg = (TypeDecl)typeArguments.get(i);
       list.add(arg.createBoundAccess());
     }
     methodDecl.setTypeArgumentList(list);
@@ -150,6 +154,15 @@ aspect GenericMethods {
     }
     return typeDecl.createBoundAccess();
   }
+  public Access WildcardType.substitute(ParMethodDecl parMethodDecl) {
+    return new Wildcard();
+  }
+  public Access WildcardExtendsType.substitute(ParMethodDecl parMethodDecl) {
+    return new WildcardExtends(getAccess().type().substitute(parMethodDecl));
+  }
+  public Access WildcardSuperType.substitute(ParMethodDecl parMethodDecl) {
+    return new WildcardSuper(getAccess().type().substitute(parMethodDecl));
+  }
   public Access ArrayDecl.substitute(ParMethodDecl parMethodDecl) {
     Access result = elementType().substitute(parMethodDecl);
     return new ArrayTypeAccess(result, dimension());
@@ -167,7 +180,10 @@ aspect GenericMethods {
       TypeDecl typeParameter = g.getTypeParameter(i);
       if(typeParameter == typeDecl || typeParameter.name().equals(typeDecl.name())) {
         typeDecl = parMethodDecl.getTypeArgument(i).type();
-        if(typeDecl instanceof WildcardExtendsType) {
+        if(typeDecl instanceof WildcardType) {
+          return typeObject().createBoundAccess();
+        }
+        else if(typeDecl instanceof WildcardExtendsType) {
           WildcardExtendsType t = (WildcardExtendsType)typeDecl;
           return t.extendsType().createBoundAccess();
         }
@@ -189,7 +205,10 @@ aspect GenericMethods {
       TypeDecl typeParameter = g.getTypeParameter(i);
       if(typeParameter == typeDecl || typeParameter.name().equals(typeDecl.name())) {
         typeDecl = parMethodDecl.getTypeArgument(i).type();
-        if(typeDecl instanceof WildcardExtendsType) {
+        if(typeDecl instanceof WildcardType) {
+          return typeNull().createBoundAccess();
+        }
+        else if(typeDecl instanceof WildcardExtendsType) {
           WildcardExtendsType t = (WildcardExtendsType)typeDecl;
           return typeNull().createQualifiedAccess();
         }
@@ -217,7 +236,12 @@ aspect GenericMethods {
     if(m instanceof ParMethodAccess) {
       //System.err.println("Is generic method " + signature() + " compatible with ParMethodAccess?");
       ParMethodAccess p = (ParMethodAccess)m;
-      ParMethodDecl decl = (ParMethodDecl)lookupParMethodDecl(p);
+
+      ArrayList typeArguments = new ArrayList();
+      for(int i = 0; i < p.getNumTypeArgument(); i++)
+        typeArguments.add(p.getTypeArgument(i).type());
+      ParMethodDecl decl = (ParMethodDecl)lookupParMethodDecl(typeArguments);
+
       if(decl.getNumTypeParameter() != p.getNumTypeArgument())
         return false;
       for(int i = 0; i < decl.getNumTypeParameter(); i++) {

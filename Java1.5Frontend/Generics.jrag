@@ -399,7 +399,7 @@ aspect LookupParTypeDecl {
   eq WildcardExtends.sameSignature(Access a) = type() == a.type();
   eq WildcardSuper.sameSignature(Access a) = type() == a.type();
 
-  syn boolean ParTypeDecl.sameSignature(ParameterizedTypeAccess a) {
+  syn boolean ParTypeDecl.sameSignature(ParameterizedTypeAccess a) circular [true] {
     if(getNumArgument() != a.getNumTypeArgument())
       return false;
     for(int i = 0; i < getNumArgument(); i++) {
@@ -525,29 +525,43 @@ aspect LookupParTypeDecl {
   eq GenericInterfaceDecl.getRawType().enclosingGenericTypeDecl() = this;
   eq Program.getCompilationUnit().enclosingGenericTypeDecl() = unknownType();
 
-
-  //private int GenericTypeDecl.tempCounter;
   syn lazy TypeDecl GenericTypeDecl.lookupParTypeDecl(ParameterizedTypeAccess p) {
     String signature = p.typeSignature();
-    /*
-    System.out.println("Trying to lookup parameterized version of " + signature);
-    if(signature.equals("java.lang.Class<wildcards.? extends java.lang.annotation.Annotation>")) {
-      tempCounter++;
-      //if(tempCounter == 100)
-      //  throw new Error("Breaking loop");
-    }
-    */
-
     for(int i = 0; i < getNumParTypeDecl(); i++) {
       ParTypeDecl decl = (ParTypeDecl)getParTypeDecl(i);
-      //if(i > 35) throw new Error("Too many parameterizations of " + fullName());
-      //System.out.println("Candidate: " + decl.typeSignature());
       if(decl.sameSignature(p)) {
-        //System.out.println("Found!");
         return (TypeDecl)decl;
       }
     }
     return (TypeDecl)p(p);
+  }
+  public TypeDecl TypeDecl.p(ParameterizedTypeAccess params) {
+    throw new Error("Operation p not supported for " + getClass().getName());
+  }
+  public TypeDecl GenericClassDecl.p(ParameterizedTypeAccess params) {
+    ParClassDecl typeDecl = params.isRawAccess() ? new RawClassDecl() : new ParClassDecl();
+    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    typeDecl.setID(getID());
+    addParTypeDecl(typeDecl);
+    typeDecl.setArgumentList(createArgumentList(params));
+    typeDecl.is$Final = true;
+    return typeDecl;
+  }
+  public TypeDecl GenericInterfaceDecl.p(ParameterizedTypeAccess params) {
+    ParInterfaceDecl typeDecl = params.isRawAccess() ? new RawInterfaceDecl() : new ParInterfaceDecl();
+    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    typeDecl.setID(getID());
+    addParTypeDecl(typeDecl);
+    typeDecl.setArgumentList(createArgumentList(params));
+    typeDecl.is$Final = true;
+    return typeDecl;
+  }
+
+  public List GenericTypeDecl.createArgumentList(ParameterizedTypeAccess params) {
+    List list = new List();
+    for(int i = 0; i < params.getNumTypeArgument(); i++)
+      list.add(params.getTypeArgument(i).copyTypeArguments());
+    return list;
   }
   
   public Access TypeDecl.substitute(ParTypeDecl parTypeDecl) {
@@ -593,7 +607,10 @@ aspect LookupParTypeDecl {
         //System.err.println(parTypeDecl.getArgument(i).dumpTreeNoRewrite());
         typeDecl = parTypeDecl.getArgument(i).type();
         //System.err.println("  computed type of argument");
-        if(typeDecl instanceof WildcardExtendsType) {
+        if(typeDecl instanceof WildcardType) {
+          return typeObject().createBoundAccess();
+        }
+        else if(typeDecl instanceof WildcardExtendsType) {
           WildcardExtendsType t = (WildcardExtendsType)typeDecl;
           return t.extendsType().createBoundAccess();
         }
@@ -620,7 +637,10 @@ aspect LookupParTypeDecl {
       if(g.getTypeParameter(i) == typeDecl) {
         //System.err.println("  found variable as parameter " + i);
         typeDecl = parTypeDecl.getArgument(i).type();
-        if(typeDecl instanceof WildcardExtendsType) {
+        if(typeDecl instanceof WildcardType) {
+          return typeNull().createQualifiedAccess();
+        }
+        else if(typeDecl instanceof WildcardExtendsType) {
           return typeNull().createQualifiedAccess();
         }
         else if(typeDecl instanceof WildcardSuperType) {
@@ -713,53 +733,6 @@ aspect LookupParTypeDecl {
     return list;
   }
 
-  public TypeDecl TypeDecl.p(ParameterizedTypeAccess params) {
-    throw new Error("Operation p not supported for " + getClass().getName());
-  }
-
-  public List GenericTypeDecl.createArgumentList(ParameterizedTypeAccess params) {
-    List list = new List();
-    for(int i = 0; i < params.getNumTypeArgument(); i++) {
-      list.add(params.getTypeArgument(i).copyTypeArguments());
-      /*
-      if(arg.isTypeVariable()) {
-        list.add(arg.createTypeVariableAccess());
-      }
-      else {
-        list.add(arg.createQualifiedAccess());
-      }
-      */
-    }
-    return list;
-  }
-
-  
-
-  public TypeDecl GenericClassDecl.p(ParameterizedTypeAccess params) {
-    // build parameterized type decl using arguments from distant type access
-    ParClassDecl typeDecl = params.isRawAccess() ? new RawClassDecl() : new ParClassDecl();
-    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-    typeDecl.setID(getID());
-    
-    addParTypeDecl(typeDecl);
-
-    //System.err.println("Building instantiation of " + params.typeSignature());
-    
-    //System.err.println("Begin copying argument list");
-    typeDecl.setArgumentList(createArgumentList(params));
-    /*
-    for(int i = 0; i < typeDecl.getNumArgument(); i++) {
-      System.err.println(typeDecl.getArgument(i).typeSignature());
-      typeDecl.getArgument(i).dumpTree(1);  
-    }
-    */
-    //System.err.println("End copying argument list for " + typeDecl.typeSignature());
-
-    typeDecl.is$Final = true;
-
-    //System.err.println("End instantiation of " + params.typeSignature());
-    return typeDecl;
-  }
   syn lazy List ParClassDecl.getTypeParameterList() {
     GenericClassDecl decl = (GenericClassDecl)genericTypeDecl();
     List list = (List)decl.getTypeParameterList().fullCopy();
@@ -785,17 +758,6 @@ aspect LookupParTypeDecl {
   }
   syn lazy List ParClassDecl.getBodyDeclList() = new List();
 
-  public TypeDecl GenericInterfaceDecl.p(ParameterizedTypeAccess params) {
-    // build parameterized type decl using arguments from distant type access
-    ParInterfaceDecl typeDecl = params.isRawAccess() ? new RawInterfaceDecl() : new ParInterfaceDecl();
-    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-    typeDecl.setID(getID());
-    addParTypeDecl(typeDecl);
-    //System.err.println("Building instantiation of " + params.typeSignature());
-    typeDecl.setArgumentList(createArgumentList(params));
-    typeDecl.is$Final = true;
-    return typeDecl;
-  }
   syn lazy List ParInterfaceDecl.getTypeParameterList() {
     GenericInterfaceDecl decl = (GenericInterfaceDecl)genericTypeDecl();
     //System.err.println("Begin substituting type parameter list");
