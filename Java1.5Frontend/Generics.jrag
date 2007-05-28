@@ -9,6 +9,20 @@ aspect Generics {
     return typeDecl;
   }
 
+  refine TypeAnalysis eq ConditionalExpr.type() {
+    TypeDecl type = TypeAnalysis.ConditionalExpr.type();
+    TypeDecl trueType = getTrueExpr().type();
+    TypeDecl falseType = getFalseExpr().type();
+
+    if(type.isUnknown() && trueType.isReferenceType() && falseType.isReferenceType()) {
+      ArrayList list = new ArrayList();
+      list.add(trueType);
+      list.add(falseType);
+      return type.lookupLUBType(list);
+    }
+    return type;
+  }
+
   interface GenericTypeDecl {
     syn boolean isGenericType();
     int getNumTypeParameter();
@@ -29,40 +43,56 @@ aspect Generics {
     return this;
   }
   public TypeDecl ClassDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
-    //System.out.println("Making " + getID() + " generic");
-    ASTNode node = getParent();
-    int index = node.getIndexOfChild(this);
-    node.setChild(
-      new GenericClassDecl(
-        getModifiersNoTransform(),
-        getID(),
-        s.hasSuperclassSignature() ? new Opt(s.superclassSignature()) : getSuperClassAccessOptNoTransform(),
-        s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getImplementsListNoTransform(),
-        getBodyDeclListNoTransform(),
-        s.typeParameters(),
-        new List(),
-        new Opt()
-      ),
-      index
-    );
-    return (TypeDecl)node.getChildNoTransform(index);
+    if(s.hasFormalTypeParameters()) {
+      ASTNode node = getParent();
+      int index = node.getIndexOfChild(this);
+      node.setChild(
+          new GenericClassDecl(
+            getModifiersNoTransform(),
+            getID(),
+            s.hasSuperclassSignature() ? new Opt(s.superclassSignature()) : getSuperClassAccessOptNoTransform(),
+            s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getImplementsListNoTransform(),
+            getBodyDeclListNoTransform(),
+            s.typeParameters(),
+            new List(),
+            new Opt()
+            ),
+          index
+          );
+      return (TypeDecl)node.getChildNoTransform(index);
+    }
+    else {
+      if(s.hasSuperclassSignature())
+        setSuperClassAccessOpt(new Opt(s.superclassSignature()));
+      if(s.hasSuperinterfaceSignature())
+        setImplementsList(s.superinterfaceSignature());
+      return this;
+    }
   }
+
   public TypeDecl InterfaceDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
-    ASTNode node = getParent();
-    int index = node.getIndexOfChild(this);
-    node.setChild(
-      new GenericInterfaceDecl(
-        getModifiersNoTransform(),
-        getID(),
-        s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getSuperInterfaceIdListNoTransform(),
-        getBodyDeclListNoTransform(),
-        s.typeParameters(),
-        new List(),
-        new Opt()
-      ),
-      index
-    );
-    return (TypeDecl)node.getChildNoTransform(index);
+    if(s.hasFormalTypeParameters()) {
+      ASTNode node = getParent();
+      int index = node.getIndexOfChild(this);
+      node.setChild(
+          new GenericInterfaceDecl(
+            getModifiersNoTransform(),
+            getID(),
+            s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getSuperInterfaceIdListNoTransform(),
+            getBodyDeclListNoTransform(),
+            s.typeParameters(),
+            new List(),
+            new Opt()
+            ),
+          index
+          );
+      return (TypeDecl)node.getChildNoTransform(index);
+    }
+    else {
+      if(s.hasSuperinterfaceSignature())
+        setSuperInterfaceIdList(s.superinterfaceSignature());
+      return this;
+    }
   }
   public TypeDecl GenericTypeDecl.makeGeneric(bytecode.Signatures.ClassSignature s) {
     return (TypeDecl)this;
@@ -1026,6 +1056,75 @@ aspect LookupParTypeDecl {
 
   eq AbstractWildcard.type() = lookupWildcard(this);
 
+
+  syn lazy LUBType Program.lookupLUBType(ArrayList bounds) {
+    CompilationUnit cu = wildcards();
+    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
+      TypeDecl typeDecl = cu.getTypeDecl(i);
+      if(typeDecl instanceof LUBType) {
+        LUBType type = (LUBType)typeDecl;
+        if(type.getNumTypeBound() == bounds.size()) {
+          boolean same = true;
+          for(int j = 0; same && j < type.getNumTypeBound(); j++)
+            if(type.getTypeBound(j).type() != bounds.get(j))
+              same = false;
+          if(same)
+            return type;
+        }
+      }
+    }
+    List boundList = new List();
+    StringBuffer name = new StringBuffer();
+    for(Iterator iter = bounds.iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      boundList.add(typeDecl.createBoundAccess());
+      name.append("& " + typeDecl.typeName());
+    }
+    LUBType decl = new LUBType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      name.toString(),
+      new List(),
+      boundList
+    );
+    decl.is$Final = true;
+    cu.addTypeDecl(decl);
+    return decl;
+  }
+  inh LUBType TypeDecl.lookupLUBType(ArrayList bounds);
+  eq Program.getCompilationUnit().lookupLUBType(ArrayList bounds) = 
+    lookupLUBType(bounds);
+
+  eq LUBType.supertypeClassDecl(ClassDecl type) {
+    return type.subtype(lub());
+  }
+  eq LUBType.supertypeInterfaceDecl(InterfaceDecl type) {
+    return type.subtype(lub());
+  }
+  eq LUBType.subtype(TypeDecl type) {
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(!getTypeBound(i).type().instanceOf(type))
+        return false;
+    return true;
+  }
+
+  syn lazy TypeDecl Program.typeWildcard() {
+    CompilationUnit cu = wildcards();
+    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
+      TypeDecl typeDecl = cu.getTypeDecl(i);
+      if(typeDecl instanceof WildcardType)
+        return typeDecl;
+    }
+    TypeDecl decl = new WildcardType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      "?",
+      new List()
+    );
+    decl.is$Final = true;
+    cu.addTypeDecl(decl);
+    return decl;
+  }
+  inh TypeDecl TypeDecl.typeWildcard();
+  eq Program.getCompilationUnit().typeWildcard() = typeWildcard();
 
   syn lazy TypeDecl Program.lookupWildcardExtends(TypeDecl bound) {
     CompilationUnit cu = wildcards();

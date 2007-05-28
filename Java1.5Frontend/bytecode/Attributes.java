@@ -195,8 +195,7 @@ class Attributes {
         int signature_index = p.u2();
         String s = p.getCONSTANT_Utf8_Info(signature_index).string();
         Signatures.ClassSignature classSignature = new Signatures.ClassSignature(s);
-        if(classSignature.hasFormalTypeParameters())
-          typeDecl = typeDecl.makeGeneric(classSignature);
+        typeDecl = typeDecl.makeGeneric(classSignature);
       }
       else if(attribute_name.equals("RuntimeVisibleAnnotations")) {
         int num_annotations = p.u2();
