@@ -2,7 +2,7 @@ import AST.*;
 
 import java.util.*;
 import java.io.*;
-import parser.*;
+import beaver.Symbol;
 
 class JavaPrettyPrinter {
   public static void main(String args[]) {
@@ -12,6 +12,18 @@ class JavaPrettyPrinter {
   
   public static boolean compile(String args[]) {
     Program program = new Program();
+
+    program.initBytecodeReader(new bytecode.Parser());
+    program.initJavaParser(
+      new JavaParser() {
+        public CompilationUnit parse(InputStream is, String fileName) throws IOException, beaver.Parser.Exception {
+          return new parser.JavaParser().parse(is, fileName);
+        }
+      }
+    );
+    // extract package name from a source file without parsing the entire file
+    program.initPackageExtractor(new parser.JavaScanner());
+
     program.initOptions();    
     program.addKeyValueOption("-classpath");
     program.addKeyValueOption("-sourcepath");
@@ -35,12 +47,12 @@ class JavaPrettyPrinter {
       return false;
     }
 
-    for(Iterator iter = files.iterator(); iter.hasNext(); ) {
-      String name = (String)iter.next();
-      program.addSourceFile(name);
-    }
-
     try {
+      for(Iterator iter = files.iterator(); iter.hasNext(); ) {
+        String name = (String)iter.next();
+        program.addSourceFile(name);
+      }
+
       for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
         CompilationUnit unit = (CompilationUnit)iter.next();
         if(unit.fromSource()) {
@@ -57,11 +69,16 @@ class JavaPrettyPrinter {
           }
         }
       }
-    } catch (Error e) {
+    } catch (ParseError e) {
       System.err.println(e.getMessage());
       return false;
+    } catch (LexicalError e) {
+      System.err.println(e.getMessage());
+      return false;
+    } catch (Exception e) {
+      System.err.println(e.getMessage());
+      e.printStackTrace();
     }
-
     if(Program.verbose())
       System.out.println("Pretty printing source code");
     System.out.println(program.toString());
@@ -85,6 +102,6 @@ class JavaPrettyPrinter {
   }
 
   protected static void printVersion() {
-    System.out.println("Java1.4Frontend + Java5 extensions (http://jastadd.cs.lth.se) Version R20070201");
+    System.out.println("Java1.4Frontend + Java5 extensions (http://jastadd.cs.lth.se) Version R20070529");
   }
 }
