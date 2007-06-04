@@ -68,10 +68,11 @@ class JavaCompiler {
         CompilationUnit unit = (CompilationUnit)iter.next();
         if(unit.fromSource()) {
           Collection errors = new LinkedList();
+          Collection warnings = new LinkedList();
           if(Program.verbose())
             System.out.println("Error checking " + unit.relativeName());
           long time = System.currentTimeMillis();
-          unit.errorCheck(errors);
+          unit.errorCheck(errors, warnings);
           time = System.currentTimeMillis()-time;
           if(Program.verbose())
             System.out.println("Error checking " + unit.relativeName() + " done in " + time + " ms");
@@ -84,8 +85,12 @@ class JavaCompiler {
             return false;
           }
           else {
-            unit.java2Transformation();
-            unit.generateClassfile();
+            for(Iterator iter2 = warnings.iterator(); iter2.hasNext(); ) {
+              System.out.println(iter2.next());
+            }
+            System.out.println("Writing " + unit.relativeName());
+              unit.java2Transformation();
+              unit.generateClassfile();
           }
         }
       }

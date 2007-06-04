@@ -1,4 +1,38 @@
 aspect Generics {
+
+  // imported types are considered raw types by the name resolver
+  // here we replace them by their generic counter parts
+  refine LookupType eq CompilationUnit.getTypeDecl().lookupType(String name) {
+    SimpleSet result = SimpleSet.emptySet;
+    for(Iterator iter = LookupType.CompilationUnit.getTypeDecl().lookupType(name).iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      if(typeDecl instanceof ParTypeDecl)
+        result = result.add(((ParTypeDecl)typeDecl).genericDecl());
+      else
+        result = result.add(typeDecl);
+    }
+    return result;
+  }
+
+  refine TypeAnalysis eq ClassDecl.castingConversionTo(TypeDecl type) {
+    TypeDecl S = this;
+    TypeDecl T = type;
+    if(T.isClassDecl() && (S.erasure() != S || T.erasure() != T))
+        return S.erasure().castingConversionTo(T.erasure());
+    return TypeAnalysis.ClassDecl.castingConversionTo(type);
+  }
+
+  refine TypeAnalysis eq InterfaceDecl.castingConversionTo(TypeDecl type) {
+    TypeDecl S = this;
+    TypeDecl T = type;
+    if(T.isInterfaceDecl()) {
+      if(T.isFinal())
+        return T.instanceOf(S);
+      return true;
+    }
+    return TypeAnalysis.InterfaceDecl.castingConversionTo(type);
+  }
+
   refine TypeAnalysis eq ClassAccess.type() {
     GenericClassDecl d = (GenericClassDecl)TypeAnalysis.ClassAccess.type();
     ParClassDecl typeDecl = new ParClassDecl();
@@ -100,7 +134,7 @@ aspect Generics {
 
 
   interface ParTypeDecl {
-    syn String name();
+    //syn String name();
     int getNumArgument();
     Access getArgument(int index);
     int getNumTypeParameter();
@@ -136,6 +170,27 @@ aspect GenericsTypeAnalysis {
       return result;
     }
     return decl();
+  }
+
+  refine LookupType eq TypeAccess.decl() {
+    TypeDecl decl = LookupType.TypeAccess.decl();
+    if(decl instanceof GenericTypeDecl && isRaw()) {
+      return ((GenericTypeDecl)decl).lookupParTypeDecl(new ArrayList());
+    }
+    return decl;
+  }
+
+  protected boolean TypeAccess.isRaw() {
+    //if(!decl().isGenericType())
+    //  return false;
+    if(getParent() instanceof ParTypeAccess)
+      return false;
+    if(hasNextAccess() && nextAccess().isThisAccess())
+      return false;
+    return true;
+  }
+  protected boolean ParameterizedTypeAccess.isRaw() {
+    return false;
   }
   
 }
@@ -342,20 +397,6 @@ aspect GenericsNameBinding {
   eq ParameterizedTypeAccess.isExactTypeAccess() = false;
   eq RawTypeAccess.isExactTypeAccess() = false;
   
-  syn boolean TypeAccess.isRaw() {
-    if(!decl().isGenericType())
-      return false;
-    if(getParent() instanceof ParTypeAccess)
-      return false;
-    if(!(getParent() instanceof AbstractDot))
-      return true;
-    AbstractDot d = (AbstractDot)getParent();
-    if(d.isThisAccess())
-      return false;
-    if(d.isTypeAccess() && d.type().isTypeVariable())
-      return false;
-    return true;
-  }
 
   syn boolean ParameterizedTypeAccess.isRawAccess() = false;
   eq RawTypeAccess.isRawAccess() = true;
@@ -428,7 +469,13 @@ aspect LookupParTypeDecl {
 
   syn String Access.typeSignature() = "";
   eq AbstractDot.typeSignature() = lastAccess().typeSignature();
-  eq TypeAccess.typeSignature() = type().typeSignature();
+  eq TypeAccess.typeSignature() {
+    TypeDecl typeDecl = decl();
+    if(typeDecl.isRawType())
+      return decl().genericTypeDecl().fullName();
+    else
+      return typeDecl.typeSignature();
+  }
   eq ArrayTypeAccess.typeSignature() {
     StringBuffer s = new StringBuffer();
     s.append(getAccess().typeSignature());
@@ -543,8 +590,12 @@ aspect LookupParTypeDecl {
   }
   public List GenericTypeDecl.createArgumentList(ArrayList params) {
     List list = new List();
-    for(Iterator iter = params.iterator(); iter.hasNext(); )
-      list.add(((TypeDecl)iter.next()).createBoundAccess());
+    if(params.isEmpty())
+      for(int i = 0; i < getNumTypeParameter(); i++)
+        list.add(getTypeParameter(i).erasure().createBoundAccess());
+    else
+      for(Iterator iter = params.iterator(); iter.hasNext(); )
+        list.add(((TypeDecl)iter.next()).createBoundAccess());
     return list;
   }
 
@@ -659,47 +710,79 @@ aspect LookupParTypeDecl {
     // can find context
     return type().substitute(parTypeDecl);
   }
-  public Access ParameterizedTypeAccess.substitute(ParTypeDecl parTypeDecl) {
-    // can find context
-    return new ParameterizedTypeAccess(getPackage(), getID(), getTypeArgumentList().substitute(parTypeDecl));
-  }
-  
-  public Access Access.substituteReturnType(ParTypeDecl parTypeDecl) {
-    // can find context
-    return type().substituteReturnType(parTypeDecl);
-  }
-  public Access ParameterizedTypeAccess.substituteReturnType(ParTypeDecl parTypeDecl) {
-    // can find context
-    return new ParameterizedTypeAccess(getPackage(), getID(),
-      getTypeArgumentList().substitute(parTypeDecl));
-  }
-  public Access Dot.substituteReturnType(ParTypeDecl parTypeDecl) {
-    return new Dot(
-      getLeft() instanceof Access ? ((Access)getLeft()).substitute(parTypeDecl) : getLeft().type().substitute(parTypeDecl),
-      getRight().substitute(parTypeDecl)
-    );
-  }
   public Access Dot.substitute(ParTypeDecl parTypeDecl) {
     return new Dot(
       getLeft() instanceof Access ? ((Access)getLeft()).substitute(parTypeDecl) : getLeft().type().substitute(parTypeDecl),
       getRight().substitute(parTypeDecl)
     );
   }
-  public Access Dot.substituteParameterType(ParTypeDecl parTypeDecl) {
-    return new Dot(
-      getLeft() instanceof Access ? ((Access)getLeft()).substitute(parTypeDecl) : getLeft().type().substitute(parTypeDecl),
-      getRight().substitute(parTypeDecl)
-    );
+  public Access ParameterizedTypeAccess.substitute(ParTypeDecl parTypeDecl) {
+    if(parTypeDecl.isRawType())
+      return new TypeAccess(getPackage(), getID());
+    if(decl().isNestedType() && !isQualified())
+      return decl().enclosingType().createQualifiedAccess().qualifiesAccess(
+        new ParameterizedTypeAccess("", getID(), getTypeArgumentList().substitute(parTypeDecl))
+      );
+    return new ParameterizedTypeAccess(getPackage(), getID(), getTypeArgumentList().substitute(parTypeDecl));
+  }
+  public Access WildcardExtends.substitute(ParTypeDecl parTypeDecl) {
+    return new WildcardExtends(getAccess().substitute(parTypeDecl));
+  }
+  public Access WildcardSuper.substitute(ParTypeDecl parTypeDecl) {
+    return new WildcardSuper(getAccess().substitute(parTypeDecl));
   }
   
+  public Access Access.substituteReturnType(ParTypeDecl parTypeDecl) {
+    return type().substituteReturnType(parTypeDecl);
+  }
+  public Access Dot.substituteReturnType(ParTypeDecl parTypeDecl) {
+    return new Dot(
+      getLeft() instanceof Access ? ((Access)getLeft()).substituteReturnType(parTypeDecl) : getLeft().type().substituteReturnType(parTypeDecl),
+      getRight().substituteReturnType(parTypeDecl)
+    );
+  }
+  public Access ParameterizedTypeAccess.substituteReturnType(ParTypeDecl parTypeDecl) {
+    if(parTypeDecl.isRawType())
+      return new TypeAccess(getPackage(), getID());
+    if(decl().isNestedType() && !isQualified())
+      return decl().enclosingType().createQualifiedAccess().qualifiesAccess(
+        new ParameterizedTypeAccess("", getID(), getTypeArgumentList().substitute(parTypeDecl))
+      );
+    return new ParameterizedTypeAccess(getPackage(), getID(),
+      getTypeArgumentList().substitute(parTypeDecl));
+  }
+  public Access WildcardExtends.substituteReturnType(ParTypeDecl parTypeDecl) {
+    return new WildcardExtends(getAccess().substitute(parTypeDecl));
+  }
+  public Access WildcardSuper.substituteReturnType(ParTypeDecl parTypeDecl) {
+    return new WildcardSuper(getAccess().substitute(parTypeDecl));
+  }
+
+
   public Access Access.substituteParameterType(ParTypeDecl parTypeDecl) {
     // can find context
     return type().substituteParameterType(parTypeDecl);
   }
+  public Access Dot.substituteParameterType(ParTypeDecl parTypeDecl) {
+    return new Dot(
+      getLeft() instanceof Access ? ((Access)getLeft()).substituteParameterType(parTypeDecl) : getLeft().type().substituteParameterType(parTypeDecl),
+      getRight().substituteParameterType(parTypeDecl)
+    );
+  }
   public Access ParameterizedTypeAccess.substituteParameterType(ParTypeDecl parTypeDecl) {
-    // can find context
-    return new ParameterizedTypeAccess(getPackage(), getID(),
-      getTypeArgumentList().substitute(parTypeDecl));
+    if(parTypeDecl.isRawType())
+      return new TypeAccess(getPackage(), getID());
+    if(decl().isNestedType() && !isQualified())
+      return decl().enclosingType().createQualifiedAccess().qualifiesAccess(
+        new ParameterizedTypeAccess("", getID(), getTypeArgumentList().substitute(parTypeDecl))
+      );
+    return new ParameterizedTypeAccess(getPackage(), getID(), getTypeArgumentList().substitute(parTypeDecl));
+  }
+  public Access WildcardExtends.substituteParameterType(ParTypeDecl parTypeDecl) {
+    return new WildcardExtends(getAccess().substitute(parTypeDecl));
+  }
+  public Access WildcardSuper.substituteParameterType(ParTypeDecl parTypeDecl) {
+    return new WildcardSuper(getAccess().substitute(parTypeDecl));
   }
 
 
@@ -861,26 +944,30 @@ aspect LookupParTypeDecl {
     SimpleSet set = SimpleSet.emptySet;
     for(Iterator iter = genericTypeDecl().memberTypes(name).iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl)iter.next();
-      BodyDecl b;
-      TypeDecl typeDecl;
-      if(t instanceof ClassDecl) {
-        ClassDecl classDecl = (ClassDecl)t;
-        typeDecl = classDecl.p(this);
-        b = new MemberClassDecl((ClassDecl)typeDecl);
-        b.is$Final = true;
-        addBodyDecl(b);
-        set = set.add(typeDecl);
-      }
-      else if(t instanceof InterfaceDecl) {
-        InterfaceDecl interfaceDecl = (InterfaceDecl)t;
-        typeDecl = interfaceDecl.p(this);
-        b = new MemberInterfaceDecl((InterfaceDecl)typeDecl);
-        b.is$Final = true;
-        addBodyDecl(b);
-        set = set.add(typeDecl);
-      }
-      else if(t instanceof TypeVariable) {
-        // TODO: check me
+      if(t.isStatic())
+        set = set.add(t);
+      else {
+        BodyDecl b;
+        TypeDecl typeDecl;
+        if(t instanceof ClassDecl) {
+          ClassDecl classDecl = (ClassDecl)t;
+          typeDecl = classDecl.p(this);
+          b = new MemberClassDecl((ClassDecl)typeDecl);
+          b.is$Final = true;
+          addBodyDecl(b);
+          set = set.add(typeDecl);
+        }
+        else if(t instanceof InterfaceDecl) {
+          InterfaceDecl interfaceDecl = (InterfaceDecl)t;
+          typeDecl = interfaceDecl.p(this);
+          b = new MemberInterfaceDecl((InterfaceDecl)typeDecl);
+          b.is$Final = true;
+          addBodyDecl(b);
+          set = set.add(typeDecl);
+        }
+        else if(t instanceof TypeVariable) {
+          // TODO: check me
+        }
       }
     }
     return set;
@@ -950,11 +1037,12 @@ aspect LookupParTypeDecl {
     return c;
   }
   public BodyDecl FieldDeclaration.p(ParTypeDecl parTypeDecl) {
-    FieldDeclaration f = new FieldDeclaration(
+    FieldDeclaration f = new FieldDeclarationSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getTypeAccess().substituteReturnType(parTypeDecl),
       getID(),
-      new Opt()
+      new Opt(),
+      this
     );
     return f;
   }
