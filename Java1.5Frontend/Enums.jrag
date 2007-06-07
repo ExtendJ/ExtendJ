@@ -115,9 +115,34 @@ aspect Enums {
           )
         );
       }
+      else {
+        transformEnumConstructors();
+      }
       addValues(); // Add the values() and getValue(String s) methods
       return this;
     }
+  }
+
+  protected void ASTNode.transformEnumConstructors() {
+    for(int i = 0; i < getNumChild(); i++)
+      getChild(i).transformEnumConstructors();
+  }
+  protected void ConstructorDecl.transformEnumConstructors() {
+    super.transformEnumConstructors();
+    getParameterList().insertChild(
+      new ParameterDeclaration(new TypeAccess("java.lang", "String"), "@p0"),
+      0
+    );
+    getParameterList().insertChild(
+      new ParameterDeclaration(new TypeAccess("int"), "@p1"),
+      1
+    );
+  }
+  // applied to both ConstructorAccess and SuperConstructorAccess
+  protected void ConstructorAccess.transformEnumConstructors() {
+    super.transformEnumConstructors();
+    getArgList().insertChild(new VarAccess("@p0"),0);
+    getArgList().insertChild(new VarAccess("@p1"),1);
   }
   
   /*
@@ -163,8 +188,7 @@ aspect Enums {
     argList.add(new StringLiteral(getID()));
     argList.add(new IntegerLiteral(Integer.toString(((List)getParent()).getIndexOfChild(this))));
     for(int i = 0; i < getNumArg(); i++)
-      argList.add(getArg(i));
-    setArgList(new List()); // TODO: get rid of this side-effect
+      argList.add(getArg(i).fullCopy());
     return argList;
   }
 
@@ -425,12 +449,12 @@ aspect Enums {
   // generic traversal should traverse NTA as well
   // this should be done automatically by the JastAdd
   public int EnumConstant.getNumChild() {
-    return 6;
+    return 5;
   }
   public ASTNode EnumConstant.getChild(int i) {
     switch(i) {
-      case 4: return getTypeAccess();
-      case 5: return getInitOpt();
+      case 3: return getTypeAccess();
+      case 4: return getInitOpt();
       default: return ASTNode.getChild(this, i);
     }
   }
