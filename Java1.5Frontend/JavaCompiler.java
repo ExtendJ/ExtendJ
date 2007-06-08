@@ -88,7 +88,7 @@ class JavaCompiler {
             for(Iterator iter2 = warnings.iterator(); iter2.hasNext(); ) {
               System.out.println(iter2.next());
             }
-            System.out.println("Writing " + unit.relativeName());
+            //System.out.println("Writing " + unit.relativeName());
               unit.java2Transformation();
               unit.generateClassfile();
           }
