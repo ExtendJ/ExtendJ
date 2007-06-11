@@ -1,30 +1,4 @@
 aspect Generics {
-  
-  eq ParClassDecl.isInnerTypeOf(TypeDecl typeDecl) {
-    if(typeDecl instanceof ParTypeDecl)
-      typeDecl = ((ParTypeDecl)typeDecl).genericDecl();
-    return genericDecl().isInnerTypeOf(typeDecl);
-  }
-
-  eq ParClassDecl.withinBodyThatSubclasses(TypeDecl type) {
-    if(type instanceof ParTypeDecl)
-      type = ((ParTypeDecl)type).genericDecl();
-    return genericDecl().withinBodyThatSubclasses(type);
-  }
-
-  eq ParClassDecl.enclosedBy(TypeDecl type) {
-    if(type instanceof ParTypeDecl)
-      type = ((ParTypeDecl)type).genericDecl();
-    return genericDecl().enclosedBy(type);
-  }
-
-  eq ParClassDecl.accessibleFrom(TypeDecl type) {
-    if(type instanceof ParTypeDecl)
-      type = ((ParTypeDecl)type).genericDecl();
-    return genericDecl().accessibleFrom(type);
-  }
-
-
   // imported types are considered raw types by the name resolver
   // here we replace them by their generic counter parts
   refine LookupType eq CompilationUnit.getTypeDecl().lookupType(String name) {
@@ -356,48 +330,12 @@ aspect LookupParTypeDecl {
     return super.fullName();
   }
 
-/*
-  syn boolean Access.sameSignature(Access a) circular [true] = false;
-  eq AbstractDot.sameSignature(Access a) {
-    if(a instanceof AbstractDot)
-      return lastAccess().sameSignature(((AbstractDot)a).lastAccess());
-    return lastAccess().sameSignature(a);
-  }
-  eq TypeAccess.sameSignature(Access a) {
-    if(!(a instanceof TypeAccess))
-      return false;
-    TypeAccess ta  = (TypeAccess)a;
-    //if(type() instanceof TypeVariable && ta.type() instanceof TypeVariable)
-    //  return ((TypeVariable)type()).sameSignature((TypeVariable)ta.type());
-    return type() == ta.type();
-  }
-  eq ParTypeAccess.sameSignature(Access a) {
-    if(a instanceof ParTypeAccess && genericDecl() == ((ParTypeAccess)a).genericDecl()) {
-      ParTypeAccess ta = (ParTypeAccess)a;
-      for(int i = 0; i < getNumTypeArgument(); i++)
-        if(!getTypeArgument(i).sameSignature(ta.getTypeArgument(i)))
-          return false;
-      return true;
-    }
-    return false;
-  }
-  eq Wildcard.sameSignature(Access a) = type() == a.type();
-  eq WildcardExtends.sameSignature(Access a) = type() == a.type();
-  eq WildcardSuper.sameSignature(Access a) = type() == a.type();
-  */
-
   syn boolean TypeDecl.sameSignature(Access a) {
     if(a instanceof ParTypeAccess) return false;
     if(a instanceof AbstractWildcard) return false;
-    //if(a instanceof TypeAccess && ((TypeAccess)a).isRaw()) return false;
     return this == a.type();
   }
-  eq TypeVariable.sameSignature(Access a) {
-    TypeDecl type = a.type();
-    if(type instanceof TypeVariable)
-      return ((TypeVariable)type).self() == self();
-    return false;
-  }
+  eq TypeVariable.sameSignature(Access a) = a.type() == this;
   syn boolean ParTypeDecl.sameSignature(Access a){
     if(a instanceof ParTypeAccess) {
       ParTypeAccess ta = (ParTypeAccess)a;
@@ -433,28 +371,6 @@ aspect LookupParTypeDecl {
     return super.sameSignature(a);
   }
 
-
-/*
-  syn boolean TypeVariable.sameSignature(TypeVariable v) circular [true] {
-    return this == v;
-    //if(this == v) return true;
-    //if(!name().equals(v.name()) || getNumTypeBound() != v.getNumTypeBound())
-    //  return false;
-    //for(int i = 0; i < getNumTypeBound(); i++)
-    //  if(!getTypeBound(i).sameSignature(v.getTypeBound(i)))
-    //    return false;
-    //return true;
-  }
-
-  syn boolean ParTypeDecl.sameSignature(ParTypeAccess a) circular [true] {
-    if(getNumArgument() != a.getNumTypeArgument())
-      return false;
-    for(int i = 0; i < getNumArgument(); i++)
-      if(!getArgument(i).sameSignature(a.getTypeArgument(i)))
-        return false;
-    return true;
-  }
-  */
   syn lazy boolean ParTypeDecl.sameSignature(ArrayList list) circular [true] {
     if(getNumArgument() != list.size())
       return false;
@@ -564,7 +480,7 @@ aspect LookupParTypeDecl {
       return erasure().createBoundAccess();
     GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
     for(int i = 0; i < g.original().getNumTypeParameter(); i++)
-      if(g.original().getTypeParameter(i).self() == this.self())
+      if(g.original().getTypeParameter(i) == this)
         return parTypeDecl.getArgument(i).type().createBoundAccess();
     return createBoundAccess();
   }
@@ -598,7 +514,7 @@ aspect LookupParTypeDecl {
       return erasure().createBoundAccess();
     GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
     for(int i = 0; i < g.original().getNumTypeParameter(); i++) {
-      if(g.original().getTypeParameter(i).self() == this.self()) {
+      if(g.original().getTypeParameter(i) == this) {
         TypeDecl typeDecl = parTypeDecl.getArgument(i).type();
         if(typeDecl instanceof WildcardType)
           return typeObject().createBoundAccess();
@@ -632,7 +548,7 @@ aspect LookupParTypeDecl {
       return erasure().createBoundAccess();
     GenericTypeDecl g = (GenericTypeDecl)parTypeDecl.genericDecl();
     for(int i = 0; i < g.original().getNumTypeParameter(); i++) {
-      if(g.original().getTypeParameter(i).self() == this.self()) {
+      if(g.original().getTypeParameter(i) == this) {
         TypeDecl typeDecl = parTypeDecl.getArgument(i).type();
         if(typeDecl instanceof WildcardType)
           return typeNull().createQualifiedAccess();
@@ -889,6 +805,8 @@ aspect LookupParTypeDecl {
   syn GenericMethodDecl GenericMethodDecl.original() = original != null ? original : this;
   public GenericMethodDecl GenericMethodDecl.original;
   
+  syn GenericConstructorDecl GenericConstructorDecl.original() = original != null ? original : this;
+  public GenericConstructorDecl GenericConstructorDecl.original;
   
 
   public BodyDecl ConstructorDecl.p(ParTypeDecl parTypeDecl) {
@@ -1158,48 +1076,4 @@ aspect NewGenerics {
   }
 
   eq TypeVariable.accessibleFrom(TypeDecl type) = true;
-
-  syn lazy TypeVariable TypeVariable.self() = this;//usesTypeVariable(this) ? this : lookupTypeVariable(this);
-
-  private ArrayList Program.typeVariables = new ArrayList();
-  private TypeVariable Program.lookupTypeVariable(TypeVariable v) {
-    for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
-      TypeVariable decl = (TypeVariable)iter.next();
-      if(decl.name().equals(v.name()) && decl.getNumTypeBound() != v.getNumTypeBound()) {
-        boolean match = true;
-        for(int i = 0; match && i < decl.getNumTypeBound(); i++)
-          if(!decl.getTypeBound(i).type().sameSignature(v.getTypeBound(i)))
-          //if(decl.getTypeBound(i).type() != v.getTypeBound(i).type())
-            match = false;
-        if(match)
-          return decl;
-      }
-    }
-    typeVariables.add(v);
-    return v;
-  }
-
-  protected boolean ASTNode.usesTypeVariable(TypeVariable v) {
-    for(int i = 0; i < getNumChild(); i++)
-      if(getChild(i).usesTypeVariable(v))
-        return true;
-    return false;
-  }
-  protected boolean TypeAccess.usesTypeVariable(TypeVariable v) {
-    if(type() == v)
-      return true;
-    return super.usesTypeVariable(v);
-  }
-
-  eq Program.getCompilationUnit().lookupTypeVariable(TypeVariable v) =
-    lookupTypeVariable(v);
-  inh TypeVariable TypeVariable.lookupTypeVariable(TypeVariable v);
-
-
-
-
-
-
-
-
 }

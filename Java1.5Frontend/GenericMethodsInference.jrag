@@ -28,10 +28,6 @@ aspect GenericMethodsInference {
   eq ReturnStmt.getResult().assignConvertedType() = returnType();
   eq Program.getCompilationUnit().assignConvertedType() = typeNull();
 
-
-  syn boolean MethodAccess.nonParMethodAccess() = true;
-  eq ParMethodAccess.nonParMethodAccess() = false;
-
   inh TypeDecl MethodAccess.typeObject();
 
   // Generic Method Type Inference
@@ -39,21 +35,13 @@ aspect GenericMethodsInference {
     Constraints c = new Constraints();
     // store type parameters
     for(int i = 0; i < decl.original().getNumTypeParameter(); i++)
-      c.addTypeVariable(decl.original().getTypeParameter(i).self());
+      c.addTypeVariable(decl.original().getTypeParameter(i));
     
     // add initial constraints
     for(int i = 0; i < getNumArg(); i++) {
       TypeDecl A = getArg(i).type();
       TypeDecl F = decl.getParameter(i).type();
       c.convertibleTo(A, F);
-      /* 
-      if(A == F)
-        c.constraintEqual(A, F);
-      else if(A.methodInvocationConversionTo(F))
-        c.convertibleTo(A, F);
-      else if(F.methodInvocationConversionTo(A))
-        c.convertibleFrom(A, F);
-      */
     }
     
     //c.printConstraints();
@@ -81,13 +69,6 @@ aspect GenericMethodsInference {
     c.resolveSupertypeConstraints();
     c.resolveBounds();
 
-    //System.err.println("Arguments: ");
-    for(Iterator iter = c.typeArguments().iterator(); iter.hasNext(); ) {
-      TypeDecl t = (TypeDecl)iter.next();
-      //System.err.println("  " + (t != null ? t.fullName() : "Unresolved"));
-    }
-
-    //System.err.println("End Compute Constraints\n\n");
     return c.typeArguments();
   }
 
@@ -108,7 +89,6 @@ aspect GenericMethodsInference {
 
     public void addTypeVariable(TypeVariable T) {
       if(!typeVariables.contains(T)) {
-        //System.out.println("Adding type variable " + T.fullName());
         typeVariables.add(T);
         constraintsMap.put(T, new ConstraintSet());
       }
@@ -223,131 +203,8 @@ aspect GenericMethodsInference {
         }
       }
     }
-
-    private HashSet EC(ArrayList list) {
-      HashSet result = new HashSet();
-      boolean first = true;
-      for(Iterator iter = list.iterator(); iter.hasNext(); ) {
-        TypeDecl U = (TypeDecl)iter.next();
-        HashSet EST = EST(U);
-        if(first) {
-          result.addAll(EST);
-          first = false;
-        }
-        else
-          result.retainAll(EST);
-      }
-      return result;
-    }
-
-    private HashSet MEC(ArrayList list) {
-      HashSet EC = EC(list);
-      if(EC.size() == 1)
-        return EC;
-      HashSet MEC = new HashSet();
-      for(Iterator iter = EC.iterator(); iter.hasNext(); ) {
-        TypeDecl V = (TypeDecl)iter.next();
-        boolean keep = true;
-        for(Iterator i2 = EC.iterator(); i2.hasNext(); ) {
-          TypeDecl W = (TypeDecl)i2.next();
-          if(V != W && W.instanceOf(V))
-            keep = false;
-        }
-        if(keep)
-          MEC.add(V);
-      }
-      return MEC;
-    }
-
-    private HashSet Inv(TypeDecl G, ArrayList Us) {
-      HashSet result = new HashSet();
-      for(Iterator iter = Us.iterator(); iter.hasNext(); ) {
-        TypeDecl U = (TypeDecl)iter.next();
-        for(Iterator i2 = ST(U).iterator(); i2.hasNext(); ) {
-          TypeDecl V = (TypeDecl)i2.next();
-          if(V instanceof ParTypeDecl && ((ParTypeDecl)V).genericDecl() == G)
-            result.add(V);
-        }
-      }
-      return result;
-    }
-
-    private TypeDecl lci(HashSet set, TypeDecl G) {
-      ArrayList list = new ArrayList();
-      boolean first = true;
-      for(Iterator iter = set.iterator(); iter.hasNext(); ) {
-        ParTypeDecl decl = (ParTypeDecl)iter.next();
-        if(first) {
-          first = false;
-          for(int i = 0; i < decl.getNumArgument(); i++)
-            list.add(decl.getArgument(i).type());
-        }
-        else {
-          for(int i = 0; i < decl.getNumArgument(); i++)
-            list.set(i, lcta((TypeDecl)list.get(i), decl.getArgument(i).type()));
-        }
-      }
-      return ((GenericTypeDecl)G).lookupParTypeDecl(list);
-    }
-
-    private TypeDecl lcta(TypeDecl X, TypeDecl Y) {
-      System.err.println("Computing lcta for " + X.typeName() + " and " + Y.typeName());
-      if(!X.isWildcard() && !Y.isWildcard()) {
-        TypeDecl U = X;
-        TypeDecl V = Y;
-        return U == V ? U : lub(U, V);
-      }
-      else if(!X.isWildcard() && Y instanceof WildcardExtendsType) {
-        TypeDecl U = X;
-        TypeDecl V = ((WildcardExtendsType)Y).getAccess().type();
-        return lub(U, V);
-      }
-      else if(!X.isWildcard() && Y instanceof WildcardSuperType) {
-        TypeDecl U = X;
-        TypeDecl V = ((WildcardSuperType)Y).getAccess().type();
-        return glb(U, V).asWildcardSuper();
-      }
-      else if(X instanceof WildcardExtendsType && Y instanceof WildcardExtendsType) {
-        TypeDecl U = ((WildcardExtendsType)X).getAccess().type();
-        TypeDecl V = ((WildcardExtendsType)Y).getAccess().type();
-        return lub(U, V);
-      }
-      else if(X instanceof WildcardExtendsType && Y instanceof WildcardSuperType) {
-        TypeDecl U = ((WildcardExtendsType)X).getAccess().type();
-        TypeDecl V = ((WildcardSuperType)Y).getAccess().type();
-        return U == V ? U : U.typeWildcard();
-      }
-      else if(X instanceof WildcardSuperType && Y instanceof WildcardSuperType) {
-        TypeDecl U = ((WildcardSuperType)X).getAccess().type();
-        TypeDecl V = ((WildcardSuperType)Y).getAccess().type();
-        return glb(U, V).asWildcardSuper();
-      }
-      else
-        throw new Error("lcta not defined for (" + X.getClass().getName() + ", " + Y.getClass().getName());
-    }
-
-    private TypeDecl lub(TypeDecl X, TypeDecl Y) {
-      ArrayList list = new ArrayList(2);
-      list.add(X);
-      list.add(Y);
-      return lub(list);
-    }
-
-    private TypeDecl lub(ArrayList list) {
-      ArrayList bounds = new ArrayList();
-      for(Iterator iter = MEC(list).iterator(); iter.hasNext(); ) {
-        TypeDecl W = (TypeDecl)iter.next();
-        TypeDecl C = W instanceof GenericTypeDecl ? lci(Inv(W, list), W) : W;
-        bounds.add(C);
-      }
-      // TODO: add additional bounds
-      return ((TypeDecl)bounds.iterator().next()).asWildcardExtends();
-    }
-
-    private TypeDecl glb(TypeDecl X, TypeDecl Y) {
-      return null;
-    }
-
+    
+    /*
     // operates only on erased types. does it matter? (no type variables, no partypedecl)
     private TypeDecl intersect(TypeDecl t1, TypeDecl t2) {
       if(t1.instanceOf(t2))
@@ -373,52 +230,7 @@ aspect GenericMethodsInference {
         return lowestType;
       }
     }
-
-    private HashSet EST(TypeDecl t) {
-      HashSet result = new HashSet();
-      for(Iterator iter = ST(t).iterator(); iter.hasNext(); ) {
-        TypeDecl typeDecl = (TypeDecl)iter.next();
-        result.add(typeDecl.erasure());
-      }
-      return result;
-    }
-
-    private HashSet ST(TypeDecl t) {
-      HashSet result = new HashSet();
-      addSupertypes(result, t);
-      return result;
-    }
-
-    private void addSupertypes(HashSet set, TypeDecl t) {
-      set.add(t);
-      if(t instanceof ClassDecl) {
-        ClassDecl type = (ClassDecl)t;
-        if(type.hasSuperclass()) {
-          addSupertypes(set, type.superclass());
-        }
-        for(int i = 0; i < type.getNumImplements(); i++) {
-          addSupertypes(set, type.getImplements(i).type());
-        }
-      }
-      else if(t instanceof InterfaceDecl) {
-        InterfaceDecl type = (InterfaceDecl)t;
-        for(int i = 0; i < type.getNumSuperInterfaceId(); i++) {
-          addSupertypes(set, type.getSuperInterfaceId(i).type());
-        }
-        if(type.getNumSuperInterfaceId() == 0)
-          set.add(type.typeObject());
-      }
-      else if(t instanceof TypeVariable) {
-        TypeVariable type = (TypeVariable)t;
-        for(int i = 0; i < type.getNumTypeBound(); i++) {
-          addSupertypes(set, type.getTypeBound(i).type());
-        }
-        if(type.getNumTypeBound() == 0)
-          set.add(type.typeObject());
-      }
-      else
-        throw new Error("Operation not supported for " + t.fullName() + ", " + t.getClass().getName());
-    }
+    */
 
     private HashSet directSupertypes(TypeDecl t) {
       if(t instanceof ClassDecl) {
@@ -507,18 +319,8 @@ aspect GenericMethodsInference {
       }
       // If F = Tj, then the constrint Tj :> A is implied
       else if(F instanceof TypeVariable) {
-        TypeVariable Tj = null;
-        for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
-          TypeVariable t = (TypeVariable)iter.next();
-          if(t == F)
-            Tj = (TypeVariable)F;
-          else if(t.name().equals(F.name())) {
-            //System.out.println("Found other type variable with the same name");
-            Tj = t;
-          }
-        }
-        if(Tj != null)
-          addSupertypeConstraint(Tj, A);
+        if(typeVariables.contains(F))
+          addSupertypeConstraint(F, A);
       }
       // If F = U[], where the type U involves Tj, then if A is an array type V[]
       // or a type variable with an upper bound that is an array type V[],
@@ -599,18 +401,8 @@ aspect GenericMethodsInference {
       else if(A.isNull())
         return;
       else if(F instanceof TypeVariable) {
-        TypeVariable Tj = null;
-        for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
-          TypeVariable t = (TypeVariable)iter.next();
-          if(t == F)
-            Tj = (TypeVariable)F;
-          else if(t.name().equals(F.name())) {
-            //System.out.println("Found other type variable with the same name");
-            Tj = t;
-          }
-        }
-        if(Tj != null)
-          addSubtypeConstraint(Tj, A);
+        if(typeVariables.contains(F))
+          addSubtypeConstraint(F, A);
       }
       else if(F.isArrayDecl()) {
         TypeDecl U = ((ArrayDecl)F).componentType();
@@ -723,19 +515,8 @@ aspect GenericMethodsInference {
       else if(A.isNull())
         return;
       else if(F instanceof TypeVariable) {
-        TypeVariable Tj = null;
-        for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
-          TypeVariable t = (TypeVariable)iter.next();
-          if(t == F)
-            Tj = (TypeVariable)F;
-          else if(t.name().equals(F.name())) {
-            //System.out.println("Found other type variable with the same name");
-            Tj = t;
-          }
-        }
-        if(Tj != null) {
-          addEqualConstraint(Tj, A);
-        }
+        if(typeVariables.contains(F))
+          addEqualConstraint(F, A);
       }
       else if(F.isArrayDecl()) {
         TypeDecl U = ((ArrayDecl)F).componentType();
