@@ -7,21 +7,14 @@ aspect Enums {
   syn boolean TypeDecl.isEnumDecl() = false;
   eq EnumDecl.isEnumDecl() = true;
   
-  syn boolean ClassInstanceExpr.isExactClassInstanceExpr() = true;
-  eq EnumInstanceExpr.isExactClassInstanceExpr() = false;
+  refine NameCheck public void ClassInstanceExpr.nameCheck() {
+    if(getAccess().type().isEnumDecl() && !hostBodyDecl().isEnumConstant())
+      error("enum types may not be instantiated explicitly");
+    else
+      NameCheck.ClassInstanceExpr.nameCheck();
+  }
   
-  rewrite ClassInstanceExpr {
-    when(isExactClassInstanceExpr() && getAccess().type().isEnumDecl())
-    to EnumInstanceExpr new EnumInstanceExpr(getAccess(), getArgList(), getTypeDeclOpt());
-  }
-
-  public void EnumInstanceExpr.nameCheck() {
-    if(!hostBodyDecl().isEnumConstant())
-      error("enum types may not be instatinated explicitly");
-    else 
-      super.nameCheck();
-  }
-  inh BodyDecl EnumInstanceExpr.hostBodyDecl();
+  inh BodyDecl ClassInstanceExpr.hostBodyDecl();
   eq EnumConstant.getInit().hostBodyDecl() = this;
   syn boolean BodyDecl.isEnumConstant() = false;
   eq EnumConstant.isEnumConstant() = true;
@@ -172,7 +165,7 @@ aspect Enums {
 
   syn lazy Opt EnumConstant.getInitOpt() {
     return new Opt(
-        new EnumInstanceExpr(
+        new ClassInstanceExpr(
           hostType().createQualifiedAccess(),
           createArgumentList(),
           createOptAnonymousDecl()
@@ -236,7 +229,7 @@ aspect Enums {
   eq EnumDecl.isFinal() {
     for(Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
       EnumConstant c = (EnumConstant)iter.next();
-      EnumInstanceExpr e = (EnumInstanceExpr)c.getInit();
+      ClassInstanceExpr e = (ClassInstanceExpr)c.getInit();
       if(e.hasTypeDecl())
         return false;
     }
