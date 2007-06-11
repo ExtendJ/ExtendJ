@@ -29,152 +29,11 @@ aspect GenericMethods {
     methodDecl.setTypeArgumentList(list);
 
     methodDecl.setModifiers((Modifiers)getModifiers().fullCopy());
-    methodDecl.setTypeAccess(getTypeAccess().substituteReturnType(methodDecl));
+    methodDecl.setTypeAccess(getTypeAccess().type().substituteReturnType(methodDecl));
     methodDecl.setID(getID());
     methodDecl.setParameterList(getParameterList().substitute(methodDecl));
     methodDecl.setExceptionList(getExceptionList().substitute(methodDecl));
     return methodDecl;
-  }
-
-  public Access Access.substitute(ParMethodDecl parMethodDecl) {
-    return type().substitute(parMethodDecl);
-  }
-  public Access ParTypeAccess.substitute(ParMethodDecl parMethodDecl) {
-    return new ParTypeAccess(
-      genericDecl().createBoundAccess(),
-      getTypeArgumentList().substitute(parMethodDecl)
-    );
-  }
-  public Access Access.substituteReturnType(ParMethodDecl parMethodDecl) {
-    return type().substituteReturnType(parMethodDecl);
-  }
-  public Access ParTypeAccess.substituteReturnType(ParMethodDecl parMethodDecl) {
-    return new ParTypeAccess(
-      genericDecl().createBoundAccess(),
-      getTypeArgumentList().substitute(parMethodDecl)
-    );
-  }
-  public Access Access.substituteParameterType(ParMethodDecl parMethodDecl) {
-    return type().substituteParameterType(parMethodDecl);
-  }
-  public Access ParTypeAccess.substituteParameterType(ParMethodDecl parMethodDecl) {
-    return new ParTypeAccess(
-      genericDecl().createBoundAccess(),
-      getTypeArgumentList().substitute(parMethodDecl)
-    );
-  }
-  public List List.substitute(ParMethodDecl parMethodDecl) {
-    List list = new List();
-    for(int i = 0; i < getNumChild(); i++) {
-      ASTNode node = getChild(i);
-      if(node instanceof Access) {
-        Access a = (Access)node;
-        list.add(a.substitute(parMethodDecl));
-      }
-      else if(node instanceof VariableArityParameterDeclaration) {
-        VariableArityParameterDeclaration p = (VariableArityParameterDeclaration)node;
-        list.add(
-          new VariableArityParameterDeclaration(
-            (Modifiers)p.getModifiers().fullCopy(),
-            p.getTypeAccess().substituteParameterType(parMethodDecl),
-            p.getID(),
-            new List()
-          )
-        );
-      }
-      else if(node instanceof ParameterDeclaration) {
-        ParameterDeclaration p = (ParameterDeclaration)node;
-        list.add(
-          new ParameterDeclaration(
-            (Modifiers)p.getModifiers().fullCopy(),
-            p.getTypeAccess().substituteParameterType(parMethodDecl),
-            p.getID()
-          )
-        );
-      }
-      else {
-        throw new Error("Can only substitute lists of access nodes but node number " + i + " is of type " + node.getClass().getName());
-      }
-    }
-    return list;
-  }
-  public Access TypeDecl.substitute(ParMethodDecl parMethodDecl) {
-    return createBoundAccess();
-  }
-  public Access TypeVariable.substitute(ParMethodDecl parMethodDecl) {
-    GenericMethodDecl g = parMethodDecl.genericMethodDecl();
-    for(int i = 0; i < g.getNumTypeParameter(); i++) {
-      if(g.original().getTypeParameter(i) == this) {
-        TypeDecl typeDecl = parMethodDecl.getTypeArgument(i).type();
-        return typeDecl.createBoundAccess();
-      }
-    }
-    return createBoundAccess();
-  }
-  public Access WildcardType.substitute(ParMethodDecl parMethodDecl) {
-    return new Wildcard();
-  }
-  public Access WildcardExtendsType.substitute(ParMethodDecl parMethodDecl) {
-    return new WildcardExtends(getAccess().type().substitute(parMethodDecl));
-  }
-  public Access WildcardSuperType.substitute(ParMethodDecl parMethodDecl) {
-    return new WildcardSuper(getAccess().type().substitute(parMethodDecl));
-  }
-  public Access ArrayDecl.substitute(ParMethodDecl parMethodDecl) {
-    Access result = elementType().substitute(parMethodDecl);
-    return new ArrayTypeAccess(result, dimension());
-  }
-  public Access ArrayDecl.substituteReturnType(ParMethodDecl parMethodDecl) {
-    return new ArrayTypeAccess(componentType().substituteReturnType(parMethodDecl), 1);
-  }
-  public Access TypeDecl.substituteReturnType(ParMethodDecl parMethodDecl) {
-    return createBoundAccess();
-  }
-  public Access TypeVariable.substituteReturnType(ParMethodDecl parMethodDecl) {
-    GenericMethodDecl g = parMethodDecl.genericMethodDecl();
-    for(int i = 0; i < g.getNumTypeParameter(); i++) {
-      TypeDecl typeParameter = g.original().getTypeParameter(i);
-      if(g.original().getTypeParameter(i) == this ) {
-        TypeDecl typeDecl = parMethodDecl.getTypeArgument(i).type();
-        if(typeDecl instanceof WildcardType) {
-          return typeObject().createBoundAccess();
-        }
-        else if(typeDecl instanceof WildcardExtendsType) {
-          WildcardExtendsType t = (WildcardExtendsType)typeDecl;
-          return t.extendsType().createBoundAccess();
-        }
-        else if(typeDecl instanceof WildcardSuperType) {
-          return typeObject().createBoundAccess();
-        }
-        return typeDecl.createBoundAccess();
-      }
-    }
-    return createBoundAccess();
-  }
-  public Access TypeDecl.substituteParameterType(ParMethodDecl parMethodDecl) {
-    return createBoundAccess();
-  }
-  public Access TypeVariable.substituteParameterType(ParMethodDecl parMethodDecl) {
-    GenericMethodDecl g = parMethodDecl.genericMethodDecl();
-    for(int i = 0; i < g.getNumTypeParameter(); i++) {
-      TypeDecl typeParameter = g.original().getTypeParameter(i);
-      if(g.original().getTypeParameter(i) == this) {
-        TypeDecl typeDecl = parMethodDecl.getTypeArgument(i).type();
-        if(typeDecl instanceof WildcardType) {
-          return typeNull().createBoundAccess();
-        }
-        else if(typeDecl instanceof WildcardExtendsType) {
-          WildcardExtendsType t = (WildcardExtendsType)typeDecl;
-          return typeNull().createQualifiedAccess();
-        }
-        else if(typeDecl instanceof WildcardSuperType) {
-          WildcardSuperType t = (WildcardSuperType)typeDecl;
-          return t.superType().createBoundAccess();
-        }
-        return typeDecl.createBoundAccess();
-      }
-    }
-    return createBoundAccess();
   }
 
 }
@@ -183,9 +42,7 @@ aspect TypeCheck {
   // Disable error checking in instantiated generic methods
   public void ParMethodDecl.collectErrors() {
   }
-}
-
-aspect CovariantReturnTypes {
+  // Allow covariant return types
   refine TypeHierarchyCheck eq MethodDecl.mayOverrideReturn(MethodDecl m) = type().instanceOf(m.type());
 }
 
