@@ -1,0 +1,203 @@
+aspect AutoBoxingCodegen {
+    // Code generation for Boxing Conversion
+  refine CodeGeneration void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    if(type.unboxed() == this || type.isObject())
+      boxed().emitBoxingOperation(gen);
+  }
+  void ReferenceType.byteToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeByte().boxed().byteToThis(gen);
+    else {
+      unboxed().byteToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  void ReferenceType.charToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeChar().boxed().charToThis(gen);
+    else {
+      unboxed().charToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  void ReferenceType.shortToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeShort().boxed().shortToThis(gen);
+    else {
+      unboxed().shortToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  void ReferenceType.intToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeInt().boxed().intToThis(gen);
+    else {
+      unboxed().intToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  void ReferenceType.longToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeLong().boxed().longToThis(gen);
+    else {
+      unboxed().longToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  void ReferenceType.floatToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeFloat().boxed().floatToThis(gen);
+    else {
+      unboxed().floatToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  void ReferenceType.doubleToThis(CodeGeneration gen) {
+    if(isUnknown()) throw new Error("Trying to cast to Unknown");
+    if(!isNumericType())
+      typeDouble().boxed().doubleToThis(gen);
+    else {
+      unboxed().doubleToThis(gen);
+      emitBoxingOperation(gen);
+    }
+  }
+  protected void TypeDecl.emitBoxingOperation(CodeGeneration gen) {
+    // Box the value on the stack into this Reference type
+    String classname = constantPoolName();
+    String desc = "(" + unboxed().typeDescriptor() + ")" + typeDescriptor();
+    String name = "valueOf";
+    int index = gen.constantPool().addMethodref(classname, name, desc);
+    gen.emit(Bytecode.INVOKESTATIC, variableSize() - unboxed().variableSize()).add2(index);
+  }
+
+  // Code generation for Unboxing Conversion
+  refine CodeGeneration public void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    if(type instanceof PrimitiveType) {
+      emitUnboxingOperation(gen);
+      unboxed().emitCastTo(gen, type);
+    }
+    else 
+      CodeGeneration.ReferenceType.emitCastTo(gen, type);
+  }
+  protected void TypeDecl.emitUnboxingOperation(CodeGeneration gen) {
+    // Unbox the value on the stack from this Reference type
+    String classname = constantPoolName();
+    String desc = "(" + ")" + unboxed().typeDescriptor();
+    String name = unboxed().name() + "Value";
+    int index = gen.constantPool().addMethodref(classname, name, desc);
+    gen.emit(Bytecode.INVOKEVIRTUAL, unboxed().variableSize() - 1).add2(index);
+  }
+
+  // Generate unboxing code for conditions
+  // 14.9 If, 14.12 While, 14.13 Do, 14.14 For
+  // 
+  // emitEvalBranch is used to emit the condition from these constructs
+  // refine behavior to include unboxing of the value when needed
+  refine CreateBCode public void Expr.emitEvalBranch(CodeGeneration gen) {
+    if(type().isReferenceType()) {
+      createBCode(gen);
+      type().emitUnboxingOperation(gen);
+      gen.emitCompare(Bytecode.IFEQ, false_label());
+      gen.emitGoto(true_label());
+    }
+    else {
+      CreateBCode.Expr.emitEvalBranch(gen);
+    }
+  }
+
+
+  // 14.11 Switch
+
+  // 15.12.2 Determine Method Signature
+
+ 
+  // 15.14.2 Postix Increment Operator ++
+  // 15.14.3 Postix Decrement Operator --
+  refine CreateBCode public void Unary.emitPostfix(CodeGeneration gen, int constant) {
+    Expr operand = getOperand();
+    while(operand instanceof ParExpr)
+      operand = ((ParExpr)operand).getExpr();
+    Access access = ((Access)operand).lastAccess();
+    access.createAssignLoadDest(gen);
+    if(needsPush())
+      access.createPushAssignmentResult(gen);
+    TypeDecl type = access.type().binaryNumericPromotion(typeInt());
+    access.type().emitCastTo(gen, type); // Added for AutoBoxing
+    type.emitPushConstant(gen, constant);
+    type.add(gen);
+    type.emitCastTo(gen, access.type());
+    access.emitStore(gen);
+  }
+
+  // 15.15.1 Prefix Increment Operator ++
+  // 15.15.2 Prefix Decrement Operator --
+  refine CreateBCode public void Unary.emitPrefix(CodeGeneration gen, int constant) {
+    Expr operand = getOperand();
+    while(operand instanceof ParExpr)
+      operand = ((ParExpr)operand).getExpr();
+    Access access = ((Access)operand).lastAccess();
+    access.createAssignLoadDest(gen);
+    TypeDecl type = access.type().binaryNumericPromotion(typeInt());
+    access.type().emitCastTo(gen, type); // Added for AutoBoxing
+    type.emitPushConstant(gen, constant);
+    type.add(gen);
+    type.emitCastTo(gen, access.type());
+    if(needsPush())
+      access.createPushAssignmentResult(gen);
+    access.emitStore(gen);
+  }
+
+  refine CreateBCode public void ArrayCreationExpr.createBCode(CodeGeneration gen) {
+    if(hasArrayInit()){
+      getArrayInit().createBCode(gen);
+    }
+    else {
+      for (int i=0; i<getNumDims(); i++) 
+        getDims(i).createBCode(gen);
+      if(type().componentType().isPrimitive() && !type().componentType().isReferenceType()) {
+        gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+      }
+      else {
+        if(numArrays() == 1) {
+          String n = type().componentType().arrayTypeDescriptor();
+          int index = gen.constantPool().addClass(n);
+          gen.emit(Bytecode.ANEWARRAY).add2(index);
+        }
+        else {
+          String n = type().arrayTypeDescriptor();
+          int index = gen.constantPool().addClass(n);
+          gen.emit(Bytecode.MULTIANEWARRAY, 1 - numArrays()).add2(index).add(numArrays());
+        }
+      }
+    }
+  }
+
+  refine CreateBCode public void ArrayInit.createBCode(CodeGeneration gen) {
+    IntType.push(gen, getNumInit());
+    if(type().componentType().isPrimitive() && !type().componentType().isReferenceType()) {
+      gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+    } 
+    else {
+      String n = type().componentType().arrayTypeDescriptor();
+      int index = gen.constantPool().addClass(n);
+      gen.emit(Bytecode.ANEWARRAY).add2(index);
+    }
+    for(int i = 0; i < getNumInit(); i++) {
+      gen.emitDup();
+      IntType.push(gen, i);
+      getInit(i).createBCode(gen);
+      if(getInit(i) instanceof ArrayInit)
+        gen.emit(Bytecode.AASTORE);
+      else {
+        getInit(i).type().emitAssignConvTo(gen, expectedType()); // AssignConversion
+        gen.emit(expectedType().arrayStore());
+      }
+    }
+  }
+}
