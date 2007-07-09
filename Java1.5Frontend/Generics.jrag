@@ -58,6 +58,7 @@ aspect Generics {
     syn GenericTypeDecl original();
     int getNumTypeParameter();
     TypeVariable getTypeParameter(int index);
+    List getTypeParameterList();
     public String fullName();
     public String typeName();
     sons BodyDecl:BodyDecl* TypeParameter:TypeVariable* ParTypeDecl:ParTypeDecl*;
@@ -153,8 +154,15 @@ aspect GenericsTypeAnalysis {
 
   eq ParTypeAccess.type() {
     TypeDecl typeDecl = genericDecl();
-    if(typeDecl instanceof GenericTypeDecl)
-      return ((GenericTypeDecl)typeDecl).lookupParTypeDecl(this);
+    if(typeDecl instanceof GenericTypeDecl) {
+      // use signature in lookup for types that are used in extends and implements clauses
+      if(unqualifiedScope().getParent().getParent() instanceof TypeDecl)
+        return ((GenericTypeDecl)typeDecl).lookupParTypeDecl(this);
+      ArrayList args = new ArrayList();
+      for(int i = 0; i < getNumTypeArgument(); i++)
+        args.add(getTypeArgument(i).type());
+      return ((GenericTypeDecl)typeDecl).lookupParTypeDecl(args);
+    }
     return typeDecl;
   }
   syn TypeDecl ParTypeAccess.genericDecl() = getTypeAccess().type();
@@ -193,7 +201,7 @@ aspect GenericsErasure {
   eq ParClassDecl.erasure() = genericDecl();
   eq ParInterfaceDecl.erasure() = genericDecl();
   eq TypeVariable.erasure() = getTypeBound(0).type().erasure(); // Skip last erasure?
-  eq ArrayDecl.erasure() = elementType().erasure().arrayType();
+  eq ArrayDecl.erasure() = componentType().erasure().arrayType();
 }
 
 aspect GenericsTypeCheck {
@@ -390,7 +398,7 @@ aspect LookupParTypeDecl {
 
   eq GenericClassDecl.getParTypeDecl().enclosingGenericTypeDecl() = this;
   eq GenericInterfaceDecl.getParTypeDecl().enclosingGenericTypeDecl() = this;
-  eq Program.getCompilationUnit().enclosingGenericTypeDecl() = unknownType();
+  eq Program.getChild().enclosingGenericTypeDecl() = unknownType();
 
   syn lazy TypeDecl GenericTypeDecl.lookupParTypeDecl(ParTypeAccess p);
   eq GenericClassDecl.lookupParTypeDecl(ParTypeAccess p) {
@@ -429,33 +437,33 @@ aspect LookupParTypeDecl {
   }
 
   // used by methods inference when looking up paramterizations from wildcards
-  syn lazy TypeDecl GenericTypeDecl.lookupParTypeDecl(ArrayList list);
+  syn lazy final TypeDecl GenericTypeDecl.lookupParTypeDecl(ArrayList list);
   eq GenericClassDecl.lookupParTypeDecl(ArrayList list) {
-    for(int i = 0; i < getNumParTypeDecl(); i++) {
+    /*for(int i = 0; i < getNumParTypeDecl(); i++) {
       ParTypeDecl decl = (ParTypeDecl)getParTypeDecl(i);
       if(decl.sameSignature(list) || (list.isEmpty() && decl.isRawType()))
         return (TypeDecl)decl;
-    }
+    }*/
     ParClassDecl typeDecl = list.size() == 0 ? new RawClassDecl() : new ParClassDecl();
     typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
     typeDecl.setID(getID());
-    addParTypeDecl(typeDecl);
     typeDecl.setArgumentList(createArgumentList(list));
     typeDecl.is$Final = true;
+    addParTypeDecl(typeDecl);
     return typeDecl;
   }
   eq GenericInterfaceDecl.lookupParTypeDecl(ArrayList list) {
-    for(int i = 0; i < getNumParTypeDecl(); i++) {
+    /*for(int i = 0; i < getNumParTypeDecl(); i++) {
       ParTypeDecl decl = (ParTypeDecl)getParTypeDecl(i);
       if(decl.sameSignature(list) || (list.isEmpty() && decl.isRawType()))
         return (TypeDecl)decl;
-    }
+    }*/
     ParInterfaceDecl typeDecl = list.size() == 0 ? new RawInterfaceDecl() : new ParInterfaceDecl();
     typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
     typeDecl.setID(getID());
-    addParTypeDecl(typeDecl);
     typeDecl.setArgumentList(createArgumentList(list));
     typeDecl.is$Final = true;
+    addParTypeDecl(typeDecl);
     return typeDecl;
   }
   public List GenericTypeDecl.createArgumentList(ArrayList params) {
@@ -611,7 +619,8 @@ aspect LookupParTypeDecl {
         list.add(
           new VariableArityParameterDeclaration(
             (Modifiers)p.getModifiers().fullCopy(),
-            p.type().substituteParameterType(parTypeDecl),
+            // use the type acces since VariableArity adds to the dimension
+            p.getTypeAccess().type().substituteParameterType(parTypeDecl),
             p.getID(),
             new List()
           )
@@ -877,94 +886,62 @@ aspect LookupParTypeDecl {
     return c;
   }
 
-  syn lazy CompilationUnit Program.wildcards() {
-    CompilationUnit cu = new CompilationUnit(
+  syn nta WildcardsCompilationUnit Program.wildcards() {
+    return new WildcardsCompilationUnit(
       "wildcards",
       new List(),
       new List()
     );
-    cu.is$Final = true;
-    addCompilationUnit(cu);
-    return cu;
   }
 
-  syn boolean TypeDecl.matches(AbstractWildcard wildcard) = false;
-  eq WildcardType.matches(AbstractWildcard wildcard) = wildcard.matches(this);
-  eq WildcardExtendsType.matches(AbstractWildcard wildcard) = wildcard.matchesExtends(this);
-  eq WildcardSuperType.matches(AbstractWildcard wildcard) = wildcard.matchesSuper(this);
-
-  syn boolean AbstractWildcard.matches(AbstractWildcardType type) = true;
-  eq WildcardExtends.matches(AbstractWildcardType type) = false;
-  eq WildcardSuper.matches(AbstractWildcardType type) = false;
-  
-  syn boolean AbstractWildcard.matchesExtends(WildcardExtendsType type) = false;
-  eq WildcardExtends.matchesExtends(WildcardExtendsType type) = type.extendsType() == getAccess().type();
   syn TypeDecl WildcardExtendsType.extendsType() = getAccess().type();
-  
-  syn boolean AbstractWildcard.matchesSuper(WildcardSuperType type) = false;
-  eq WildcardSuper.matchesSuper(WildcardSuperType type) = type.superType() == getAccess().type();
   syn TypeDecl WildcardSuperType.superType() = getAccess().type();
 
-  public abstract TypeDecl AbstractWildcard.buildTypeDecl();
+  eq Wildcard.type() = typeWildcard();
+  eq WildcardExtends.type() = lookupWildcardExtends(getAccess().type());
+  eq WildcardSuper.type() = lookupWildcardSuper(getAccess().type());
+  inh TypeDecl WildcardSuper.lookupWildcardSuper(TypeDecl bound);
+  inh TypeDecl WildcardExtends.lookupWildcardExtends(TypeDecl bound);
+  inh TypeDecl Wildcard.typeWildcard();
 
-  public TypeDecl Wildcard.buildTypeDecl() {
-    return new WildcardType(
+  syn nta TypeDecl WildcardsCompilationUnit.typeWildcard() {
+    TypeDecl decl = new WildcardType(
       new Modifiers(new List().add(new Modifier("public"))),
       "?",
       new List()
     );
-  }
-  public TypeDecl WildcardExtends.buildTypeDecl() {
-    return new WildcardExtendsType(
-      new Modifiers(new List().add(new Modifier("public"))),
-      "? extends " + getAccess().type().fullName(),
-      new List(),
-      getAccess().type().createBoundAccess()
-    );
-  }
-  public TypeDecl WildcardSuper.buildTypeDecl() {
-    return new WildcardSuperType(
-      new Modifiers(new List().add(new Modifier("public"))),
-      "? super " + getAccess().type().fullName(),
-      new List(),
-      getAccess().type().createBoundAccess()
-    );
-  }
-  
-  syn lazy TypeDecl Program.lookupWildcard(AbstractWildcard wildcard) {
-    CompilationUnit cu = wildcards();
-    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
-      TypeDecl typeDecl = cu.getTypeDecl(i);
-      if(typeDecl.matches(wildcard))
-        return typeDecl;
-    }
-    TypeDecl decl = wildcard.buildTypeDecl();
-    decl.is$Final = true;
-    cu.addTypeDecl(decl);
     return decl;
   }
-  eq Program.getCompilationUnit().lookupWildcard(AbstractWildcard wildcard) = lookupWildcard(wildcard);
-  inh TypeDecl AbstractWildcard.lookupWildcard(AbstractWildcard wildcard);
+  inh TypeDecl TypeDecl.typeWildcard();
+  eq Program.getChild().typeWildcard() = wildcards().typeWildcard();
 
-  eq AbstractWildcard.type() = lookupWildcard(this);
+  syn nta TypeDecl WildcardsCompilationUnit.lookupWildcardExtends(TypeDecl bound) {
+    TypeDecl decl = new WildcardExtendsType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      "? extends " + bound.fullName(),
+      new List(),
+      bound.createBoundAccess()
+    );
+    return decl;
+  }
+  eq Program.getChild().lookupWildcardExtends(TypeDecl typeDecl) = wildcards().lookupWildcardExtends(typeDecl);
+  inh TypeDecl TypeDecl.lookupWildcardExtends(TypeDecl typeDecl);
+  syn TypeDecl TypeDecl.asWildcardExtends() = lookupWildcardExtends(this);
 
+  syn nta TypeDecl WildcardsCompilationUnit.lookupWildcardSuper(TypeDecl bound) {
+    TypeDecl decl = new WildcardSuperType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      "? extends " + bound.fullName(),
+      new List(),
+      bound.createBoundAccess()
+    );
+    return decl;
+  }
+  eq Program.getChild().lookupWildcardSuper(TypeDecl typeDecl) = wildcards().lookupWildcardSuper(typeDecl);
+  inh TypeDecl TypeDecl.lookupWildcardSuper(TypeDecl typeDecl);
+  syn TypeDecl TypeDecl.asWildcardSuper() = lookupWildcardSuper(this);
 
-  syn lazy LUBType Program.lookupLUBType(ArrayList bounds) {
-    CompilationUnit cu = wildcards();
-    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
-      TypeDecl typeDecl = cu.getTypeDecl(i);
-      if(typeDecl instanceof LUBType) {
-        LUBType type = (LUBType)typeDecl;
-        if(type.getNumTypeBound() == bounds.size()) {
-          boolean same = true;
-          for(int j = 0; same && j < type.getNumTypeBound(); j++)
-            if(type.getTypeBound(j).type() != bounds.get(j))
-              same = false;
-          if(same)
-            return type;
-        }
-      }
-    }
+  syn nta LUBType WildcardsCompilationUnit.lookupLUBType(ArrayList bounds) {
     List boundList = new List();
     StringBuffer name = new StringBuffer();
     for(Iterator iter = bounds.iterator(); iter.hasNext(); ) {
@@ -978,13 +955,11 @@ aspect LookupParTypeDecl {
       new List(),
       boundList
     );
-    decl.is$Final = true;
-    cu.addTypeDecl(decl);
     return decl;
   }
   inh LUBType TypeDecl.lookupLUBType(ArrayList bounds);
-  eq Program.getCompilationUnit().lookupLUBType(ArrayList bounds) = 
-    lookupLUBType(bounds);
+  eq Program.getChild().lookupLUBType(ArrayList bounds) = 
+    wildcards().lookupLUBType(bounds);
 
   eq LUBType.supertypeClassDecl(ClassDecl type) = type.subtype(lub());
   eq LUBType.supertypeInterfaceDecl(InterfaceDecl type) = type.subtype(lub());
@@ -995,67 +970,6 @@ aspect LookupParTypeDecl {
     return true;
   }
 
-  syn lazy TypeDecl Program.typeWildcard() {
-    CompilationUnit cu = wildcards();
-    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
-      TypeDecl typeDecl = cu.getTypeDecl(i);
-      if(typeDecl instanceof WildcardType)
-        return typeDecl;
-    }
-    TypeDecl decl = new WildcardType(
-      new Modifiers(new List().add(new Modifier("public"))),
-      "?",
-      new List()
-    );
-    decl.is$Final = true;
-    cu.addTypeDecl(decl);
-    return decl;
-  }
-  inh TypeDecl TypeDecl.typeWildcard();
-  eq Program.getCompilationUnit().typeWildcard() = typeWildcard();
-
-  syn lazy TypeDecl Program.lookupWildcardExtends(TypeDecl bound) {
-    CompilationUnit cu = wildcards();
-    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
-      TypeDecl typeDecl = cu.getTypeDecl(i);
-      if(typeDecl instanceof WildcardExtendsType && ((WildcardExtendsType)typeDecl).getAccess().type() == typeDecl)
-        return typeDecl;
-    }
-    TypeDecl decl = new WildcardExtendsType(
-      new Modifiers(new List().add(new Modifier("public"))),
-      "? extends " + bound.fullName(),
-      new List(),
-      bound.createBoundAccess()
-    );
-    decl.is$Final = true;
-    cu.addTypeDecl(decl);
-    return decl;
-  }
-  eq Program.getCompilationUnit().lookupWildcardExtends(TypeDecl typeDecl) = lookupWildcardExtends(typeDecl);
-  inh TypeDecl TypeDecl.lookupWildcardExtends(TypeDecl typeDecl);
-  syn TypeDecl TypeDecl.asWildcardExtends() = lookupWildcardExtends(this);
-
-
-  syn lazy TypeDecl Program.lookupWildcardSuper(TypeDecl bound) {
-    CompilationUnit cu = wildcards();
-    for(int i = 0; i < cu.getNumTypeDecl(); i++) {
-      TypeDecl typeDecl = cu.getTypeDecl(i);
-      if(typeDecl instanceof WildcardSuperType && ((WildcardSuperType)typeDecl).getAccess().type() == typeDecl)
-        return typeDecl;
-    }
-    TypeDecl decl = new WildcardSuperType(
-      new Modifiers(new List().add(new Modifier("public"))),
-      "? extends " + bound.fullName(),
-      new List(),
-      bound.createBoundAccess()
-    );
-    decl.is$Final = true;
-    cu.addTypeDecl(decl);
-    return decl;
-  }
-  eq Program.getCompilationUnit().lookupWildcardSuper(TypeDecl typeDecl) = lookupWildcardSuper(typeDecl);
-  inh TypeDecl TypeDecl.lookupWildcardSuper(TypeDecl typeDecl);
-  syn TypeDecl TypeDecl.asWildcardSuper() = lookupWildcardSuper(this);
 
 }
 

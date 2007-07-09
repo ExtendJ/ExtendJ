@@ -26,7 +26,7 @@ aspect GenericMethodsInference {
   eq AssignSimpleExpr.getSource().assignConvertedType() = getDest().type();
   eq ArrayInit.getInit().assignConvertedType() = declType().componentType();
   eq ReturnStmt.getResult().assignConvertedType() = returnType();
-  eq Program.getCompilationUnit().assignConvertedType() = typeNull();
+  eq Program.getChild().assignConvertedType() = typeNull();
 
   inh TypeDecl MethodAccess.typeObject();
 
@@ -54,20 +54,27 @@ aspect GenericMethodsInference {
     //c.printConstraints();
 
     //System.err.println("Resolving unresolved type arguments");
-    c.resolveBounds();
+    //c.resolveBounds();
     //c.printConstraints();
 
-    TypeDecl S = assignConvertedType();
-    TypeDecl R = decl.type();
-    // TODO: replace all uses of type variables in R with their inferred types
-    TypeDecl Rprime = R;
-    if(!R.isVoid()) {
+    if(c.unresolvedTypeArguments()) {
+      TypeDecl S = assignConvertedType();
+      if(S.isPrimitive())
+        S = S.boxed();
+      TypeDecl R = decl.type();
+      // TODO: replace all uses of type variables in R with their inferred types
+      TypeDecl Rprime = R;
+      if(R.isVoid())
+        R = typeObject();
       c.convertibleFrom(S, R);
-      // TODO: add constrint S >> Rprime provided R is not void
+      // TODO: additional constraints
+
+      c.resolveEqualityConstraints();
+      c.resolveSupertypeConstraints();
+      //c.resolveBounds();
+
+      c.resolveSubtypeConstraints();
     }
-    c.resolveEqualityConstraints();
-    c.resolveSupertypeConstraints();
-    c.resolveBounds();
 
     return c.typeArguments();
   }
@@ -92,6 +99,16 @@ aspect GenericMethodsInference {
         typeVariables.add(T);
         constraintsMap.put(T, new ConstraintSet());
       }
+    }
+
+    public boolean unresolvedTypeArguments() {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        if(set.typeArgument == null)
+          return true;
+      }
+      return false;
     }
 
     public void printConstraints() {
@@ -177,6 +194,20 @@ aspect GenericMethodsInference {
         TypeDecl U = (TypeDecl)i2.next();
         if(U == before) //  TODO: fix parameterized type
           i2.set(after);
+      }
+    }
+
+    public void resolveSubtypeConstraints() {
+      for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
+        TypeVariable T = (TypeVariable)iter.next();
+        ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
+        if(!set.subtypeConstraints.isEmpty()) {
+          ArrayList list = set.subtypeConstraints;
+          if(list.size() == 1)
+            set.typeArgument = (TypeDecl)list.iterator().next();
+          else
+            throw new Error("Need to compute greatest lower bound for subtype constraints");
+        }
       }
     }
     
@@ -428,7 +459,6 @@ aspect GenericMethodsInference {
         TypeDecl H = PA.genericDecl();
         for(int i = 0; i < PF.getNumArgument(); i++) {
           TypeDecl T = PF.getArgument(i).type();
-          TypeDecl X = PA.getArgument(i).type();
           if(T.involvesTypeParameters()) {
             // If F has the form G<...,U,...> where U is a type expression that involves Tj
             if(!T.isWildcard()) {
@@ -443,17 +473,20 @@ aspect GenericMethodsInference {
                     }
                   }
                 }
-                else if(!X.isWildcard()) {
-                  TypeDecl W = X;
-                  constraintEqual(W, U);
-                }
-                else if(X instanceof WildcardExtendsType) {
-                  TypeDecl W = ((WildcardExtendsType)X).getAccess().type();
-                  convertibleFrom(W, U);
-                }
-                else if(X instanceof WildcardSuperType) {
-                  TypeDecl W = ((WildcardSuperType)X).getAccess().type();
-                  convertibleTo(W, U);
+                else if(PF.getNumArgument() == PA.getNumArgument()) {
+                  TypeDecl X = PA.getArgument(i).type();
+                  if(!X.isWildcard()) {
+                    TypeDecl W = X;
+                    constraintEqual(W, U);
+                  }
+                  else if(X instanceof WildcardExtendsType) {
+                    TypeDecl W = ((WildcardExtendsType)X).getAccess().type();
+                    convertibleFrom(W, U);
+                  }
+                  else if(X instanceof WildcardSuperType) {
+                    TypeDecl W = ((WildcardSuperType)X).getAccess().type();
+                    convertibleTo(W, U);
+                  }
                 }
               }
             }
@@ -473,9 +506,12 @@ aspect GenericMethodsInference {
                     }
                   }
                 }
-                else if(X instanceof WildcardExtendsType) {
-                  TypeDecl W = ((WildcardExtendsType)X).getAccess().type();
-                  convertibleFrom(W, U);
+                else if(PF.getNumArgument() == PA.getNumArgument()) {
+                  TypeDecl X = PA.getArgument(i).type();
+                  if(X instanceof WildcardExtendsType) {
+                    TypeDecl W = ((WildcardExtendsType)X).getAccess().type();
+                    convertibleFrom(W, U);
+                  }
                 }
               }
             }
@@ -495,9 +531,12 @@ aspect GenericMethodsInference {
                     }
                   }
                 }
-                else if(X instanceof WildcardSuperType) {
-                  TypeDecl W = ((WildcardSuperType)X).getAccess().type();
-                  convertibleTo(W, U);
+                else if(PF.getNumArgument() == PA.getNumArgument()) {
+                  TypeDecl X = PA.getArgument(i).type();
+                  if(X instanceof WildcardSuperType) {
+                    TypeDecl W = ((WildcardSuperType)X).getAccess().type();
+                    convertibleTo(W, U);
+                  }
                 }
               }
             }

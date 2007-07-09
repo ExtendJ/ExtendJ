@@ -80,7 +80,7 @@ aspect Annotations {
   // 14.4
   eq VariableDeclaration.getModifiers().mayUseAnnotationTarget(String name) =
     name.equals("LOCAL_VARIABLE");
-  eq Program.getCompilationUnit().mayUseAnnotationTarget(String name) = false;
+  eq Program.getChild().mayUseAnnotationTarget(String name) = false;
 
   /* The direct superinterface of an annotation type is always
   annotation.Annotation.*/
@@ -165,7 +165,7 @@ aspect Annotations {
   inh ElementValue ElementConstantValue.lookupElementTypeValue(String name);
   eq ElementArrayValue.getElementValue().lookupElementTypeValue(String name) =
     definesElementTypeValue(name);
-  eq Program.getCompilationUnit().lookupElementTypeValue(String name) = null;
+  eq Program.getChild().lookupElementTypeValue(String name) = null;
   syn ElementValue ElementValue.definesElementTypeValue(String name) = null;
   eq ElementConstantValue.definesElementTypeValue(String name) {
     Variable v = getExpr().varDecl();
@@ -182,135 +182,7 @@ aspect Annotations {
 
   // 9.6.1.2 Retention TODO
   
-  refine Attributes eq TypeDecl.attributes() {
-    Collection c = Attributes.TypeDecl.attributes();
-    getModifiers().addRuntimeVisibleAnnotationsAttribute(c);
-    getModifiers().addRuntimeInvisibleAnnotationsAttribute(c);
-    return c;
-  }
-  refine Attributes eq FieldDeclaration.attributes() {
-    Collection c = Attributes.FieldDeclaration.attributes();
-    getModifiers().addRuntimeVisibleAnnotationsAttribute(c);
-    getModifiers().addRuntimeInvisibleAnnotationsAttribute(c);
-    return c;
-  }
-  refine Attributes eq MethodDecl.attributes() {
-    Collection c = Attributes.MethodDecl.attributes();
-    getModifiers().addRuntimeVisibleAnnotationsAttribute(c);
-    getModifiers().addRuntimeInvisibleAnnotationsAttribute(c);
-    addRuntimeVisibleParameterAnnotationsAttribute(c);
-    addRuntimeInvisibleParameterAnnotationsAttribute(c);
-    return c;
-  }
-  refine Attributes eq ConstructorDecl.attributes() {
-    Collection c = Attributes.ConstructorDecl.attributes();
-    getModifiers().addRuntimeVisibleAnnotationsAttribute(c);
-    getModifiers().addRuntimeInvisibleAnnotationsAttribute(c);
-    return c;
-  }
 
-  // 4.8.15
-  public void Modifiers.addRuntimeVisibleAnnotationsAttribute(Collection c) {
-    ConstantPool cp = hostType().constantPool();
-    Collection annotations = runtimeVisibleAnnotations();
-    if(!annotations.isEmpty())
-      c.add(new AnnotationsAttribute(cp, annotations, "RuntimeVisibleAnnotations"));
-  }
-
-  // 4.8.16
-  public void Modifiers.addRuntimeInvisibleAnnotationsAttribute(Collection c) {
-    ConstantPool cp = hostType().constantPool();
-    Collection annotations = runtimeInvisibleAnnotations();
-    if(!annotations.isEmpty())
-      c.add(new AnnotationsAttribute(cp, annotations, "RuntimeInvisibleAnnotations"));
-  }
-
-  class AnnotationsAttribute extends Attribute {
-    public AnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
-      super(cp, name);
-      u2(annotations.size());
-      for(Iterator iter = annotations.iterator(); iter.hasNext(); )
-        ((Annotation)iter.next()).appendAsAttributeTo(this);
-    }
-  }
-
-  inh TypeDecl Modifiers.hostType();
-
-  // 4.8.15
-  syn boolean Modifier.isRuntimeVisible() = false;
-  eq Annotation.isRuntimeVisible() {
-    Annotation a = decl().annotation("java.lang.annotation", "Retention");
-    if(a == null) return false;
-    ElementConstantValue value = (ElementConstantValue)a.getElementValuePair(0).getElementValue();
-    Variable v = value.getExpr().varDecl();
-    return v != null && v.name().equals("RUNTIME");
-  }
-
-  // 4.8.16
-  syn boolean Modifier.isRuntimeInvisible() = false;
-  eq Annotation.isRuntimeInvisible() {
-    Annotation a = decl().annotation("java.lang.annotation", "Retention");
-    if(a == null) return true; // default bahavior if not annotated
-    ElementConstantValue value = (ElementConstantValue)a.getElementValuePair(0).getElementValue();
-    Variable v = value.getExpr().varDecl();
-    return v != null &&  v.name().equals("CLASS");
-  }
-
-  // 4.8.17
-  public void MethodDecl.addRuntimeVisibleParameterAnnotationsAttribute(Collection c) {
-    boolean foundVisibleAnnotations = false;
-    Collection annotations = new ArrayList(getNumParameter());
-    for(int i = 0; i < getNumParameter(); i++) {
-      Collection a = getParameter(i).getModifiers().runtimeVisibleAnnotations();
-      if(!a.isEmpty()) foundVisibleAnnotations = true;
-      annotations.add(a);
-    }
-    if(foundVisibleAnnotations)
-      c.add(new ParameterAnnotationsAttribute(hostType().constantPool(), annotations, "RuntimeVisibleParameterAnnotations"));
-  }
-
-  public Collection Modifiers.runtimeVisibleAnnotations() {
-    Collection annotations = new ArrayList();
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i).isRuntimeVisible())
-        annotations.add(getModifier(i));
-    return annotations;
-  }
-
-  // 4.8.18
-  public void MethodDecl.addRuntimeInvisibleParameterAnnotationsAttribute(Collection c) {
-    boolean foundInvisibleAnnotations = false;
-    Collection annotations = new ArrayList(getNumParameter());
-    for(int i = 0; i < getNumParameter(); i++) {
-      Collection a = getParameter(i).getModifiers().runtimeInvisibleAnnotations();
-      if(!a.isEmpty()) foundInvisibleAnnotations = true;
-      annotations.add(a);
-    }
-    if(foundInvisibleAnnotations)
-      c.add(new ParameterAnnotationsAttribute(hostType().constantPool(), annotations, "RuntimeInvisibleParameterAnnotations"));
-  }
-
-  public Collection Modifiers.runtimeInvisibleAnnotations() {
-    Collection annotations = new ArrayList();
-    for(int i = 0; i < getNumModifier(); i++)
-      if(getModifier(i).isRuntimeInvisible())
-        annotations.add(getModifier(i));
-    return annotations;
-  }
-
-  class ParameterAnnotationsAttribute extends Attribute {
-    public ParameterAnnotationsAttribute(ConstantPool cp, Collection annotations, String name) {
-      super(cp, name);
-      u1(annotations.size());
-      for(Iterator iter = annotations.iterator(); iter.hasNext(); ) {
-        Collection c = (Collection)iter.next();
-        for(Iterator inner = c.iterator(); inner.hasNext(); ) {
-          Annotation a = (Annotation)inner.next();
-          a.appendAsAttributeTo(this);
-        }
-      }
-    }
-  }
 
   // 9.6.1.3 Inherited
   /* Indicates that an annotation type is automatically inherited.  If an Inherited
@@ -390,7 +262,7 @@ aspect Annotations {
   generated as a result of the annotated declaration or any of its parts.
   Unchecked warnings are identified by the string "unchecked"*/
   inh boolean Access.withinSuppressWarnings(String s);
-  eq Program.getCompilationUnit().withinSuppressWarnings(String s) = false;
+  eq Program.getChild().withinSuppressWarnings(String s) = false;
 
   eq TypeDecl.getBodyDecl(int i).withinSuppressWarnings(String s) =
     getBodyDecl(i).hasAnnotationSuppressWarnings(s) || hasAnnotationSuppressWarnings(s) ||
@@ -405,7 +277,7 @@ aspect Annotations {
 
   syn boolean TypeDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
   syn boolean BodyDecl.hasAnnotationSuppressWarnings(String s) = false;
-  eq MemberTypeDecl.hasAnnotationSuppressWarnings(String s) = getTypeDecl().hasAnnotationSuppressWarnings(s);
+  eq MemberTypeDecl.hasAnnotationSuppressWarnings(String s) = typeDecl().hasAnnotationSuppressWarnings(s);
   eq MethodDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
   eq ConstructorDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
   eq FieldDeclaration.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
@@ -443,7 +315,7 @@ aspect Annotations {
   syn boolean Modifiers.hasDeprecatedAnnotation() = annotation("java.lang", "Deprecated") != null;
 
   syn boolean TypeDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
-  syn boolean MemberTypeDecl.isDeprecated() = getTypeDecl().isDeprecated();
+  syn boolean MemberTypeDecl.isDeprecated() = typeDecl().isDeprecated();
   syn boolean MethodDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
   syn boolean ConstructorDecl.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
   syn boolean FieldDeclaration.isDeprecated() = getModifiers().hasDeprecatedAnnotation();
@@ -492,7 +364,7 @@ aspect Annotations {
         warning(decl().signature() + " in " + decl().hostType().typeName() + " has been deprecated");
   }
 
-  eq Program.getCompilationUnit().withinDeprecatedAnnotation() = false;
+  eq Program.getChild().withinDeprecatedAnnotation() = false;
   inh boolean Access.withinDeprecatedAnnotation();
 
   eq TypeDecl.getBodyDecl(int i).withinDeprecatedAnnotation() =
@@ -551,7 +423,7 @@ aspect Annotations {
   eq ElementAnnotationValue.getAnnotation().lookupAnnotation(TypeDecl typeDecl) =
     getAnnotation().type() == typeDecl ? getAnnotation() : lookupAnnotation(typeDecl);
 
-  eq Program.getCompilationUnit(int i).lookupAnnotation(TypeDecl typeDecl) = null;
+  eq Program.getChild(int i).lookupAnnotation(TypeDecl typeDecl) = null;
 
   syn ElementValue Annotation.elementValueFor(String name) {
     for(int i = 0; i < getNumElementValuePair(); i++) {
@@ -582,7 +454,7 @@ aspect Annotations {
   inh TypeDecl ElementValuePair.enclosingAnnotationDecl();
   inh TypeDecl ElementValue.enclosingAnnotationDecl();
   eq Annotation.getElementValuePair().enclosingAnnotationDecl() = decl();
-  eq Program.getCompilationUnit().enclosingAnnotationDecl() = unknownType();
+  eq Program.getChild().enclosingAnnotationDecl() = unknownType();
     
   /* An element type T is commensurate with an element value V if and only if one of the following conditions is true:
     * T is an array type E[] and either:
@@ -679,74 +551,6 @@ aspect Annotations {
     }
     return set;
   }
-
-  // Add ACC_ANNOTATION flag to generated class file
-  public static final int Modifiers.ACC_ANNOTATION = 0x2000;
-  eq AnnotationDecl.flags() = super.flags() | Modifiers.ACC_ANNOTATION;
-
-  eq AnnotationMethodDecl.attributes() {
-    Collection c = super.attributes();
-    // 4.8.19
-    if(hasDefaultValue()) {
-      Attribute attribute = new Attribute(hostType().constantPool(), "AnnotationDefault");
-      getDefaultValue().appendAsAttributeTo(attribute);
-      c.add(attribute);
-    }
-    return c;
-  }
-
-  // 4.8.15
-  public void Annotation.appendAsAttributeTo(Attribute buf) {
-    ConstantPool cp = hostType().constantPool();
-    int type_index = cp.addUtf8(decl().typeDescriptor());
-    buf.u2(type_index);
-    buf.u2(getNumElementValuePair());
-    for(int i = 0; i < getNumElementValuePair(); i++) {
-      int name_index = cp.addUtf8(getElementValuePair(i).getName());
-      buf.u2(name_index);
-      getElementValuePair(i).getElementValue().appendAsAttributeTo(buf);
-    }
-  }
-
-  // 4.8.15.1
-  public void ElementValue.appendAsAttributeTo(Attribute buf) {
-    throw new Error(getClass().getName() + " does not support appendAsAttributeTo(Attribute buf)");
-  }
-  public void ElementConstantValue.appendAsAttributeTo(Attribute buf) {
-    if(getExpr().isConstant() && !getExpr().type().isEnumDecl()) {
-      char tag = getExpr().type().isString() ? 's' : getExpr().type().typeDescriptor().charAt(0);
-      int const_value_index = getExpr().type().addConstant(hostType().constantPool(), getExpr().constant());
-      buf.u1(tag);
-      buf.u2(const_value_index);
-    }
-    else if(getExpr().isClassAccess()) {
-      int const_class_index = hostType().constantPool().addUtf8(getExpr().type().typeDescriptor());
-      buf.u1('c');
-      buf.u2(const_class_index);
-    }
-    else {
-      Variable v = getExpr().varDecl();
-      if(v == null) throw new Error("Expected Enumeration constant");
-
-      int type_name_index = hostType().constantPool().addUtf8(v.type().typeDescriptor());
-      int const_name_index = hostType().constantPool().addUtf8(v.name());
-      buf.u1('e');
-      buf.u2(type_name_index);
-      buf.u2(const_name_index);
-    }
-  }
-  public void ElementAnnotationValue.appendAsAttributeTo(Attribute buf) {
-    buf.u1('@');
-    getAnnotation().appendAsAttributeTo(buf);
-  }
-  public void ElementArrayValue.appendAsAttributeTo(Attribute buf) {
-    buf.u1('[');
-    buf.u2(getNumElementValue());
-    for(int i = 0; i < getNumElementValue(); i++)
-      getElementValue(i).appendAsAttributeTo(buf);
-  }
-
-  inh TypeDecl ElementValue.hostType();
 
   // provide error message for method calls in 
   eq ElementConstantValue.getExpr().methodHost() = enclosingAnnotationDecl().typeName();
