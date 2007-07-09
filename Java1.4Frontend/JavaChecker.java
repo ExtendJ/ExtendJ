@@ -1,9 +1,5 @@
 import AST.*;
 
-import java.util.*;
-import java.io.*;
-import parser.*;
-
 class JavaChecker extends Frontend {
 
   public static void main(String args[]) {
@@ -11,53 +7,18 @@ class JavaChecker extends Frontend {
   }
 
   public static boolean compile(String args[]) {
-    return new JavaChecker().process(args);
-  }
-
-  public boolean process(String args[]) {
-    initReaders();
-    initOptions();
-    processArgs(args);
-
-    Collection files = program.files();
-    
-    if(program.hasOption("-version")) {
-      printVersion();
-      return false;
-    }
-    if(program.hasOption("-help") || files.isEmpty()) {
-      printUsage();
-      return false;
-    }
-    
-    for(Iterator iter = files.iterator(); iter.hasNext(); ) {
-      String name = (String)iter.next();
-      program.addSourceFile(name);
-    }
-
-    try {
-      for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
-        CompilationUnit unit = (CompilationUnit)iter.next();
-        if(unit.fromSource()) {
-          Collection errors = new LinkedList();
-          unit.errorCheck(errors);
-          if(!errors.isEmpty()) {
-            System.out.println("Errors:");
-            for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
-              String s = (String)iter2.next();
-              System.out.println(s);
-            }
-            return false;
+    return new JavaChecker().process(
+        args,
+        new bytecode.Parser(),
+        new JavaParser() {
+          public CompilationUnit parse(java.io.InputStream is, String fileName) throws java.io.IOException, beaver.Parser.Exception {
+            return new parser.JavaParser().parse(is, fileName);
           }
-        }
-      }
-    } catch (Error e) {
-      System.err.println(e.getMessage());
-      return false;
-    }
-    return true;
+        },
+        new scanner.JavaScanner()
+    );
   }
 
-  protected String name() { return "JavaPrettyPrinter"; }
+  protected String name() { return "JavaChecker"; }
   protected String version() { return "R20060915"; }
 }

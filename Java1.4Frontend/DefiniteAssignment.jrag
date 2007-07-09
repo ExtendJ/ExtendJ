@@ -36,7 +36,7 @@ aspect DefiniteAssignment {
   eq PreDecExpr.getOperand().isDest() = true;
   
   inh boolean Expr.isIncOrDec();
-  eq Program.getCompilationUnit().isIncOrDec() = false;
+  eq Program.getChild().isIncOrDec() = false;
   eq CompilationUnit.getTypeDecl().isIncOrDec() = false;
   eq Block.getStmt().isIncOrDec() = false;
   eq PostfixExpr.getOperand().isIncOrDec() = true;
@@ -306,7 +306,7 @@ aspect DA {
     return isDAbefore(v);
   }
   
-  eq Program.getCompilationUnit().isDAbefore(Variable v) = false;
+  eq Program.getChild().isDAbefore(Variable v) = false;
   eq Stmt.isDAafter(Variable v) {
     //System.out.println("### isDAafter reached in " + getClass().getName());
     //throw new NullPointerException();
@@ -487,32 +487,10 @@ aspect DA {
   }
   eq VariableDeclaration.getInit().isDAbefore(Variable v) = isDAbefore(v);
   
-
-  syn lazy Collection ArrayInit.assignments() {
-    Collection c = new ArrayList();
-    collectAssignments(c);
-    return c;
-  }
-
-  protected void ASTNode.collectAssignments(Collection c) {
-    for(int i = 0; i < getNumChild(); i++)
-      getChild(i).collectAssignments(c);
-  }
-  protected void TypeDecl.collectAssignments(Collection c) {
-  }
-  protected void AssignExpr.collectAssignments(Collection c) {
-    super.collectAssignments(c);
-    if(getDest().isVariable())
-      c.add(getDest().varDecl());
-  }
-
-  eq ArrayInit.isDAafter(Variable v) {
-    if(getNumInit() > 0 && assignments().contains(v))
-      return true;
-    return isDAbefore(v);
-    //getInit(getNumInit()-1).isDAafter(v);
-  }
-  eq ArrayInit.getInit().isDAbefore(Variable v) {
+  eq ArrayInit.isDAafter(Variable v) = getNumInit() == 0 ? isDAbefore(v) : getInit(getNumInit()-1).isDAafter(v);
+  eq ArrayInit.getInit().isDAbefore(Variable v) = computeDABefore(childIndex, v);
+  // force caching of computation
+  syn lazy boolean ArrayInit.computeDABefore(int childIndex, Variable v) {
     if(childIndex == 0) return isDAbefore(v);
     int index = childIndex-1;
     while(index > 0 && getInit(index).isConstant())
@@ -722,6 +700,9 @@ aspect DU {
   syn lazy boolean Stmt.isDUafter(Variable v);
   inh boolean Expr.isDUbefore(Variable v);
   syn boolean Expr.isDUafter(Variable v);
+
+  inh lazy boolean Binary.isDUbefore(Variable v);
+  inh lazy boolean AbstractDot.isDUbefore(Variable v);
   
   syn lazy boolean Binary.isDUafter(Variable v);
   syn lazy boolean AbstractDot.isDUafter(Variable v);
@@ -734,7 +715,7 @@ aspect DU {
   inh lazy boolean BodyDecl.isDUbefore(Variable v);
   syn lazy boolean BodyDecl.isDUafter(Variable v) = true;
 
-  eq Program.getCompilationUnit().isDUbefore(Variable v) = true;
+  eq Program.getChild().isDUbefore(Variable v) = true;
 
   eq TypeDecl.getBodyDecl().isDUbefore(Variable v) {
     BodyDecl b = getBodyDecl(childIndex);
@@ -917,14 +898,16 @@ aspect DU {
   }
   eq VariableDeclaration.getInit().isDUbefore(Variable v) = isDUbefore(v);
 
-  //eq ArrayInit.isDUafter(Variable v) = getNumInit() == 0 ? isDUbefore(v) : getInit(getNumInit()-1).isDUafter(v);
-  eq ArrayInit.isDUafter(Variable v) {
-    if(getNumInit() > 0 && assignments().contains(v))
-      return false;
-    return isDUbefore(v);
-    //getInit(getNumInit()-1).isDAafter(v);
+  eq ArrayInit.isDUafter(Variable v) = getNumInit() == 0 ? isDUbefore(v) : getInit(getNumInit()-1).isDUafter(v);
+  eq ArrayInit.getInit().isDUbefore(Variable v) = computeDUbefore(childIndex, v);
+  // force caching of computation
+  syn lazy boolean ArrayInit.computeDUbefore(int childIndex, Variable v) {
+    if(childIndex == 0) return isDUbefore(v);
+    int index = childIndex-1;
+    while(index > 0 && getInit(index).isConstant())
+      index--;
+    return getInit(childIndex-1).isDUafter(v);
   }
-  eq ArrayInit.getInit().isDUbefore(Variable v) = childIndex == 0 ? isDUbefore(v) : getInit(childIndex-1).isDUafter(v);
 
   eq LabeledStmt.getStmt().isDUbefore(Variable v) = isDUbefore(v);
   eq LabeledStmt.isDUafter(Variable v) {

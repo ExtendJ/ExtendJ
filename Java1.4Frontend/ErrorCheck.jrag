@@ -40,31 +40,29 @@ aspect ErrorCheck {
   public String ASTNode.errorPrefix() {
     return sourceFile() + ":" + location() + ":\n" + "  *** Semantic Error: ";
   }
+  public String ASTNode.warningPrefix() {
+    return sourceFile() + ":" + location() + ":\n" + "  *** WARNING: ";
+  }
 
   protected java.util.ArrayList CompilationUnit.errors = new java.util.ArrayList();
+  protected java.util.ArrayList CompilationUnit.warnings = new java.util.ArrayList();
 
-  //protected String ASTNode.errors = null;
-  
   protected void ASTNode.error(String s) {
     ASTNode node = this;
     while(node != null && !(node instanceof CompilationUnit))
       node = node.getParent();
     CompilationUnit cu = (CompilationUnit)node;
     cu.errors.add(errorPrefix() + s);
-    //s = errorPrefix() + s;
-    //if(errors == null)
-    //  errors = s;
-    //else
-    //  errors = errors + "\n" + s;
+  }
+  protected void ASTNode.warning(String s) {
+    ASTNode node = this;
+    while(node != null && !(node instanceof CompilationUnit))
+      node = node.getParent();
+    CompilationUnit cu = (CompilationUnit)node;
+    cu.warnings.add(warningPrefix() + s);
   }
   
-  /*
-  protected boolean ASTNode.hasErrors() {
-    return errors != null;
-  }
-  */
-
-  public void ASTNode.collectErrors(/*Collection collection*/) {
+  public void ASTNode.collectErrors() {
     nameCheck();
     typeCheck();
     accessControl();
@@ -72,22 +70,16 @@ aspect ErrorCheck {
     checkUnreachableStmt();
     definiteAssignment();
     checkModifiers();
-    /*
-    if(hasErrors())
-      collection.add(errors);
-    */
     for(int i = 0; i < getNumChild(); i++) {
-      getChild(i).collectErrors(/*collection*/);
+      getChild(i).collectErrors();
     }
   }
 
   public void Program.errorCheck(Collection collection) {
-    //if(hasErrors())
-    //  collection.add(errors);
     for(Iterator iter = compilationUnitIterator(); iter.hasNext(); ) {
       CompilationUnit cu = (CompilationUnit)iter.next();
       if(cu.fromSource()) {
-        cu.collectErrors(/*collection*/);
+        cu.collectErrors();
         collection.addAll(cu.errors);
       }
     }
@@ -96,6 +88,11 @@ aspect ErrorCheck {
   public void CompilationUnit.errorCheck(Collection collection) {
     collectErrors();
     collection.addAll(errors);
+  }
+  public void CompilationUnit.errorCheck(Collection err, Collection warn) {
+    collectErrors();
+    err.addAll(errors);
+    warn.addAll(warnings);
   }
   
   public boolean Program.errorCheck() {

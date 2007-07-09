@@ -2,22 +2,40 @@ import AST.*;
 
 import java.util.*;
 import java.io.*;
-import parser.*;
 
-class JavaDumpTree extends Frontend {
+class JavaDumpTree {
   public static void main(String args[]) {
     if(!compile(args))
       System.exit(1);
   }
-
+  
   public static boolean compile(String args[]) {
-    return new JavaDumpTree().process(args);
-  }
+    Program program = new Program();
 
-  public boolean process(String args[]) {
-    initReaders();
-    initOptions();
-    processArgs(args);
+    program.initBytecodeReader(new bytecode.Parser());
+    program.initJavaParser(
+      new JavaParser() {
+        public CompilationUnit parse(InputStream is, String fileName) throws IOException, beaver.Parser.Exception {
+          return new parser.JavaParser().parse(is, fileName);
+        }
+      }
+    );
+    // extract package name from a source file without parsing the entire file
+    program.initPackageExtractor(new scanner.JavaScanner());
+
+
+    program.initOptions();    
+    program.addKeyValueOption("-classpath");
+    program.addKeyValueOption("-sourcepath");
+    program.addKeyValueOption("-bootclasspath");
+    program.addKeyValueOption("-extdirs");
+    program.addKeyValueOption("-d");
+    program.addKeyOption("-verbose");
+    program.addKeyOption("-version");
+    program.addKeyOption("-help");
+    program.addKeyOption("-g");
+
+    program.addOptions(args);
     Collection files = program.files();
 
     if(program.hasOption("-version")) {
@@ -46,7 +64,7 @@ class JavaDumpTree extends Frontend {
               String s = (String)iter2.next();
               System.out.println(s);
             }
-            System.out.println(unit.dumpTree());
+            System.out.println(unit.dumpTreeNoRewrite());
             return false;
           }
         }
@@ -56,10 +74,27 @@ class JavaDumpTree extends Frontend {
       return false;
     }
 
-    System.out.println(program.dumpTree());
+    program.dumpTree();
     return true;
   }
 
-  protected String name() { return "JavaDumpTree"; }
-  protected String version() { return "R20060915"; }
+  protected static void printUsage() {
+    printVersion();
+    System.out.println(
+      "\nJavaDumpTree\n\n" +
+      "Usage: java JavaDumpTree <options> <source files>\n" +
+      "  -verbose                  Output messages about what the compiler is doing\n" +
+      "  -classpath <path>         Specify where to find user class files\n" +
+      "  -sourcepath <path>        Specify where to find input source files\n" + 
+      "  -bootclasspath <path>     Override location of bootstrap class files\n" + 
+      "  -extdirs <dirs>           Override location of installed extensions\n" +
+      "  -d <directory>            Specify where to place generated class files\n" +
+      "  -help                     Print a synopsis of standard options\n" +
+      "  -version                  Print version information\n"
+    );
+  }
+
+  protected static void printVersion() {
+    System.out.println("Java1.4Frontend (http://jastadd.cs.lth.se) Version R20060127");
+  }
 }

@@ -1,4 +1,4 @@
-package parser;
+package scanner;
 import java.io.*;
 
 public class Unicode extends FilterReader {

@@ -49,8 +49,9 @@ class TestServer {
        cus[i] = cu;
        if(cu != null)
          program.addCompilationUnit(cu);
-       else
-         System.out.println("Could not load " + msg);
+       else {
+         throw new Error("Could not load " + msg);
+       }
      }
     return cus;
   }
