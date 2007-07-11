@@ -1,6 +1,7 @@
 import java.util.*;
 
 aspect GenericMethodsInference {
+  syn boolean TypeDecl.isUnboxedPrimitive() = this instanceof PrimitiveType && isPrimitive();
 
   syn boolean TypeDecl.involvesTypeParameters() circular [false] = false;
   eq TypeVariable.involvesTypeParameters() = true;
@@ -59,7 +60,7 @@ aspect GenericMethodsInference {
 
     if(c.unresolvedTypeArguments()) {
       TypeDecl S = assignConvertedType();
-      if(S.isPrimitive())
+      if(S.isUnboxedPrimitive())
         S = S.boxed();
       TypeDecl R = decl.type();
       // TODO: replace all uses of type variables in R with their inferred types
@@ -344,7 +345,7 @@ aspect GenericMethodsInference {
         return;
       // If A is a primitive type, then A is converted to a reference type U via boxing conversion
       // and this algorithm is applied recursively to the constraint U << F.
-      if(A.isPrimitive()) {
+      if(A.isUnboxedPrimitive()) {
         TypeDecl U = A.boxed();
         convertibleTo(U, F);
       }
@@ -779,6 +780,14 @@ aspect GenericMethodsInference {
       }
       else if(t instanceof TypeVariable) {
         TypeVariable type = (TypeVariable)t;
+        for(int i = 0; i < type.getNumTypeBound(); i++) {
+          addSupertypes(set, type.getTypeBound(i).type());
+        }
+        if(type.getNumTypeBound() == 0)
+          set.add(type.typeObject());
+      }
+      else if(t instanceof LUBType) {
+        LUBType type = (LUBType)t;
         for(int i = 0; i < type.getNumTypeBound(); i++) {
           addSupertypes(set, type.getTypeBound(i).type());
         }

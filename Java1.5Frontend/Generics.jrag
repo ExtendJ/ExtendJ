@@ -205,6 +205,74 @@ aspect GenericsErasure {
 }
 
 aspect GenericsTypeCheck {
+
+  // different parameterizations of the same generic interface may not be implemented
+  refine TypeHierarchyCheck public void TypeDecl.typeCheck() {
+    TypeHierarchyCheck.TypeDecl.typeCheck();
+    ArrayList list = new ArrayList();
+    list.addAll(implementedInterfaces());
+    for(int i = 0; i < list.size(); i++) {
+      InterfaceDecl decl = (InterfaceDecl)list.get(i);
+      if(decl instanceof ParInterfaceDecl) {
+        ParInterfaceDecl p = (ParInterfaceDecl)decl;
+        for(Iterator i2 = list.listIterator(i); i2.hasNext(); ) {
+          InterfaceDecl decl2 = (InterfaceDecl)i2.next();
+          if(decl2 instanceof ParInterfaceDecl) {
+            ParInterfaceDecl q = (ParInterfaceDecl)decl2;
+            if(p != q && p.genericDecl() == q.genericDecl() && !p.sameArgument(q))
+              error(p.genericDecl().name() + " cannot be inherited with different arguments: " +
+                p.typeName() + " and " + q.typeName());
+          }
+        }
+      }
+    }
+  }
+  
+  syn boolean ParTypeDecl.sameArgument(ParTypeDecl decl) {
+    if(this == decl) return true;
+    if(genericDecl() != decl.genericDecl())
+      return false;
+    for(int i = 0; i < getNumArgument(); i++) {
+      TypeDecl t1 = getArgument(i).type();
+      TypeDecl t2 = decl.getArgument(i).type();
+      if(t1 instanceof ParTypeDecl && t2 instanceof ParTypeDecl) {
+        if(!((ParTypeDecl)t1).sameArgument((ParTypeDecl)t2))
+          return false;
+      }
+      else {
+        if(t1 != t2)
+          return false;
+      }
+    }
+    return true;
+  }
+
+  syn lazy HashSet TypeDecl.implementedInterfaces() = new HashSet();
+  eq ClassDecl.implementedInterfaces() {
+    HashSet set = new HashSet();
+    if(hasSuperclass())
+      set.addAll(superclass().implementedInterfaces());
+    for(Iterator iter = interfacesIterator(); iter.hasNext(); ) {
+      InterfaceDecl decl = (InterfaceDecl)iter.next();
+      set.add(decl);
+      set.addAll(decl.implementedInterfaces());
+    }
+    return set;
+  }
+  eq InterfaceDecl.implementedInterfaces() {
+    HashSet set= new HashSet();
+    set.addAll(typeObject().implementedInterfaces());
+    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); ) {
+      InterfaceDecl decl = (InterfaceDecl)iter.next();
+      set.add(decl);
+      set.addAll(decl.implementedInterfaces());
+    }
+    return set;
+  }
+
+
+
+
   public void GenericClassDecl.typeCheck() {
     super.typeCheck();
     if(instanceOf(typeThrowable()))
@@ -968,7 +1036,15 @@ aspect LookupParTypeDecl {
     return true;
   }
 
-
+  syn String LUBType.typeName() {
+    if(getNumTypeBound() == 0)
+      return "<NOTYPE>";
+    StringBuffer s = new StringBuffer();
+    s.append(getTypeBound(0).type().typeName());
+    for(int i = 1; i < getNumTypeBound(); i++)
+      s.append(" & " + getTypeBound(i).type().typeName());
+    return s.toString();
+  }
 }
 
 
