@@ -203,6 +203,14 @@ aspect GenericsCodegen {
   eq ParClassDecl.topLevelType() = erasure().topLevelType();
 
   public void BridgeMethodDecl.java2Transformation() { }
+  public static final int Modifiers.ACC_BRIDGE = 0x0040;
+
+  eq BridgeMethodDecl.flags() {
+    int res = super.flags();
+    res |= Modifiers.ACC_BRIDGE;
+    res |= Modifiers.ACC_SYNTHETIC;
+    return res;
+  }
 
   public void MethodDecl.java2Transformation() {
     super.java2Transformation();
@@ -255,5 +263,197 @@ aspect GenericsCodegen {
   public void ParTypeDecl.java2Transformation() {
   }
 
+  // add Signature Attribute 
+  refine AnnotationsCodegen eq TypeDecl.attributes() {
+    Collection c = AnnotationsCodegen.TypeDecl.attributes();
+    if(needsSignatureAttribute())
+      c.add(new SignatureAttribute(constantPool(), classSignature()));
+    return c;
+  }
+
+  refine AnnotationsCodegen eq MethodDecl.attributes() {
+    Collection c = AnnotationsCodegen.MethodDecl.attributes();
+    if(needsSignatureAttribute())
+      c.add(new SignatureAttribute(hostType().constantPool(), methodTypeSignature()));
+    return c;
+  }
+
+  refine AnnotationsCodegen eq FieldDeclaration.attributes() {
+    Collection c = AnnotationsCodegen.FieldDeclaration.attributes();
+    if(needsSignatureAttribute())
+      c.add(new SignatureAttribute(hostType().constantPool(), type().fieldTypeSignature()));
+    return c;
+  }
+
+  class SignatureAttribute extends Attribute {
+    public SignatureAttribute(ConstantPool cp, String signature) {
+      super(cp, "Signature");
+      u2(cp.addUtf8(signature));
+    }
+  }
+
+  // Determine which classes, interfaces, methods, and fields need a signature attribute
+  syn lazy boolean TypeDecl.needsSignatureAttribute() = false;
+  eq GenericClassDecl.needsSignatureAttribute() = true;
+  eq GenericInterfaceDecl.needsSignatureAttribute() = true;
+  eq ParClassDecl.needsSignatureAttribute() = true;
+  eq ParInterfaceDecl.needsSignatureAttribute() = true;
+  eq AbstractWildcardType.needsSignatureAttribute() = true;
+  eq TypeVariable.needsSignatureAttribute() = true;
+  eq ArrayDecl.needsSignatureAttribute() = elementType().needsSignatureAttribute();
+  eq ClassDecl.needsSignatureAttribute() {
+    if(hasSuperclass() && superclass().needsSignatureAttribute())
+      return true;
+    for(Iterator iter = interfacesIterator(); iter.hasNext(); )
+      if(((TypeDecl)iter.next()).needsSignatureAttribute())
+        return true;
+    return false;
+  }
+  eq InterfaceDecl.needsSignatureAttribute() {
+    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); )
+      if(((TypeDecl)iter.next()).needsSignatureAttribute())
+        return true;
+    return false;
+  }
+
+  syn boolean BodyDecl.needsSignatureAttribute() = false;
+  syn boolean MethodDecl.needsSignatureAttribute() {
+    if(type().needsSignatureAttribute())
+      return true;
+    for(int i = 0; i < getNumParameter(); i++)
+      if(getParameter(i).type().needsSignatureAttribute())
+        return true;
+    return false;
+  }
+
+  eq GenericMethodDecl.needsSignatureAttribute() = true;
+  syn boolean ConstructorDecl.needsSignatureAttribute() {
+    for(int i = 0; i < getNumParameter(); i++)
+      if(getParameter(i).type().needsSignatureAttribute())
+        return true;
+    return false;
+  }
+  eq GenericConstructorDecl.needsSignatureAttribute() = true;
+
+  eq FieldDeclaration.needsSignatureAttribute() = type().needsSignatureAttribute();
+
+  // compute the signature string used for the signature attribute
+  syn lazy String TypeDecl.classSignature() = "";
+  eq ClassDecl.classSignature() {
+    StringBuffer buf = new StringBuffer();
+    // SuperclassSignature
+    if(hasSuperclass())
+      buf.append(superclass().classTypeSignature());
+    // SuperinterfaceSignature*
+    for(Iterator iter = interfacesIterator(); iter.hasNext(); )
+      buf.append(((TypeDecl)iter.next()).classTypeSignature());
+    return buf.toString();
+  }
+  eq InterfaceDecl.classSignature() {
+    StringBuffer buf = new StringBuffer();
+    // SuperclassSignature
+    buf.append(typeObject().classTypeSignature());
+    // SuperinterfaceSignature*
+    for(Iterator iter = superinterfacesIterator(); iter.hasNext(); )
+      buf.append(((TypeDecl)iter.next()).classTypeSignature());
+    return buf.toString();
+  }
+  eq GenericClassDecl.classSignature() {
+    StringBuffer buf = new StringBuffer();
+    // FormalTypeParameters
+    buf.append("<");
+    for(int i = 0; i < getNumTypeParameter(); i++)
+      buf.append(getTypeParameter(i).formalTypeParameter());
+    buf.append(">");
+    buf.append(super.classSignature());
+    return buf.toString();
+  }
+  eq GenericInterfaceDecl.classSignature() {
+    StringBuffer buf = new StringBuffer();
+    // FormalTypeParameters
+    buf.append("<");
+    for(int i = 0; i < getNumTypeParameter(); i++)
+      buf.append(getTypeParameter(i).formalTypeParameter());
+    buf.append(">");
+    buf.append(super.classSignature());
+    return buf.toString();
+  }
+
+  // FormalTypeParameter
+  syn String TypeVariable.formalTypeParameter() {
+    StringBuffer buf = new StringBuffer();
+    // Identifier
+    buf.append(name());
+    buf.append(":");
+    if(getNumTypeBound() > 0) {
+      // ClassBound InterfaceBound*
+      if(getTypeBound(0).type().isClassDecl())
+        buf.append(getTypeBound(0).type().fieldTypeSignature());
+      else
+        buf.append(":" + getTypeBound(0).type().fieldTypeSignature());
+      for(int i = 1; i < getNumTypeBound(); i++)
+        buf.append(":" + getTypeBound(i).type().fieldTypeSignature());
+    }
+    return buf.toString();
+  }
+
+  syn lazy String TypeDecl.fieldTypeSignature() = classTypeSignature();
+  eq ArrayDecl.fieldTypeSignature() = "[" + componentType().fieldTypeSignature();
+  eq TypeVariable.fieldTypeSignature() = classTypeSignature();
+  eq WildcardType.fieldTypeSignature() = "*";
+  eq WildcardExtendsType.fieldTypeSignature() = "+" + extendsType().fieldTypeSignature();
+  eq WildcardSuperType.fieldTypeSignature() = "-" + superType().fieldTypeSignature();
+  eq PrimitiveType.fieldTypeSignature() = classTypeSignature();
+  eq VoidType.fieldTypeSignature() = classTypeSignature();
+
+  syn lazy String TypeDecl.classTypeSignature() = "L" + classTypeSignatureContents() + ";";
+  eq TypeVariable.classTypeSignature() = "T" + name() + ";";
+  eq PrimitiveType.classTypeSignature() = typeDescriptor();
+  eq VoidType.classTypeSignature() = typeDescriptor();
+
+  syn String TypeDecl.classTypeSignatureContents() {
+    StringBuffer buf = new StringBuffer();
+    if(isTopLevelType()) {
+      if(!packageName().equals(""))
+        buf.append(packageName().replace('.', '/') + "/");
+    }
+    else
+      buf.append(enclosingType().classTypeSignatureContents() + ".");
+    buf.append(name());
+    buf.append(typeArgumentsOpt());
+    return buf.toString();
+  }
+  syn String TypeDecl.typeArgumentsOpt() = "";
+  eq ParTypeDecl.typeArgumentsOpt() {
+    StringBuffer buf = new StringBuffer();
+    buf.append("<");
+    for(int i = 0; i < getNumArgument(); i++)
+      buf.append(getArgument(i).type().fieldTypeSignature());
+    buf.append(">");
+    return buf.toString();
+  }
+  eq RawClassDecl.typeArgumentsOpt() = "";
+  eq RawInterfaceDecl.typeArgumentsOpt() = "";
+
+  syn String MethodDecl.methodTypeSignature() {
+    StringBuffer buf = new StringBuffer();
+    buf.append("(");
+    for(int i = 0; i < getNumParameter(); i++)
+      buf.append(getParameter(i).type().classTypeSignature());
+    buf.append(")");
+    buf.append(type().classTypeSignature());
+    for(int i = 0; i < getNumException(); i++)
+      buf.append("^" + getException(i).type().classTypeSignature());
+    return buf.toString();
+  }
+  eq GenericMethodDecl.methodTypeSignature() {
+    StringBuffer buf = new StringBuffer();
+    buf.append("<");
+    for(int i = 0; i < getNumTypeParameter(); i++)
+      buf.append(getTypeParameter(i).fieldTypeSignature());
+    buf.append(">");
+    buf.append(super.methodTypeSignature());
+    return buf.toString();
+  }
 
 }
