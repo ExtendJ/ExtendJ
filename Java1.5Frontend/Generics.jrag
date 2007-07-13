@@ -59,12 +59,16 @@ aspect Generics {
     int getNumTypeParameter();
     TypeVariable getTypeParameter(int index);
     List getTypeParameterList();
+    syn lazy TypeDecl rawType();
     public String fullName();
     public String typeName();
     sons BodyDecl:BodyDecl* TypeParameter:TypeVariable* ParTypeDecl:ParTypeDecl*;
   }
   GenericClassDecl implements GenericTypeDecl;
   GenericInterfaceDecl implements GenericTypeDecl;
+
+  eq GenericClassDecl.rawType() = lookupParTypeDecl(new ArrayList());
+  eq GenericInterfaceDecl.rawType() = lookupParTypeDecl(new ArrayList());
   
   syn boolean TypeDecl.isGenericType() = false;
   eq GenericTypeDecl.isGenericType() = true;
@@ -600,7 +604,8 @@ aspect LookupParTypeDecl {
   }
   public Access ParTypeDecl.substitute(Parameterization parTypeDecl) {
     if(parTypeDecl.isRawType())
-      return erasure().createBoundAccess();
+      return ((GenericTypeDecl)genericDecl()).rawType().createBoundAccess();
+      //return erasure().createBoundAccess();
     if(!usesTypeVariable())
       return super.substitute(parTypeDecl);
     List list = new List();
@@ -910,7 +915,7 @@ aspect LookupParTypeDecl {
     ClassDecl c = new ClassDecl(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
-      (Opt)getSuperClassAccessOpt().fullCopy(),
+      hasSuperClassAccess() ? new Opt(getSuperClassAccess().type().substitute(parTypeDecl)) : new Opt(),
       getImplementsList().substitute(parTypeDecl),
       new List()
     );
@@ -921,7 +926,7 @@ aspect LookupParTypeDecl {
     GenericClassDecl c = new GenericClassDecl(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
-      (Opt)getSuperClassAccessOpt().fullCopy(),
+      hasSuperClassAccess() ? new Opt(getSuperClassAccess().type().substitute(parTypeDecl)) : new Opt(),
       getImplementsList().substitute(parTypeDecl),
       new List(),
       new List(), // delegates TypeParameter lookup to original 
