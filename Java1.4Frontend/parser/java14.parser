@@ -107,7 +107,6 @@ Access simple_name =
   ;
 Access qualified_name =
     name.n DOT simple_name.i   {: return n.qualifiesAccess(i); :}
-//    name.n DOT IDENTIFIER.i   {: return n.qualifiesAccess(new ParseName(i)); :}
   ;
 CompilationUnit compilation_unit =
     package_declaration.p import_declarations.i type_declarations.t {: return new CompilationUnit(p.getID(), i, t); :}
@@ -324,13 +323,25 @@ ConstructorDecl constructor_body =
 	;
 ExprStmt explicit_constructor_invocation =
     THIS LPAREN argument_list_opt.l RPAREN SEMICOLON 
-    {: return new ExprStmt(new ConstructorAccess("this", l)); :}
+    {: ConstructorAccess c = new ConstructorAccess("this", l);
+       c.setStart(THIS.getStart());
+       c.setEnd(RPAREN.getEnd());
+       return new ExprStmt(c); :}
   | SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON 
-    {: return new ExprStmt(new SuperConstructorAccess("super", l)); :}
+    {: SuperConstructorAccess c = new SuperConstructorAccess("super", l);
+       c.setStart(SUPER.getStart());
+       c.setEnd(RPAREN.getEnd());
+       return new ExprStmt(c); :}
   | primary.p DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON
-    {: return new ExprStmt(p.qualifiesAccess(new SuperConstructorAccess("super", l))); :}
+    {: SuperConstructorAccess c = new SuperConstructorAccess("super", l);
+       c.setStart(SUPER.getStart());
+       c.setEnd(RPAREN.getEnd());
+       return new ExprStmt(p.qualifiesAccess(c)); :}
   | name.n DOT SUPER LPAREN argument_list_opt.l RPAREN SEMICOLON
-    {: return new ExprStmt(n.qualifiesAccess(new SuperConstructorAccess("super", l))); :}
+    {: SuperConstructorAccess c = new SuperConstructorAccess("super", l);
+       c.setStart(SUPER.getStart());
+       c.setEnd(RPAREN.getEnd());
+       return new ExprStmt(n.qualifiesAccess(c)); :}
   ;
 InterfaceDecl interface_declaration =
     modifiers.m INTERFACE IDENTIFIER.id extends_interfaces.i interface_body.b {: return new InterfaceDecl(m, id, i, b); :}
@@ -564,15 +575,31 @@ Expr primary =
   | array_creation_init.a                      {: return a; :}
   | array_creation_uninit.a                    {: return a; :}
   ;
+
+ClassAccess class_literal =
+  CLASS {: return new ClassAccess(); :}
+  ;
+
 Expr primary_no_new_array =
     literal.l                                  {: return l; :}
-  | primitive_type.n DOT CLASS                 {: return n.qualifiesAccess(new ClassAccess()); :}
-  | primitive_type.n dims.d DOT CLASS          {: return new ArrayTypeAccess(n, d.getNumChild()).qualifiesAccess(new ClassAccess()); :}
-  | name.n DOT CLASS                           {: return n.qualifiesAccess(new ClassAccess()); :}
-  | name.n dims.d DOT CLASS                    {: return new ArrayTypeAccess(n, d.getNumChild()).qualifiesAccess(new ClassAccess()); :}
-  | VOID DOT CLASS                             {: return new PrimitiveTypeAccess("void").qualifiesAccess(new ClassAccess()); :}
+  | primitive_type.n DOT class_literal.c       {: return n.qualifiesAccess(c); :}
+  | primitive_type.n dims.d DOT class_literal.c {: ArrayTypeAccess a = new ArrayTypeAccess(n, d.getNumChild());
+                                                   a.setStart(n.getStart());
+                                                   a.setEnd(d.getEnd());
+                                                   return a.qualifiesAccess(c); :}
+  | name.n DOT class_literal.c                 {: return n.qualifiesAccess(c); :}
+  | name.n dims.d DOT class_literal.c          {: ArrayTypeAccess a = new ArrayTypeAccess(n, d.getNumChild());
+                                                  a.setStart(n.getStart());
+                                                  a.setEnd(d.getEnd());
+                                                  return a.qualifiesAccess(c); :}
+  | VOID DOT class_literal.c                   {: PrimitiveTypeAccess v = new PrimitiveTypeAccess("void");
+                                                  v.setStart(VOID.getStart());
+                                                  v.setEnd(VOID.getEnd());
+                                                  return v.qualifiesAccess(c); :}
   | THIS                                       {: return new ThisAccess("this"); :}
-  | name.n DOT THIS                            {: return n.qualifiesAccess(new ThisAccess("this")); :}
+  | name.n DOT THIS                            {: ThisAccess t = new ThisAccess("this");
+                                                  t.setStart(THIS.getStart()); t.setEnd(THIS.getEnd());
+                                                  return n.qualifiesAccess(t); :}
   | LPAREN expression.e RPAREN                 {: return new ParExpr(e); :}
   | LPAREN name.n RPAREN                       {: return new ParExpr(n); :}
   | class_instance_creation_expression.c       {: return c; :}
@@ -583,17 +610,28 @@ Expr primary_no_new_array =
 Expr class_instance_creation_expression =
     NEW class_or_interface_type.t LPAREN argument_list_opt.l RPAREN 
     {: return new ClassInstanceExpr(t, l, new Opt()); :}
-  | primary.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, new Opt())); :}
-  | name.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, new Opt())); :}
-    
+  | primary.n DOT NEW simple_name.id LPAREN argument_list_opt.l RPAREN
+    {: ClassInstanceExpr e = new ClassInstanceExpr(id, l, new Opt());
+       e.setStart(NEW.getStart());
+       e.setEnd(RPAREN.getEnd());
+       return n.qualifiesAccess(e); :}
+  | name.n DOT NEW simple_name.id LPAREN argument_list_opt.l RPAREN
+    {: ClassInstanceExpr e = new ClassInstanceExpr(id, l, new Opt());
+       e.setStart(NEW.getStart());
+       e.setEnd(RPAREN.getEnd());
+       return n.qualifiesAccess(e); :}
   | NEW class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body.b 
     {: return new ClassInstanceExpr(t, l, b); :}
-  | primary.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN subclass_body.b
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, b )); :}
-  | name.n DOT NEW IDENTIFIER.id LPAREN argument_list_opt.l RPAREN subclass_body.b
-    {: return n.qualifiesAccess(new ClassInstanceExpr(new ParseName(id), l, b)); :}
+  | primary.n DOT NEW simple_name.id LPAREN argument_list_opt.l RPAREN subclass_body.b
+    {: ClassInstanceExpr e = new ClassInstanceExpr(id, l, b);
+       e.setStart(NEW.getStart());
+       e.setEnd(b.getEnd());
+       return n.qualifiesAccess(e); :}
+  | name.n DOT NEW simple_name.id LPAREN argument_list_opt.l RPAREN subclass_body.b
+    {: ClassInstanceExpr e = new ClassInstanceExpr(id, l, b);
+       e.setStart(NEW.getStart());
+       e.setEnd(b.getEnd());
+       return n.qualifiesAccess(e); :}
   ;
 Opt subclass_body =
     class_body.b                               {: return new Opt(new AnonymousDecl(new Modifiers(), "Anonymous", b)); :}
@@ -630,12 +668,19 @@ List dims =
     LBRACK RBRACK                              {: return new List().add(new Dims(new Opt())); :}
   | dims.l LBRACK RBRACK                       {: return l.add(new Dims(new Opt())); :}
   ;
+
 Access field_access =
-    primary.p DOT IDENTIFIER.id                {: return p.qualifiesAccess(new ParseName(id)); :}
-  | SUPER DOT IDENTIFIER.id 
-    {: return new SuperAccess("super").qualifiesAccess(new ParseName(id)); :}
-  | name.n DOT SUPER DOT IDENTIFIER.id
-    {: return n.qualifiesAccess(new SuperAccess("super")).qualifiesAccess(new ParseName(id)); :}
+    primary.p DOT simple_name.id                {: return p.qualifiesAccess(id); :}
+  | SUPER DOT simple_name.id 
+    {: SuperAccess s = new SuperAccess("super");
+       s.setStart(SUPER.getStart());
+       s.setEnd(SUPER.getEnd());
+       return s.qualifiesAccess(id); :}
+  | name.n DOT SUPER DOT simple_name.id
+    {: SuperAccess s = new SuperAccess("super");
+       s.setStart(SUPER.getStart());
+       s.setEnd(SUPER.getEnd());
+       return n.qualifiesAccess(s).qualifiesAccess(id); :}
   ;
 Access method_invocation =
       name.n LPAREN argument_list_opt.l RPAREN {: 
@@ -643,8 +688,8 @@ Access method_invocation =
                                                                AbstractDot d = (AbstractDot)n; 
                                                                ParseName pn = (ParseName)d.extractLast();
                                                                MethodAccess m = new MethodAccess(pn.getID(), l);
-                                                               m.setStart(n.getStart());
-                                                               m.setEnd(RPAREN.getEnd());
+                                                               m.setStart(n.getStart()); // add location information
+                                                               m.setEnd(RPAREN.getEnd()); // add location information
                                                                d.replaceLast(m);
                                                                return d;
                                                              }
@@ -653,17 +698,44 @@ Access method_invocation =
                                                                return new MethodAccess(pn.getID(), l);
                                                              }
                                                                :}
-   | primary.p DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN 
-     {: return p.qualifiesAccess(new MethodAccess(id, l)); :}
-   | SUPER DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-     {: return new SuperAccess("super").qualifiesAccess(new MethodAccess(id, l)); :}
-   | name.n DOT SUPER DOT IDENTIFIER.id LPAREN argument_list_opt.l RPAREN
-     {: return n.qualifiesAccess(new SuperAccess("super")).qualifiesAccess(new MethodAccess(id, l)); :}
+   | primary.p DOT IDENTIFIER LPAREN argument_list_opt.l RPAREN 
+     {: String id = (String)IDENTIFIER.value; // extract token value
+        MethodAccess m = new MethodAccess(id, l);
+        m.setStart(IDENTIFIER.getStart()); // add location information
+        m.setEnd(RPAREN.getEnd()); // add location information
+        return p.qualifiesAccess(m); :}
+   | SUPER DOT IDENTIFIER LPAREN argument_list_opt.l RPAREN
+     {: String id = (String)IDENTIFIER.value; // extract token value
+        SuperAccess s = new SuperAccess("super");
+        s.setStart(SUPER.getStart());
+        s.setEnd(SUPER.getEnd());
+        MethodAccess m = new MethodAccess(id, l);
+        m.setStart(IDENTIFIER.getStart());
+        m.setEnd(RPAREN.getEnd());
+        return s.qualifiesAccess(m); :}
+   | name.n DOT SUPER DOT IDENTIFIER LPAREN argument_list_opt.l RPAREN
+     {: String id = (String)IDENTIFIER.value; // extract token value
+        SuperAccess s = new SuperAccess("super");
+        s.setStart(SUPER.getStart());
+        s.setEnd(SUPER.getEnd());
+        MethodAccess m = new MethodAccess(id, l);
+        m.setStart(IDENTIFIER.getStart());
+        m.setEnd(RPAREN.getEnd());
+        return n.qualifiesAccess(s).qualifiesAccess(m); :}
    ;
 Access array_access =
-    name.n LBRACK expression.e RBRACK                 {: return n.qualifiesAccess(new ArrayAccess(e)); :}
-  | primary_no_new_array.p LBRACK expression.e RBRACK {: return p.qualifiesAccess(new ArrayAccess(e)); :}
-  | array_creation_init.a LBRACK expression.e RBRACK  {: return a.qualifiesAccess(new ArrayAccess(e)); :}
+    name.n LBRACK expression.e RBRACK                 {: ArrayAccess a = new ArrayAccess(e);
+                                                         a.setStart(LBRACK.getStart());
+                                                         a.setEnd(RBRACK.getEnd());
+                                                         return n.qualifiesAccess(a); :}
+  | primary_no_new_array.p LBRACK expression.e RBRACK {: ArrayAccess a = new ArrayAccess(e);
+                                                         a.setStart(LBRACK.getStart());
+                                                         a.setEnd(RBRACK.getEnd());
+                                                         return p.qualifiesAccess(a); :}
+  | array_creation_init.i LBRACK expression.e RBRACK  {: ArrayAccess a = new ArrayAccess(e);
+                                                         a.setStart(LBRACK.getStart());
+                                                         a.setEnd(RBRACK.getEnd());
+                                                         return i.qualifiesAccess(a); :}
   ;
 Expr postfix_expression =
     primary.p                                  {: return p; :}
@@ -697,9 +769,13 @@ Expr unary_expression_not_plus_minus =
   | cast_expression.e                          {: return e; :}
   ;
 Expr cast_expression =
-    LPAREN primitive_type.t dims.d RPAREN unary_expression.e      {: return new CastExpr(new ArrayTypeAccess(t, d.getNumChild()), e); :}
+    LPAREN primitive_type.t dims.d RPAREN unary_expression.e      {: ArrayTypeAccess a = new ArrayTypeAccess(t, d.getNumChild());
+                                                                     a.setStart(t.getStart()); a.setEnd(d.getEnd());
+                                                                     return new CastExpr(a, e); :}
   | LPAREN primitive_type.t        RPAREN unary_expression.e      {: return new CastExpr(t, e); :}
-  | LPAREN name.n dims.d RPAREN unary_expression_not_plus_minus.e {: return new CastExpr(new ArrayTypeAccess(n, d.getNumChild()), e); :}
+  | LPAREN name.n dims.d RPAREN unary_expression_not_plus_minus.e {: ArrayTypeAccess a = new ArrayTypeAccess(n, d.getNumChild());
+                                                                     a.setStart(n.getStart()); a.setEnd(d.getEnd());
+                                                                     return new CastExpr(a, e); :}
   | LPAREN name.n        RPAREN unary_expression_not_plus_minus.e {: return new CastExpr(n, e); :}
   ;
 Expr multiplicative_expression =
@@ -761,7 +837,9 @@ Expr assignment_expression =
   | assignment.a {: return a; :}
   ;
 Expr assignment =
-    postfix_expression.dest assignment_operator.e assignment_expression.source {: e.setDest(dest); e.setSource(source); return e; :}
+    postfix_expression.dest assignment_operator.e assignment_expression.source {: e.setDest(dest); e.setSource(source);
+                                                                                  e.setStart(dest.getStart()); e.setEnd(source.getEnd());
+                                                                                  return e; :}
   ;
 AssignExpr assignment_operator =
     EQ                                         {: return new AssignSimpleExpr(null, null); :}
