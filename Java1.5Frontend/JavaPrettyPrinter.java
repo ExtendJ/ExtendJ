@@ -14,8 +14,7 @@ class JavaPrettyPrinter extends Frontend {
           public CompilationUnit parse(java.io.InputStream is, String fileName) throws java.io.IOException, beaver.Parser.Exception {
             return new parser.JavaParser().parse(is, fileName);
           }
-        },
-        new scanner.JavaScanner()
+        }
     );
   }
   protected void processErrors(java.util.Collection errors, CompilationUnit unit) {
