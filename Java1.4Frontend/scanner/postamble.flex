@@ -4,9 +4,9 @@
                                    } 
                                  }
 // fall through errors
-.|\n                             { throw new LexicalError("Illegal character \""+str()+ "\" at line "+yyline+", column "+yycolumn); }
+.|\n                             { error("illegal character \""+str()+ "\""); }
 <<EOF>>                          { // detect position of first SUB character
                                    if(!(sub_line == 0 && sub_column == 0) && (sub_line != yyline || sub_column != yycolumn-1))
-                                     throw new LexicalError("Error");
+                                     error("error");
                                    return sym(Terminals.EOF);
                                  }

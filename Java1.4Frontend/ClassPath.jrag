@@ -6,24 +6,12 @@ aspect ClassPath {
   interface BytecodeReader {
     CompilationUnit read(InputStream is, String fullName, Program p) throws FileNotFoundException, IOException;
   }
-  interface PackageExtractor {
-    String extractPackageName(String fileName);
-  }
   interface JavaParser {
     CompilationUnit parse(InputStream is, String fileName) throws IOException, beaver.Parser.Exception;
   }
 
-  public class ParseError extends Error {
-    public ParseError(String msg) { super(msg); }
-  }
-  public class LexicalError extends Error {
-    public LexicalError(String msg) { super(msg); }
-  }
-
   protected BytecodeReader Program.bytecodeReader;
   public void Program.initBytecodeReader(BytecodeReader r) { bytecodeReader = r; }
-  protected PackageExtractor Program.packageExtractor;
-  public void Program.initPackageExtractor(PackageExtractor e) { packageExtractor = e; }
   protected JavaParser Program.javaParser;
   public void Program.initJavaParser(JavaParser p) { javaParser = p; }
 
@@ -344,18 +332,14 @@ aspect ClassPath {
           CompilationUnit u = program.javaParser.parse(is, fullName);
           is.close();
           is = null;
-        
+          
           u.setPathName(pathName);
           u.setRelativeName(relativeName);
           u.setFromSource(true);
-          
+
           if(Program.verbose())
             System.out.println("in " + (System.currentTimeMillis() - startTime) + " ms");
           return u;
-        } catch (ParseError e) {
-          throw e;
-        } catch (LexicalError e) {
-          throw e;
         } catch (Exception e) {
           System.err.println("Unexpected error of kind " + e.getClass().getName());
           throw new Error(fullName + ": " + e.getMessage(), e);
@@ -415,26 +399,10 @@ aspect ClassPath {
           pathName = classFile.getAbsolutePath();
           relativeName = fileName + fileSuffix();
           fullName = canonicalName;
-          if(fileSuffix().endsWith("java") && !canonicalName.equals(canonicalName(classFile.getPath()))) {
-              return false;
-          }
           return true;
         }
       }
       return false;
-    }
-    
-    private String canonicalName(String fileName) {
-      StringBuffer packageName = new StringBuffer(
-        program.packageExtractor.extractPackageName(fileName)
-      );
-      int begin = fileName.lastIndexOf(File.separatorChar);
-      begin = begin + 1;
-      int end = fileName.lastIndexOf('.');
-      if(end == -1)
-        return fileName;
-      packageName.append(fileName.substring(begin, end));
-      return packageName.toString();
     }
   }
 
@@ -517,18 +485,6 @@ aspect ClassPath {
       return false;
     }
     public void addSourceFile(String name) {
-      String canonicalName = canonicalName(name);
-      //sourceFiles.put(canonicalName, name);
-      String pathName = canonicalName;
-      if(!packages.contains(pathName)) {
-        int pos = 0;
-        while(pathName != null && -1 != (pos = pathName.indexOf('.', pos + 1))) {
-          String n = pathName.substring(0, pos);
-          if(!packages.contains(n))
-            packages.add(n);
-        }
-      }
-      // eager loading of source files
       try {
         File classFile = new File(name);
         if(classFile.isFile()) {
@@ -537,24 +493,22 @@ aspect ClassPath {
           relativeName = name;
           fullName = name; // is this ok
           CompilationUnit u = getCompilationUnit();
-          if(u != null)
+          if(u != null) {
+            String packageName = u.getPackageDecl();
+            if(packageName != null && !packages.contains(packageName)) {
+              packages.add(packageName);
+              int pos = 0;
+              while(packageName != null && -1 != (pos = packageName.indexOf('.', pos + 1))) {
+                String n = packageName.substring(0, pos);
+                if(!packages.contains(n))
+                  packages.add(n);
+              }
+            }
             program.addCompilationUnit(u);
+          }
         }
       } catch (IOException e) {
       }
-      // end eager loading of source files
-    }
-    private String canonicalName(String fileName) {
-      StringBuffer packageName = new StringBuffer(
-        program.packageExtractor.extractPackageName(fileName)
-      );
-      int begin = fileName.lastIndexOf(File.separatorChar);
-      begin = begin + 1;
-      int end = fileName.lastIndexOf('.');
-      if(end == -1)
-        return fileName;
-      packageName.append(fileName.substring(begin, end));
-      return packageName.toString();
     }
   }
 

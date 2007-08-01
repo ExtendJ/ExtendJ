@@ -10,10 +10,9 @@ aspect FrontendMain {
       program = new Program();
     }
 
-    public boolean process(String[] args, BytecodeReader reader, JavaParser parser, PackageExtractor extractor) {
+    public boolean process(String[] args, BytecodeReader reader, JavaParser parser) {
       program.initBytecodeReader(reader);
       program.initJavaParser(parser);
-      program.initPackageExtractor(extractor);
 
       initOptions();
       processArgs(args);
@@ -32,19 +31,18 @@ aspect FrontendMain {
       try {
         for(Iterator iter = files.iterator(); iter.hasNext(); ) {
           String name = (String)iter.next();
-          try {
-            program.addSourceFile(name);
-          } catch(LexicalError e) {
-            throw new LexicalError(name + ": " + e.getMessage());
-          }
+          program.addSourceFile(name);
         }
 
         for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
           CompilationUnit unit = (CompilationUnit)iter.next();
           if(unit.fromSource()) {
-            Collection errors = new LinkedList();
+            Collection errors = unit.parseErrors();
             Collection warnings = new LinkedList();
-            unit.errorCheck(errors, warnings);
+            // compute static semantic errors when there are no parse errors or 
+            // the recover from parse errors option is specified
+            if(errors.isEmpty() || program.hasOption("-recover"))
+              unit.errorCheck(errors, warnings);
             if(!errors.isEmpty()) {
               processErrors(errors, unit);
               return false;
@@ -55,12 +53,6 @@ aspect FrontendMain {
             }
           }
         }
-      } catch (ParseError e) {
-        System.err.println(e.getMessage());
-        return false;
-      } catch (LexicalError e) {
-        System.err.println(e.getMessage());
-        return false;
       } catch (Exception e) {
         System.err.println(e.getMessage());
         e.printStackTrace();
@@ -89,6 +81,7 @@ aspect FrontendMain {
       program.addKeyOption("-help");
       program.addKeyOption("-O");
       program.addKeyOption("-J-Xmx128M");
+      program.addKeyOption("-recover");
     }
     protected void processArgs(String[] args) {
       program.addOptions(args);
@@ -97,8 +90,7 @@ aspect FrontendMain {
     protected void processErrors(Collection errors, CompilationUnit unit) {
       System.out.println("Errors:");
       for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
-        String s = (String)iter2.next();
-        System.out.println(s);
+        System.out.println(iter2.next());
       }
     }
     protected void processWarnings(Collection warnings, CompilationUnit unit) {

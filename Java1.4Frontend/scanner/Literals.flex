@@ -35,8 +35,8 @@
   \'{OctalEscape}\'              { int val = Integer.parseInt(str().substring(2,len()-1),8);
 			                             return sym(Terminals.CHARACTER_LITERAL, new Character((char)val).toString()); }
   // Character Literal errors
-  \'\\.                          { throw new LexicalError("Illegal escape sequence \""+str()+"\""); }
-  \'{LineTerminator}             { throw new LexicalError("Unterminated character literal at end of line"); }
+  \'\\.                          { error("illegal escape sequence \""+str()+"\""); }
+  \'{LineTerminator}             { error("unterminated character literal at end of line"); }
 
   // 3.10.5 String Literals
   \"                             { yybegin(STRING); strbuf.setLength(0); }
@@ -63,8 +63,8 @@
   {OctalEscape}                  { strbuf.append((char)Integer.parseInt(str().substring(1),8)); }
 
   // String Literal errors
-  \\.                            { throw new LexicalError("Illegal escape sequence \""+str()+"\""); }
-  {LineTerminator}               { throw new LexicalError("Unterminated string at end of line"); }
+  \\.                            { error("illegal escape sequence \""+str()+"\""); }
+  {LineTerminator}               { error("unterminated string at end of line"); }
 }
 
 

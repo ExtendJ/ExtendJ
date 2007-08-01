@@ -59,7 +59,7 @@ public class Unicode extends FilterReader {
       int c = next();
       int value = Character.digit((char)c, 16);
       if(value == -1)
-        throw new AST.LexicalError("Invalid Unicode Escape");
+        throw new Error("Invalid Unicode Escape");
       result <<= 4;
       result += value;
     }

@@ -11,11 +11,11 @@ class JavaChecker extends Frontend {
         args,
         new bytecode.Parser(),
         new JavaParser() {
+          parser.JavaParser parser = new parser.JavaParser();
           public CompilationUnit parse(java.io.InputStream is, String fileName) throws java.io.IOException, beaver.Parser.Exception {
-            return new parser.JavaParser().parse(is, fileName);
+            return parser.parse(is, fileName);
           }
-        },
-        new scanner.JavaScanner()
+        }
     );
   }
 

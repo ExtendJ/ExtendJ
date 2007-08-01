@@ -3,7 +3,6 @@ package scanner;
 import beaver.Symbol;
 import beaver.Scanner;
 import parser.JavaParser.Terminals;
-import AST.LexicalError;
 import java.io.*;
 
 %%
@@ -12,11 +11,10 @@ import java.io.*;
 %final 
 %class JavaScanner
 %extends Scanner
-%implements AST.PackageExtractor
 
 %type Symbol 
 %function nextToken 
-%yylexthrow LexicalError
+%yylexthrow Scanner.Exception
 
 %unicode
 %line %column
@@ -37,31 +35,9 @@ import java.io.*;
   private String str() { return yytext(); }
   private int len() { return yylength(); }
 
-  public JavaScanner() {
+  private void error(String msg) throws Scanner.Exception {
+    throw new Scanner.Exception(yyline + 1, yycolumn + 1, msg);
   }
-
-  public String extractPackageName(String fileName) {
-    StringBuffer packageName = new StringBuffer();
-    try {
-      Reader reader = new FileReader(fileName);
-      JavaScanner scanner = new JavaScanner(new Unicode(reader));
-      Symbol sym = scanner.nextToken();
-      if(sym.getId() == Terminals.PACKAGE) {
-        while(true) {
-          sym = scanner.nextToken();
-          if(sym.getId() == Terminals.SEMICOLON)
-            break;
-          packageName.append(sym.value);
-        }
-      }
-      reader.close();
-      if(packageName.length() != 0)
-        packageName.append(".");
-    } catch (java.lang.Exception e) {
-    }
-    return packageName.toString();
-  }
-
 %}
 
 
