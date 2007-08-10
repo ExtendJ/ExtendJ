@@ -255,29 +255,7 @@ aspect TypeHierarchyCheck {
         for(Iterator i2 = superclass().methodsSignature(m.signature()).iterator(); i2.hasNext(); ) {
           MethodDecl n = (MethodDecl)i2.next();
           if(n.accessibleFrom(this)) {
-            if(n.isStatic())
-              error("Xa static method may not hide an instance method");
-            if(!n.isAbstract() && !n.isPublic())
-              error("Xoverriding access modifier error");
-            if(!n.mayOverrideReturn(m))
-              error("Xthe return type of method " + m.signature() + " in " + m.hostType().typeName() + 
-                    " does not match the return type of method " + n.signature() + " in " + 
-                    n.hostType().typeName() + " and may thus not be overriden");
-            if(!n.isAbstract()) {
-              // n implements and overrides method m in the interface
-              // may not throw more checked exceptions
-              for(int i = 0; i < n.getNumException(); i++) {
-                Access e = n.getException(i);
-                boolean found = false;
-                for(int j = 0; !found && j < m.getNumException(); j++) {
-                  if(e.type().instanceOf(m.getException(j).type()))
-                    found = true;
-                }
-                if(!found && e.type().isUncheckedException())
-                  error("X" + n.signature() + " in " + n.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
-                   m.signature() + " in " + m.hostType().typeName());
-              }
-            }
+            interfaceMethodCompatibleWithInherited(m, n);
           }
         }
         for(Iterator i2 = interfacesMethodsSignature(m.signature()).iterator(); i2.hasNext(); ) {
@@ -287,6 +265,32 @@ aspect TypeHierarchyCheck {
                   " does not match the return type of method " + n.signature() + " in " + 
                   n.hostType().typeName() + " and may thus not be overriden");
         }
+      }
+    }
+  }
+
+  private void ClassDecl.interfaceMethodCompatibleWithInherited(MethodDecl m, MethodDecl n) {
+    if(n.isStatic())
+      error("Xa static method may not hide an instance method");
+    if(!n.isAbstract() && !n.isPublic())
+      error("Xoverriding access modifier error for " + m.signature() + " in " + m.hostType().typeName() + " and " + n.hostType().typeName());
+    if(!n.mayOverrideReturn(m))
+      error("Xthe return type of method " + m.signature() + " in " + m.hostType().typeName() + 
+            " does not match the return type of method " + n.signature() + " in " + 
+            n.hostType().typeName() + " and may thus not be overriden");
+    if(!n.isAbstract()) {
+      // n implements and overrides method m in the interface
+      // may not throw more checked exceptions
+      for(int i = 0; i < n.getNumException(); i++) {
+        Access e = n.getException(i);
+        boolean found = false;
+        for(int j = 0; !found && j < m.getNumException(); j++) {
+          if(e.type().instanceOf(m.getException(j).type()))
+            found = true;
+        }
+        if(!found && e.type().isUncheckedException())
+          error("X" + n.signature() + " in " + n.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
+           m.signature() + " in " + m.hostType().typeName());
       }
     }
   }
