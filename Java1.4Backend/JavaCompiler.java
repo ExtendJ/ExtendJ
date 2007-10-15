@@ -9,7 +9,7 @@ class JavaCompiler extends Frontend {
   public static boolean compile(String args[]) {
     return new JavaCompiler().process(
         args,
-        new bytecode.Parser(),
+        new BytecodeParser(),
         new JavaParser() {
           public CompilationUnit parse(java.io.InputStream is, String fileName) throws java.io.IOException, beaver.Parser.Exception {
             return new parser.JavaParser().parse(is, fileName);
