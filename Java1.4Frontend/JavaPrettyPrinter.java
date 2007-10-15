@@ -30,5 +30,5 @@ class JavaPrettyPrinter extends Frontend {
   }
 
   protected String name() { return "JavaPrettyPrinter"; }
-  protected String version() { return "R20060915"; }
+  protected String version() { return "R20071015"; }
 }

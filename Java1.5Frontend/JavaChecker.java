@@ -18,5 +18,5 @@ class JavaChecker extends Frontend {
   }
 
   protected String name() { return "Java1.4Frontend + Java1.5Extensions"; }
-  protected String version() { return "R20060915"; }
+  protected String version() { return "R20071015"; }
 }
