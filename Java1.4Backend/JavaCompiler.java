@@ -25,5 +25,5 @@ class JavaCompiler extends Frontend {
   }
 
   protected String name() { return "Java1.4Frontend + Backend"; }
-  protected String version() { return "R20070504"; }
+  protected String version() { return "R20071015"; }
 }
