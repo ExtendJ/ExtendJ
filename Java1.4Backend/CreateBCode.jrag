@@ -3,7 +3,6 @@ import java.io.*;
 aspect CreateBCode {
   inh TypeDecl Stmt.hostType();
   inh TypeDecl CatchClause.hostType();
-  inh TypeDecl Case.hostType();
   
   syn lazy boolean TypeDecl.hasClinit() {
     for(int i = 0; i < getNumBodyDecl(); i++) {
@@ -1274,9 +1273,9 @@ aspect CreateBCode {
   }
 
   syn lazy DefaultCase SwitchStmt.defaultCase() {
-    for(int i= 0; i < getNumCase(); i++) {
-      if(getCase(i) instanceof DefaultCase)
-        return (DefaultCase)getCase(i);
+    for(int i= 0; i < getBlock().getNumStmt(); i++) {
+      if(getBlock().getStmt(i) instanceof DefaultCase)
+        return (DefaultCase)getBlock().getStmt(i);
     }
     return null;
   }
@@ -1289,19 +1288,16 @@ aspect CreateBCode {
     int switch_label = hostType().constantPool().newLabel();
 
     gen.emitGoto(cond_label);
-    for(int i= 0; i < getNumCase(); i++) {
-      getCase(i).createBCode(gen);
-    }
+    getBlock().createBCode(gen);
     if(canCompleteNormally())
       gen.emitGoto(end_label());
     gen.addLabel(cond_label);
     getExpr().createBCode(gen);
 
     TreeMap map = new TreeMap();
-    for(int i = 0; i < getNumCase(); i++) {
-      Case c = getCase(i);
-      if(c instanceof ConstCase) {
-        ConstCase ca = (ConstCase)c;
+    for(int i = 0; i < getBlock().getNumStmt(); i++) {
+      if(getBlock().getStmt(i) instanceof ConstCase) {
+        ConstCase ca = (ConstCase)getBlock().getStmt(i);
         map.put(new Integer(ca.getValue().constant().intValue()), ca);
       }        
     }
@@ -1340,7 +1336,7 @@ aspect CreateBCode {
       int pad = emitPad(gen);
       int defaultOffset = defaultOffset(gen, switch_label);
       if(defaultOffset == 0) {
-        defaultOffset = 1 + pad + 4 + 4 + 8 * getNumCase();
+        defaultOffset = 1 + pad + 4 + 4 + 8 * numCase();
       }
       gen.add4(defaultOffset);
       gen.add4(map.size());
@@ -1353,6 +1349,14 @@ aspect CreateBCode {
       }
     }
     gen.addLabel(end_label());
+  }
+
+  syn int SwitchStmt.numCase() {
+    int result = 0;
+    for(int i = 0; i < getBlock().getNumStmt(); i++)
+      if(getBlock().getStmt(i) instanceof Case)
+        result++;
+    return result;
   }
 
   private int SwitchStmt.emitPad(CodeGeneration gen) {
@@ -1377,8 +1381,6 @@ aspect CreateBCode {
 
   public void Case.createBCode(CodeGeneration gen) {
     gen.addLabel(label(gen));
-    for(int i = 0; i < getNumStmt(); i++)
-      getStmt(i).createBCode(gen);
   }
 
   syn lazy int IfStmt.else_branch_label() = hostType().constantPool().newLabel();
