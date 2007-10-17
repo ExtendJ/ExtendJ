@@ -122,7 +122,11 @@ aspect DefiniteAssignment {
       else if(v instanceof VariableDeclaration) {
         VariableDeclaration var = (VariableDeclaration)v;
         //System.out.println("### is variable");
-        if(var.isValue()) {
+        if(!var.isValue() && var.getParent().getParent().getParent() instanceof SwitchStmt) {
+          if(!isDUbefore(var))
+            error("Final variable " + var.name() + " may only be assigned once");
+        }
+        else if(var.isValue()) {
           if(var.hasInit() || !isDUbefore(var))
             error("Final variable " + var.name() + " may only be assigned once");
         }
@@ -537,15 +541,8 @@ aspect DA {
     return true;
   }
 
-  syn boolean SwitchStmt.assignedAfterLastStmt(Variable v) {
-    boolean result = true;
-    int i = getNumCase() - 1;
-    while(i >= 0 && getCase(i).getNumStmt() == 0)
-      i--;
-    if(i >= 0 && getCase(i).getNumStmt() > 0)
-      return getCase(i).getStmt(getCase(i).getNumStmt()-1).isDAafter(v);
-    return true;
-  }
+  syn boolean SwitchStmt.assignedAfterLastStmt(Variable v) =
+    getBlock().isDAafter(v);
   
   // 16.2.9 2nd bullet
   eq SwitchStmt.getExpr().isDAbefore(Variable v) {
@@ -563,23 +560,13 @@ aspect DA {
     return getParent().isDescendantTo(node);
   }
 
-  eq SwitchStmt.getCase(int i).isDAbefore(Variable v) {
-    // 16.2.9 3rd bullet
-    if(i == 0)
-      return getExpr().isDAafter(v);
-    Case c = getCase(i-1);
-    if(c.getNumStmt() == 0)
-      return c.isDAbefore(v);
-    return getExpr().isDAafter(v) && c.getStmt(c.getNumStmt()-1).isDAafter(v);
-  }
+  eq SwitchStmt.getBlock().isDAbefore(Variable v) = getExpr().isDAafter(v);
 
-  inh lazy boolean Case.isDAbefore(Variable v);
-  // 16.2.8 5th bullet
-  eq Case.getStmt(int i).isDAbefore(Variable v) {
-    if(i ==  0)
-      return isDAbefore(v);
-    return getStmt(i-1).isDAafter(v);
-  }
+  syn lazy boolean Case.isDAbefore(Variable v) = 
+    getParent().getParent() instanceof Block && ((Block)getParent().getParent()).isDAbefore(v)
+    && super.isDAbefore(v);
+
+  eq Case.isDAafter(Variable v) = isDAbefore(v);
 
   eq WhileStmt.isDAafter(Variable v) {
     if(!getCondition().isDAafterFalse(v))
@@ -1031,41 +1018,21 @@ aspect DU {
     return true;
   }
 
-  syn boolean SwitchStmt.unassignedAfterLastStmt(Variable v) {
-    boolean result = true;
-    int i = getNumCase() - 1;
-    while(i >= 0 && getCase(i).getNumStmt() == 0)
-      i--;
-    if(i >= 0 && getCase(i).getNumStmt() > 0)
-      return getCase(i).getStmt(getCase(i).getNumStmt()-1).isDUafter(v);
-    return true;
-  }
+  syn boolean SwitchStmt.unassignedAfterLastStmt(Variable v) =
+    getBlock().isDUafter(v);
   
-  syn boolean SwitchStmt.switchLabelEndsBlock() {
-    int i = getNumCase() - 1;
-    if(i >= 0 && (getCase(i) instanceof ConstCase) && getCase(i).getNumStmt() == 0)
-      return true;
-    return false;
-  }
+  syn boolean SwitchStmt.switchLabelEndsBlock() =
+    getBlock().getNumStmt() > 0 && getBlock().getStmt(getBlock().getNumStmt()-1) instanceof ConstCase;
   
   // 16.2.8 2nd bullet
   eq SwitchStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
-  eq SwitchStmt.getCase(int i).isDUbefore(Variable v) {
-    if(i == 0)
-      return getExpr().isDUafter(v);
-    Case c = getCase(i-1);
-    if(c.getNumStmt() == 0)
-      return c.isDUbefore(v);
-    return c.getStmt(c.getNumStmt()-1).isDUafter(v);
-  }
+  eq SwitchStmt.getBlock().isDUbefore(Variable v) = getExpr().isDUafter(v);
 
-  inh boolean Case.isDUbefore(Variable v);
+  syn boolean Case.isDUbefore(Variable v) =
+    getParent().getParent() instanceof Block && ((Block)getParent().getParent()).isDUbefore(v)
+    && super.isDUbefore(v);
 
-  eq Case.getStmt(int i).isDUbefore(Variable v) {
-    if(i ==  0)
-      return isDUbefore(v);
-    return getStmt(i-1).isDUafter(v);
-  }
+  eq Case.isDUafter(Variable v) = isDUbefore(v);
 
   // 16.2.10 1st bullet
   eq WhileStmt.isDUafter(Variable v) {
