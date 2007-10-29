@@ -1,19 +1,27 @@
 aspect GenericsArrays {
   refine Arrays eq TypeDecl.arrayType() {
     String name = name() + "[]";
-    TypeDecl typeDecl =
-      new ArrayDecl(
-        new Modifiers(new List().add(new Modifier("public"))),
-        name,
-        new Opt(typeObject().createQualifiedAccess()), // [SuperClassAccess]
-        new List().add(typeCloneable().createQualifiedAccess()).add(typeSerializable().createQualifiedAccess()), // Implements*
-        new List().add( // BodyDecl*
-          new FieldDeclaration(
-            new Modifiers(new List().add(new Modifier("public")).add(new Modifier("final"))),
-            new PrimitiveTypeAccess("int"),
-            "length",
-            new Opt() // [Init:Expr]
-          )).add(
+
+    List body = new List();
+    body.add(
+      new FieldDeclaration(
+        new Modifiers(new List().add(new Modifier("public")).add(new Modifier("final"))),
+        new PrimitiveTypeAccess("int"),
+        "length",
+        new Opt() // [Init:Expr]
+      )
+    );
+    MethodDecl clone = null;
+    TypeDecl typeObject = typeObject();
+    for(int i = 0; clone == null && i < typeObject.getNumBodyDecl(); i++) {
+      if(typeObject.getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl m = (MethodDecl)typeObject.getBodyDecl(i);
+        if(m.name().equals("clone"))
+          clone = m;
+      }
+    }
+    if(clone != null) {
+      body.add(
           // we create a substituted method that substitutes the clone method in object
           // this has the following two consequences: the return value will be cast to the
           // expected return type rather than object, and the invoked method will be the
@@ -28,7 +36,15 @@ aspect GenericsArrays {
             new Opt(new Block()),
             (MethodDecl)typeObject().memberMethods("clone").iterator().next()
           )
-        )
+      );
+    }
+    TypeDecl typeDecl =
+      new ArrayDecl(
+        new Modifiers(new List().add(new Modifier("public"))),
+        name,
+        new Opt(typeObject().createQualifiedAccess()), // [SuperClassAccess]
+        new List().add(typeCloneable().createQualifiedAccess()).add(typeSerializable().createQualifiedAccess()), // Implements*
+        body // BodyDecl*
       );
     return typeDecl;
   }

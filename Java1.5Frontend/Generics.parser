@@ -29,9 +29,9 @@ InterfaceDecl interface_declaration =
 
 Access class_or_interface_type =
 		name.t LT type_argument_list_1.l {:  return new ParTypeAccess(t, l);  :}
-  | class_or_interface_type.t DOT IDENTIFIER.id {: return t.qualifiesAccess(new ParseName(id)); :}
-  | class_or_interface_type.t DOT IDENTIFIER.id LT type_argument_list_1.l 
-    {: return new ParTypeAccess(t.qualifiesAccess(new ParseName(id)), l); :}
+  | class_or_interface_type.t DOT simple_name.id {: return t.qualifiesAccess(id); :}
+  | class_or_interface_type.t DOT simple_name.id LT type_argument_list_1.l 
+    {: return t.qualifiesAccess(new ParTypeAccess(id, l)); :}
 	;
 Access array_type =
     	name.t LT type_argument_list_1.l DOT name.n dims.d 
@@ -76,22 +76,26 @@ Opt subclass_body_opt =
 Expr class_instance_creation_expression =
 	 	NEW type_arguments.a class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
 		{:  return new ParClassInstanceExpr(t, l, b, a); :}
-    /*
-	|	primary.n DOT NEW IDENTIFIER.id type_arguments.a LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
-        {:  return new NestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), a), l, b ); :}	
-        */
+	|	primary.n DOT NEW simple_name.id type_arguments.a LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+    {:  ClassInstanceExpr e = new ParClassInstanceExpr(id, l, b, a); 
+        e.setStart(NEW.getStart());
+        e.setEnd(RPAREN.getEnd());
+        return n.qualifiesAccess(e);
+    :}
 	|	primary.n DOT NEW type_arguments.ca IDENTIFIER.id LPAREN argument_list_opt.l RPAREN class_body_opt.b
 		{:  return n.qualifiesAccess(new ParClassInstanceExpr(new ParseName(id), l, b, ca)); :}
-    /*
-	|	primary.n DOT NEW type_arguments.ca IDENTIFIER.id type_arguments.ta LPAREN argument_list_opt.l RPAREN class_body_opt.b
-		{:  return new ParNestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), ta), l, b, ca); :}
-	|	name.n DOT NEW IDENTIFIER.id type_arguments.a LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
-		{:  return new NestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), a), l, b);  :}
-	|	name.n DOT NEW type_arguments.ca IDENTIFIER.id LPAREN argument_list_opt.l RPAREN class_body_opt.b
-		{:  return new ParNestedClassInstanceExpr(n, new ParseName(id), l, b, ca);  :}
-	|	name.n DOT NEW type_arguments.ca IDENTIFIER.id type_arguments.ta LPAREN argument_list_opt.l RPAREN class_body_opt.b
-		{:  return new ParNestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), ta), l, b, ca);  :}
-    */
+//	|	primary.n DOT NEW type_arguments.ca IDENTIFIER.id type_arguments.ta LPAREN argument_list_opt.l RPAREN class_body_opt.b
+//		{:  return new ParNestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), ta), l, b, ca); :}
+	|	name.n DOT NEW simple_name.id type_arguments.a LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+    {:  ClassInstanceExpr e = new ParClassInstanceExpr(id, l, b, a); 
+        e.setStart(NEW.getStart());
+        e.setEnd(RPAREN.getEnd());
+        return n.qualifiesAccess(e);
+    :}
+//	|	name.n DOT NEW type_arguments.ca IDENTIFIER.id LPAREN argument_list_opt.l RPAREN class_body_opt.b
+//		{:  return new ParNestedClassInstanceExpr(n, new ParseName(id), l, b, ca);  :}
+//	|	name.n DOT NEW type_arguments.ca IDENTIFIER.id type_arguments.ta LPAREN argument_list_opt.l RPAREN class_body_opt.b
+//		{:  return new ParNestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), ta), l, b, ca);  :}
 	;
 
 List type_argument_list =
