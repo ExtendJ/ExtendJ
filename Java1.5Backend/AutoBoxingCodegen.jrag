@@ -113,6 +113,76 @@ aspect AutoBoxingCodegen {
 
 
   // 14.11 Switch
+  refine CreateBCode public void SwitchStmt.createBCode(CodeGeneration gen) {
+    super.createBCode(gen);
+    int cond_label = hostType().constantPool().newLabel();
+    int switch_label = hostType().constantPool().newLabel();
+
+    gen.emitGoto(cond_label);
+    getBlock().createBCode(gen);
+    if(canCompleteNormally())
+      gen.emitGoto(end_label());
+    gen.addLabel(cond_label);
+    getExpr().createBCode(gen);
+    if(getExpr().type().isReferenceType())
+      getExpr().type().emitUnboxingOperation(gen);
+
+    TreeMap map = new TreeMap();
+    for(int i = 0; i < getBlock().getNumStmt(); i++) {
+      if(getBlock().getStmt(i) instanceof ConstCase) {
+        ConstCase ca = (ConstCase)getBlock().getStmt(i);
+        map.put(new Integer(ca.getValue().constant().intValue()), ca);
+      }        
+    }
+
+    long low = map.isEmpty() ? 0 : ((Integer)map.firstKey()).intValue();
+    long high = map.isEmpty() ? 0 : ((Integer)map.lastKey()).intValue();
+
+    long tableSwitchSize = 8L + (high - low + 1L) * 4L;
+    long lookupSwitchSize = 4L + map.size() * 8L;
+
+    gen.addLabel(switch_label);
+    if(tableSwitchSize < lookupSwitchSize) {
+      gen.emit(Bytecode.TABLESWITCH);
+      int pad = emitPad(gen);
+      int defaultOffset = defaultOffset(gen, switch_label);
+      if(defaultOffset == 0) {
+        defaultOffset = 1 + pad + 4 + 4 + 4 + 4 * (int)(high - low + 1);
+      }
+      gen.add4(defaultOffset);
+      gen.add4((int)low);
+      gen.add4((int)high);
+      for(long i = low; i <= high; i++) {
+        ConstCase ca = (ConstCase)map.get(new Integer((int)i));
+        if(ca != null) {
+          int offset = gen.addressOf(ca.label(gen))
+            - gen.addressOf(switch_label);
+          gen.add4(offset);
+        }
+        else {
+          gen.add4(defaultOffset);
+        }
+      }
+    }
+    else {
+      gen.emit(Bytecode.LOOKUPSWITCH);
+      int pad = emitPad(gen);
+      int defaultOffset = defaultOffset(gen, switch_label);
+      if(defaultOffset == 0) {
+        defaultOffset = 1 + pad + 4 + 4 + 8 * numCase();
+      }
+      gen.add4(defaultOffset);
+      gen.add4(map.size());
+      for(Iterator iter = map.values().iterator(); iter.hasNext(); ) {
+        ConstCase ca = (ConstCase)iter.next();
+        gen.add4(ca.getValue().constant().intValue());
+        int offset = gen.addressOf(ca.label(gen))
+          - gen.addressOf(switch_label);
+        gen.add4(offset);
+      }
+    }
+    gen.addLabel(end_label());
+  }
 
   // 15.12.2 Determine Method Signature
 
@@ -200,4 +270,65 @@ aspect AutoBoxingCodegen {
       }
     }
   }
+
+  protected void Unary.boxingGen(CodeGeneration gen) {
+    getOperand().createBCode(gen);
+    TypeDecl type = getOperand().type();
+    if(type.isReferenceType())
+      type.emitCastTo(gen, type());
+    emitOperation(gen);
+  }
+
+  public void MinusExpr.createBCode(CodeGeneration gen) { boxingGen(gen); } 
+  public void PlusExpr.createBCode(CodeGeneration gen) { boxingGen(gen); } 
+  public void BitNotExpr.createBCode(CodeGeneration gen) { boxingGen(gen); } 
+
+  refine CreateBCode public void AssignExpr.createBCode(CodeGeneration gen) {
+    TypeDecl dest = getDest().type();
+    TypeDecl source = getSource().type();
+    TypeDecl type;
+    if(dest.isNumericType() && source.isNumericType() && !(dest.isReferenceType() && source.isReferenceType()))
+      type = dest.binaryNumericPromotion(source);
+    else 
+      type = dest;
+    getDest().createAssignLoadDest(gen);
+    dest.emitCastTo(gen, type);
+    getSource().createBCode(gen);
+    source.emitCastTo(gen, type);
+    createAssignOp(gen, type);
+    type.emitCastTo(gen, dest);
+    if(needsPush()) {
+      getDest().createPushAssignmentResult(gen);
+    }
+    getDest().emitStore(gen);
+  }
+
+  public void EqualityExpr.emitEvalBranch(CodeGeneration gen) {
+    if(isTrue())
+      gen.emitGoto(true_label());
+    else if(isFalse())
+      gen.emitGoto(false_label());
+    else {
+      TypeDecl type = getLeftOperand().type();
+      if(type.isNumericType() && !(type.isReferenceType() && getRightOperand().type().isReferenceType())) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      }
+      else {
+        getLeftOperand().createBCode(gen);
+        getRightOperand().createBCode(gen);
+      }
+      compareBranch(gen, true_label(), type);
+      gen.emitGoto(false_label());
+      // compareNotBranch does not work for float comparison with NaN
+      //compareNotBranch(gen, false_label(), type);
+      //gen.emitGoto(true_label());
+    }
+  }
+
+
+
 }

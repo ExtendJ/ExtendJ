@@ -164,6 +164,8 @@ aspect Generics {
 }
 
 aspect GenericsTypeAnalysis {
+  eq ParTypeAccess.unqualifiedScope() = getParent() instanceof Access ? ((Access)getParent()).unqualifiedScope() : super.unqualifiedScope();
+  eq ParTypeAccess.getTypeArgument().lookupType(String name) = unqualifiedScope().lookupType(name);
 
   eq ParTypeAccess.type() {
     TypeDecl typeDecl = genericDecl();
@@ -305,20 +307,22 @@ aspect GenericsTypeCheck {
 
   public void ParTypeAccess.typeCheck() {
     super.typeCheck();
-    if(!genericDecl().isGenericType()) {
-      error(genericDecl().typeName() + " is not a generic type but used as one in " + this);
-    }
-    else {
-      GenericTypeDecl decl = (GenericTypeDecl)genericDecl();
-      if(decl.original().getNumTypeParameter() != getNumTypeArgument()) {
-        error(decl.typeName() + " takes " + decl.original().getNumTypeParameter() + " type parameters, not " + getNumTypeArgument() + " as used in " + this);
+    if(!genericDecl().isUnknown()) {
+      if(!genericDecl().isGenericType()) {
+        error(genericDecl().typeName() + " is not a generic type but used as one in " + this);
       }
       else {
-        ParTypeDecl typeDecl = (ParTypeDecl)type();
-        for(int i = 0; i < getNumTypeArgument(); i++) {
-          if(!getTypeArgument(i).type().instanceOf(decl.original().getTypeParameter(i))) {
-            error("type argument " + i + " is of type " + getTypeArgument(i).type().typeName() 
-              + " which is not a subtype of " + decl.original().getTypeParameter(i).typeName());
+        GenericTypeDecl decl = (GenericTypeDecl)genericDecl();
+        if(decl.original().getNumTypeParameter() != getNumTypeArgument()) {
+          error(decl.typeName() + " takes " + decl.original().getNumTypeParameter() + " type parameters, not " + getNumTypeArgument() + " as used in " + this);
+        }
+        else {
+          ParTypeDecl typeDecl = (ParTypeDecl)type();
+          for(int i = 0; i < getNumTypeArgument(); i++) {
+            if(!getTypeArgument(i).type().instanceOf(decl.original().getTypeParameter(i))) {
+              error("type argument " + i + " is of type " + getTypeArgument(i).type().typeName() 
+                  + " which is not a subtype of " + decl.original().getTypeParameter(i).typeName());
+            }
           }
         }
       }

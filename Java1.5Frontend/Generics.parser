@@ -1,42 +1,47 @@
 ClassDecl class_declaration =
-		modifiers.m CLASS IDENTIFIER.id type_parameters.p super_opt.s interfaces_opt.i class_body.b 
+		modifiers.m CLASS IDENTIFIER.id type_parameters.p class_body.b 
+		{:  return new GenericClassDecl(m, id, new Opt(), new List(), b, p, new List());  :}
+	|	            CLASS IDENTIFIER.id type_parameters.p class_body.b 
+		{:  return new GenericClassDecl(new Modifiers(new List()), id, new Opt(), new List(), b, p, new List());  :}
+	|	modifiers.m CLASS IDENTIFIER.id type_parameters.p super.s class_body.b 
+		{:  return new GenericClassDecl(m, id, s, new List(), b, p, new List());  :}
+	|	            CLASS IDENTIFIER.id type_parameters.p super.s class_body.b 
+		{:  return new GenericClassDecl(new Modifiers(new List()), id, s, new List(), b, p, new List());  :}
+	|	modifiers.m CLASS IDENTIFIER.id type_parameters.p interfaces.i class_body.b 
+		{:  return new GenericClassDecl(m, id, new Opt(), i, b, p, new List());  :}
+	|	            CLASS IDENTIFIER.id type_parameters.p interfaces.i class_body.b 
+		{:  return new GenericClassDecl(new Modifiers(new List()), id, new Opt(), i, b, p, new List());  :}
+	|	modifiers.m CLASS IDENTIFIER.id type_parameters.p super.s interfaces.i class_body.b 
 		{:  return new GenericClassDecl(m, id, s, i, b, p, new List());  :}
-	|	            CLASS IDENTIFIER.id type_parameters.p super_opt.s interfaces_opt.i class_body.b 
+	|	            CLASS IDENTIFIER.id type_parameters.p super.s interfaces.i class_body.b 
 		{:  return new GenericClassDecl(new Modifiers(new List()), id, s, i, b, p, new List());  :}
 	;
 
-Opt super_opt =
-  {: return new Opt(); :}
-  | super.s {: return s; :}
-  ;
-
-List interfaces_opt =
-    {: return new List(); :}
-  | interfaces.i {: return i; :}
-  ;
-
-List extends_interfaces_opt =
-                       {: return new List(); :}
-  | extends_interfaces {: return extends_interfaces; :}
-  ;
-  
 InterfaceDecl interface_declaration =
-		modifiers.m INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces_opt.i interface_body.b 
+		modifiers.m INTERFACE IDENTIFIER.id type_parameters.p interface_body.b 
+		{:  return new GenericInterfaceDecl(m, id, new List(), b, p, new List());  :}
+	|             INTERFACE IDENTIFIER.id type_parameters.p interface_body.b 
+		{:  return new GenericInterfaceDecl(new Modifiers(new List()), id, new List(), b, p, new List());  :}
+	|	modifiers.m INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces.i interface_body.b 
 		{:  return new GenericInterfaceDecl(m, id, i, b, p, new List());  :}
-	|             INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces_opt.i interface_body.b 
+	|             INTERFACE IDENTIFIER.id type_parameters.p extends_interfaces.i interface_body.b 
 		{:  return new GenericInterfaceDecl(new Modifiers(new List()), id, i, b, p, new List());  :}
 	;
 
-Access class_or_interface_type =
-		name.t LT type_argument_list_1.l {:  return new ParTypeAccess(t, l);  :}
-  | class_or_interface_type.t DOT simple_name.id {: return t.qualifiesAccess(id); :}
-  | class_or_interface_type.t DOT simple_name.id LT type_argument_list_1.l 
-    {: return t.qualifiesAccess(new ParTypeAccess(id, l)); :}
+
+Access class_or_interface =
+    name.n {: return n; :}
+  | class_or_interface.n LT type_argument_list_1.l DOT name.end {: return new ParTypeAccess(n, l).qualifiesAccess(end); :}
+  ;
+
+Access class_or_interface_type :=
+    class_or_interface.n {: return n; :}
+  | class_or_interface.n LT type_argument_list_1.l {: return new ParTypeAccess(n, l); :}
 	;
 Access array_type =
-    	name.t LT type_argument_list_1.l DOT name.n dims.d 
+    	class_or_interface.t LT type_argument_list_1.l DOT name.n dims.d 
     	{:  return new ArrayTypeAccess(new ParTypeAccess(t, l).qualifiesAccess(n), d.getNumChild());  :}
-	|	name.t LT type_argument_list_1.l dims.d 
+	|	class_or_interface.t LT type_argument_list_1.l dims.d 
 		{:  return new ArrayTypeAccess(new ParTypeAccess(t, l), d.getNumChild());  :}
 	;
 
@@ -73,29 +78,43 @@ Opt subclass_body_opt =
   | subclass_body {: return subclass_body; :}
   ;
 
-Expr class_instance_creation_expression =
-	 	NEW type_arguments.a class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+Expr class_instance_creation_expression :=
+    NEW class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+    {: return new ClassInstanceExpr(t, l, b); :}
+  |	NEW type_arguments.a class_or_interface_type.t LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
 		{:  return new ParClassInstanceExpr(t, l, b, a); :}
+	|	primary.n DOT NEW simple_name.id LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+    {:  ClassInstanceExpr e = new ClassInstanceExpr(id, l, b); 
+        e.setStart(NEW.getStart());
+        e.setEnd(RPAREN.getEnd());
+        return n.qualifiesAccess(e);
+    :}
 	|	primary.n DOT NEW simple_name.id type_arguments.a LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
-    {:  ClassInstanceExpr e = new ParClassInstanceExpr(id, l, b, a); 
+    {:  ClassInstanceExpr e = new ClassInstanceExpr(new ParTypeAccess(id, a), l, b); 
         e.setStart(NEW.getStart());
         e.setEnd(RPAREN.getEnd());
         return n.qualifiesAccess(e);
     :}
-	|	primary.n DOT NEW type_arguments.ca IDENTIFIER.id LPAREN argument_list_opt.l RPAREN class_body_opt.b
-		{:  return n.qualifiesAccess(new ParClassInstanceExpr(new ParseName(id), l, b, ca)); :}
-//	|	primary.n DOT NEW type_arguments.ca IDENTIFIER.id type_arguments.ta LPAREN argument_list_opt.l RPAREN class_body_opt.b
-//		{:  return new ParNestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), ta), l, b, ca); :}
+	|	primary.n DOT NEW type_arguments.ca simple_name.id LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+		{:  return n.qualifiesAccess(new ParClassInstanceExpr(id, l, b, ca)); :}
+	|	primary.n DOT NEW type_arguments.ca simple_name.id type_arguments.ta LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+		{:  return n.qualifiesAccess(new ParClassInstanceExpr(new ParTypeAccess(id, ta), l, b, ca)); :}
+	|	name.n DOT NEW simple_name.id LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+    {:  ClassInstanceExpr e = new ClassInstanceExpr(id, l, b); 
+        e.setStart(NEW.getStart());
+        e.setEnd(RPAREN.getEnd());
+        return n.qualifiesAccess(e);
+    :}
 	|	name.n DOT NEW simple_name.id type_arguments.a LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
-    {:  ClassInstanceExpr e = new ParClassInstanceExpr(id, l, b, a); 
+    {:  ClassInstanceExpr e = new ClassInstanceExpr(new ParTypeAccess(id, a), l, b); 
         e.setStart(NEW.getStart());
         e.setEnd(RPAREN.getEnd());
         return n.qualifiesAccess(e);
     :}
-//	|	name.n DOT NEW type_arguments.ca IDENTIFIER.id LPAREN argument_list_opt.l RPAREN class_body_opt.b
-//		{:  return new ParNestedClassInstanceExpr(n, new ParseName(id), l, b, ca);  :}
-//	|	name.n DOT NEW type_arguments.ca IDENTIFIER.id type_arguments.ta LPAREN argument_list_opt.l RPAREN class_body_opt.b
-//		{:  return new ParNestedClassInstanceExpr(n, new ParTypeAccess(new ParseName(id), ta), l, b, ca);  :}
+	|	name.n DOT NEW type_arguments.ca simple_name.id LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+		{:  return n.qualifiesAccess(new ParClassInstanceExpr(id, l, b, ca)); :}
+	|	name.n DOT NEW type_arguments.ca simple_name.id type_arguments.ta LPAREN argument_list_opt.l RPAREN subclass_body_opt.b
+		{:  return n.qualifiesAccess(new ParClassInstanceExpr(new ParTypeAccess(id, ta), l, b, ca)); :}
 	;
 
 List type_argument_list =
@@ -140,12 +159,12 @@ Access type_argument_3 =
   
 Access reference_type_1 =
 		reference_type.t GT {:  return t;  :}
-	|	name.t LT type_argument_list_2.l {:  return new ParTypeAccess(t, l);  :}
+	|	class_or_interface.t LT type_argument_list_2.l {:  return new ParTypeAccess(t, l);  :}
 	;
 	
 Access reference_type_2 =
 		reference_type.t RSHIFT {:  return t;  :}
-	|	name.t LT type_argument_list_3.l {:  return new ParTypeAccess(t, l);  :}
+	|	class_or_interface.t LT type_argument_list_3.l {:  return new ParTypeAccess(t, l);  :}
 	;
 	
 Access reference_type_3 =
@@ -161,6 +180,7 @@ Expr cast_expression =
 	|	LPAREN name.n LT type_argument_list_1.a DOT class_or_interface_type.t dims.d RPAREN unary_expression_not_plus_minus.e 
 		{:  return new CastExpr(new ArrayTypeAccess(new ParTypeAccess(n, a).qualifiesAccess(t), d.getNumChild()), e);  :}
   ;
+
 List type_parameters =
 		LT type_parameter_list_1.l {:  return l;  :}
 	;
@@ -212,7 +232,4 @@ Access additional_bound =
 Access additional_bound_1 =
 		AND reference_type_1.t {:  return t;  :}
 	;
-
-Opt class_body_opt = {: return new Opt(); :}
-    |  class_body.b {:  return new Opt(b);  :};
 
