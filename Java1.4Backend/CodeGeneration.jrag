@@ -228,6 +228,10 @@ aspect CodeGeneration {
     private void setAddress(int position, int address) {
       bytes.set(position + 0, (byte)((address&0xff00)>>8));
       bytes.set(position + 1, (byte)(address&0xff));
+      /*bytes.set(position + 0, (byte)(address >> 24 & 0xff));
+      bytes.set(position + 1, (byte)(address >> 16 & 0xff));
+      bytes.set(position + 2, (byte)(address >> 8 & 0xff));
+      bytes.set(position + 3, (byte)(address & 0xff));*/
     }
 
     public void emitStoreReference(int pos) {
@@ -289,6 +293,7 @@ aspect CodeGeneration {
     public void emitGoto(int label) {
       int p = jump(label);
       bytes.emitGoto(Bytecode.GOTO).add2(p);
+      //bytes.emitGoto(Bytecode.GOTO_W).add4(p);
     }
 
     public void emitJsr(int label) {
@@ -310,13 +315,7 @@ aspect CodeGeneration {
     CodeGeneration add(int i) { return add((byte)i); }
     CodeGeneration add(byte b) { bytes.add(b); return this; }
     CodeGeneration add2(int index) { bytes.add2(index); return this; }
-    CodeGeneration add4(int i) {
-      bytes.add(i >> 24 & 0xff);
-      bytes.add(i >> 16 & 0xff);
-      bytes.add(i >> 8 & 0xff);
-      bytes.add(i & 0xff);
-      return this;
-    }
+    CodeGeneration add4(int index) { bytes.add4(index); return this; }
     CodeGeneration emit(byte b) {
       bytes.emit(b);
       return this;
@@ -354,6 +353,13 @@ aspect CodeGeneration {
         bytes = ba;
       }
       bytes[pos++] = b;
+      return this;
+    }
+    ByteArray add4(int i) { 
+      add(i >> 24 & 0xff);
+      add(i >> 16 & 0xff);
+      add(i >> 8 & 0xff);
+      add(i & 0xff);
       return this;
     }
     ByteArray add2(int index) { add(index >> 8).add(index & 0xff); return this; }
@@ -895,7 +901,8 @@ aspect CodeGeneration {
 }
 aspect CodeGenerationConversions {
   void TypeDecl.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {
-    emitCastTo(gen, type);
+    if(!type.isIntegralType() || !isIntegralType() || type.isLong())
+      emitCastTo(gen, type);
   }
   
   void TypeDecl.emitCastTo(CodeGeneration gen, TypeDecl type) { throw new Error("CastTo not implemented for " + getClass().getName()); }

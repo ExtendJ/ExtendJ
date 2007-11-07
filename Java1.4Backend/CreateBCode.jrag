@@ -675,6 +675,10 @@ aspect CreateBCode {
     if(c.needsEnclosing()) {
       if(hasPrevExpr() && !prevExpr().isTypeAccess()) {
         prevExpr().createBCode(gen);
+        gen.emitDup();
+        int index = gen.constantPool().addMethodref("java/lang/Object", "getClass", "()Ljava/lang/Class;");
+        gen.emit(Bytecode.INVOKEVIRTUAL, 0).add2(index);
+        gen.emitPop();
       }
       else {
         if(hostType().needsSuperEnclosing()) {
@@ -959,14 +963,21 @@ aspect CreateBCode {
   eq ShortType.stringPromotion() = typeInt();
 
   syn boolean ASTNode.isStringAdd() = false;
-  eq AddExpr.isStringAdd() = type().isString();
+  eq AddExpr.isStringAdd() = type().isString() && !isConstant();
   
-  syn boolean AddExpr.firstStringAddPart() = !getLeftOperand().isStringAdd() && type().isString();
+  syn boolean AddExpr.firstStringAddPart() = type().isString() && !getLeftOperand().isStringAdd();
   syn boolean AddExpr.lastStringAddPart() = !getParent().isStringAdd();
 
   public void AddExpr.createBCode(CodeGeneration gen) {
     if(!type().isString())
       super.createBCode(gen);
+    else if(isConstant()) {
+      int index = gen.constantPool().addConstant(constant().stringValue());
+      if(index < 256)
+        gen.emit(Bytecode.LDC).add(index);
+      else 
+        gen.emit(Bytecode.LDC_W).add2(index);
+    }
     else {
       TypeDecl stringBuffer = lookupType("java.lang", "StringBuffer");
       String classname = stringBuffer.constantPoolName();
