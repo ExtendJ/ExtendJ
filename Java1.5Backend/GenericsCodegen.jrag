@@ -3,6 +3,10 @@ aspect GenericsCodegen {
    eq TypeVariable.typeDescriptor() = erasure().typeDescriptor();
    eq ParClassDecl.typeDescriptor() = erasure().typeDescriptor();
    eq ParInterfaceDecl.typeDescriptor() = erasure().typeDescriptor();
+
+   eq TypeVariable.arrayTypeDescriptor() = erasure().arrayTypeDescriptor();
+   eq ParClassDecl.arrayTypeDescriptor() = erasure().arrayTypeDescriptor();
+   eq ParInterfaceDecl.arrayTypeDescriptor() = erasure().arrayTypeDescriptor();
    //eq WildcardType.typeDescriptor() = erasure().typeDescriptor();
 
    eq ConstructorDeclSubstituted.accessorIndex() = 
@@ -106,17 +110,18 @@ aspect GenericsCodegen {
   }
 
   refine CreateBCode protected TypeDecl MethodAccess.methodQualifierType() {
-    if(decl().isStatic())
-      return decl().hostType().erasure();
     TypeDecl typeDecl = CreateBCode.MethodAccess.methodQualifierType();
+    if(typeDecl == null)
+      return null;
+    typeDecl = typeDecl.erasure();
+    if(!typeDecl.memberMethods(decl().name()).contains(decl()))
+      return decl().hostType();
     return typeDecl.erasure();
   }
 
   refine CreateBCode protected TypeDecl VarAccess.fieldQualifierType() {
-    if(decl().isStatic())
-      return decl().hostType().erasure();
     TypeDecl typeDecl = CreateBCode.VarAccess.fieldQualifierType();
-    return typeDecl.erasure();
+    return typeDecl == null ? null : typeDecl.erasure();
   }
 
   public void ConstructorDeclSubstituted.emitInvokeConstructor(CodeGeneration gen) {
@@ -217,6 +222,9 @@ aspect GenericsCodegen {
   }
 
   public void BridgeMethodDecl.java2Transformation() { }
+  public void MethodDeclSubstituted.java2Transformation() { }
+  public void ParMethodDecl.java2Transformation() { }
+
   public static final int Modifiers.ACC_BRIDGE = 0x0040;
 
   eq BridgeMethodDecl.flags() {
@@ -226,49 +234,68 @@ aspect GenericsCodegen {
     return res;
   }
 
+  syn SimpleSet TypeDecl.bridgeCandidates(String signature) = SimpleSet.emptySet;
+  eq InterfaceDecl.bridgeCandidates(String signature) = ancestorMethods(signature);
+  eq ClassDecl.bridgeCandidates(String signature) {
+    SimpleSet set = ancestorMethods(signature);
+    for(Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); )
+      set = set.add(iter.next());
+    return set;
+  }
+  
   public void MethodDecl.java2Transformation() {
     super.java2Transformation();
-    for(Iterator iter = hostType().ancestorMethods(signature()).iterator(); iter.hasNext(); ) {
+    HashSet processed = new HashSet();
+    for(Iterator iter = hostType().bridgeCandidates(signature()).iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
       if(this.overrides(m)) {
         MethodDecl erased = m.erasedMethod();
         if(!erased.signature().equals(signature()) || erased.type().erasure() != type().erasure()) {
-          List args = new List();
-          List parameters = new List();
+          StringBuffer keyBuffer = new StringBuffer();
           for(int i = 0; i < getNumParameter(); i++) {
-            args.add(new CastExpr(getParameter(i).type().erasure().createBoundAccess(), new VarAccess("p" + i)));
-            parameters.add(new ParameterDeclaration(erased.getParameter(i).type().erasure(), "p" + i));
+            keyBuffer.append(erased.getParameter(i).type().erasure().fullName());
           }
-          Stmt stmt;
-          if(type().isVoid()) {
-            stmt = new ExprStmt(
-              createBoundAccess(
-                args
-              )
-            );
+          keyBuffer.append(erased.type().erasure().fullName());
+          String key = keyBuffer.toString();
+          if(!processed.contains(key)) {
+            processed.add(key);
+
+            List args = new List();
+            List parameters = new List();
+            for(int i = 0; i < getNumParameter(); i++) {
+              args.add(new CastExpr(getParameter(i).type().erasure().createBoundAccess(), new VarAccess("p" + i)));
+              parameters.add(new ParameterDeclaration(erased.getParameter(i).type().erasure(), "p" + i));
+            }
+            Stmt stmt;
+            if(type().isVoid()) {
+              stmt = new ExprStmt(
+                  createBoundAccess(
+                    args
+                    )
+                  );
+            }
+            else {
+              stmt = new ReturnStmt(
+                  createBoundAccess(
+                    args
+                    )
+                  );
+            }
+            MethodDecl bridge = new BridgeMethodDecl(
+                (Modifiers)getModifiers().fullCopy(),
+                erased.type().erasure().createBoundAccess(),
+                erased.name(),
+                parameters,
+                new List(),
+                (List)getExceptionList().fullCopy(),
+                new Opt(
+                  new Block(
+                    new List().add(stmt)
+                    )
+                  )
+                );
+            hostType().addBodyDecl(bridge);
           }
-          else {
-            stmt = new ReturnStmt(
-              createBoundAccess(
-                args
-              )
-            );
-          }
-          MethodDecl bridge = new BridgeMethodDecl(
-            (Modifiers)getModifiers().fullCopy(),
-            erased.type().erasure().createBoundAccess(),
-            erased.name(),
-            parameters,
-            new List(),
-            (List)getExceptionList().fullCopy(),
-            new Opt(
-              new Block(
-                new List().add(stmt)
-              )
-            )
-          );
-          hostType().addBodyDecl(bridge);
-          
         }
       }
     }
@@ -427,6 +454,7 @@ aspect GenericsCodegen {
   eq VoidType.fieldTypeSignature() = classTypeSignature();
 
   syn lazy String TypeDecl.classTypeSignature() = "L" + classTypeSignatureContents() + ";";
+  eq ArrayDecl.classTypeSignature() = "[" + componentType().classTypeSignature();
   eq TypeVariable.classTypeSignature() = "T" + name() + ";";
   eq PrimitiveType.classTypeSignature() = typeDescriptor();
   eq VoidType.classTypeSignature() = typeDescriptor();

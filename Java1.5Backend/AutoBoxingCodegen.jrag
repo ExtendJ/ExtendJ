@@ -248,6 +248,14 @@ aspect AutoBoxingCodegen {
     }
   }
 
+  refine CreateBCode public void Dims.createBCode(CodeGeneration gen) {
+    if(hasExpr()) {
+      getExpr().createBCode(gen);
+      if(getExpr().type().isReferenceType())
+        getExpr().type().emitUnboxingOperation(gen);
+    }
+  }
+
   refine CreateBCode public void ArrayInit.createBCode(CodeGeneration gen) {
     IntType.push(gen, getNumInit());
     if(type().componentType().isPrimitive() && !type().componentType().isReferenceType()) {
@@ -271,6 +279,12 @@ aspect AutoBoxingCodegen {
     }
   }
 
+  refine CodeGeneration void TypeDecl.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {
+    if(!type.isIntegralType() || !isIntegralType() || type.isLong() || type.isReferenceType() || isReferenceType())
+      emitCastTo(gen, type);
+  }
+
+
   protected void Unary.boxingGen(CodeGeneration gen) {
     getOperand().createBCode(gen);
     TypeDecl type = getOperand().type();
@@ -287,9 +301,12 @@ aspect AutoBoxingCodegen {
     TypeDecl dest = getDest().type();
     TypeDecl source = getSource().type();
     TypeDecl type;
-    if(dest.isNumericType() && source.isNumericType() && !(dest.isReferenceType() && source.isReferenceType()))
+    if(dest.isNumericType() && source.isNumericType())
       type = dest.binaryNumericPromotion(source);
-    else 
+    else if(dest.isBoolean() && source.isBoolean()) {
+      type = dest.isReferenceType() ? dest.unboxed() : dest;
+    }
+    else
       type = dest;
     getDest().createAssignLoadDest(gen);
     dest.emitCastTo(gen, type);
@@ -317,6 +334,13 @@ aspect AutoBoxingCodegen {
         getRightOperand().createBCode(gen);
         getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
       }
+      else if(type.isBoolean() && type != getRightOperand().type()) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      }
       else {
         getLeftOperand().createBCode(gen);
         getRightOperand().createBCode(gen);
@@ -328,6 +352,29 @@ aspect AutoBoxingCodegen {
       //gen.emitGoto(true_label());
     }
   }
+
+  refine CreateBCode public void ArrayAccess.createBCode(CodeGeneration gen) {
+    prevExpr().createBCode(gen);
+    getExpr().createBCode(gen);
+    getExpr().type().emitCastTo(gen, typeInt());
+    gen.emit(type().arrayLoad());
+  }
+
+  refine CreateBCode public void ArrayAccess.createAssignSimpleLoadDest(CodeGeneration gen) {
+    prevExpr().createBCode(gen);
+    getExpr().createBCode(gen);
+    getExpr().type().emitCastTo(gen, typeInt());
+  }
+
+  refine CreateBCode public void ArrayAccess.createAssignLoadDest(CodeGeneration gen) {
+    prevExpr().createBCode(gen);
+    gen.emitDup();
+    getExpr().createBCode(gen);
+    getExpr().type().emitCastTo(gen, typeInt());
+    typeInt().emitDup_x1(gen);
+    gen.emit(type().arrayLoad());
+  }
+
 
 
 

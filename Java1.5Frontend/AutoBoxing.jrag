@@ -103,7 +103,7 @@ aspect AutoBoxing {
   }
 
   // 5.6.1 Unary Numeric Promotion
-  eq ReferenceType.unaryNumericPromotion() = isUnknown() ? this : unboxed().unaryNumericPromotion();
+  eq ReferenceType.unaryNumericPromotion() = isNumericType() && !isUnknown() ? unboxed().unaryNumericPromotion() : this;
   eq UnknownType.unaryNumericPromotion() = this;
 
   // 5.6.2 Binary Numeric Promotion
@@ -112,6 +112,17 @@ aspect AutoBoxing {
     if(type.isReferenceType())
       type = type.unboxed();
     return TypeAnalysis.NumericType.binaryNumericPromotion(type);
+  }
+
+  refine TypeAnalysis eq ConditionalExpr.type() {
+    TypeDecl trueType = getTrueExpr().type();
+    TypeDecl falseType = getFalseExpr().type();
+    if(trueType.isBoolean() && falseType.isBoolean()) {
+      if(trueType.isReferenceType())
+        return trueType.unboxed();
+      return trueType;
+    }
+    return TypeAnalysis.ConditionalExpr.type();
   }
 
   eq UnknownType.binaryNumericPromotion(TypeDecl type) = this;
@@ -125,11 +136,26 @@ aspect AutoBoxing {
   eq ReferenceType.isPrimitive() =
     !unboxed().isUnknown() && unboxed().isPrimitive();
 
+  refine ConstantExpression eq Binary.binaryNumericPromotedType() {
+    TypeDecl leftType = left().type();
+    TypeDecl rightType = right().type();
+    if(leftType.isBoolean() && rightType.isBoolean()) {
+      return leftType.isReferenceType() ? leftType.unboxed() : leftType;
+    }
+    return ConstantExpression.Binary.binaryNumericPromotedType();
+  }
+
   // Affects type checking of 14.9 If, 14.10 Assert, 14.12 While, 14.13 Do, 14.14 For 
   eq ReferenceType.isBoolean() = fullName().equals("java.lang.Boolean") && unboxed().isBoolean();
   // Code generation need to add unboxing if the conditional is a Boxed value
   // this is done by inserting a new node with an explicit cast
 
+
+  eq PrimitiveType.castingConversionTo(TypeDecl type) = 
+    type.isReferenceType() ? boxed().castingConversionTo(type) : super.castingConversionTo(type);
+
+  refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) =
+    type.isPrimitiveType() && !unboxed().isUnknown() ? unboxed().castingConversionTo(type) : Generics.ClassDecl.castingConversionTo(type);
 
   // 15.15.6 Logical Complement Operator !
   // type()
