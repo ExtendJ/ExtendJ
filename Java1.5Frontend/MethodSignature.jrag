@@ -4,7 +4,7 @@ aspect MethodSignature15 {
     // select potentially applicable methods
     for(Iterator iter = lookupMethod(name()).iterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl)iter.next();
-      if(potentiallyApplicable(decl)) {
+      if(potentiallyApplicable(decl) && accessible(decl)) {
         if(decl instanceof GenericMethodDecl) {
           decl = ((GenericMethodDecl)decl).lookupParMethodDecl(typeArguments(decl));
         }
@@ -117,6 +117,9 @@ aspect MethodSignature15 {
     return maxSpecific;
   }
 
+  eq ParMethodDecl.moreSpecificThan(MethodDecl m) =
+    genericMethodDecl().moreSpecificThan(m instanceof ParMethodDecl ? ((ParMethodDecl)m).genericMethodDecl() : m );
+
   syn boolean MethodAccess.applicableBySubtyping(MethodDecl m) {
     if(m.getNumParameter() != getNumArg())
       return false;
@@ -209,8 +212,12 @@ aspect MethodSignature15 {
       return false;
     if(m instanceof GenericMethodDecl) {
       GenericMethodDecl gm = (GenericMethodDecl)m;
-      if(gm.getNumTypeParameter() != typeArguments(m).size())
+      ArrayList list = typeArguments(m);
+      if(gm.getNumTypeParameter() != list.size())
         return false;
+      for(int i = 0; i < gm.getNumTypeParameter(); i++)
+        if(!((TypeDecl)list.get(i)).subtype(gm.getTypeParameter(i)))
+          return false;
     }
     return true;
   }
@@ -220,10 +227,20 @@ aspect MethodSignature15 {
   syn lazy ArrayList MethodAccess.typeArguments(MethodDecl m) {
     ArrayList typeArguments = new ArrayList();
     if(m instanceof GenericMethodDecl) {
-      Collection arguments = computeConstraints((GenericMethodDecl)m);
-      for(Iterator iter = arguments.iterator(); iter.hasNext(); ) {
+      GenericMethodDecl g = (GenericMethodDecl)m;
+      Collection arguments = computeConstraints(g);
+      int i = 0;
+      for(Iterator iter = arguments.iterator(); iter.hasNext(); i++) {
         TypeDecl typeDecl = (TypeDecl)iter.next();
-        if(typeDecl == null) typeDecl = typeObject();
+        if(typeDecl == null) {
+          TypeVariable v = g.getTypeParameter(i);
+          if(v.getNumTypeBound() == 0)
+            typeDecl = typeObject();
+          else if(v.getNumTypeBound() == 1)
+            typeDecl = v.getTypeBound(0).type();
+          else
+            typeDecl = v.lubType();
+        }
         typeArguments.add(typeDecl);
       }
     }

@@ -29,6 +29,8 @@ aspect GenericMethodsInference {
   eq ReturnStmt.getResult().assignConvertedType() = returnType();
   eq Program.getChild().assignConvertedType() = typeNull();
 
+  eq MethodAccess.getArg().assignConvertedType() = typeObject();
+
   inh TypeDecl MethodAccess.typeObject();
 
   // Generic Method Type Inference
@@ -202,12 +204,21 @@ aspect GenericMethodsInference {
       for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
         TypeVariable T = (TypeVariable)iter.next();
         ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
-        if(!set.subtypeConstraints.isEmpty()) {
-          ArrayList list = set.subtypeConstraints;
-          if(list.size() == 1)
-            set.typeArgument = (TypeDecl)list.iterator().next();
-          else
-            throw new Error("Need to compute greatest lower bound for subtype constraints");
+        if(!set.subtypeConstraints.isEmpty() && set.typeArgument == null) {
+          for(Iterator i2 = set.subtypeConstraints.iterator(); i2.hasNext(); ) {
+            TypeDecl typeDecl = (TypeDecl)i2.next();
+            if(set.typeArgument == null || typeDecl.subtype(set.typeArgument))
+              set.typeArgument = typeDecl;
+            else if(!set.typeArgument.subtype(typeDecl))
+              throw new Error("Need to compute greatest lower bound for subtype constraints");
+          }
+          for(int i = 0; i < T.getNumTypeBound(); i++) {
+            TypeDecl typeDecl = T.getTypeBound(i).type();
+            if(set.typeArgument == null || typeDecl.subtype(set.typeArgument))
+              set.typeArgument = typeDecl;
+            else if(!set.typeArgument.subtype(typeDecl))
+              throw new Error("Need to compute greatest lower bound for subtype constraints");
+          }
         }
       }
     }
@@ -216,7 +227,7 @@ aspect GenericMethodsInference {
       for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
         TypeVariable T = (TypeVariable)iter.next();
         ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
-        if(!set.supertypeConstraints.isEmpty()) {
+        if(!set.supertypeConstraints.isEmpty() && set.typeArgument == null) {
           //TypeDecl typeDecl = lub(set.supertypeConstraints);
           TypeDecl typeDecl = T.lookupLUBType(set.supertypeConstraints).lub();
           set.typeArgument = typeDecl;
