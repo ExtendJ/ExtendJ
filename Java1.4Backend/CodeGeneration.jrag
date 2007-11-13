@@ -55,8 +55,18 @@ aspect CodeGeneration {
       uses = null;
     }
     
+    private boolean wideGoto = false;
+
+    private boolean numberFormatError = false;
+    public boolean numberFormatError() { return numberFormatError; }
+
     public CodeGeneration(ConstantPool constantPool) {
       this.constantPool = constantPool;
+    }
+
+    public CodeGeneration(ConstantPool constantPool, boolean wideGoto) {
+      this.constantPool = constantPool;
+      this.wideGoto = wideGoto;
     }
 
     public ConstantPool constantPool() {
@@ -203,8 +213,11 @@ aspect CodeGeneration {
       if(uses.containsKey(label_object)) {
         ArrayList array = (ArrayList)uses.get(label_object);
         for(int i = 0; i < array.size(); i++) {
-          int p = ((Integer)array.get(i)).intValue();          
-          setAddress(p + 1, pos() -  p);
+          int p = ((Integer)array.get(i)).intValue();
+          if(bytes.get(p) == Bytecode.GOTO_W)
+            setAddress32(p + 1, pos() - p);
+          else
+            setAddress(p + 1, pos() -  p);
         }
       }
     } 
@@ -226,13 +239,18 @@ aspect CodeGeneration {
       return 0; // a position of 0 means not calculated yet
     }
     private void setAddress(int position, int address) {
+      if(address > Short.MAX_VALUE || address < Short.MIN_VALUE)
+        numberFormatError = true;
       bytes.set(position + 0, (byte)((address&0xff00)>>8));
       bytes.set(position + 1, (byte)(address&0xff));
-      /*bytes.set(position + 0, (byte)(address >> 24 & 0xff));
+    }
+    private void setAddress32(int position, int address) {
+      bytes.set(position + 0, (byte)(address >> 24 & 0xff));
       bytes.set(position + 1, (byte)(address >> 16 & 0xff));
       bytes.set(position + 2, (byte)(address >> 8 & 0xff));
-      bytes.set(position + 3, (byte)(address & 0xff));*/
+      bytes.set(position + 3, (byte)(address & 0xff));
     }
+
 
     public void emitStoreReference(int pos) {
       maxLocals = Math.max(maxLocals, pos+1);
@@ -292,8 +310,13 @@ aspect CodeGeneration {
 
     public void emitGoto(int label) {
       int p = jump(label);
-      bytes.emitGoto(Bytecode.GOTO).add2(p);
-      //bytes.emitGoto(Bytecode.GOTO_W).add4(p);
+      if(wideGoto)
+        bytes.emitGoto(Bytecode.GOTO_W).add4(p);
+      else {
+        if(p > Short.MAX_VALUE || p < Short.MIN_VALUE)
+          numberFormatError = true;
+        bytes.emitGoto(Bytecode.GOTO).add2(p);
+      }
     }
 
     public void emitJsr(int label) {
@@ -314,8 +337,14 @@ aspect CodeGeneration {
     public byte[] toArray() {return bytes.toArray();}
     CodeGeneration add(int i) { return add((byte)i); }
     CodeGeneration add(byte b) { bytes.add(b); return this; }
-    CodeGeneration add2(int index) { bytes.add2(index); return this; }
-    CodeGeneration add4(int index) { bytes.add4(index); return this; }
+    CodeGeneration add2(int index) {
+      bytes.add2(index);
+      return this; 
+    }
+    CodeGeneration add4(int index) {
+      bytes.add4(index);
+      return this;
+    }
     CodeGeneration emit(byte b) {
       bytes.emit(b);
       return this;
@@ -362,7 +391,11 @@ aspect CodeGeneration {
       add(i & 0xff);
       return this;
     }
-    ByteArray add2(int index) { add(index >> 8).add(index & 0xff); return this; }
+    ByteArray add2(int index) {
+      add(index >> 8 & 0xff);
+      add(index & 0xff);
+      return this;
+    }
     ByteArray emit(byte b) {
       changeStackDepth(BytecodeDebug.stackChange(b));
       add(b);
@@ -416,7 +449,7 @@ aspect CodeGeneration {
 
   // push constants
 
-  public static void IntType.push(CodeGeneration gen, int value) {
+  public static void IntegerLiteral.push(CodeGeneration gen, int value) {
     switch(value) {
       case -1:
         gen.emit(Bytecode.ICONST_M1);
@@ -455,38 +488,27 @@ aspect CodeGeneration {
         }
     }
   }
-
-  public static void BooleanType.push(CodeGeneration gen, boolean value) {
-    gen.emit(value ? Bytecode.ICONST_1 : Bytecode.ICONST_0);
-  }
-
-  public void TypeDecl.emitPushConstant(CodeGeneration gen, int value) {
-  }
-
-  public void IntegralType.emitPushConstant(CodeGeneration gen, int value) {
-    IntType.push(gen, value);
-  }
-  public void LongType.emitPushConstant(CodeGeneration gen, int value) {
+  public static void LongLiteral.push(CodeGeneration gen, long value) {
     if(value == 0)
       gen.emit(Bytecode.LCONST_0);
     else if(value == 1)
       gen.emit(Bytecode.LCONST_1);
     else {
-      int index = gen.constantPool().addConstant((long)value);
+      int index = gen.constantPool().addConstant(value);
       gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
-  public void DoubleType.emitPushConstant(CodeGeneration gen, int value) {
+  public static void DoubleLiteral.push(CodeGeneration gen, double value) {
     if(value == 0)
       gen.emit(Bytecode.DCONST_0);
     else if(value == 1)
       gen.emit(Bytecode.DCONST_1);
     else {
-      int index = gen.constantPool().addConstant((double)value);
+      int index = gen.constantPool().addConstant(value);
       gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
-  public void FloatType.emitPushConstant(CodeGeneration gen, int value) {
+  public static void FloatingPointLiteral.push(CodeGeneration gen, float value) {
     if(value == 0)
       gen.emit(Bytecode.FCONST_0);
     else if(value == 1)
@@ -494,13 +516,30 @@ aspect CodeGeneration {
     else if(value == 2)
       gen.emit(Bytecode.FCONST_2);
     else {
-      int index = gen.constantPool().addConstant((float)value);
+      int index = gen.constantPool().addConstant(value);
       if(index < 256)
         gen.emit(Bytecode.LDC).add(index);
       else
         gen.emit(Bytecode.LDC_W).add2(index);
     }
   }
+  public static void StringLiteral.push(CodeGeneration gen, String value) {
+    int index = gen.constantPool().addConstant(value);
+    if(index < 256)
+      gen.emit(Bytecode.LDC).add(index);
+    else 
+      gen.emit(Bytecode.LDC_W).add2(index);
+  }
+
+  public static void BooleanLiteral.push(CodeGeneration gen, boolean value) {
+    gen.emit(value ? Bytecode.ICONST_1 : Bytecode.ICONST_0);
+  }
+
+  public void TypeDecl.emitPushConstant(CodeGeneration gen, int value) { }
+  public void IntegralType.emitPushConstant(CodeGeneration gen, int value) { IntegerLiteral.push(gen, value); }
+  public void LongType.emitPushConstant(CodeGeneration gen, int value) { LongLiteral.push(gen, value); }
+  public void DoubleType.emitPushConstant(CodeGeneration gen, int value) { DoubleLiteral.push(gen, value); }
+  public void FloatType.emitPushConstant(CodeGeneration gen, int value) { FloatingPointLiteral.push(gen, value); }
 
   // push literals
 
@@ -517,42 +556,19 @@ aspect CodeGeneration {
   }
 
   public void FloatingPointLiteral.emitPushConstant(CodeGeneration gen) {
-    if(constant().floatValue() == 0) gen.emit(Bytecode.FCONST_0);
-    else if(constant().floatValue() == 1) gen.emit(Bytecode.FCONST_1);
-    else if(constant().floatValue() == 2) gen.emit(Bytecode.FCONST_2);
-    else {
-      int index = gen.constantPool().addConstant(constant().floatValue());
-      if(index < 256)
-        gen.emit(Bytecode.LDC).add(index);
-      else 
-        gen.emit(Bytecode.LDC_W).add2(index);
-    }
+    FloatingPointLiteral.push(gen, constant().floatValue());
   }
 
   public void LongLiteral.emitPushConstant(CodeGeneration gen) {
-    if(constant().longValue() == 0) gen.emit(Bytecode.LCONST_0);
-    else if(constant().longValue() == 1) gen.emit(Bytecode.LCONST_1);
-    else {
-      int index = gen.constantPool().addConstant(constant().longValue());
-      gen.emit(Bytecode.LDC2_W).add2(index);
-    }
+    LongLiteral.push(gen, constant().longValue());
   }
 
   public void DoubleLiteral.emitPushConstant(CodeGeneration gen) {
-    if(constant().doubleValue() == 0) gen.emit(Bytecode.DCONST_0);
-    else if(constant().doubleValue() == 1) gen.emit(Bytecode.DCONST_1);
-    else {
-      int index = gen.constantPool().addConstant(constant().doubleValue());
-      gen.emit(Bytecode.LDC2_W).add2(index);
-    }
+    DoubleLiteral.push(gen, constant().doubleValue());
   }
 
   public void StringLiteral.emitPushConstant(CodeGeneration gen) {
-    int index = gen.constantPool().addConstant(constant().stringValue());
-    if(index < 256)
-      gen.emit(Bytecode.LDC).add(index);
-    else 
-      gen.emit(Bytecode.LDC_W).add2(index);
+    StringLiteral.push(gen, getLITERAL());
   }
 
   public void NullLiteral.emitPushConstant(CodeGeneration gen) {
@@ -560,7 +576,7 @@ aspect CodeGeneration {
   }
 
   public void BooleanLiteral.emitPushConstant(CodeGeneration gen) {
-    BooleanType.push(gen, constant().booleanValue());
+    BooleanLiteral.push(gen, constant().booleanValue());
   }
 
   public void ASTNode.error() {
@@ -568,6 +584,23 @@ aspect CodeGeneration {
     StackTraceElement[] ste = new Throwable().getStackTrace();
     String s = ste[1].toString();
     throw new Error(s+" Cannot create bytecode for:"+getClass().getName());
+  }
+
+  public void Constant.createBCode(CodeGeneration gen) {
+    if(this instanceof ConstantInt)
+      IntegerLiteral.push(gen, intValue());
+    else if(this instanceof ConstantLong)
+      LongLiteral.push(gen, longValue());
+    else if(this instanceof ConstantFloat)
+      FloatingPointLiteral.push(gen, floatValue());
+    else if(this instanceof ConstantDouble)
+      DoubleLiteral.push(gen, doubleValue());
+    else if(this instanceof ConstantChar)
+      IntegerLiteral.push(gen, intValue());
+    else if(this instanceof ConstantBoolean)
+      BooleanLiteral.push(gen, booleanValue());
+    else if(this instanceof ConstantString)
+      StringLiteral.push(gen, stringValue());
   }
 
   // return

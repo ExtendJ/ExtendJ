@@ -22,6 +22,16 @@ aspect CreateBCode {
 
   syn lazy CodeGeneration TypeDecl.bytecodes(ConstantPool constantPool) {
     CodeGeneration gen = new CodeGeneration(constantPool);
+    generateBytecodes(gen);
+    if(!gen.numberFormatError())
+      return gen;
+    gen = new CodeGeneration(constantPool, true);
+    generateBytecodes(gen);
+    if(!gen.numberFormatError())
+      return gen;
+    throw new Error("Could not generate code for initializers in " + hostType().typeName());
+  }
+  private void TypeDecl.generateBytecodes(CodeGeneration gen) {
     for(int i = 0; i < getNumBodyDecl(); i++) {
       BodyDecl b = getBodyDecl(i);
       if(b instanceof FieldDeclaration && b.isBytecodeField()) {
@@ -37,13 +47,22 @@ aspect CreateBCode {
       }
     }
     gen.emitReturn();
-    return gen;
   }
 
   syn lazy CodeGeneration MethodDecl.bytecodes(ConstantPool constantPool) {
     //if(Program.verbose())
     //  System.out.println("Generating bytecodes for " + signature() + " in " + hostType().fullName());
     CodeGeneration gen = new CodeGeneration(constantPool);
+    generateBytecodes(gen);
+    if(!gen.numberFormatError())
+      return gen;
+    gen = new CodeGeneration(constantPool, true);
+    generateBytecodes(gen);
+    if(!gen.numberFormatError())
+      return gen;
+    throw new Error("Could not generate code for " + signature() + " in " + hostType().typeName());
+  }
+  private void MethodDecl.generateBytecodes(CodeGeneration gen) {
     int label = gen.variableScopeLabel();
     if(!isStatic())
       gen.addLocalVariableEntryAtCurrentPC("this", hostType().typeDescriptor(), 0, label);
@@ -57,11 +76,20 @@ aspect CreateBCode {
     if(type() instanceof VoidType) // TODO: canCompleteNormally check as well
       gen.emitReturn();
     gen.addVariableScopeLabel(label);
-    return gen;
   }
   
   syn lazy CodeGeneration ConstructorDecl.bytecodes(ConstantPool constantPool) {
     CodeGeneration gen = new CodeGeneration(constantPool);
+    generateBytecodes(gen);
+    if(!gen.numberFormatError())
+      return gen;
+    gen = new CodeGeneration(constantPool, true);
+    generateBytecodes(gen);
+    if(!gen.numberFormatError())
+      return gen;
+    throw new Error("Could not generate code for " + signature() + " in " + hostType().typeName());
+  }
+  private void ConstructorDecl.generateBytecodes(CodeGeneration gen) {
     int label = gen.variableScopeLabel();
     gen.addLocalVariableEntryAtCurrentPC("this", hostType().typeDescriptor(), 0, label);
     for(int i = 0; i < getNumParameter(); i++) {
@@ -73,7 +101,6 @@ aspect CreateBCode {
     createBCode(gen);
     gen.emitReturn();
     gen.addVariableScopeLabel(label);
-    return gen;
   }
 
   public void MethodDecl.createBCode(CodeGeneration gen) {
@@ -105,12 +132,11 @@ aspect CreateBCode {
     }
 
     int localIndex = 1;
-    if(hostType().needsEnclosing()) {
-      TypeDecl type = hostType().enclosingType();
+    if(needsEnclosing()) {
       gen.emitLoadReference(0);
       gen.emitLoadReference(localIndex);
       String classname = hostType().constantPoolName();
-      String desc = type.typeDescriptor();
+      String desc = enclosing().typeDescriptor();
       String name = "this$0";
       int index = gen.constantPool().addFieldref(classname, name, desc);
       gen.emit(Bytecode.PUTFIELD, -2).add2(index);
@@ -403,7 +429,12 @@ aspect CreateBCode {
     else if(v instanceof FieldDeclaration) {
       FieldDeclaration f = (FieldDeclaration)v;
       createLoadQualifier(gen);
-      if(f.isPrivate() && !hostType().hasField(v.name()))
+      if(f.isConstant() && (f.type().isPrimitive() || f.type().isString())) {
+        if(!f.isStatic())
+          fieldQualifierType().emitPop(gen);
+        f.constant().createBCode(gen);
+      }
+      else if(f.isPrivate() && !hostType().hasField(v.name()))
         f.emitInvokeFieldAccessor(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());
@@ -434,7 +465,7 @@ aspect CreateBCode {
         prevExpr().createBCode(gen);
         // pop qualifier stack element for class variables
         // this qualifier must be computed to ensure side effects
-        if(f.isClassVariable() && !prevExpr().isTypeAccess())
+        if(!prevExpr().isTypeAccess() && f.isClassVariable())
           prevExpr().type().emitPop(gen);
       }
       else if(f.isInstanceVariable()) {
@@ -611,7 +642,7 @@ aspect CreateBCode {
       TypeDecl enclosing = hostType();
       if(inExplicitConstructorInvocation()) {
         gen.emit(Bytecode.ALOAD_1);
-        enclosing = enclosing.enclosingType();
+        enclosing = enclosing.enclosing();
       }
       else {
         gen.emit(Bytecode.ALOAD_0);
@@ -756,16 +787,21 @@ aspect CreateBCode {
     // 15.9.2 first part
     if(type().isAnonymous()) {
       if(type().isAnonymousInNonStaticContext()) {
-        gen.emit(Bytecode.ALOAD_0);
+        if(type().inExplicitConstructorInvocation())
+          gen.emit(Bytecode.ALOAD_1);
+        else
+          gen.emit(Bytecode.ALOAD_0);
       }
-      // 15.9.2 second part
-      ClassDecl C = (ClassDecl)type();
-      TypeDecl S = C.superclass();
-      if(S.isLocalClass()) {
-        emitLocalEnclosing(gen, S);
-      }
-      else if(S.isInnerType()) {
-        emitInnerMemberEnclosing(gen, S);
+      if(type().needsSuperEnclosing()) {
+        // 15.9.2 second part
+        ClassDecl C = (ClassDecl)type();
+        TypeDecl S = C.superclass();
+        if(S.isLocalClass()) {
+          emitLocalEnclosing(gen, S);
+        }
+        else if(S.isInnerType()) {
+          emitInnerMemberEnclosing(gen, S);
+        }
       }
     }
     else if(type().isLocalClass()) {
@@ -834,7 +870,7 @@ aspect CreateBCode {
   }
   
   public void ArrayInit.createBCode(CodeGeneration gen) {
-    IntType.push(gen, getNumInit());
+    IntegerLiteral.push(gen, getNumInit());
     if(type().componentType().isPrimitive()) {
       gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
     } 
@@ -845,7 +881,7 @@ aspect CreateBCode {
     }
     for(int i = 0; i < getNumInit(); i++) {
       gen.emitDup();
-      IntType.push(gen, i);
+      IntegerLiteral.push(gen, i);
       getInit(i).createBCode(gen);
       if(getInit(i) instanceof ArrayInit)
         gen.emit(Bytecode.AASTORE);
@@ -972,11 +1008,7 @@ aspect CreateBCode {
     if(!type().isString())
       super.createBCode(gen);
     else if(isConstant()) {
-      int index = gen.constantPool().addConstant(constant().stringValue());
-      if(index < 256)
-        gen.emit(Bytecode.LDC).add(index);
-      else 
-        gen.emit(Bytecode.LDC_W).add2(index);
+      StringLiteral.push(gen, constant().stringValue());
     }
     else {
       TypeDecl stringBuffer = lookupType("java.lang", "StringBuffer");
@@ -1106,11 +1138,11 @@ aspect CreateBCode {
     emitEvalBranch(gen);
     int end_label = hostType().constantPool().newLabel();
     gen.addLabel(false_label());
-    BooleanType.push(gen, false);
+    BooleanLiteral.push(gen, false);
     gen.emitGoto(end_label);
     gen.changeStackDepth(-1); // discard false from stack depth computation
     gen.addLabel(true_label());
-    BooleanType.push(gen, true);
+    BooleanLiteral.push(gen, true);
     gen.addLabel(end_label);
   }
 
@@ -1656,7 +1688,7 @@ aspect CreateBCode {
       
       // emit string literal
       
-      new StringLiteral(prevExpr().type().referenceClassName()).emitPushConstant(gen);
+      StringLiteral.push(gen, prevExpr().type().referenceClassName());
       m.emitInvokeMethod(gen, hostType());
       gen.emitDup();
       f.emitStoreField(gen, hostType());

@@ -276,11 +276,12 @@ aspect InnerClasses {
     }
   }
 
-  syn boolean ConstructorDecl.needsEnclosing() = hostType().needsEnclosing();
-  syn boolean ConstructorDecl.needsSuperEnclosing() = hostType().needsSuperEnclosing();
   
   syn boolean TypeDecl.isAnonymousInNonStaticContext() {
-    return isAnonymous() && !((ClassInstanceExpr)getParent().getParent()).unqualifiedScope().inStaticContext() && !inExplicitConstructorInvocation();
+    return isAnonymous() && 
+           !((ClassInstanceExpr)getParent().getParent()).unqualifiedScope().inStaticContext();
+           /*&&
+           !inExplicitConstructorInvocation();*/
   }
   
   syn boolean TypeDecl.needsEnclosing() {
@@ -301,8 +302,26 @@ aspect InnerClasses {
       return !superClass.inStaticContext();
     else if(superClass.isInnerType())
       return true;
+    if(needsEnclosing() && enclosing() == superEnclosing())
+      return false;
     return false;
   }
+  syn TypeDecl TypeDecl.enclosing() {
+    if(!needsEnclosing())
+      return null;
+    TypeDecl typeDecl = enclosingType();
+    if(isAnonymous() && inExplicitConstructorInvocation())
+      typeDecl = typeDecl.enclosingType();
+    return typeDecl;
+  }
+  syn TypeDecl TypeDecl.superEnclosing() = null;
+  eq ClassDecl.superEnclosing() = superclass().enclosing();
+
+  syn boolean ConstructorDecl.needsEnclosing() = hostType().needsEnclosing();
+  syn boolean ConstructorDecl.needsSuperEnclosing() = hostType().needsSuperEnclosing();
+
+  syn TypeDecl ConstructorDecl.enclosing() = hostType().enclosing();
+  syn TypeDecl ConstructorDecl.superEnclosing() = hostType().superEnclosing();
 
   public ArrayList ConstructorDecl.accessorAttributes() {
     ConstantPool cp = hostType().constantPool();
@@ -311,9 +330,9 @@ aspect InnerClasses {
     int index = 0;
     gen.emitLoadReference(index++);
     // this$0
-    if(hostType().needsEnclosing())
+    if(needsEnclosing())
       gen.emitLoadReference(index++);
-    if(hostType().needsSuperEnclosing())
+    if(needsSuperEnclosing())
       gen.emitLoadReference(index++);
 
     // args
@@ -341,9 +360,9 @@ aspect InnerClasses {
     int size = -2; // take this and null (reference to anonymous class)
     for(int i = 0; i < getNumParameter(); i++)
       size -= getParameter(i).type().variableSize();
-    if(hostType().needsEnclosing())
+    if(needsEnclosing())
       size--;
-    if(hostType().needsSuperEnclosing())
+    if(needsSuperEnclosing())
       size--;
     for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
