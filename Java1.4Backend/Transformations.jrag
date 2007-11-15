@@ -1,44 +1,44 @@
-aspect Java2Transformations {
+aspect Transformations {
   // generic traversal of the tree
-  public void ASTNode.java2Transformation() {
+  public void ASTNode.transformation() {
     for(int i = 0; i < getNumChild(); i++) {
-        getChild(i).java2Transformation();
+        getChild(i).transformation();
     }
   }
   
-  public void CompilationUnit.java2Transformation() {
+  public void CompilationUnit.transformation() {
     if(fromSource()) {
       for(int i = 0; i < getNumTypeDecl(); i++) {
-        getTypeDecl(i).java2Transformation();
+        getTypeDecl(i).transformation();
       }
     }
   }
   
   // remote collection
-  public void TypeDecl.java2Transformation() {
-    super.java2Transformation();
+  public void TypeDecl.transformation() {
+    super.transformation();
     if(isNestedType())
       enclosingType().addNestedType(this);
   }
 
   /*
-  public void Expr.java2Transformation() {
+  public void Expr.transformation() {
     if(isConstant() && !(this instanceof Literal))
       replace(this).with(constant().buildLiteral());
     else
-      super.java2Transformation();
+      super.transformation();
   }
   */
 
   // remote collection
-  public void TypeAccess.java2Transformation() {
-    super.java2Transformation();
+  public void TypeAccess.transformation() {
+    super.transformation();
     if(type().elementType().isNestedType())
       hostType().addUsedNestedType(type().elementType());
   }
   
   /*
-  public void Dot.java2Transformation() {
+  public void Dot.transformation() {
     if(leftSide().isTypeAccess() && rightSide() instanceof ThisAccess) {
       System.out.println("Replacing " + this);
       Access a = new ThisAccess("this");
@@ -49,14 +49,14 @@ aspect Java2Transformations {
         typeDecl = typeDecl.enclosingType();
       }
       ASTNode result = replace(this).with(qualifyTailWith(a));
-      result.java2Transformation();
+      result.transformation();
       return;
     }
-    super.java2Transformation();
+    super.transformation();
   }*/
 
   // remote collection / demand driven creation of accessor
-  public void MethodAccess.java2Transformation() {
+  public void MethodAccess.transformation() {
     MethodDecl m = decl();
 
 
@@ -65,7 +65,7 @@ aspect Java2Transformations {
       while(typeDecl != null && !typeDecl.hasMethod(name()))
         typeDecl = typeDecl.enclosingType();
       ASTNode result = replace(this).with(typeDecl.createQualifiedAccess().qualifiesAccess(new ThisAccess("this")).qualifiesAccess(new MethodAccess(name(), getArgList())));
-      result.java2Transformation();
+      result.transformation();
       return;
     }*/
     
@@ -80,17 +80,17 @@ aspect Java2Transformations {
       3) The flags must indicate that the method is static and package private
       */
       ASTNode result = replace(this).with(decl().createAccessor().createBoundAccess(getArgList()));
-      //result.java2Transformation();
+      //result.transformation();
       return;
     }
     else if(!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
       superAccessorTarget().createSuperAccessor(m);
     }
-    super.java2Transformation();
+    super.transformation();
   }
 
   // remote collection / demand driven creation of accessor
-  public void VarAccess.java2Transformation() {
+  public void VarAccess.transformation() {
     Variable v = decl();
     if(v instanceof FieldDeclaration) {
       FieldDeclaration f = (FieldDeclaration)v;
@@ -99,12 +99,12 @@ aspect Java2Transformations {
         f.accessorWriteIndex();
       }
     }
-    super.java2Transformation();
+    super.transformation();
   }
 
   // remote collection / demand driven creation of accessor
-  public void ClassInstanceExpr.java2Transformation() {
-    super.java2Transformation();
+  public void ClassInstanceExpr.transformation() {
+    super.transformation();
     // touch accessorIndex to force creation of private constructorAccessor
     if(decl().isPrivate() && type() != hostType()) {
       decl().accessorIndex();
@@ -112,8 +112,8 @@ aspect Java2Transformations {
   }
 
   // remote collection / demand driven creation of accessor
-  public void ConstructorAccess.java2Transformation() {
-    super.java2Transformation();
+  public void ConstructorAccess.transformation() {
+    super.transformation();
     // touch accessorIndex go force creation of private constructorAccessor
     if(decl().isPrivate() && decl().hostType() != hostType()) {
       decl().accessorIndex();
@@ -121,8 +121,8 @@ aspect Java2Transformations {
   }
 
   // remote collection / demand driven creation of accessor
-  public void SuperConstructorAccess.java2Transformation() {
-    super.java2Transformation();
+  public void SuperConstructorAccess.transformation() {
+    super.transformation();
     // touch accessorIndex go force creation of private constructorAccessor
     if(decl().isPrivate() && decl().hostType() != hostType()) {
       decl().accessorIndex();
@@ -130,8 +130,8 @@ aspect Java2Transformations {
   }
 
   // remote collection / demand driven creation of accessor
-  public void ClassAccess.java2Transformation() {
-    super.java2Transformation();
+  public void ClassAccess.transformation() {
+    super.transformation();
     // touch static class method before any accessors to make it first in method
     if(isQualified() && qualifier().type().isReferenceType()) {
       hostType().createStaticClassMethod();
@@ -140,8 +140,8 @@ aspect Java2Transformations {
     
   }
 
-  public void AssertStmt.java2Transformation() {
-    super.java2Transformation();
+  public void AssertStmt.transformation() {
+    super.transformation();
     // add field to hold cached result as a side-effect
     FieldDeclaration f = hostType().createStaticClassField(hostType().referenceClassFieldName());
     FieldDeclaration assertionsDisabled = hostType().createAssertionsDisabled();
@@ -170,7 +170,7 @@ aspect Java2Transformations {
       );
      
     replace(this).with(stmt);
-    stmt.java2Transformation();
+    stmt.transformation();
   }
   
   // imperative transformation of the AST

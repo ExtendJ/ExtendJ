@@ -18,7 +18,7 @@ class JavaCompiler extends Frontend {
     );
   }
   protected void processNoErrors(CompilationUnit unit) {
-    unit.java2Transformation();
+    unit.transformation();
     unit.generateClassfile();
   }
 
