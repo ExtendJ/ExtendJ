@@ -38,33 +38,18 @@ aspect GenerateClassfile {
       if(hasSuperclass()) {
         cp.addClass(superclass().constantPoolName());
       }
-      for(Iterator iter = interfacesIterator(); iter.hasNext(); )
+      int numInterfaces = 0;
+      for(Iterator iter = interfacesIterator(); iter.hasNext(); numInterfaces++)
         cp.addClass(((TypeDecl)iter.next()).constantPoolName());
       for(Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
         FieldDeclaration field = (FieldDeclaration) iter.next();
         cp.addUtf8(field.name());
         cp.addUtf8(field.type().typeDescriptor());
         field.attributes();
-        if(field.needsAccessor()) {
-          cp.addUtf8("access$" + field.accessorIndex());
-          cp.addUtf8(field.accessorDescName());
-          field.accessorAttributes();
-        }
-        if(field.needsAccessorWrite()) {
-          cp.addUtf8("access$" + field.accessorWriteIndex());
-          cp.addUtf8(field.accessorWriteDescName());
-          field.accessorWriteAttributes();
-        }
       }
       if(needsEnclosing()) {
         cp.addUtf8("this$0");
         cp.addUtf8(enclosing().typeDescriptor());
-        cp.addUtf8("Synthetic");
-      }
-      for(Iterator iter = enclosingVariables().iterator(); iter.hasNext(); ) {
-        Variable v = (Variable)iter.next();
-        cp.addUtf8("val$" + v.name());
-        cp.addUtf8(v.type().typeDescriptor());
         cp.addUtf8("Synthetic");
       }
 
@@ -98,11 +83,11 @@ aspect GenerateClassfile {
       out.writeChar(flags);
       out.writeChar(cp.addClass(constantPoolName()));
       out.writeChar(hasSuperclass() ? cp.addClass(superclass().constantPoolName()) : 0);
-      out.writeChar(getNumImplements());
+      out.writeChar(numInterfaces);
       for(Iterator iter = interfacesIterator(); iter.hasNext(); )
         out.writeChar(cp.addClass(((TypeDecl)iter.next()).constantPoolName()));
       Collection fields = bcFields();
-      out.writeChar(fields.size() + (needsEnclosing() ? 1 : 0) + enclosingVariables().size());
+      out.writeChar(fields.size() + (needsEnclosing() ? 1 : 0));
       for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
         FieldDeclaration field = (FieldDeclaration) iter.next();
         out.writeChar(field.flags());
@@ -120,27 +105,12 @@ aspect GenerateClassfile {
         new SyntheticAttribute(cp).emit(out);
 
       }
-      for(Iterator iter = enclosingVariables().iterator(); iter.hasNext(); ) {
-        Variable v = (Variable)iter.next();
-        out.writeChar(Modifiers.ACC_PRIVATE);
-        out.writeChar(cp.addUtf8("val$" + v.name()));
-        out.writeChar(cp.addUtf8(v.type().typeDescriptor()));
-        out.writeChar(1);
-        new SyntheticAttribute(cp).emit(out);
-      }
 
       Collection methods = bcMethods();
-      out.writeChar(methods.size() + numAccessorMethods(methods) + (hasClinit() ? 1 : 0) + numAccessorFields(fields));
+      out.writeChar(methods.size() + (hasClinit() ? 1 : 0));
       for(Iterator iter = methods.iterator(); iter.hasNext(); ) {
         BodyDecl b = (BodyDecl)iter.next();
         b.generateMethod(out, cp);
-      }
-      for(Iterator iter = fields.iterator(); iter.hasNext(); ) {
-        FieldDeclaration field = (FieldDeclaration) iter.next();
-        if(field.needsAccessor())
-          field.emitAccessor(cp, out);
-        if(field.needsAccessorWrite())
-          field.emitAccessorWrite(cp, out);
       }
       if(hasClinit()) {
         out.writeChar(Modifiers.ACC_STATIC);
@@ -277,8 +247,6 @@ aspect GenerateClassfile {
     out.writeChar(attributes().size());
     for(Iterator itera = attributes().iterator(); itera.hasNext();)
       ((Attribute)itera.next()).emit(out);
-    if(needsAccessor())
-      emitAccessor(cp, out);
   }
   
   public void BodyDecl.touchMethod(ConstantPool cp) {
@@ -292,10 +260,6 @@ aspect GenerateClassfile {
     cp.addUtf8("<init>");
     cp.addUtf8(descName());
     attributes();
-    if(needsAccessor()) {
-      cp.addUtf8(accessorDescName());
-      accessorAttributes();
-    }
   }
 
 

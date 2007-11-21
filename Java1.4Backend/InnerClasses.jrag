@@ -81,136 +81,36 @@ aspect InnerClasses {
 
   public int TypeDecl.accessorCounter = 0;
 
-  syn boolean FieldDeclaration.needsAccessor() = accessorIndex != -1;
-  syn lazy int FieldDeclaration.accessorIndex() = accessorIndex = hostType().accessorCounter++;
-  private int FieldDeclaration.accessorIndex = -1;
-  syn boolean FieldDeclaration.needsAccessorWrite() = accessorWriteIndex != -1;
-  syn lazy int FieldDeclaration.accessorWriteIndex() = accessorWriteIndex = hostType().accessorCounter++;
-  private int FieldDeclaration.accessorWriteIndex = -1;
-
-  syn boolean ConstructorDecl.needsAccessor() = accessorIndex != -1;
-  private String ConstructorDecl.anonymousJavaName;
-
-  private boolean ConstructorDecl.accessorIndexVisited = false;
-  syn lazy int ConstructorDecl.accessorIndex() {
-    // rework treebuilding, final
-    if(accessorIndexVisited)
-      return accessorIndex;
-    accessorIndexVisited = true;
-
-    ClassDecl classDecl =
-      new ClassDecl(
-          new Modifiers(new List().add(new Modifier("synthetic"))),
-          "Dummy",
-          new Opt(),
-          new List(),
-          new List()
-          );
-    // add as LocalClassDeclStmt
-    getBlock().addStmt(new LocalClassDeclStmt(classDecl)); 
-    // force new subtree to be rewritten and final
-    // TODO: why is this necessary?
-    LocalClassDeclStmt stmt = (LocalClassDeclStmt)getBlock().getStmt(getBlock().getNumStmt()-1);
-    classDecl = stmt.getClassDecl();
-    classDecl.toString(new StringBuffer());
-
-    accessorIndex = hostType().accessorCounter++;
-    anonymousJavaName = classDecl.typeDescriptor();
-
-    hostType().addUsedNestedType(classDecl);
-    hostType().addNestedType(classDecl);
-
-
-    //classDecl.generateClassfile();
-    return accessorIndex;
-  }
-  private int ConstructorDecl.accessorIndex = -1;
-
-  public int TypeDecl.numAccessorMethods(Collection c) {
-    int num = 0;
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-      Object o = iter.next();
-      if(o instanceof ConstructorDecl) {
-        ConstructorDecl m = (ConstructorDecl)o;
-        if(m.needsAccessor())
-          num++;
-      }
-    }
-    return num;
+  private HashMap TypeDecl.accessorMap = null;
+  public ASTNode TypeDecl.getAccessor(ASTNode source, String name) {
+    ArrayList key = new ArrayList(2);
+    key.add(source);
+    key.add(name);
+    if(accessorMap == null || !accessorMap.containsKey(key)) return null;
+    return (ASTNode)accessorMap.get(key);
   }
 
-  public int TypeDecl.numAccessorFields(Collection c) {
-    int num = 0;
-    for(Iterator iter = c.iterator(); iter.hasNext(); ) {
-      Object o = iter.next();
-      if(o instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration)o;
-        if(f.needsAccessor())
-          num++;
-        if(f.needsAccessorWrite())
-          num++;
-      }
-    }
-    return num;
+  public void TypeDecl.addAccessor(ASTNode source, String name, ASTNode accessor) {
+    ArrayList key = new ArrayList(2);
+    key.add(source);
+    key.add(name);
+    if(accessorMap == null) accessorMap = new HashMap();
+    accessorMap.put(key, accessor);
   }
 
-  public void FieldDeclaration.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
-    out.writeChar(Modifiers.ACC_STATIC);
-    out.writeChar(cp.addUtf8("access$" + accessorIndex()));
-    out.writeChar(cp.addUtf8(accessorDescName()));
-    out.writeChar(accessorAttributes().size());
-    for(Iterator iter = accessorAttributes().iterator(); iter.hasNext(); ) {
-      ((Attribute)iter.next()).emit(out);
-    }
-  }
-  public void FieldDeclaration.emitAccessorWrite(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
-    out.writeChar(Modifiers.ACC_STATIC);
-    out.writeChar(cp.addUtf8("access$" + accessorWriteIndex()));
-    out.writeChar(cp.addUtf8(accessorWriteDescName()));
-    out.writeChar(accessorAttributes().size());
-    for(Iterator iter = accessorWriteAttributes().iterator(); iter.hasNext(); ) {
-      ((Attribute)iter.next()).emit(out);
-    }
-  }
+  public MethodDecl MethodDecl.createAccessor(TypeDecl methodQualifier) {
+    MethodDecl m = (MethodDecl)methodQualifier.getAccessor(this, "method");
+    if(m != null) return m;
 
-  public ArrayList FieldDeclaration.accessorAttributes() {
-    ConstantPool cp = hostType().constantPool();
-    ArrayList list = new ArrayList();
-    CodeGeneration gen = new CodeGeneration(cp);
-    int index = 0;
-    if(!isStatic())
-      gen.emitLoadReference(index++);
-    emitLoadField(gen, hostType());
-    type().emitReturn(gen);
-    CodeAttribute a = new CodeAttribute(gen, null);
-    list.add(a);
-    list.add(new SyntheticAttribute(cp));
-    return list;
-  }
-
-  public ArrayList FieldDeclaration.accessorWriteAttributes() {
-    ConstantPool cp = hostType().constantPool();
-    ArrayList list = new ArrayList();
-    CodeGeneration gen = new CodeGeneration(cp);
-    int index = 0;
-    if(!isStatic())
-      gen.emitLoadReference(index++);
-    type().emitLoadLocal(gen, index);
-    emitStoreField(gen, hostType());
-    gen.emit(Bytecode.RETURN);
-    CodeAttribute a = new CodeAttribute(gen, null);
-    list.add(a);
-    list.add(new SyntheticAttribute(cp));
-    return list;
-  }
-
-  syn lazy MethodDecl MethodDecl.createAccessor() {
-    int accessorIndex = hostType().accessorCounter++;
+    int accessorIndex = methodQualifier.accessorCounter++;
     // add synthetic flag to modifiers
-    Modifiers modifiers = (Modifiers)getModifiers().fullCopy();
+    Modifiers modifiers = new Modifiers(new List());
+    if(getModifiers().isStatic())
+      modifiers.addModifier(new Modifier("static"));
     modifiers.addModifier(new Modifier("synthetic"));
+    modifiers.addModifier(new Modifier("public"));
     // build accessor declaration
-    MethodDecl m = new MethodAccessorDecl(
+    m = new MethodDecl(
       modifiers,
       type().createQualifiedAccess(),
       "access$" + accessorIndex,
@@ -225,58 +125,152 @@ aspect InnerClasses {
         )
       )
     );
-    return hostType().addMemberMethod(m);
+    m = methodQualifier.addMemberMethod(m);
+    methodQualifier.addAccessor(this, "method", m);
+    return m;
   }
   
   private Stmt MethodDecl.createAccessorStmt() {
     List argumentList = new List();
     for(int i = 0; i < getNumParameter(); i++)
       argumentList.add(new VarAccess(getParameter(i).name()));
-    Access access = createBoundAccess(argumentList);
-    //Access access = new MethodAccess(argumentList, name());
+    Access access = new MethodAccess(name(), argumentList);
     if(!isStatic())
       access = new ThisAccess("this").qualifiesAccess(access);
     return isVoid() ? (Stmt) new ExprStmt(access) : new ReturnStmt(new Opt(access));
   }
-  
-  eq MethodAccessorDecl.descName() {
-    StringBuffer b = new StringBuffer();
-    b.append("(");
-    if(!isStatic())
-      b.append(hostType().typeDescriptor());
-    for (int i=0; i<getNumParameter(); i++)
-      b.append(getParameter(i).type().typeDescriptor());
-    b.append(")");
-    b.append(type().typeDescriptor());
-    return b.toString();
-  }
 
-  public void MethodAccessorDecl.emitInvokeMethod(CodeGeneration gen, TypeDecl hostType) {
-    // compute operation stack height change
-    int size = type().variableSize();
-    if(!isStatic())
-      size -= 1;
-    for(int i = 0; i < getNumParameter(); i++)
-      size -= getParameter(i).type().variableSize();
-    // invoke method
-    int index = gen.constantPool().addMethodref(hostType().constantPoolName(), name(), descName());
-    gen.emit(Bytecode.INVOKESTATIC, size).add2(index);
-  }
+  public MethodDecl MethodDecl.createSuperAccessor(TypeDecl methodQualifier) {
+    MethodDecl m = (MethodDecl)methodQualifier.getAccessor(this, "method_super");
+    if(m != null) return m;
 
-  eq MethodAccessorDecl.flags() = (super.flags() | Modifiers.ACC_STATIC) & (~Modifiers.ACC_PRIVATE);
-  
-  public void ConstructorDecl.emitAccessor(ConstantPool cp, DataOutputStream out) throws java.io.IOException {
-    accessorIndex();
-    out.writeChar(0);
-    out.writeChar(cp.addUtf8("<init>"));
-    out.writeChar(cp.addUtf8(accessorDescName()));
-    out.writeChar(accessorAttributes().size());
-    for(Iterator iter = accessorAttributes().iterator(); iter.hasNext(); ) {
-      ((Attribute)iter.next()).emit(out);
+    int accessorIndex = methodQualifier.accessorCounter++;
+    List parameters = new List();
+    List args = new List();
+    for(int i = 0; i < getNumParameter(); i++) {
+      parameters.add(getParameter(i).fullCopy());
+      args.add(new VarAccess(getParameter(i).name()));
     }
+    Stmt stmt;
+    if(type().isVoid())
+      stmt = new ExprStmt(new SuperAccess("super").qualifiesAccess(new MethodAccess(name(), args)));
+    else 
+      stmt = new ReturnStmt(new Opt(new SuperAccess("super").qualifiesAccess(new MethodAccess(name(), args))));
+    m = new MethodDecl(
+      new Modifiers(new List().add(new Modifier("synthetic"))),
+      type().createQualifiedAccess(),
+      "access$" + accessorIndex,
+      parameters,
+      new List(),
+      new List(),
+      new Opt(
+        new Block(
+          new List().add(stmt)
+        )
+      )
+    );
+    m = methodQualifier.addMemberMethod(m);
+    methodQualifier.addAccessor(this, "method_super", m);
+    return m;
   }
 
-  
+  public MethodDecl FieldDeclaration.createAccessor(TypeDecl fieldQualifier) {
+    MethodDecl m = (MethodDecl)fieldQualifier.getAccessor(this, "field_read");
+    if(m != null) return m;
+    
+    int accessorIndex = fieldQualifier.accessorCounter++;
+    Modifiers modifiers = new Modifiers(new List());
+    modifiers.addModifier(new Modifier("static"));
+    modifiers.addModifier(new Modifier("synthetic"));
+    modifiers.addModifier(new Modifier("public"));
+
+    List parameters = new List();
+    if(!isStatic())
+      parameters.add(new ParameterDeclaration(fieldQualifier.createQualifiedAccess(), "that"));
+
+    m = new MethodDecl(
+      modifiers,
+      type().createQualifiedAccess(),
+      "access$" + accessorIndex,
+      parameters,
+      new List(),
+      new List(),
+      new Opt(
+        new Block(
+          new List().add(
+            new ReturnStmt(createAccess())
+          )
+        )
+      )
+    );
+    m = hostType().addMemberMethod(m);
+    fieldQualifier.addAccessor(this, "field_read", m);
+    return m;
+  }
+
+  public MethodDecl FieldDeclaration.createAccessorWrite(TypeDecl fieldQualifier) {
+    MethodDecl m = (MethodDecl)fieldQualifier.getAccessor(this, "field_write");
+    if(m != null) return m;
+
+    int accessorIndex = fieldQualifier.accessorCounter++;
+    Modifiers modifiers = new Modifiers(new List());
+    modifiers.addModifier(new Modifier("static"));
+    modifiers.addModifier(new Modifier("synthetic"));
+    modifiers.addModifier(new Modifier("public"));
+
+    List parameters = new List();
+    if(!isStatic())
+      parameters.add(new ParameterDeclaration(fieldQualifier.createQualifiedAccess(), "that"));
+    parameters.add(new ParameterDeclaration(type().createQualifiedAccess(), "value"));
+
+    m = new MethodDecl(
+      modifiers,
+      type().createQualifiedAccess(),
+      "access$" + accessorIndex,
+      parameters,
+      new List(),
+      new List(),
+      new Opt(
+        new Block(
+          new List().add(
+            new ExprStmt(
+              new AssignSimpleExpr(
+                createAccess(),
+                new VarAccess("value")
+              )
+            )
+          ).add(
+            new ReturnStmt(
+              new Opt(
+                new VarAccess("value")
+              )
+            )
+          )
+        )
+      )
+    );
+    m = hostType().addMemberMethod(m);
+    fieldQualifier.addAccessor(this, "field_write", m);
+    return m;
+  }
+
+  private Access FieldDeclaration.createAccess() {
+    Access fieldAccess = new VarAccess(name());
+    return isStatic() ? fieldAccess : new VarAccess("that").qualifiesAccess(fieldAccess);
+  }
+
+  syn boolean VarAccess.requiresAccessor() {
+    Variable v = decl();
+    if(!(v instanceof FieldDeclaration))
+      return false;
+    FieldDeclaration f = (FieldDeclaration)v;
+    if(f.isPrivate() && !hostType().hasField(v.name()))
+      return true;
+    if(f.isProtected() && !f.hostPackage().equals(hostPackage()))
+      return true;
+    return false;
+  }
+
   syn boolean TypeDecl.isAnonymousInNonStaticContext() {
     return isAnonymous() && 
            !((ClassInstanceExpr)getParent().getParent()).unqualifiedScope().inStaticContext();
@@ -323,72 +317,129 @@ aspect InnerClasses {
   syn TypeDecl ConstructorDecl.enclosing() = hostType().enclosing();
   syn TypeDecl ConstructorDecl.superEnclosing() = hostType().superEnclosing();
 
-  public ArrayList ConstructorDecl.accessorAttributes() {
-    ConstantPool cp = hostType().constantPool();
-    ArrayList list = new ArrayList();
-    CodeGeneration gen = new CodeGeneration(cp);
-    int index = 0;
-    gen.emitLoadReference(index++);
-    // this$0
-    if(needsEnclosing())
-      gen.emitLoadReference(index++);
-    if(needsSuperEnclosing())
-      gen.emitLoadReference(index++);
 
-    // args
-    for(int i = 0; i < getNumParameter(); i++) {
-      getParameter(i).type().emitLoadLocal(gen, index);
-      index += getParameter(i).type().variableSize();
-    }
-    // this$val
-    for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
+
+  // add val$name as fields to the class
+  private boolean TypeDecl.addEnclosingVariables = true;
+  public void TypeDecl.addEnclosingVariables() {
+    if(!addEnclosingVariables) return;
+    addEnclosingVariables = false;
+    for(Iterator iter = enclosingVariables().iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
-      v.type().emitLoadLocal(gen, index);
-      index += v.type().variableSize();
+      Modifiers m = new Modifiers();
+      m.addModifier(new Modifier("public"));
+      m.addModifier(new Modifier("synthetic"));
+      addMemberField(new FieldDeclaration(m, v.type().createQualifiedAccess(), "val$" + v.name(), new Opt()));
     }
-    gen.maxLocals++; // Increase max locals to include dummy constructor argument for private constructors
-    emitInvokeConstructor(gen);
-    gen.emit(Bytecode.RETURN);
-    CodeAttribute a = new CodeAttribute(gen, null);
-    list.add(a);
-    list.add(new SyntheticAttribute(cp));
-    return list;
+  }
+  public FieldDeclaration TypeDecl.createEnclosingVariable(Variable v) {
+    String name = "val$" + v.name();
+    FieldDeclaration f = (FieldDeclaration)getAccessor(this, name);
+    if(f != null) return f;
+    Modifiers m = new Modifiers();
+    m.addModifier(new Modifier("public"));
+    m.addModifier(new Modifier("synthetic"));
+    f = addMemberField(new FieldDeclaration(m, v.type().createQualifiedAccess(), name, new Opt()));
+    addAccessor(this, name, f);
+    return f;
   }
 
-  public void ConstructorDecl.emitInvokeConstructorAccessor(CodeGeneration gen) {
-    accessorIndex();
-    int size = -2; // take this and null (reference to anonymous class)
-    for(int i = 0; i < getNumParameter(); i++)
-      size -= getParameter(i).type().variableSize();
-    if(needsEnclosing())
-      size--;
-    if(needsSuperEnclosing())
-      size--;
+  // add val$name as parameters to the constructor
+  protected boolean ConstructorDecl.addEnclosingVariables = true;
+  public void ConstructorDecl.addEnclosingVariables() {
+    if(!addEnclosingVariables) return;
+    addEnclosingVariables = false;
+    hostType().addEnclosingVariables();
     for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
       Variable v = (Variable)iter.next();
-      size -= v.type().variableSize();
+      getParameterList().add(new ParameterDeclaration(v.type(), "val$" + v.name()));
     }
-    String classname = hostType().constantPoolName();
-    String      desc = accessorDescName();
-    String      name = "<init>";
-    int index = gen.constantPool().addMethodref(classname, name, desc);
-    gen.emit(Bytecode.INVOKESPECIAL, size).add2(index);
   }
-  public void FieldDeclaration.emitInvokeFieldAccessor(CodeGeneration gen, TypeDecl hostType) {
-    String classname = hostType.constantPoolName();
-    String      desc = accessorDescName();
-    String      name = "access$" + accessorIndex();
-    int index = gen.constantPool().addMethodref(classname, name, desc);
-    int size = isStatic() ? type().variableSize() : (type().variableSize() - 1);
-    gen.emit(Bytecode.INVOKESTATIC, size).add2(index);
+
+  // add val$name as arguments to the constructor
+  protected boolean ConstructorAccess.addEnclosingVariables = true;
+  public void ConstructorAccess.addEnclosingVariables() {
+    if(!addEnclosingVariables) return;
+    addEnclosingVariables = false;
+    decl().addEnclosingVariables();
+    for(Iterator iter = decl().hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      getArgList().add(new VarAccess("val$" + v.name()));
+    }
   }
-  public void FieldDeclaration.emitInvokeFieldAccessorWrite(CodeGeneration gen, TypeDecl hostType) {
-    String classname = hostType.constantPoolName();
-    String      desc = accessorWriteDescName();
-    String      name = "access$" + accessorWriteIndex();
-    int index = gen.constantPool().addMethodref(classname, name, desc);
-    int size = isStatic() ? -type().variableSize() : (-type().variableSize() - 1);
-    gen.emit(Bytecode.INVOKESTATIC, size).add2(index);
+
+  // add val$name as arguments to the constructor
+  protected boolean ClassInstanceExpr.addEnclosingVariables = true;
+  public void ClassInstanceExpr.addEnclosingVariables() {
+    if(!addEnclosingVariables) return;
+    addEnclosingVariables = false;
+    decl().addEnclosingVariables();
+    for(Iterator iter = decl().hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
+      Variable v = (Variable)iter.next();
+      getArgList().add(new VarAccess(v.name()));
+    }
+  }
+
+  public ConstructorDecl ConstructorDecl.createAccessor() {
+    ConstructorDecl c = (ConstructorDecl)hostType().getAccessor(this, "constructor");
+    if(c != null) return c;
+
+    // make sure enclosing varibles are added as parameters prior to building accessor
+    addEnclosingVariables();
+
+    Modifiers modifiers = new Modifiers(new List());
+    modifiers.addModifier(new Modifier("synthetic"));
+    modifiers.addModifier(new Modifier("public"));
+
+    List parameters = createAccessorParameters();
+    
+    // add all parameters as arguments except for the dummy parameter
+    List args = new List();
+    for(int i = 0; i < parameters.getNumChildNoTransform() - 1; i++)
+      args.add(new VarAccess(((ParameterDeclaration)parameters.getChildNoTransform(i)).name()));
+    ConstructorAccess access = new ConstructorAccess("this", args);
+    access.addEnclosingVariables = false;
+
+    c = new ConstructorDecl(
+      modifiers,
+      name(),
+      parameters,
+      (List)getExceptionList().fullCopy(),
+      new Opt(
+        new ExprStmt(
+          access
+        )
+      ),
+      new Block(
+        new List().add(new ReturnStmt(new Opt()))
+      )
+    );
+    c = hostType().addConstructor(c);
+    c.addEnclosingVariables = false;
+    hostType().addAccessor(this, "constructor", c);
+    return c;
+  }
+
+  protected List ConstructorDecl.createAccessorParameters() {
+    List parameters = new List();
+    for (int i=0; i<getNumParameter(); i++)
+      parameters.add(new ParameterDeclaration(getParameter(i).type(), getParameter(i).name()));
+    parameters.add(new ParameterDeclaration(createAnonymousJavaTypeDecl(), ("p" + getNumParameter())));
+    return parameters;
+  }
+
+  protected TypeDecl ConstructorDecl.createAnonymousJavaTypeDecl() {
+    ClassDecl classDecl =
+      new ClassDecl(
+          new Modifiers(new List().add(new Modifier("synthetic"))),
+          "" + hostType().nextAnonymousIndex(),
+          new Opt(),
+          new List(),
+          new List()
+      );
+    classDecl = hostType().addMemberClass(classDecl);
+    hostType().addUsedNestedType(classDecl);
+    return classDecl;
   }
 
 }

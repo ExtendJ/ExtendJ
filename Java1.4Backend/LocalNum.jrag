@@ -35,48 +35,42 @@ aspect LocalNum {
 
   syn lazy int ConstructorDecl.localNumOfFirstParameter() {
     int i = 1;
-    //if(hostType().isInnerType())
     if(hostType().needsEnclosing())
       i++;
     if(hostType().needsSuperEnclosing())
       i++;
-    /*
-    for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
-      Variable v = (Variable)iter.next();
-      i += v.type().variableSize();
-    }*/
     return i;
   }
 
-  syn lazy int ConstructorDecl.enclosingVariablesOffset() {
-    int i = 0;
-    for(Iterator iter = hostType().enclosingVariables().iterator(); iter.hasNext(); ) {
-      Variable v = (Variable)iter.next();
-      i += v.type().variableSize();
-    }
-    return i;
+  syn lazy int ConstructorDecl.offsetFirstEnclosingVariable() {
+    int localIndex = localNumOfFirstParameter();
+    Collection vars = hostType().enclosingVariables();
+    if(vars.isEmpty())
+      return localIndex;
+    String name = "val$" + ((Variable)vars.iterator().next()).name();
+    for(int i = 0; !getParameter(i).name().equals(name); i++)
+      localIndex += getParameter(i).type().variableSize();
+    return localIndex;
   }
-  
-  syn lazy int ConstructorDecl.offsetFirstEnclosingVariable() = getNumParameter() == 0 ?
+
+  syn int ConstructorDecl.localIndexOfEnclosingVariable(Variable v) {
+    int localIndex  = offsetFirstEnclosingVariable();
+    Iterator iter = hostType().enclosingVariables().iterator();
+    Variable varDecl = (Variable)iter.next();
+    while(varDecl != v && iter.hasNext()) {
+      localIndex += varDecl.type().variableSize();
+      varDecl = (Variable)iter.next();
+    }
+    return localIndex;
+  }
+
+  eq ConstructorDecl.getParameter(int index).localNum() = index == 0 ?
+    localNumOfFirstParameter() :
+    getParameter(index-1).localNum() + getParameter(index-1).type().variableSize();
+
+  eq ConstructorDecl.getBlock().localNum() = getNumParameter() == 0 ? 
     localNumOfFirstParameter() :
     getParameter(getNumParameter()-1).localNum() + getParameter(getNumParameter()-1).type().variableSize();
-
-  eq ConstructorDecl.getParameter(int index).localNum() {
-    if(index == 0) {
-      return localNumOfFirstParameter();
-    }
-    return getParameter(index-1).localNum() + getParameter(index-1).type().variableSize();
-  }
-
-  eq ConstructorDecl.getBlock().localNum() {
-    if(getNumParameter() == 0) {
-      return localNumOfFirstParameter() + enclosingVariablesOffset();
-    }
-    else {
-      return getParameter(getNumParameter()-1).localNum() + getParameter(getNumParameter()-1).type().variableSize() + enclosingVariablesOffset();
-    }
-  }
-
 
   eq ForStmt.getStmt().localNum() {
     if(getNumInitStmt() == 0)

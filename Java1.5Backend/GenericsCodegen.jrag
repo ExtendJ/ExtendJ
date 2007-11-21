@@ -25,11 +25,13 @@ aspect GenericsCodegen {
    eq ClassDeclSubstituted.arrayTypeDescriptor() = original().arrayTypeDescriptor();
    eq InterfaceDeclSubstituted.arrayTypeDescriptor() = original().arrayTypeDescriptor();
 
-   eq ConstructorDeclSubstituted.accessorIndex() = 
-     erasedConstructor().accessorIndex();
-
-   eq ConstructorDeclSubstituted.accessorDescName() = 
-     erasedConstructor().accessorDescName();
+   public ConstructorDecl ConstructorDeclSubstituted.createAccessor() {
+     return erasedConstructor().createAccessor();
+   }
+   
+   protected TypeDecl ConstructorDeclSubstituted.createAnonymousJavaTypeDecl() {
+     return erasedConstructor().createAnonymousJavaTypeDecl();
+   }
 
   syn FieldDeclaration FieldDeclaration.erasedField() = this;
   eq FieldDeclarationSubstituted.erasedField() = getOriginal().erasedField();
@@ -44,7 +46,7 @@ aspect GenericsCodegen {
       FieldDeclaration f = (FieldDeclaration)v;
       f = f.erasedField();
       if(f.isPrivate() && !hostType().hasField(v.name()))
-        f.emitInvokeFieldAccessorWrite(gen, fieldQualifierType());
+        f.createAccessorWrite(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitStoreField(gen, fieldQualifierType());
     }
@@ -60,7 +62,7 @@ aspect GenericsCodegen {
       FieldDeclaration f = (FieldDeclaration)v;
       f = f.erasedField();
       if(f.isPrivate() && !hostType().hasField(v.name()))
-        f.emitInvokeFieldAccessor(gen, fieldQualifierType());
+        f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());
     }
@@ -80,7 +82,7 @@ aspect GenericsCodegen {
         f.constant().createBCode(gen);
       }
       else if(f.isPrivate() && !hostType().hasField(v.name()))
-        f.emitInvokeFieldAccessor(gen, fieldQualifierType());
+        f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());
       if(f.type() != decl().type())
@@ -114,11 +116,8 @@ aspect GenericsCodegen {
       getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // MethodInvocationConversion
     }
     if(!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()) {
-      if(!hostType().instanceOf(prevExpr().type())) {
-        TypeDecl typeDecl = superAccessorTarget();
-        MethodDecl m = typeDecl.createSuperAccessor(decl);
-        m.emitInvokeMethod(gen, typeDecl);
-      }
+      if(!hostType().instanceOf(prevExpr().type()))
+        decl().createSuperAccessor(superAccessorTarget()).emitInvokeMethod(gen, superAccessorTarget());
       else
         decl.emitInvokeSpecialMethod(gen, methodQualifierType());
     }
