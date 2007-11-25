@@ -24,6 +24,8 @@ aspect DefiniteAssignment {
 
   eq ArrayAccess.getExpr().isDest() = false;
   eq ArrayAccess.getExpr().isSource() = true;
+  eq ArrayTypeWithSizeAccess.getExpr().isDest() = false;
+  eq ArrayTypeWithSizeAccess.getExpr().isSource() = true;
   
   eq FieldDeclaration.getInit().isSource() = true;
   eq VariableDeclaration.getInit().isSource() = true;
@@ -346,6 +348,8 @@ aspect DA {
   eq AbstractDot.isDAafter(Variable v) = lastAccess().isDAafter(v);
 
   eq ArrayAccess.isDAafter(Variable v) = getExpr().isDAafter(v);
+  eq ArrayTypeWithSizeAccess.isDAafter(Variable v) = getExpr().isDAafter(v);
+  eq ArrayTypeWithSizeAccess.getExpr().isDAbefore(Variable v) = getAccess().isDAafter(v);
 
   // 16.1.2 1st bullet
   eq AndLogicalExpr.isDAafterTrue(Variable v) = getRightOperand().isDAafterTrue(v) || isFalse();
@@ -415,20 +419,9 @@ aspect DA {
     i == 0 ? isDAbefore(v) : getArg(i-1).isDAafter(v);
   eq ClassInstanceExpr.getTypeDecl().isDAbefore(Variable v) = isDAafterInstance(v);
   
-  syn boolean ArrayCreationExpr.isDAafterCreation(Variable v) {
-    if(getNumDims() == 0)
-      return isDAbefore(v);
-    return getDims(getNumDims()-1).isDAafter(v);
-  }
+  syn boolean ArrayCreationExpr.isDAafterCreation(Variable v) = getTypeAccess().isDAafter(v);
   eq ArrayCreationExpr.isDAafter(Variable v) = hasArrayInit() ? getArrayInit().isDAafter(v) : isDAafterCreation(v);
-  eq ArrayCreationExpr.getDims(int i).isDAbefore(Variable v) {
-    if(i == 0)
-      return isDAbefore(v);
-    return getDims(i-1).isDAafter(v);
-  }
   eq ArrayCreationExpr.getArrayInit().isDAbefore(Variable v) = isDAafterCreation(v);
-  syn boolean Dims.isDAafter(Variable v) = hasExpr() ? getExpr().isDAafter(v) : isDAbefore(v);
-  inh boolean Dims.isDAbefore(Variable v);
 
   // 16.2.2 1st bullet
   eq MethodDecl.getBlock().isDAbefore(Variable v) = v.isFinal() && (v.isClassVariable() || v.isInstanceVariable()) ? true : isDAbefore(v);
@@ -834,6 +827,8 @@ aspect DU {
   eq AbstractDot.getRight().isDUbefore(Variable v) = getLeft().isDUafter(v);
   eq AbstractDot.isDUafter(Variable v) = lastAccess().isDUafter(v);
   eq ArrayAccess.isDUafter(Variable v) = getExpr().isDUafter(v);
+  eq ArrayTypeWithSizeAccess.isDUafter(Variable v) = getExpr().isDUafter(v);
+  eq ArrayTypeWithSizeAccess.getExpr().isDUbefore(Variable v) = getAccess().isDUafter(v);
 
   eq ParExpr.isDUafter(Variable v) = getExpr().isDUafter(v);
   eq Unary.isDUafter(Variable v) = getOperand().isDUafter(v);
@@ -854,20 +849,11 @@ aspect DU {
   syn lazy boolean ClassInstanceExpr.computeDUbefore(int i, Variable v) =
     i == 0 ? isDUbefore(v) : getArg(i-1).isDUafter(v);
 
-  syn boolean ArrayCreationExpr.isDUafterCreation(Variable v) {
-    if(getNumDims() == 0)
-      return isDUbefore(v);
-    return getDims(getNumDims()-1).isDUafter(v);
-  }
+  syn boolean ArrayCreationExpr.isDUafterCreation(Variable v) = getTypeAccess().isDUafter(v);
   eq ArrayCreationExpr.isDUafter(Variable v) = hasArrayInit() ? getArrayInit().isDUafter(v) : isDUafterCreation(v);
-  eq ArrayCreationExpr.getDims(int i).isDUbefore(Variable v) = i == 0 ?
-    isDUbefore(v) : getDims(i-1).isDUafter(v);
   
   eq ArrayCreationExpr.getArrayInit().isDUbefore(Variable v) = isDUafterCreation(v);
 
-  syn boolean Dims.isDUafter(Variable v) = hasExpr() ? getExpr().isDUafter(v) : isDUbefore(v);
-  inh boolean Dims.isDUbefore(Variable v);
-  
   eq EmptyStmt.isDUafter(Variable v) = isDUbefore(v);
   eq AssertStmt.isDUafter(Variable v) = getfirst().isDUafter(v);
 

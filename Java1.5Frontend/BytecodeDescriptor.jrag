@@ -167,11 +167,10 @@ aspect BytecodeDescriptor {
             new VariableArityParameterDeclaration(
               p.getModifiersNoTransform(),
               ((ArrayTypeAccess)p.getTypeAccessNoTransform()).getAccessNoTransform(),
-              p.getID(),
-              p.getEmptyBracketListNoTransform()
-              ),
-            lastIndex
-            );
+              p.getID()
+            ),
+          lastIndex
+        );
       }
       List exceptionList = (s != null && s.hasExceptionList()) ? s.exceptionList() : attributes.exceptionList();
 
@@ -181,16 +180,16 @@ aspect BytecodeDescriptor {
       }
       else if(attributes.elementValue() != null) {
         return new AnnotationMethodDecl(p.modifiers(flags), returnType, name, 
-            parameterList, new List(), exceptionList, 
+            parameterList, exceptionList, 
             new Opt(new Block()), new Opt(attributes.elementValue()));
       }
       else if(s != null && s.hasFormalTypeParameters()) {
         return new GenericMethodDecl(p.modifiers(flags), returnType, name, parameterList, 
-            new List(), exceptionList, new Opt(new Block()), s.typeParameters(), new List());
+            exceptionList, new Opt(new Block()), s.typeParameters(), new List());
       }
       else {
         return new MethodDecl(p.modifiers(flags), returnType, name, parameterList, 
-            new List(), exceptionList, new Opt(new Block()));
+            exceptionList, new Opt(new Block()));
       }
     }
 
@@ -242,10 +241,7 @@ aspect BytecodeDescriptor {
         case 'L':
           return this.p.fromClassName(s.substring(1, s.length() - 1));
         case '[':
-          int i = 1;
-          while(s.charAt(i) == '[')
-            i++;
-          return new ArrayTypeAccess(type(s.substring(i)), i);
+          return new ArrayTypeAccess(type(s.substring(1)));
         case 'V':
           return new PrimitiveTypeAccess("void");
         default:
@@ -320,9 +316,12 @@ aspect BytecodeDescriptor {
         case '[':
           int i = 1;
           while(s.charAt(i) == '[') i++;
-          ArrayTypeAccess typeAccess = new ArrayTypeAccess(null, i);
-          l.add(new ParameterDeclaration(new Modifiers(), typeAccess, "p" + l.getNumChildNoTransform()));
-          return arrayTypeList(s.substring(i), typeAccess);
+          ArrayTypeAccess bottom = new ArrayTypeAccess(null);
+          ArrayTypeAccess top = bottom;
+          for(int j = 0; j < i - 1; j++)
+            top = new ArrayTypeAccess(top);
+          l.add(new ParameterDeclaration(new Modifiers(), top, "p" + l.getNumChild()));
+          return arrayTypeList(s.substring(i), bottom);
         default:
           this.p.println("Error: unknown Type \"" + c + "\" in TypeDescriptor");
           throw new Error("Error: unknown Type in TypeDescriptor: " + s);

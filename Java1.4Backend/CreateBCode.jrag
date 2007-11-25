@@ -772,8 +772,7 @@ aspect CreateBCode {
       getArrayInit().createBCode(gen);
     }
     else {
-      for (int i=0; i<getNumDims(); i++) 
-        getDims(i).createBCode(gen);
+      getTypeAccess().createBCode(gen); // push array sizes
       if(type().componentType().isPrimitive()) {
         gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
       }
@@ -815,9 +814,12 @@ aspect CreateBCode {
     }
   }
   
-  public void Dims.createBCode(CodeGeneration gen) {
-    if(hasExpr())
-      getExpr().createBCode(gen);
+  public void ArrayTypeAccess.createBCode(CodeGeneration gen) {
+    getAccess().createBCode(gen);
+  }
+  public void ArrayTypeWithSizeAccess.createBCode(CodeGeneration gen) {
+    getAccess().createBCode(gen);
+    getExpr().createBCode(gen);
   }
 
   inh TypeDecl ArrayInit.expectedType();
@@ -829,10 +831,13 @@ aspect CreateBCode {
   eq ArrayInit.getInit().expectedType() = expectedType().componentType();
   
   syn lazy int ArrayCreationExpr.numArrays() {
-    for(int i = 0; i < getNumDims(); i++)
-      if(!getDims(i).hasExpr())
-        return i;
-    return getNumDims();
+    int i = type().dimension();
+    Access a = getTypeAccess();
+    while(a instanceof ArrayTypeAccess && !(a instanceof ArrayTypeWithSizeAccess)) {
+      i--;
+      a = ((ArrayTypeAccess)a).getAccess();
+    }
+    return i;
   }
   
   syn String TypeDecl.arrayTypeDescriptor() { throw new Error("Operation not supported"); }
