@@ -34,7 +34,7 @@ aspect GenericMethodsInference {
   inh TypeDecl MethodAccess.typeObject();
 
   // Generic Method Type Inference
-  private Collection MethodAccess.computeConstraints(GenericMethodDecl decl) {
+  public Collection MethodAccess.computeConstraints(GenericMethodDecl decl) {
     Constraints c = new Constraints();
     // store type parameters
     for(int i = 0; i < decl.original().getNumTypeParameter(); i++)
@@ -204,21 +204,15 @@ aspect GenericMethodsInference {
       for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
         TypeVariable T = (TypeVariable)iter.next();
         ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
-        if(!set.subtypeConstraints.isEmpty() && set.typeArgument == null) {
+        if((!set.subtypeConstraints.isEmpty() || T.getNumTypeBound() > 0) && set.typeArgument == null) {
+          ArrayList bounds = new ArrayList();
           for(Iterator i2 = set.subtypeConstraints.iterator(); i2.hasNext(); ) {
-            TypeDecl typeDecl = (TypeDecl)i2.next();
-            if(set.typeArgument == null || typeDecl.subtype(set.typeArgument))
-              set.typeArgument = typeDecl;
-            else if(!set.typeArgument.subtype(typeDecl))
-              throw new Error("Need to compute greatest lower bound for subtype constraints");
+            bounds.add(i2.next());
           }
           for(int i = 0; i < T.getNumTypeBound(); i++) {
-            TypeDecl typeDecl = T.getTypeBound(i).type();
-            if(set.typeArgument == null || typeDecl.subtype(set.typeArgument))
-              set.typeArgument = typeDecl;
-            else if(!set.typeArgument.subtype(typeDecl))
-              throw new Error("Need to compute greatest lower bound for subtype constraints");
+            bounds.add(T.getTypeBound(i).type());
           }
+          set.typeArgument = GLBTypeFactory.glb(bounds);
         }
       }
     }
@@ -275,7 +269,7 @@ aspect GenericMethodsInference {
     }
     */
 
-    private HashSet directSupertypes(TypeDecl t) {
+    public static HashSet directSupertypes(TypeDecl t) {
       if(t instanceof ClassDecl) {
         ClassDecl type = (ClassDecl)t;
         HashSet set = new HashSet();
@@ -303,12 +297,12 @@ aspect GenericMethodsInference {
         throw new Error("Operation not supported for " + t.fullName() + ", " + t.getClass().getName());
     }
 
-    private HashSet parameterizedSupertypes(TypeDecl t) {
+    public static HashSet parameterizedSupertypes(TypeDecl t) {
       HashSet result = new HashSet();
       addParameterizedSupertypes(t, new HashSet(), result);
       return result;
     }
-    private void addParameterizedSupertypes(TypeDecl t, HashSet processed, HashSet result) {
+    public static void addParameterizedSupertypes(TypeDecl t, HashSet processed, HashSet result) {
       if(!processed.contains(t)) {
         processed.add(t);
         if(t.isParameterizedType() && !t.isRawType())
@@ -330,17 +324,17 @@ aspect GenericMethodsInference {
       return list;
     }
 
-    private void addSupertypeConstraint(TypeDecl T, TypeDecl A) {
+    public void addSupertypeConstraint(TypeDecl T, TypeDecl A) {
       ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
       set.supertypeConstraints.add(A);
       //System.out.println(T.name() + " :> " + A.fullName());
     }
-    private void addSubtypeConstraint(TypeDecl T, TypeDecl A) {
+    public void addSubtypeConstraint(TypeDecl T, TypeDecl A) {
       ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
       set.subtypeConstraints.add(A);
       //System.out.println(T.name() + " <: " + A.fullName());
     }
-    private void addEqualConstraint(TypeDecl T, TypeDecl A) {
+    public void addEqualConstraint(TypeDecl T, TypeDecl A) {
       ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
       set.equaltypeConstraints.add(A);
       //System.out.println(T.name() + " = " + A.fullName());
@@ -638,7 +632,7 @@ aspect GenericMethodsInference {
     return lookupLUBType(bounds);
   }
 
-    private HashSet LUBType.EC(ArrayList list) {
+    public HashSet LUBType.EC(ArrayList list) {
       HashSet result = new HashSet();
       boolean first = true;
       for(Iterator iter = list.iterator(); iter.hasNext(); ) {
@@ -654,7 +648,7 @@ aspect GenericMethodsInference {
       return result;
     }
 
-    private HashSet LUBType.MEC(ArrayList list) {
+    public HashSet LUBType.MEC(ArrayList list) {
       HashSet EC = EC(list);
       if(EC.size() == 1)
         return EC;
@@ -673,7 +667,7 @@ aspect GenericMethodsInference {
       return MEC;
     }
 
-    private HashSet LUBType.Inv(TypeDecl G, ArrayList Us) {
+    public HashSet LUBType.Inv(TypeDecl G, ArrayList Us) {
       HashSet result = new HashSet();
       for(Iterator iter = Us.iterator(); iter.hasNext(); ) {
         TypeDecl U = (TypeDecl)iter.next();
@@ -686,7 +680,7 @@ aspect GenericMethodsInference {
       return result;
     }
 
-    private TypeDecl LUBType.lci(HashSet set, TypeDecl G) {
+    public TypeDecl LUBType.lci(HashSet set, TypeDecl G) {
       ArrayList list = new ArrayList();
       boolean first = true;
       for(Iterator iter = set.iterator(); iter.hasNext(); ) {
@@ -704,8 +698,8 @@ aspect GenericMethodsInference {
       return ((GenericTypeDecl)G).lookupParTypeDecl(list);
     }
 
-    private TypeDecl LUBType.lcta(TypeDecl X, TypeDecl Y) {
-      System.err.println("Computing lcta for " + X.typeName() + " and " + Y.typeName());
+    public TypeDecl LUBType.lcta(TypeDecl X, TypeDecl Y) {
+      //System.err.println("Computing lcta for " + X.typeName() + " and " + Y.typeName());
       if(!X.isWildcard() && !Y.isWildcard()) {
         TypeDecl U = X;
         TypeDecl V = Y;
@@ -719,7 +713,10 @@ aspect GenericMethodsInference {
       else if(!X.isWildcard() && Y instanceof WildcardSuperType) {
         TypeDecl U = X;
         TypeDecl V = ((WildcardSuperType)Y).getAccess().type();
-        return glb(U, V).asWildcardSuper();
+        ArrayList bounds = new ArrayList();
+        bounds.add(U);
+        bounds.add(V);
+        return GLBTypeFactory.glb(bounds).asWildcardSuper();
       }
       else if(X instanceof WildcardExtendsType && Y instanceof WildcardExtendsType) {
         TypeDecl U = ((WildcardExtendsType)X).getAccess().type();
@@ -734,28 +731,27 @@ aspect GenericMethodsInference {
       else if(X instanceof WildcardSuperType && Y instanceof WildcardSuperType) {
         TypeDecl U = ((WildcardSuperType)X).getAccess().type();
         TypeDecl V = ((WildcardSuperType)Y).getAccess().type();
-        return glb(U, V).asWildcardSuper();
+        ArrayList bounds = new ArrayList();
+        bounds.add(U);
+        bounds.add(V);
+        return GLBTypeFactory.glb(bounds).asWildcardSuper();
       }
       else
         throw new Error("lcta not defined for (" + X.getClass().getName() + ", " + Y.getClass().getName());
     }
 
-    private TypeDecl LUBType.lub(TypeDecl X, TypeDecl Y) {
+    public TypeDecl LUBType.lub(TypeDecl X, TypeDecl Y) {
       ArrayList list = new ArrayList(2);
       list.add(X);
       list.add(Y);
       return lub(list);
     }
 
-    private TypeDecl LUBType.lub(ArrayList list) {
+    public TypeDecl LUBType.lub(ArrayList list) {
       return lookupLUBType(list);
     }
 
-    private TypeDecl LUBType.glb(TypeDecl X, TypeDecl Y) {
-      return null;
-    }
-
-    private HashSet LUBType.EST(TypeDecl t) {
+    public HashSet LUBType.EST(TypeDecl t) {
       HashSet result = new HashSet();
       for(Iterator iter = ST(t).iterator(); iter.hasNext(); ) {
         TypeDecl typeDecl = (TypeDecl)iter.next();
@@ -764,13 +760,13 @@ aspect GenericMethodsInference {
       return result;
     }
 
-    private HashSet LUBType.ST(TypeDecl t) {
+    public HashSet LUBType.ST(TypeDecl t) {
       HashSet result = new HashSet();
       addSupertypes(result, t);
       return result;
     }
 
-    private void LUBType.addSupertypes(HashSet set, TypeDecl t) {
+    public void LUBType.addSupertypes(HashSet set, TypeDecl t) {
       set.add(t);
       if(t instanceof ClassDecl) {
         ClassDecl type = (ClassDecl)t;

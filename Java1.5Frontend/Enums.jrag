@@ -90,7 +90,7 @@ aspect Enums {
         );
         addBodyDecl(
           new ConstructorDecl(
-            new Modifiers(new List().add(new Modifier("private"))),
+            new Modifiers(new List().add(new Modifier("private")).add(new Modifier("synthetic"))),
             name(),
             parameterList,
             new List(),
@@ -272,7 +272,8 @@ aspect Enums {
       new Modifiers(new List().add(
         new Modifier("private")).add(
         new Modifier("static")).add(
-        new Modifier("final"))
+        new Modifier("final")).add(
+        new Modifier("synthetic"))
       ),
       arrayType().createQualifiedAccess(),
       "$VALUES",
@@ -297,7 +298,8 @@ aspect Enums {
         new Modifiers(new List().add(
           new Modifier("public")).add(
           new Modifier("static")).add(
-          new Modifier("final"))
+          new Modifier("final")).add(
+          new Modifier("synthetic"))
         ),
         arrayType().createQualifiedAccess(),
         "values",
@@ -329,7 +331,8 @@ aspect Enums {
       new MethodDecl(
         new Modifiers(new List().add(
           new Modifier("public")).add(
-          new Modifier("static"))
+          new Modifier("static")).add(
+          new Modifier("synthetic"))
         ),
         createQualifiedAccess(),
         "valueOf",
@@ -485,4 +488,99 @@ aspect Enums {
       return NameCheck.ConstCase.constValue(c);
   }
 
+  public void EnumDecl.toString(StringBuffer s) {
+    getModifiers().toString(s);
+    s.append("enum " + name());
+    if(getNumImplements() > 0) {
+      s.append(" implements ");
+      getImplements(0).toString(s);
+      for(int i = 1; i < getNumImplements(); i++) {
+        s.append(", ");
+        getImplements(i).toString(s);
+      }
+    }
+    s.append(" {\n");
+    indent++;
+    for(int i=0; i < getNumBodyDecl(); i++) {
+      BodyDecl d = getBodyDecl(i);
+      if(d instanceof EnumConstant) {
+        d.toString(s);
+        if(i + 1 < getNumBodyDecl() && !(getBodyDecl(i + 1) instanceof EnumConstant))
+          s.append(indent() + ";\n");
+      }
+      else if(d instanceof ConstructorDecl) {
+        ConstructorDecl c = (ConstructorDecl)d;
+        if(!c.isSynthetic()) {
+          s.append(indent());
+          c.getModifiers().toString(s);
+          s.append(c.name() + "(");
+          if(c.getNumParameter() > 2) {
+            c.getParameter(2).toString(s);
+            for(int j = 3; j < c.getNumParameter(); j++) {
+              s.append(", ");
+              c.getParameter(j).toString(s);
+            }
+          }
+          s.append(")");
+          if(c.getNumException() > 0) {
+            s.append(" throws ");
+            c.getException(0).toString(s);
+            for(int j = 1; j < c.getNumException(); j++) {
+              s.append(", ");
+              c.getException(j).toString(s);
+            }
+          }
+          s.append(" {\n");
+          indent++;
+          for(int j = 0; j < c.getBlock().getNumStmt(); j++) {
+            s.append(indent());
+            c.getBlock().getStmt(j).toString(s);
+          }
+          indent--;
+          s.append(indent());
+          s.append("}\n");
+        }
+      }
+      else if(d instanceof MethodDecl) {
+        MethodDecl m = (MethodDecl)d;
+        if(!m.isSynthetic())
+          m.toString(s);
+      }
+      else if(d instanceof FieldDeclaration) {
+        FieldDeclaration f = (FieldDeclaration)d;
+        if(!f.isSynthetic())
+          f.toString(s);
+      }
+      else
+        d.toString(s);
+    }
+    indent--;
+    s.append(indent() + "}\n");
+  }
+
+  public void EnumConstant.toString(StringBuffer s) {
+    s.append(indent());
+    getModifiers().toString(s);
+    s.append(getID());
+    s.append("(");
+    if(getNumArg() > 0) {
+      getArg(0).toString(s);
+      for(int i = 1; i < getNumArg(); i++) {
+        s.append(", ");
+        getArg(i).toString(s);
+      }
+    }
+    s.append(")");
+    if(getNumBodyDecl() > 0) {
+      s.append(" {\n");
+      indent++;
+      for(int i=0; i < getNumBodyDecl(); i++) {
+        BodyDecl d = getBodyDecl(i);
+        d.toString(s);
+      }
+      indent--;
+      s.append(indent() + "}");
+    }
+    s.append(",\n");
+  }
 }

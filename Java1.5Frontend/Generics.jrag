@@ -46,8 +46,11 @@ aspect Generics {
 
   refine TypeAnalysis eq ClassAccess.type() {
     GenericClassDecl d = (GenericClassDecl)TypeAnalysis.ClassAccess.type();
+    TypeDecl type = qualifier().type();
+    if(type.isPrimitive())
+      type = type.boxed();
     ArrayList list = new ArrayList();
-    list.add(qualifier().type());
+    list.add(type);
     return d.lookupParTypeDecl(list);
   }
 
@@ -1103,6 +1106,53 @@ aspect LookupParTypeDecl {
       s.append(" & " + getTypeBound(i).type().typeName());
     return s.toString();
   }
+
+  public HashSet LUBType.implementedInterfaces(){
+       HashSet ret = new HashSet();
+       for (int i = 0; i < getNumTypeBound(); i++) {
+           ret.addAll(getTypeBound(i).type().implementedInterfaces());
+       }
+       return ret;
+   }
+
+  syn nta GLBType WildcardsCompilationUnit.lookupGLBType(ArrayList bounds) {
+    List boundList = new List();
+    StringBuffer name = new StringBuffer();
+    for(Iterator iter = bounds.iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)iter.next();
+      boundList.add(typeDecl.createBoundAccess());
+      name.append("& " + typeDecl.typeName());
+    }
+    GLBType decl = new GLBType(
+      new Modifiers(new List().add(new Modifier("public"))),
+      name.toString(),
+      new List(),
+      boundList
+    );
+    return decl;
+  }
+  inh GLBType TypeDecl.lookupGLBType(ArrayList bounds);
+  eq Program.getChild().lookupGLBType(ArrayList bounds) = 
+    wildcards().lookupGLBType(bounds);
+
+  syn String GLBType.typeName() {
+    if(getNumTypeBound() == 0)
+      return "<NOTYPE>";
+    StringBuffer s = new StringBuffer();
+    s.append(getTypeBound(0).type().typeName());
+    for(int i = 1; i < getNumTypeBound(); i++)
+      s.append(" & " + getTypeBound(i).type().typeName());
+    return s.toString();
+  }
+
+  public HashSet GLBType.implementedInterfaces(){
+    HashSet ret = new HashSet();
+    for (int i = 0; i < getNumTypeBound(); i++) {
+      ret.addAll(getTypeBound(i).type().implementedInterfaces());
+    }
+    return ret;
+  }
+
 }
 
 
@@ -1113,4 +1163,6 @@ aspect NewGenerics {
   }
 
   eq TypeVariable.accessibleFrom(TypeDecl type) = true;
+
+  eq TypeVariable.typeName() = name();
 }
