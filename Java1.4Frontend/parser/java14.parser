@@ -57,7 +57,7 @@ Access name =
   | qualified_name.q          {: return q; :}
   ;
 Access simple_name =
-    IDENTIFIER.i              {: return new ParseName(i); :}
+    IDENTIFIER              {: return new ParseName(IDENTIFIER); :}
   ;
 Access qualified_name =
     name.n DOT simple_name.i   {: return n.qualifiesAccess(i); :}
@@ -82,7 +82,7 @@ IdUse name_decl =
   | qualified_name_decl.q     {: return q; :}
   ;
 IdUse simple_name_decl =
-    IDENTIFIER.i              {: return new IdUse(i); :}
+    IDENTIFIER              {: return new IdUse(IDENTIFIER); :}
   ;
 IdUse qualified_name_decl =
     name_decl.n DOT IDENTIFIER.i {: return new IdUse(n.getID() + "." + i); :}
@@ -120,8 +120,8 @@ Modifier modifier =
   | STRICTFP                                   {: return new Modifier("strictfp"); :}
   ;
 ClassDecl class_declaration =
-    modifiers.m? CLASS IDENTIFIER.id super.s? interfaces.i? class_body.b 
-                                               {: return new ClassDecl(new Modifiers(m), id, s, i, b); :}
+    modifiers.m? CLASS IDENTIFIER super.s? interfaces.i? class_body.b 
+                                               {: return new ClassDecl(new Modifiers(m), IDENTIFIER, s, i, b); :}
   ;
 Opt super =
     EXTENDS class_type.c                       {: return new Opt(c); :}
@@ -165,7 +165,7 @@ VariableDecl variable_declarator =
   | variable_declarator_id.v EQ variable_initializer.i {: v.setInit(i); return v; :}
   ;
 VariableDecl variable_declarator_id =
-    IDENTIFIER.id dims.d?                       {: return new VariableDecl(id, d, new Opt()); :}
+    IDENTIFIER dims.d?                       {: return new VariableDecl(IDENTIFIER, d, new Opt()); :}
   ;
 Expr variable_initializer =
     expression.e                               {: return e; :}
@@ -176,10 +176,10 @@ MethodDecl method_declaration =
   ;
       
 MethodDecl method_header =
-    modifiers.m? type.t IDENTIFIER.id LPAREN formal_parameter_list.l? RPAREN dims.d? throws.tl?
-    {: return new MethodDecl(new Modifiers(m), t.addArrayDims(d), id, l, tl, new Opt()); :}
-  | modifiers.m? VOID   IDENTIFIER.id LPAREN formal_parameter_list.l? RPAREN throws.tl?
-    {: return new MethodDecl(new Modifiers(m), new PrimitiveTypeAccess("void"), id, l, tl, new Opt()); :}
+    modifiers.m? type.t IDENTIFIER LPAREN formal_parameter_list.l? RPAREN dims.d? throws.tl?
+    {: return new MethodDecl(new Modifiers(m), t.addArrayDims(d), IDENTIFIER, l, tl, new Opt()); :}
+  | modifiers.m? VOID   IDENTIFIER LPAREN formal_parameter_list.l? RPAREN throws.tl?
+    {: return new MethodDecl(new Modifiers(m), new PrimitiveTypeAccess("void"), IDENTIFIER, l, tl, new Opt()); :}
   ;
                                                                 
 List formal_parameter_list =
@@ -187,7 +187,7 @@ List formal_parameter_list =
   | formal_parameter_list.l COMMA formal_parameter.f    {: return l.add(f); :}
   ;
 ParameterDeclaration formal_parameter =
-  modifiers.m? type.t IDENTIFIER.id dims.d?     {: return new ParameterDeclaration(new Modifiers(m), t.addArrayDims(d), id); :}
+  modifiers.m? type.t IDENTIFIER dims.d?     {: return new ParameterDeclaration(new Modifiers(m), t.addArrayDims(d), IDENTIFIER); :}
   ;
 List throws =
     THROWS class_type_list.l                   {: return l; :}
@@ -207,8 +207,8 @@ InstanceInitializer instance_initializer =
     block.b                                    {: return new InstanceInitializer(b); :}
   ;
 ConstructorDecl constructor_declaration =
-    modifiers.m? IDENTIFIER.id LPAREN formal_parameter_list.pl? RPAREN throws.tl? constructor_body.b
-    {: b.setModifiers(new Modifiers(m)); b.setID(id); b.setParameterList(pl); b.setExceptionList(tl); return b; :}
+    modifiers.m? IDENTIFIER LPAREN formal_parameter_list.pl? RPAREN throws.tl? constructor_body.b
+    {: b.setModifiers(new Modifiers(m)); b.setID(IDENTIFIER); b.setParameterList(pl); b.setExceptionList(tl); return b; :}
  ;
 ConstructorDecl constructor_body =
 		LBRACE explicit_constructor_invocation.c? block_statements.l? RBRACE
@@ -237,7 +237,7 @@ ExprStmt explicit_constructor_invocation =
        return new ExprStmt(n.qualifiesAccess(c)); :}
   ;
 InterfaceDecl interface_declaration =
-  modifiers.m? INTERFACE IDENTIFIER.id extends_interfaces.i? interface_body.b {: return new InterfaceDecl(new Modifiers(m), id, i, b); :}
+  modifiers.m? INTERFACE IDENTIFIER extends_interfaces.i? interface_body.b {: return new InterfaceDecl(new Modifiers(m), IDENTIFIER, i, b); :}
   ;
 List extends_interfaces =
     EXTENDS interface_type.i                    {: return new List().add(i); :}
@@ -556,26 +556,23 @@ Access method_invocation =
                                                              }
                                                                :}
    | primary.p DOT IDENTIFIER LPAREN argument_list.l? RPAREN 
-     {: String id = (String)IDENTIFIER.value; // extract token value
-        MethodAccess m = new MethodAccess(id, l);
+     {: MethodAccess m = new MethodAccess(IDENTIFIER, l);
         m.setStart(IDENTIFIER.getStart()); // add location information
         m.setEnd(RPAREN.getEnd()); // add location information
         return p.qualifiesAccess(m); :}
    | SUPER DOT IDENTIFIER LPAREN argument_list.l? RPAREN
-     {: String id = (String)IDENTIFIER.value; // extract token value
-        SuperAccess s = new SuperAccess("super");
+     {: SuperAccess s = new SuperAccess("super");
         s.setStart(SUPER.getStart());
         s.setEnd(SUPER.getEnd());
-        MethodAccess m = new MethodAccess(id, l);
+        MethodAccess m = new MethodAccess(IDENTIFIER, l);
         m.setStart(IDENTIFIER.getStart());
         m.setEnd(RPAREN.getEnd());
         return s.qualifiesAccess(m); :}
    | name.n DOT SUPER DOT IDENTIFIER LPAREN argument_list.l? RPAREN
-     {: String id = (String)IDENTIFIER.value; // extract token value
-        SuperAccess s = new SuperAccess("super");
+     {: SuperAccess s = new SuperAccess("super");
         s.setStart(SUPER.getStart());
         s.setEnd(SUPER.getEnd());
-        MethodAccess m = new MethodAccess(id, l);
+        MethodAccess m = new MethodAccess(IDENTIFIER, l);
         m.setStart(IDENTIFIER.getStart());
         m.setEnd(RPAREN.getEnd());
         return n.qualifiesAccess(s).qualifiesAccess(m); :}
