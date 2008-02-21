@@ -8,14 +8,14 @@ aspect EnhancedFor {
 			error("type " + getExpr().type().name() + 
 			      " of expression in foreach is neither array type nor java.lang.Iterable");
 		}	
-    else if(getExpr().type().isArrayDecl() && !getExpr().type().componentType().assignConversionTo(getParameter().type(), null))
-      error("parameter of type " + getParameter().type().typeName() + " can not be assigned an element of type " + getExpr().type().componentType().typeName()); 
+    else if(getExpr().type().isArrayDecl() && !getExpr().type().componentType().assignConversionTo(getVariableDeclaration().type(), null))
+      error("parameter of type " + getVariableDeclaration().type().typeName() + " can not be assigned an element of type " + getExpr().type().componentType().typeName()); 
     else if(getExpr().type().isIterable() && !getExpr().type().isUnknown()) {
       MethodDecl iterator = (MethodDecl)getExpr().type().memberMethods("iterator").iterator().next();
       MethodDecl next = (MethodDecl)iterator.type().memberMethods("next").iterator().next();
       TypeDecl componentType = next.type();
-      if(!componentType.assignConversionTo(getParameter().type(), null))
-        error("parameter of type " + getParameter().type().typeName() + " can not be assigned an element of type " + componentType.typeName()); 
+      if(!componentType.assignConversionTo(getVariableDeclaration().type(), null))
+        error("parameter of type " + getVariableDeclaration().type().typeName() + " can not be assigned an element of type " + componentType.typeName()); 
     }
 	}
   
@@ -27,20 +27,20 @@ aspect EnhancedFor {
   
 	// variable lookup
   inh SimpleSet EnhancedForStmt.lookupVariable(String name);
-	eq EnhancedForStmt.getParameter().lookupVariable(String name) = localLookupVariable(name);
+	eq EnhancedForStmt.getVariableDeclaration().lookupVariable(String name) = localLookupVariable(name);
 	eq EnhancedForStmt.getExpr().lookupVariable(String name) = localLookupVariable(name);
 	eq EnhancedForStmt.getStmt().lookupVariable(String name) = localLookupVariable(name);
 
-  eq EnhancedForStmt.getParameter().nameType() = NameType.TYPE_NAME;
+  eq EnhancedForStmt.getVariableDeclaration().nameType() = NameType.TYPE_NAME;
   
   EnhancedForStmt implements VariableScope;
-  eq EnhancedForStmt.getParameter().outerScope() = this;
+  eq EnhancedForStmt.getVariableDeclaration().outerScope() = this;
   eq EnhancedForStmt.getExpr().outerScope() = this;
   eq EnhancedForStmt.getStmt().outerScope() = this;
 
 	syn SimpleSet EnhancedForStmt.localLookupVariable(String name) {
-		if(getParameter().name().equals(name)) {
-      return SimpleSet.emptySet.add(getParameter());
+		if(getVariableDeclaration().name().equals(name)) {
+      return SimpleSet.emptySet.add(getVariableDeclaration());
     }
  	  return lookupVariable(name);
 	}
@@ -48,7 +48,7 @@ aspect EnhancedFor {
 	// pretty printing
   public void EnhancedForStmt.toString(StringBuffer s) {
     s.append("for (");
-    getParameter().toString(s);
+    getVariableDeclaration().toString(s);
     s.append(" : ");
     getExpr().toString(s);
     s.append(") ");
@@ -56,9 +56,9 @@ aspect EnhancedFor {
   }	
   
 	// some attributes for the parameter
-	eq EnhancedForStmt.getParameter().isMethodParameter() = false;
-	eq EnhancedForStmt.getParameter().isConstructorParameter() = false;
-	eq EnhancedForStmt.getParameter().isExceptionHandlerParameter() = false;
+	eq EnhancedForStmt.getVariableDeclaration().isMethodParameter() = false;
+	eq EnhancedForStmt.getVariableDeclaration().isConstructorParameter() = false;
+	eq EnhancedForStmt.getVariableDeclaration().isExceptionHandlerParameter() = false;
 
   eq EnhancedForStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
   eq EnhancedForStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
@@ -80,7 +80,8 @@ aspect EnhancedFor {
     */
     return true;
   }
-  eq EnhancedForStmt.getExpr().isDAbefore(Variable v) = isDAbefore(v);
+  eq EnhancedForStmt.getExpr().isDAbefore(Variable v) = 
+    v == getVariableDeclaration() || isDAbefore(v);
   eq EnhancedForStmt.getStmt().isDAbefore(Variable v) = getExpr().isDAafter(v);
 
   eq EnhancedForStmt.isDUafter(Variable v) {
@@ -93,7 +94,8 @@ aspect EnhancedFor {
     }
     return true;
   }
-  eq EnhancedForStmt.getExpr().isDUbefore(Variable v) = isDUbefore(v);
+  eq EnhancedForStmt.getExpr().isDUbefore(Variable v) = 
+    v != getVariableDeclaration() && isDUbefore(v);
   eq EnhancedForStmt.getStmt().isDUbefore(Variable v) = getExpr().isDUafter(v);
 
   eq EnhancedForStmt.getStmt().insideLoop() = true;
