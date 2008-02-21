@@ -113,11 +113,10 @@ aspect Generics {
             s.hasSuperclassSignature() ? new Opt(s.superclassSignature()) : getSuperClassAccessOptNoTransform(),
             s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getImplementsListNoTransform(),
             getBodyDeclListNoTransform(),
-            s.typeParameters(),
-            new List()
-            ),
+            s.typeParameters()
+          ),
           index
-          );
+      );
       return (TypeDecl)node.getChildNoTransform(index);
     }
     else {
@@ -139,11 +138,10 @@ aspect Generics {
             getID(),
             s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getSuperInterfaceIdListNoTransform(),
             getBodyDeclListNoTransform(),
-            s.typeParameters(),
-            new List()
-            ),
+            s.typeParameters()
+          ),
           index
-          );
+      );
       return (TypeDecl)node.getChildNoTransform(index);
     }
     else {
@@ -494,7 +492,9 @@ aspect LookupParTypeDecl {
     return true;
   }
   
-
+  syn lazy final List GenericClassDecl.getParTypeDeclList() = new List();
+  syn lazy final List GenericInterfaceDecl.getParTypeDeclList() = new List();
+  
   syn lazy TypeDecl GenericTypeDecl.lookupParTypeDecl(ParTypeAccess p);
   eq GenericClassDecl.lookupParTypeDecl(ParTypeAccess p) {
     for(int i = 0; i < getNumParTypeDecl(); i++) {
@@ -725,21 +725,23 @@ aspect LookupParTypeDecl {
       else if(node instanceof VariableArityParameterDeclaration) {
         VariableArityParameterDeclaration p = (VariableArityParameterDeclaration)node;
         list.add(
-          new VariableArityParameterDeclaration(
+          new VariableArityParameterDeclarationSubstituted(
             (Modifiers)p.getModifiers().fullCopy(),
             // use the type acces since VariableArity adds to the dimension
             p.getTypeAccess().type().substituteParameterType(parTypeDecl),
-            p.getID()
+            p.getID(),
+            p
           )
         );
       }
       else if(node instanceof ParameterDeclaration) {
         ParameterDeclaration p = (ParameterDeclaration)node;
         list.add(
-          new ParameterDeclaration(
+          new ParameterDeclarationSubstituted(
             (Modifiers)p.getModifiers().fullCopy(),
             p.type().substituteParameterType(parTypeDecl),
-            p.getID()
+            p.getID(),
+            p
           )
         );
       }
@@ -932,8 +934,7 @@ aspect LookupParTypeDecl {
       getParameterList().substitute(parTypeDecl),
       getExceptionList().substitute(parTypeDecl),
       new Opt(),
-      (List)getTypeParameterList().fullCopy(),
-      new List()
+      (List)getTypeParameterList().fullCopy()
     );
     m.original = this;
     //System.out.println("End substituting generic " + signature());
@@ -994,7 +995,6 @@ aspect LookupParTypeDecl {
       getImplementsList().substitute(parTypeDecl),
       new List(),
       new List(), // delegates TypeParameter lookup to original 
-      new List(),
       this
     );
     return c;
@@ -1016,7 +1016,6 @@ aspect LookupParTypeDecl {
       getSuperInterfaceIdList().substitute(parTypeDecl),
       new List(),
       new List(), // delegates TypeParameter lookup to original
-      new List(),
       this
     );
     return c;
@@ -1165,4 +1164,28 @@ aspect NewGenerics {
   eq TypeVariable.accessibleFrom(TypeDecl type) = true;
 
   eq TypeVariable.typeName() = name();
+}
+aspect SourceDeclarations {
+  syn lazy TypeDecl TypeDecl.sourceTypeDecl() = this;
+  eq ParTypeDecl.sourceTypeDecl() = genericDecl().original().sourceTypeDecl();
+  eq ClassDeclSubstituted.sourceTypeDecl() = original().sourceTypeDecl();
+  eq InterfaceDeclSubstituted.sourceTypeDecl() = original().sourceTypeDecl();
+  eq GenericClassDeclSubstituted.sourceTypeDecl() = original().sourceTypeDecl();
+  eq GenericInterfaceDeclSubstituted.sourceTypeDecl() = original().sourceTypeDecl();
+
+  syn lazy MethodDecl MethodDecl.sourceMethodDecl() = this;
+  eq ParMethodDecl.sourceMethodDecl() = genericMethodDecl().original().sourceMethodDecl();
+  eq MethodDeclSubstituted.sourceMethodDecl() = getOriginal().sourceMethodDecl();
+
+  syn lazy ConstructorDecl ConstructorDecl.sourceConstructorDecl() = this;
+  eq ParConstructorDecl.sourceConstructorDecl() = genericConstructorDecl().original().sourceConstructorDecl();
+  eq ConstructorDeclSubstituted.sourceConstructorDecl() = getOriginal().sourceConstructorDecl();
+
+  syn lazy Variable Variable.sourceVariableDecl();
+  eq VariableDeclaration.sourceVariableDecl() = this;
+  eq FieldDeclaration.sourceVariableDecl() = this;
+  eq FieldDeclarationSubstituted.sourceVariableDecl() = getOriginal().sourceVariableDecl();
+  eq ParameterDeclaration.sourceVariableDecl() = this;
+  eq ParameterDeclarationSubstituted.sourceVariableDecl() = getOriginal().sourceVariableDecl();
+ 
 }
