@@ -68,15 +68,21 @@ aspect AutoBoxing {
   refine TypeAnalysis eq TypeDecl.assignConversionTo(TypeDecl type, Expr expr) {
     if(TypeAnalysis.TypeDecl.assignConversionTo(type, expr))
       return true;
-    if(!boxed().isUnknown() && boxed().wideningConversionTo(type))
-      return true;
-    if(!unboxed().isUnknown() && unboxed().wideningConversionTo(type))
-      return true;
+    boolean canBoxThis = this instanceof PrimitiveType;
+    boolean canBoxType = type instanceof PrimitiveType;
+    boolean canUnboxThis = !unboxed().isUnknown();
+    boolean canUnboxType = !type.unboxed().isUnknown();
+    TypeDecl t = !canUnboxThis && canUnboxType ? type.unboxed() : type;
     boolean sourceIsConstant = expr != null ? expr.isConstant() : false;
     if(sourceIsConstant && (isInt() || isChar() || isShort() || isByte()) &&
-        (type.unboxed().isByte() || type.unboxed().isShort() || type.unboxed().isChar()) &&
-        narrowingConversionTo(type) && expr.representableIn(type))
+        (t.isByte() || t.isShort() || t.isChar()) &&
+        narrowingConversionTo(t) && expr.representableIn(t))
       return true;
+    if(canBoxThis && !canBoxType && boxed().assignConversionTo(type, expr))
+      return true;
+    else if(canUnboxThis && !canUnboxType && unboxed().assignConversionTo(type, expr))
+      return true;
+
     return false;
   }
 
@@ -84,10 +90,14 @@ aspect AutoBoxing {
   refine TypeAnalysis eq TypeDecl.methodInvocationConversionTo(TypeDecl type) {
     if(TypeAnalysis.TypeDecl.methodInvocationConversionTo(type))
       return true;
-    if(!boxed().isUnknown() && boxed().wideningConversionTo(type))
-      return true;
-    if(!unboxed().isUnknown() && unboxed().wideningConversionTo(type))
-      return true;
+    boolean canBoxThis = this instanceof PrimitiveType;
+    boolean canBoxType = type instanceof PrimitiveType;
+    boolean canUnboxThis = !unboxed().isUnknown();
+    boolean canUnboxType = !type.unboxed().isUnknown();
+    if(canBoxThis && !canBoxType)
+      return boxed().wideningConversionTo(type);
+    else if(canUnboxThis && !canUnboxType)
+      return unboxed().wideningConversionTo(type);
     return false;
   }
 
@@ -95,12 +105,31 @@ aspect AutoBoxing {
   refine TypeAnalysis eq TypeDecl.castingConversionTo(TypeDecl type) {
     if(TypeAnalysis.TypeDecl.castingConversionTo(type))
       return true;
-    if(boxingConversionTo(type))
+    else if(boxingConversionTo(type))
       return true;
-    if(unboxingConversionTo(type))
+    else if(unboxingConversionTo(type))
       return true;
     return false;
   }
+  refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) {
+    if(Generics.ClassDecl.castingConversionTo(type))
+      return true;
+    else if(unboxingConversionTo(type))
+      return true;
+    return false;
+  }
+  refine Generics eq InterfaceDecl.castingConversionTo(TypeDecl type) {
+    if(Generics.InterfaceDecl.castingConversionTo(type))
+      return true;
+    else if(unboxingConversionTo(type))
+      return true;
+    return false;
+  }
+  //eq PrimitiveType.castingConversionTo(TypeDecl type) = 
+  //  type.isReferenceType() ? boxed().castingConversionTo(type) : super.castingConversionTo(type);
+
+  //refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) =
+  //  type.isPrimitiveType() && !unboxed().isUnknown() ? unboxed().castingConversionTo(type) : Generics.ClassDecl.castingConversionTo(type);
 
   // 5.6.1 Unary Numeric Promotion
   eq ReferenceType.unaryNumericPromotion() = isNumericType() && !isUnknown() ? unboxed().unaryNumericPromotion() : this;
@@ -153,11 +182,6 @@ aspect AutoBoxing {
   // this is done by inserting a new node with an explicit cast
 
 
-  eq PrimitiveType.castingConversionTo(TypeDecl type) = 
-    type.isReferenceType() ? boxed().castingConversionTo(type) : super.castingConversionTo(type);
-
-  refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) =
-    type.isPrimitiveType() && !unboxed().isUnknown() ? unboxed().castingConversionTo(type) : Generics.ClassDecl.castingConversionTo(type);
 
   // 15.15.6 Logical Complement Operator !
   // type()
