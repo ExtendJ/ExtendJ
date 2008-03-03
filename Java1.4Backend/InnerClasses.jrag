@@ -1,5 +1,114 @@
 aspect InnerClasses {
 
+  // no attribute since needed in phases when the AST has been modified
+  public boolean TypeDecl.hasField(String name) {
+    if(!memberFields(name).isEmpty())
+      return true;
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof FieldDeclaration) {
+        FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
+        if(decl.name().equals(name))
+          return true;
+      }
+    }
+    return false;
+  }
+
+  private TypeDecl VarAccess.fieldQualifierType() {
+    if(hasPrevExpr())
+      return prevExpr().type();
+    TypeDecl typeDecl = hostType();
+    while(typeDecl != null && !typeDecl.hasField(name()))
+      typeDecl = typeDecl.enclosingType();
+    if(typeDecl != null)
+      return typeDecl;
+    return decl().hostType();
+  }
+
+  public boolean TypeDecl.hasMethod(String id) {
+    if(!memberMethods(id).isEmpty()) return true;
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl decl = (MethodDecl)getBodyDecl(i);
+        if(decl.name().equals(id))
+          return true;
+      }
+    }
+    return false;
+  }
+
+  private TypeDecl MethodAccess.methodQualifierType() {
+    if(hasPrevExpr())
+      return prevExpr().type();
+    TypeDecl typeDecl = hostType();
+    while(typeDecl != null && !typeDecl.hasMethod(name()))
+      typeDecl = typeDecl.enclosingType();
+    if(typeDecl != null)
+      return typeDecl;
+    return decl().hostType();
+  }
+
+
+  // Helpers for arrays
+  inh TypeDecl ArrayInit.expectedType();
+  eq Program.getCompilationUnit(int i).expectedType() = null;
+  eq ArrayCreationExpr.getArrayInit().expectedType() = type().componentType();
+  eq FieldDeclaration.getInit().expectedType() = type().componentType();
+  eq VariableDeclaration.getInit().expectedType() = type().componentType();
+  eq VariableDecl.getInit().expectedType() = null;
+  eq ArrayInit.getInit().expectedType() = expectedType().componentType();
+  
+  syn lazy int ArrayCreationExpr.numArrays() {
+    int i = type().dimension();
+    Access a = getTypeAccess();
+    while(a instanceof ArrayTypeAccess && !(a instanceof ArrayTypeWithSizeAccess)) {
+      i--;
+      a = ((ArrayTypeAccess)a).getAccess();
+    }
+    return i;
+  }
+
+  syn TypeDecl TypeDecl.stringPromotion() = this;
+  eq ReferenceType.stringPromotion() = typeObject();
+  eq NullType.stringPromotion() = typeObject();
+  eq ByteType.stringPromotion() = typeInt();
+  eq ShortType.stringPromotion() = typeInt();
+
+  syn boolean ASTNode.isStringAdd() = false;
+  eq AddExpr.isStringAdd() = type().isString() && !isConstant();
+  
+  syn boolean AddExpr.firstStringAddPart() = type().isString() && !getLeftOperand().isStringAdd();
+  syn boolean AddExpr.lastStringAddPart() = !getParent().isStringAdd();
+
+  syn MethodDecl TypeDecl.methodWithArgs(String name, TypeDecl[] args) {
+    for(Iterator iter = memberMethods(name).iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.getNumParameter() == args.length) {
+        for(int i = 0; i < args.length; i++)
+          if(m.getParameter(i).type() == args[i])
+            return m;
+      }
+    }
+    return null;
+  }
+
+  protected TypeDecl Access.superConstructorQualifier(TypeDecl targetEnclosingType) {
+    TypeDecl enclosing = hostType();
+    while(!enclosing.instanceOf(targetEnclosingType))
+      enclosing = enclosing.enclosingType();
+    return enclosing;
+  }
+
+  public TypeDecl MethodAccess.superAccessorTarget() {
+    TypeDecl targetDecl = prevExpr().type();
+    TypeDecl enclosing = hostType();
+    do {
+      enclosing = enclosing.enclosingType();
+    } while (!enclosing.instanceOf(targetDecl));
+    return enclosing;
+  }
+
+
   // The set of TypeDecls that has this TypeDecl as their directly enclosing TypeDecl.
   // I.e., NestedTypes, InnerTypes, AnonymousClasses, LocalClasses.
   private Collection TypeDecl.nestedTypes;
@@ -22,39 +131,12 @@ aspect InnerClasses {
     usedNestedTypes.add(typeDecl);
   }
   
-  int TypeDecl.constantPoolNameIndex = 1;
-
-  syn lazy String TypeDecl.constantPoolName() {
-    if(!isNestedType()) {
-      String packageName = packageName();
-      if(!packageName.equals("")) {
-        packageName = packageName.replace('.', '/') + "/";
-      }
-      return packageName + name();
-    }
-    else {
-      String prefix = enclosingType().constantPoolName();
-      if(isAnonymous()) {
-        int index = topLevelType().constantPoolNameIndex++;
-        return prefix + "$" + index;
-      }
-      else if(isLocalClass()) {
-        int index = topLevelType().constantPoolNameIndex++;
-        return prefix + "$" + index + name();
-      }
-      return prefix + "$" + name();
-    }
-  }
-
-  syn lazy String ArrayDecl.constantPoolName() = typeDescriptor();
-
+  // collect the set of variables used in the enclosing class(es)
   syn lazy Collection TypeDecl.enclosingVariables() {
     HashSet set = new HashSet();
-    for(TypeDecl e = this; e != null; e = e.enclosingType()) {
-      if(e.isLocalClass() || e.isAnonymous()) {
+    for(TypeDecl e = this; e != null; e = e.enclosingType())
+      if(e.isLocalClass() || e.isAnonymous())
         collectEnclosingVariables(set, e.enclosingType());
-      }
-    }
     if(isClassDecl()) {
       ClassDecl classDecl = (ClassDecl)this;
       if(classDecl.isNestedType() && classDecl.hasSuperclass())
@@ -69,12 +151,8 @@ aspect InnerClasses {
   }
   public void VarAccess.collectEnclosingVariables(HashSet set, TypeDecl typeDecl) {
     Variable v = decl();
-    if(!v.isInstanceVariable() && !v.isClassVariable() && v.hostType() == typeDecl) {
-      //if(Program.verbose()) {
-      //  System.out.println("Local variable " + v.name() + " in " + v.hostType().fullName() + " is used from " + hostType().fullName());
-      //}
+    if(!v.isInstanceVariable() && !v.isClassVariable() && v.hostType() == typeDecl)
       set.add(v);
-    }
     super.collectEnclosingVariables(set, typeDecl);
   }
 
@@ -98,6 +176,16 @@ aspect InnerClasses {
     accessorMap.put(key, accessor);
   }
 
+  public ASTNode TypeDecl.getAccessorSource(ASTNode accessor) {
+    Iterator i = accessorMap.entrySet().iterator();
+    while (i.hasNext()) {
+      Map.Entry entry = (Map.Entry) i.next();
+      if (entry.getValue() == accessor)
+        return (ASTNode) ((ArrayList) entry.getKey()).get(0);
+    }
+    return null;
+  }
+
   public MethodDecl MethodDecl.createAccessor(TypeDecl methodQualifier) {
     MethodDecl m = (MethodDecl)methodQualifier.getAccessor(this, "method");
     if(m != null) return m;
@@ -113,7 +201,7 @@ aspect InnerClasses {
     m = new MethodDecl(
       modifiers,
       type().createQualifiedAccess(),
-      "access$" + accessorIndex,
+      name() + "access$" + accessorIndex,
       (List)getParameterList().fullCopy(),
       (List)getExceptionList().fullCopy(),
       new Opt(
@@ -158,7 +246,7 @@ aspect InnerClasses {
     m = new MethodDecl(
       new Modifiers(new List().add(new Modifier("synthetic"))),
       type().createQualifiedAccess(),
-      "access$" + accessorIndex,
+      name() + "access$" + accessorIndex,
       parameters,
       new List(),
       new Opt(
@@ -189,7 +277,7 @@ aspect InnerClasses {
     m = new MethodDecl(
       modifiers,
       type().createQualifiedAccess(),
-      "access$" + accessorIndex,
+      "get$" + name() + "access$" + accessorIndex,
       parameters,
       new List(),
       new Opt(
@@ -223,7 +311,7 @@ aspect InnerClasses {
     m = new MethodDecl(
       modifiers,
       type().createQualifiedAccess(),
-      "access$" + accessorIndex,
+      "set$" + name() + "access$" + accessorIndex,
       parameters,
       new List(),
       new Opt(
@@ -327,17 +415,6 @@ aspect InnerClasses {
       m.addModifier(new Modifier("synthetic"));
       addMemberField(new FieldDeclaration(m, v.type().createQualifiedAccess(), "val$" + v.name(), new Opt()));
     }
-  }
-  public FieldDeclaration TypeDecl.createEnclosingVariable(Variable v) {
-    String name = "val$" + v.name();
-    FieldDeclaration f = (FieldDeclaration)getAccessor(this, name);
-    if(f != null) return f;
-    Modifiers m = new Modifiers();
-    m.addModifier(new Modifier("public"));
-    m.addModifier(new Modifier("synthetic"));
-    f = addMemberField(new FieldDeclaration(m, v.type().createQualifiedAccess(), name, new Opt()));
-    addAccessor(this, name, f);
-    return f;
   }
 
   // add val$name as parameters to the constructor

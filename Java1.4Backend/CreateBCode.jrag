@@ -481,29 +481,6 @@ aspect CreateBCode {
     }
   }
 
-  // no lazy since needed in phases when tree has been modified
-  public boolean TypeDecl.hasField(String name) {
-    if(!memberFields(name).isEmpty())
-      return true;
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof FieldDeclaration) {
-        FieldDeclaration decl = (FieldDeclaration)getBodyDecl(i);
-        if(decl.name().equals(name))
-          return true;
-      }
-    }
-    return false;
-  }
-
-  protected TypeDecl VarAccess.fieldQualifierType() {
-    if(hasPrevExpr())
-      return prevExpr().type();
-    TypeDecl typeDecl = hostType();
-    while(typeDecl != null && !typeDecl.hasField(name()))
-      typeDecl = typeDecl.enclosingType();
-    return typeDecl;
-  }
-  
   public void MethodAccess.createBCode(CodeGeneration gen) {
     createLoadQualifier(gen);
     if(decl().type().isUnknown()) {
@@ -540,15 +517,6 @@ aspect CreateBCode {
     }
   }
 
-  public TypeDecl MethodAccess.superAccessorTarget() {
-    TypeDecl targetDecl = prevExpr().type();
-    TypeDecl enclosing = hostType();
-    do {
-      enclosing = enclosing.enclosingType();
-    } while (!enclosing.instanceOf(targetDecl));
-    return enclosing;
-  }
-
   protected void MethodAccess.createLoadQualifier(CodeGeneration gen) {
     MethodDecl m = decl();
     if(hasPrevExpr()) {
@@ -565,27 +533,6 @@ aspect CreateBCode {
     }
   }
 
-  protected TypeDecl MethodAccess.methodQualifierType() {
-    if(hasPrevExpr())
-      return prevExpr().type();
-    TypeDecl typeDecl = hostType();
-    while(typeDecl != null && !typeDecl.hasMethod(name()))
-      typeDecl = typeDecl.enclosingType();
-    return typeDecl;
-  }
-
-  syn boolean TypeDecl.hasMethod(String id) {
-    if(!memberMethods(id).isEmpty()) return true;
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl decl = (MethodDecl)getBodyDecl(i);
-        if(decl.name().equals(id))
-          return true;
-      }
-    }
-    return false;
-  }
-  
   public void ArrayAccess.createBCode(CodeGeneration gen) {
     prevExpr().createBCode(gen);
     getExpr().createBCode(gen);
@@ -650,13 +597,6 @@ aspect CreateBCode {
     }
   }
   
-  protected TypeDecl Access.superConstructorQualifier(TypeDecl targetEnclosingType) {
-    TypeDecl enclosing = hostType();
-    while(!enclosing.instanceOf(targetEnclosingType))
-      enclosing = enclosing.enclosingType();
-    return enclosing;
-  }
- 
   public void SuperConstructorAccess.createBCode(CodeGeneration gen) {
     ConstructorDecl c = decl();
     
@@ -822,24 +762,6 @@ aspect CreateBCode {
     getExpr().createBCode(gen);
   }
 
-  inh TypeDecl ArrayInit.expectedType();
-  eq Program.getChild(int i).expectedType() = null;
-  eq ArrayCreationExpr.getArrayInit().expectedType() = type().componentType();
-  eq FieldDeclaration.getInit().expectedType() = type().componentType();
-  eq VariableDeclaration.getInit().expectedType() = type().componentType();
-  eq VariableDecl.getInit().expectedType() = null;
-  eq ArrayInit.getInit().expectedType() = expectedType().componentType();
-  
-  syn lazy int ArrayCreationExpr.numArrays() {
-    int i = type().dimension();
-    Access a = getTypeAccess();
-    while(a instanceof ArrayTypeAccess && !(a instanceof ArrayTypeWithSizeAccess)) {
-      i--;
-      a = ((ArrayTypeAccess)a).getAccess();
-    }
-    return i;
-  }
-  
   syn String TypeDecl.arrayTypeDescriptor() { throw new Error("Operation not supported"); }
   eq ArrayDecl.arrayTypeDescriptor() = typeDescriptor();
   eq ClassDecl.arrayTypeDescriptor() = constantPoolName();
@@ -919,18 +841,6 @@ aspect CreateBCode {
   public void LShiftExpr.createBCode(CodeGeneration gen) { emitShiftExpr(gen); }
   public void RShiftExpr.createBCode(CodeGeneration gen) { emitShiftExpr(gen); }
   public void URShiftExpr.createBCode(CodeGeneration gen) { emitShiftExpr(gen); }
-
-  syn TypeDecl TypeDecl.stringPromotion() = this;
-  eq ReferenceType.stringPromotion() = typeObject();
-  eq NullType.stringPromotion() = typeObject();
-  eq ByteType.stringPromotion() = typeInt();
-  eq ShortType.stringPromotion() = typeInt();
-
-  syn boolean ASTNode.isStringAdd() = false;
-  eq AddExpr.isStringAdd() = type().isString() && !isConstant();
-  
-  syn boolean AddExpr.firstStringAddPart() = type().isString() && !getLeftOperand().isStringAdd();
-  syn boolean AddExpr.lastStringAddPart() = !getParent().isStringAdd();
 
   public void AddExpr.createBCode(CodeGeneration gen) {
     if(!type().isString())
@@ -1616,7 +1526,7 @@ aspect CreateBCode {
       
       // emit string literal
       
-      StringLiteral.push(gen, prevExpr().type().referenceClassName());
+      StringLiteral.push(gen, prevExpr().type().jvmName());
       m.emitInvokeMethod(gen, hostType());
       gen.emitDup();
       f.emitStoreField(gen, hostType());

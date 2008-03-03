@@ -1,6 +1,31 @@
 aspect Java2Rewrites {
-  // add check for no errors
-  
+  int TypeDecl.constantPoolNameIndex = 1;
+
+  syn lazy String TypeDecl.jvmName() {
+    throw new Error("Jvm name only supported for reference types and not " + getClass().getName());
+  }
+  eq ReferenceType.jvmName() {
+    if(!isNestedType())
+      return fullName();
+    else if(isAnonymous() || isLocalClass())
+      return enclosingType().jvmName() + "$" + (topLevelType().constantPoolNameIndex++) + name();
+    else
+      return enclosingType().jvmName() + "$" + name();
+  }
+  eq ArrayDecl.jvmName() {
+    StringBuffer dim = new StringBuffer();
+    for(int i = 0; i < dimension(); i++)
+      dim.append("[");
+    return dim.toString() + elementType().jvmName(); 
+  }
+  eq ByteType.jvmName() = "B";
+  eq CharType.jvmName() = "C";
+  eq ShortType.jvmName() = "S";
+  eq IntType.jvmName() = "I";
+  eq LongType.jvmName() = "J";
+  eq FloatType.jvmName() = "F";
+  eq DoubleType.jvmName() = "D";
+  eq BooleanType.jvmName() = "Z";
 
   syn String TypeDecl.primitiveClassName() {
     throw new Error("primitiveClassName not supported for " + name() + " of type " + getClass().getName());
@@ -15,18 +40,11 @@ aspect Java2Rewrites {
   eq BooleanType.primitiveClassName() = "Boolean";
   eq VoidType.primitiveClassName() = "Void";
   
-  syn String TypeDecl.referenceClassName() {
-    throw new Error("referenceClassName not supported for " + name() + " of type " + getClass().getName());
-  }
-  
-  eq ReferenceType.referenceClassName() = constantPoolName().replace('/', '.');
-  eq ArrayDecl.referenceClassName() = typeDescriptor().replace('/', '.');
-
   syn String TypeDecl.referenceClassFieldName() {
     throw new Error("referenceClassFieldName not supported for " + name() + " of type " + getClass().getName());
   }
-  eq ReferenceType.referenceClassFieldName() = "class$" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
-  eq ArrayDecl.referenceClassFieldName() = "array" + referenceClassName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
+  eq ReferenceType.referenceClassFieldName() = "class$" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
+  eq ArrayDecl.referenceClassFieldName() = "array" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
   
   inh TypeDecl AssertStmt.hostType();
   
