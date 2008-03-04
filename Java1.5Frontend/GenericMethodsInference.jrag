@@ -85,9 +85,9 @@ aspect GenericMethodsInference {
 
   class Constraints {
     static class ConstraintSet {
-      public ArrayList supertypeConstraints = new ArrayList(4);
-      public ArrayList subtypeConstraints = new ArrayList(4);
-      public ArrayList equaltypeConstraints = new ArrayList(4);
+      public Collection supertypeConstraints = new HashSet(4);
+      public Collection subtypeConstraints = new HashSet(4);
+      public Collection equaltypeConstraints = new HashSet(4);
       public TypeDecl typeArgument;
     }
     private Collection typeVariables;
@@ -153,9 +153,8 @@ aspect GenericMethodsInference {
       for(Iterator iter = typeVariables.iterator(); iter.hasNext(); ) {
         TypeVariable T = (TypeVariable)iter.next();
         ConstraintSet set = (ConstraintSet)constraintsMap.get(T);
-        Collection equalityConstraints = set.equaltypeConstraints;
         boolean done = false;
-        for(Iterator i2 = equalityConstraints.iterator(); !done && i2.hasNext(); ) {
+        for(Iterator i2 = set.equaltypeConstraints.iterator(); !done && i2.hasNext(); ) {
           TypeDecl U = (TypeDecl)i2.next();
           if(!typeVariables.contains(U)) {
             replaceEqualityConstraints(T, U);   // replace equality constraints for other type variables
@@ -165,13 +164,15 @@ aspect GenericMethodsInference {
             done = true;                        // continue on next type variable
           }
           else if(T == U) {
-            i2.remove();                        // discard constraint
+            //i2.remove();                        // discard constraint
           }
           else {
             replaceAllConstraints(T, U);         // rewrite all constraints involving T to use U instead
             done = true;                        // continue on next type variable
           }
         }
+        if(set.typeArgument == null && set.equaltypeConstraints.size() == 1 && set.equaltypeConstraints.contains(T))
+        	set.typeArgument = T;
       }
     }
 
@@ -193,12 +194,16 @@ aspect GenericMethodsInference {
       }
     }
     
-    private void replaceConstraints(ArrayList constraints, TypeDecl before, TypeDecl after) {
-      for(ListIterator i2 = constraints.listIterator(); i2.hasNext(); ) {
+    private void replaceConstraints(Collection constraints, TypeDecl before, TypeDecl after) {
+      Collection newConstraints = new ArrayList();
+      for(Iterator i2 = constraints.iterator(); i2.hasNext(); ) {
         TypeDecl U = (TypeDecl)i2.next();
-        if(U == before) //  TODO: fix parameterized type
-          i2.set(after);
+        if(U == before) { //  TODO: fix parameterized type
+          i2.remove();
+          newConstraints.add(after);
+        }
       }
+      constraints.addAll(newConstraints);
     }
 
     public void resolveSubtypeConstraints() {
