@@ -89,17 +89,6 @@ aspect GenericsSubtype {
   eq WildcardSuperType.supertypeRawInterfaceDecl(RawInterfaceDecl type) = superType().subtype(type);
   eq WildcardSuperType.supertypeTypeVariable(TypeVariable type) = superType().subtype(type);
   eq WildcardSuperType.supertypeArrayDecl(ArrayDecl type) = superType().subtype(type);
-  // TODO: Should it be the other order for WildcardSuperType?
-  /*
-  eq WildcardSuperType.supertypeClassDecl(ClassDecl type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeInterfaceDecl(InterfaceDecl type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeParClassDecl(ParClassDecl type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeParInterfaceDecl(ParInterfaceDecl type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeRawClassDecl(RawClassDecl type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeRawInterfaceDecl(RawInterfaceDecl type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeTypeVariable(TypeVariable type) = type.subtype(superType());
-  eq WildcardSuperType.supertypeArrayDecl(ArrayDecl type) = type.subtype(superType());
-  */
 
   syn boolean TypeDecl.isWildcard() = false;
   eq AbstractWildcardType.isWildcard() = true;
@@ -144,11 +133,39 @@ aspect GenericsSubtype {
   eq AbstractWildcardType.matchingTypeArgument(TypeDecl type) = type.subtype(this);
   eq TypeVariable.matchingTypeArgument(TypeDecl type) = true;
 
+  syn boolean TypeDecl.containedIn(TypeDecl type) circular [true] {
+    if(type == this)
+      return true;
+    else if(type instanceof WildcardExtendsType)
+      return this.subtype(((WildcardExtendsType)type).extendsType());
+    else if(type instanceof WildcardSuperType)
+      return ((WildcardSuperType)type).superType().subtype(this);
+    else
+      return false;
+  }
+  eq WildcardExtendsType.containedIn(TypeDecl type) {
+    if(type == this)
+      return true;
+    else if(type instanceof WildcardExtendsType)
+      return extendsType().subtype(((WildcardExtendsType)type).extendsType());
+    else 
+      return false;
+  }
+  eq WildcardSuperType.containedIn(TypeDecl type) {
+    if(type == this)
+      return true;
+    else if(type instanceof WildcardSuperType)
+      return ((WildcardSuperType)type).superType().subtype(superType());
+    else 
+      return false;
+  }
+
   eq ParClassDecl.supertypeParClassDecl(ParClassDecl type) {
     if(type.genericDecl() == genericDecl() &&
        type.getNumArgument() == getNumArgument()) {
       for(int i = 0; i < getNumArgument(); i++)
-        if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
+        if(!type.getArgument(i).type().containedIn(getArgument(i).type()))
+        //if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
           return false;
       return true;
     }
@@ -160,7 +177,8 @@ aspect GenericsSubtype {
     if(type.genericDecl() == genericDecl() &&
        type.getNumArgument() == getNumArgument()) {
       for(int i = 0; i < getNumArgument(); i++)
-        if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
+        if(!type.getArgument(i).type().containedIn(getArgument(i).type()))
+        //if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
           return false;
       return true;
     }
@@ -170,7 +188,8 @@ aspect GenericsSubtype {
     if(type.genericDecl() == genericDecl() &&
        type.getNumArgument() == getNumArgument()) {
       for(int i = 0; i < getNumArgument(); i++)
-        if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
+        if(!type.getArgument(i).type().containedIn(getArgument(i).type()))
+        //if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
           return false;
       return true;
     }
@@ -209,7 +228,8 @@ aspect GenericsSubtype {
     for(int i = 0; i < type.getNumTypeBound(); i++) {
       boolean found = false;
       for(int j = 0; !found && j < getNumTypeBound(); j++) {
-        if(type.getTypeBound(i).type().subtype(getTypeBound(j).type()))
+        if(type.getSubstitutedTypeBound(i, type).type().subtype(getTypeBound(j).type()))
+        //if(type.getTypeBound(i).type().subtype(getTypeBound(j).type()))
           found = true;
       }
       if(!found)
@@ -218,15 +238,36 @@ aspect GenericsSubtype {
     return true;
   }
 
+  syn lazy Access TypeVariable.getSubstitutedTypeBound(int i, TypeDecl type) {
+    Access bound = getTypeBound(i);
+    if(!bound.type().usesTypeVariable())
+      return bound;
+    final TypeDecl typeDecl = type;
+    Access access = bound.type().substitute(
+      new Parameterization() {
+    		public boolean isRawType() { 
+    			return false; 
+    		}
+    		public TypeDecl substitute(TypeVariable typeVariable) {
+    			return typeVariable == TypeVariable.this ? typeDecl : typeVariable;
+    		} 
+    	}
+    );
+    access.setParent(this);
+    return access;
+  }
+
   eq TypeVariable.supertypeClassDecl(ClassDecl type) {
     for(int i = 0; i < getNumTypeBound(); i++)
-      if(!type.subtype(getTypeBound(i).type()))
+      if(!type.subtype(getSubstitutedTypeBound(i, type).type()))
+      //if(!type.subtype(getTypeBound(i).type()))
         return false;
     return true;
   }
   eq TypeVariable.supertypeInterfaceDecl(InterfaceDecl type) {
     for(int i = 0; i < getNumTypeBound(); i++)
-      if(!type.subtype(getTypeBound(i).type()))
+      if(!type.subtype(getSubstitutedTypeBound(i, type).type()))
+      //if(!type.subtype(getTypeBound(i).type()))
         return false;
     return true;
   }
