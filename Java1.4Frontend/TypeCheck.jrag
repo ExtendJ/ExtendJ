@@ -407,7 +407,7 @@ aspect TypeCheck {
     // 8.4.5
     if(!returnType().isVoid() && !hasResult())
       error("return stmt must have an expression in non void methods");
-    if(hostBodyDecl() instanceof InstanceInitializer || hostBodyDecl() instanceof StaticInitializer)
+    if(enclosingBodyDecl() instanceof InstanceInitializer || enclosingBodyDecl() instanceof StaticInitializer)
       error("Initializers may not return");
 
   }
@@ -419,6 +419,75 @@ aspect TypeCheck {
       TypeDecl typeDecl = getException(i).type();
       if(!typeDecl.instanceOf(exceptionType))
         error(signature() + " throws non throwable type " + typeDecl.fullName());
+    }
+  }
+
+  public void ClassInstanceExpr.typeCheck() {
+    if(isQualified() && qualifier().isTypeAccess() && !qualifier().type().isUnknown())
+      error("*** The expression in a qualified class instance expr must not be a type name");
+    // 15.9
+    if(isQualified() && !type().isInnerClass() && !((ClassDecl)type()).superclass().isInnerClass() && !type().isUnknown()) {
+      error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
+    }
+    if(!type().isClassDecl()) {
+      error("*** Can only instantiate classes, which " + type().typeName() + " is not"); 
+    }
+    typeCheckEnclosingInstance();
+    typeCheckAnonymousSuperclassEnclosingInstance();
+  }
+
+  public void ClassInstanceExpr.typeCheckEnclosingInstance() {
+    TypeDecl C = type();
+    if(!C.isInnerClass())
+      return;
+
+    TypeDecl enclosing = null;
+    if(C.isAnonymous()) {
+      if(noEnclosingInstance()) {
+        enclosing = null;
+      }
+      else {
+        enclosing = hostType();
+      }
+    }
+    else if(C.isLocalClass()) {
+      if(C.inStaticContext()) {
+        enclosing = null;
+      }
+      else if(noEnclosingInstance()) {
+        enclosing = unknownType();
+      }
+      else {
+        TypeDecl nest = hostType();
+        while(nest != null && !nest.instanceOf(C.enclosingType()))
+          nest = nest.enclosingType();
+        enclosing = nest;
+      }
+    }
+    else if(C.isMemberType()) {
+      if(!isQualified()) {
+        if(noEnclosingInstance()) {
+          error("No enclosing instance to initialize " + C.typeName() + " with");
+          //System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.typeName() + " is in a static context when instantiated in " + this);
+          enclosing = unknownType();
+        }
+        else {
+          TypeDecl nest = hostType();
+          while(nest != null && !nest.instanceOf(C.enclosingType()))
+            nest = nest.enclosingType();
+          enclosing = nest == null ? unknownType() : nest;
+        }
+      }
+      else {
+        enclosing = enclosingInstance();
+      }
+    }
+    if(enclosing != null && !enclosing.instanceOf(type().enclosingType())) {
+      String msg = enclosing == null ? "None" : enclosing.typeName();
+      error("*** Can not instantiate " + type().typeName() + " with the enclosing instance " + msg + " due to incorrect enclosing instance");
+    }
+    else if(!isQualified() && C.isMemberType() && inExplicitConstructorInvocation() && enclosing == hostType()) {
+      error("*** The innermost enclosing instance of type " + enclosing.typeName() + " is this which is not yet initialized here.");
     }
   }
 
@@ -439,100 +508,38 @@ aspect TypeCheck {
   eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = unknownType();
 
   syn boolean ClassInstanceExpr.noEnclosingInstance() = isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
-  
-  public void ClassInstanceExpr.typeCheck() {
-    if(isQualified() && qualifier().isTypeAccess() && !qualifier().type().isUnknown())
-      error("*** The expression in a qualified class instance expr must not be a type name");
-    // 15.9
-    if(isQualified() && !type().isInnerClass() && !((ClassDecl)type()).superclass().isInnerClass() && !type().isUnknown()) {
-      error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
-    }
-    if(!type().isClassDecl()) {
-      error("*** Can only instantiate classes, which " + type().typeName() + " is not"); 
-    }
-    TypeDecl C = type();
-    if(C.isInnerClass()) {
-      TypeDecl enclosing = null;
-      if(C.isAnonymous()) {
-        if(noEnclosingInstance()) {
-          enclosing = null;
-        }
-        else {
-          enclosing = hostType();
-        }
-      }
-      else if(C.isLocalClass()) {
-        TypeDecl O = C.enclosingType();
-        int n = 0;
-        for(TypeDecl nest = hostType(); nest != O; nest = nest.enclosingType())
-          n++;
-        if(C.inStaticContext()) {
-          enclosing = null;
+
+  public void ClassInstanceExpr.typeCheckAnonymousSuperclassEnclosingInstance() {
+    if(type().isAnonymous() && ((ClassDecl)type()).superclass().isInnerType()) {
+      TypeDecl S = ((ClassDecl)type()).superclass();
+      if(S.isLocalClass()) {
+        if(S.inStaticContext()) {
         }
         else if(noEnclosingInstance()) {
-          enclosing = unknownType();
+          error("*** No enclosing instance to class " + type().typeName() + " due to static context");
         }
-        else {
-          enclosing = O;
-        }
+        else if(inExplicitConstructorInvocation())
+          error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName() + " since this is not initialized yet");
       }
-      else if(C.isMemberType()) {
+      else if(S.isMemberType()) {
         if(!isQualified()) {
+          // 15.9.2 2nd paragraph
           if(noEnclosingInstance()) {
-            error("No enclosing instance to initialize " + C.typeName() + " with");
-            //System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.typeName() + " is in a static context when instantiated in " + this);
-            enclosing = unknownType();
+            error("*** No enclosing instance to class " + type().typeName() + " due to static context");
           }
           else {
             TypeDecl nest = hostType();
-            while(nest != null && !nest.instanceOf(C.enclosingType()))
+            while(nest != null && !nest.instanceOf(S.enclosingType()))
               nest = nest.enclosingType();
-            enclosing = nest == null ? unknownType() : nest;
-          }
-        }
-        else {
-          enclosing = enclosingInstance();
-        }
-      }
-      if(enclosing != null && !enclosing.instanceOf(type().enclosingType())) {
-        String msg = enclosing == null ? "None" : enclosing.typeName();
-        error("*** Can not instantiate " + type().typeName() + " with the enclosing instance " + msg + " due to incorrect enclosing instance");
-      }
-      else if(!isQualified() && C.isMemberType() && inExplicitConstructorInvocation() && enclosing == hostType()) {
-        error("*** The innermost enclosing instance of type " + enclosing.typeName() + " is this which is not yet initialized here.");
-      }
-      if(type().isAnonymous() && ((ClassDecl)type()).superclass().isInnerType()) {
-        TypeDecl S = ((ClassDecl)type()).superclass();
-        if(S.isLocalClass()) {
-          if(S.inStaticContext()) {
-          }
-          else if(noEnclosingInstance()) {
-            error("*** No enclosing instance to class " + type().typeName() + " due to static context");
-          }
-          else if(inExplicitConstructorInvocation())
-            error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName() + " since this is not initialized yet");
-        }
-        else if(S.isMemberType()) {
-          if(!isQualified()) {
-            // 15.9.2 2nd paragraph
-            if(noEnclosingInstance()) {
-              error("*** No enclosing instance to class " + type().typeName() + " due to static context");
+            if(nest == null) {
+              error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName());
             }
-            else {
-              TypeDecl nest = hostType();
-              while(nest != null && !nest.instanceOf(S.enclosingType()))
-                nest = nest.enclosingType();
-              if(nest == null) {
-                error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName());
-              }
-              else if(inExplicitConstructorInvocation()) {
-                error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName() + " since this is not initialized yet");
-              }
+            else if(inExplicitConstructorInvocation()) {
+              error("*** No enclosing instance to superclass " + S.typeName() + " of " + type().typeName() + " since this is not initialized yet");
             }
           }
         }
       }
-      
     }
   }
 
