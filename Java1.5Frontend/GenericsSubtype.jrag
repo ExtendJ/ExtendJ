@@ -5,13 +5,13 @@ aspect GenericsSubtype {
   syn boolean TypeDecl.supertypeGenericClassDecl(GenericClassDecl type) =
     supertypeClassDecl(type);
   eq RawClassDecl.supertypeGenericClassDecl(GenericClassDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
 
   eq GenericInterfaceDecl.subtype(TypeDecl type) = type.supertypeGenericInterfaceDecl(this);
   syn boolean TypeDecl.supertypeGenericInterfaceDecl(GenericInterfaceDecl type) =
     this == type || supertypeInterfaceDecl(type);
   eq RawInterfaceDecl.supertypeGenericInterfaceDecl(GenericInterfaceDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
 
   eq RawClassDecl.subtype(TypeDecl type) = type.supertypeRawClassDecl(this);
   syn boolean TypeDecl.supertypeRawClassDecl(RawClassDecl type) =
@@ -23,11 +23,11 @@ aspect GenericsSubtype {
    
   // 5.1.9 Unchecked Conversion
   eq ParClassDecl.supertypeGenericClassDecl(GenericClassDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
   eq ParInterfaceDecl.supertypeGenericClassDecl(GenericClassDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
   eq ParInterfaceDecl.supertypeGenericInterfaceDecl(GenericInterfaceDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
 
 
   // 5.1.10 Capture Conversion
@@ -99,18 +99,18 @@ aspect GenericsSubtype {
     super.supertypeClassDecl(type);
 
   eq RawClassDecl.supertypeClassDecl(ClassDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
   eq RawClassDecl.supertypeInterfaceDecl(InterfaceDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
   eq RawClassDecl.supertypeParClassDecl(ParClassDecl type) =
-    type.genericDecl().subtype(genericDecl());
+    type.genericDecl().original().subtype(genericDecl().original());
 
   eq RawInterfaceDecl.supertypeClassDecl(ClassDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
   eq RawInterfaceDecl.supertypeInterfaceDecl(InterfaceDecl type) =
-    type.subtype(genericDecl());
+    type.subtype(genericDecl().original());
   eq RawInterfaceDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) =
-    type.genericDecl().subtype(genericDecl());
+    type.genericDecl().original().subtype(genericDecl().original());
 
   eq ParClassDecl.subtype(TypeDecl type) = type.supertypeParClassDecl(this);
   syn boolean TypeDecl.supertypeParClassDecl(ParClassDecl type) =
@@ -121,17 +121,13 @@ aspect GenericsSubtype {
     supertypeInterfaceDecl(type);
 
   eq ParClassDecl.supertypeRawClassDecl(RawClassDecl type) =
-    type.genericDecl().subtype(genericDecl());
+    type.genericDecl().original().subtype(genericDecl().original());
   eq ParClassDecl.supertypeRawInterfaceDecl(RawInterfaceDecl type) =
-    type.genericDecl().subtype(genericDecl());
+    type.genericDecl().original().subtype(genericDecl().original());
   eq ParInterfaceDecl.supertypeRawClassDecl(RawClassDecl type) =
-    type.genericDecl().subtype(genericDecl());
+    type.genericDecl().original().subtype(genericDecl().original());
   eq ParInterfaceDecl.supertypeRawInterfaceDecl(RawInterfaceDecl type) =
-    type.genericDecl().subtype(genericDecl());
-
-  syn boolean TypeDecl.matchingTypeArgument(TypeDecl type) circular [true] = this == type || type instanceof TypeVariable;
-  eq AbstractWildcardType.matchingTypeArgument(TypeDecl type) = type.subtype(this);
-  eq TypeVariable.matchingTypeArgument(TypeDecl type) = true;
+    type.genericDecl().original().subtype(genericDecl().original());
 
   syn boolean TypeDecl.containedIn(TypeDecl type) circular [true] {
     if(type == this || type instanceof WildcardType) 
@@ -142,7 +138,8 @@ aspect GenericsSubtype {
       return ((WildcardSuperType)type).superType().subtype(this);
     else if(type instanceof TypeVariable)
       return subtype(type);
-    return false;
+    return sameStructure(type);
+    //return false;
   }
   eq WildcardExtendsType.containedIn(TypeDecl type) {
     if(type == this || type instanceof WildcardType) 
@@ -160,14 +157,79 @@ aspect GenericsSubtype {
     else 
       return false;
   }
+  eq WildcardType.containedIn(TypeDecl type) {
+    if(type == this)
+      return true;
+    else if(type instanceof WildcardExtendsType)
+      return typeObject().subtype(((WildcardExtendsType)type).extendsType());
+    else 
+      return false;
+  }
+
+  syn boolean TypeDecl.sameStructure(TypeDecl t) circular [true] = t == this;
+  eq ParClassDecl.sameStructure(TypeDecl t) {
+    if(!(t instanceof ParClassDecl))
+      return false;
+    ParClassDecl type = (ParClassDecl)t;
+    if(type.genericDecl().original() == genericDecl().original() &&
+       type.getNumArgument() == getNumArgument()) {
+      for(int i = 0; i < getNumArgument(); i++)
+        if(!type.getArgument(i).type().sameStructure(getArgument(i).type()))
+          return false;
+      if(isNestedType() && type.isNestedType())
+        return type.enclosingType().sameStructure(enclosingType());
+      return true;
+    }
+    return false;
+  }
+  eq ParInterfaceDecl.sameStructure(TypeDecl t) {
+    if(!(t instanceof ParInterfaceDecl))
+      return false;
+    ParInterfaceDecl type = (ParInterfaceDecl)t;
+    if(type.genericDecl().original() == genericDecl().original() &&
+       type.getNumArgument() == getNumArgument()) {
+      for(int i = 0; i < getNumArgument(); i++)
+        if(!type.getArgument(i).type().sameStructure(getArgument(i).type()))
+          return false;
+      if(isNestedType() && type.isNestedType())
+        return type.enclosingType().sameStructure(enclosingType());
+      return true;
+    }
+    return false;
+  }
+  eq WildcardExtendsType.sameStructure(TypeDecl t) =
+    super.sameStructure(t) || 
+    t instanceof WildcardExtendsType && ((WildcardExtendsType)t).extendsType().sameStructure(extendsType());
+  eq WildcardSuperType.sameStructure(TypeDecl t) =
+    super.sameStructure(t) || 
+    t instanceof WildcardSuperType && ((WildcardSuperType)t).superType().sameStructure(superType());
+  eq TypeVariable.sameStructure(TypeDecl t) {
+    if(!(t instanceof TypeVariable))
+      return false;
+    if(t == this)
+      return true;
+    TypeVariable type = (TypeVariable)t;
+    if(type.getNumTypeBound() != getNumTypeBound())
+      return false;
+    for(int i = 0; i < getNumTypeBound(); i++) {
+      boolean found = false;
+      for(int j = i; !found && j < getNumTypeBound(); j++)
+        if(getTypeBound(i).type().sameStructure(type.getTypeBound(j).type()))
+          found = true;
+      if(!found)
+        return false;
+    }
+    return true;
+  }
 
   eq ParClassDecl.supertypeParClassDecl(ParClassDecl type) {
-    if(type.genericDecl() == genericDecl() &&
+    if(type.genericDecl().original() == genericDecl().original() &&
        type.getNumArgument() == getNumArgument()) {
       for(int i = 0; i < getNumArgument(); i++)
         if(!type.getArgument(i).type().containedIn(getArgument(i).type()))
-        //if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
           return false;
+      if(isNestedType() && type.isNestedType())
+        return type.enclosingType().subtype(enclosingType());
       return true;
     }
     return supertypeClassDecl(type);
@@ -175,36 +237,38 @@ aspect GenericsSubtype {
   eq ParClassDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) = false;
 
   eq ParInterfaceDecl.supertypeParClassDecl(ParClassDecl type) {
-    if(type.genericDecl() == genericDecl() &&
+    if(type.genericDecl().original() == genericDecl().original() &&
        type.getNumArgument() == getNumArgument()) {
       for(int i = 0; i < getNumArgument(); i++)
         if(!type.getArgument(i).type().containedIn(getArgument(i).type()))
-        //if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
           return false;
+      if(isNestedType() && type.isNestedType())
+        return type.enclosingType().subtype(enclosingType());
       return true;
     }
     return supertypeClassDecl(type);
   }
   eq ParInterfaceDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) {
-    if(type.genericDecl() == genericDecl() &&
+    if(type.genericDecl().original() == genericDecl().original() &&
        type.getNumArgument() == getNumArgument()) {
       for(int i = 0; i < getNumArgument(); i++)
         if(!type.getArgument(i).type().containedIn(getArgument(i).type()))
-        //if(!getArgument(i).type().matchingTypeArgument(type.getArgument(i).type()))
           return false;
+      if(isNestedType() && type.isNestedType())
+        return type.enclosingType().subtype(enclosingType());
       return true;
     }
     return supertypeInterfaceDecl(type);
   }
 
   eq GenericClassDecl.supertypeParClassDecl(ParClassDecl type) =
-    type.genericDecl().subtype(this);
+    type.genericDecl().original().subtype(this);
   eq GenericClassDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) =
-    type.genericDecl().subtype(this);
+    type.genericDecl().original().subtype(this);
   eq GenericInterfaceDecl.supertypeParClassDecl(ParClassDecl type) =
-    type.genericDecl().subtype(this);
+    type.genericDecl().original().subtype(this);
   eq GenericInterfaceDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) =
-    type.genericDecl().subtype(this);
+    type.genericDecl().original().subtype(this);
   
   eq TypeVariable.supertypeArrayDecl(ArrayDecl type) {
     for(int i = 0; i < getNumTypeBound(); i++)
@@ -230,7 +294,6 @@ aspect GenericsSubtype {
       boolean found = false;
       for(int j = 0; !found && j < getNumTypeBound(); j++) {
         if(type.getSubstitutedTypeBound(i, this).type().subtype(getTypeBound(j).type()))
-        //if(type.getTypeBound(i).type().subtype(getTypeBound(j).type()))
           found = true;
       }
       if(!found)
@@ -261,14 +324,12 @@ aspect GenericsSubtype {
   eq TypeVariable.supertypeClassDecl(ClassDecl type) {
     for(int i = 0; i < getNumTypeBound(); i++)
       if(!type.subtype(getSubstitutedTypeBound(i, type).type()))
-      //if(!type.subtype(getTypeBound(i).type()))
         return false;
     return true;
   }
   eq TypeVariable.supertypeInterfaceDecl(InterfaceDecl type) {
     for(int i = 0; i < getNumTypeBound(); i++)
       if(!type.subtype(getSubstitutedTypeBound(i, type).type()))
-      //if(!type.subtype(getTypeBound(i).type()))
         return false;
     return true;
   }
@@ -413,7 +474,36 @@ aspect GenericsSubtype {
   syn boolean TypeDecl.supertypeVoidType(VoidType type) = false;
   eq VoidType.supertypeVoidType(VoidType type) = true;
 
-    
+  eq ClassDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
+  eq InterfaceDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
+  eq GenericClassDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
+  eq GenericInterfaceDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
 
+  eq ClassDeclSubstituted.subtype(TypeDecl type) = 
+    type.supertypeClassDeclSubstituted(this);
+  syn boolean TypeDecl.supertypeClassDeclSubstituted(ClassDeclSubstituted type) =
+    supertypeClassDecl(type);
+  eq ClassDeclSubstituted.supertypeClassDeclSubstituted(ClassDeclSubstituted type) =
+    original() == type.original() && type.enclosingType().subtype(enclosingType()) || super.supertypeClassDeclSubstituted(type);
 
+  eq InterfaceDeclSubstituted.subtype(TypeDecl type) = 
+    type.supertypeInterfaceDeclSubstituted(this);
+  syn boolean TypeDecl.supertypeInterfaceDeclSubstituted(InterfaceDeclSubstituted type) =
+    supertypeInterfaceDecl(type);
+  eq InterfaceDeclSubstituted.supertypeInterfaceDeclSubstituted(InterfaceDeclSubstituted type) =
+    original() == type.original() && type.enclosingType().subtype(enclosingType()) || super.supertypeInterfaceDeclSubstituted(type);
+
+  eq GenericClassDeclSubstituted.subtype(TypeDecl type) =
+    type.supertypeGenericClassDeclSubstituted(this);
+  syn boolean TypeDecl.supertypeGenericClassDeclSubstituted(GenericClassDeclSubstituted type) =
+    supertypeGenericClassDecl(type);
+  eq GenericClassDeclSubstituted.supertypeGenericClassDeclSubstituted(GenericClassDeclSubstituted type) =
+    original() == type.original() && type.enclosingType().subtype(enclosingType()) || super.supertypeGenericClassDeclSubstituted(type);
+
+  eq GenericInterfaceDeclSubstituted.subtype(TypeDecl type) =
+    type.supertypeGenericInterfaceDeclSubstituted(this);
+  syn boolean TypeDecl.supertypeGenericInterfaceDeclSubstituted(GenericInterfaceDeclSubstituted type) =
+    supertypeGenericInterfaceDecl(type);
+  eq GenericInterfaceDeclSubstituted.supertypeGenericInterfaceDeclSubstituted(GenericInterfaceDeclSubstituted type) =
+    original() == type.original() && type.enclosingType().subtype(enclosingType()) || super.supertypeGenericInterfaceDeclSubstituted(type);
 }
