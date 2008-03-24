@@ -28,6 +28,14 @@ aspect Generics {
   refine TypeAnalysis eq ClassDecl.castingConversionTo(TypeDecl type) {
     TypeDecl S = this;
     TypeDecl T = type;
+    if(T.isTypeVariable()) {
+      TypeVariable t = (TypeVariable)type;
+      if(t.getNumTypeBound() == 0) return true;
+      for(int i = 0; i < t.getNumTypeBound(); i++)
+        if(castingConversionTo(t.getTypeBound(i).type()))
+          return true;
+      return false;
+    }
     if(T.isClassDecl() && (S.erasure() != S || T.erasure() != T))
         return S.erasure().castingConversionTo(T.erasure());
     return TypeAnalysis.ClassDecl.castingConversionTo(type);
@@ -36,12 +44,43 @@ aspect Generics {
   refine TypeAnalysis eq InterfaceDecl.castingConversionTo(TypeDecl type) {
     TypeDecl S = this;
     TypeDecl T = type;
-    if(T.isInterfaceDecl()) {
-      if(T.isFinal())
-        return T.instanceOf(S);
+    if(T.isArrayDecl())
+      return T.instanceOf(S);
+    else if(!T.isFinal()) {
       return true;
     }
-    return TypeAnalysis.InterfaceDecl.castingConversionTo(type);
+    else {
+      return T.instanceOf(S);
+    }
+  }
+
+  eq TypeVariable.castingConversionTo(TypeDecl type) {
+    if(getNumTypeBound() == 0) return true;
+    for(int i = 0; i < getNumTypeBound(); i++)
+      if(getTypeBound(i).type().castingConversionTo(type))
+        return true;
+    return false;
+  }
+
+  refine TypeAnalysis eq ArrayDecl.castingConversionTo(TypeDecl type) {
+    TypeDecl S = this;
+    TypeDecl T = type;
+    if(T.isTypeVariable()) {
+      TypeVariable t = (TypeVariable)T;
+      if(t.getNumTypeBound() == 0) return true;
+      for(int i = 0; i < t.getNumTypeBound(); i++) {
+        TypeDecl bound = t.getTypeBound(i).type();
+        if(bound.isObject() || bound == typeSerializable() || bound == typeCloneable())
+          return true;
+        if(bound.isTypeVariable() && castingConversionTo(bound))
+          return true;
+        if(bound.isArrayDecl() && castingConversionTo(bound))
+          return true;
+      }
+      return false;
+    }
+    else
+      return TypeAnalysis.ArrayDecl.castingConversionTo(type);
   }
 
   refine TypeAnalysis eq ClassAccess.type() {
