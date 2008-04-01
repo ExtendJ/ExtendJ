@@ -1,21 +1,3 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- * 
- * Copyright (c) 2005-2008, Torbjorn Ekman
- * All rights reserved.
- */
-
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- * 
- * Copyright (c) 2005-2008, Torbjorn Ekman
- * All rights reserved.
- */
-
 /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *
  * This file is part of Beaver Parser Generator.                       *
  * Copyright (C) 2003,2004 Alexander Demenchuk <alder@softanvil.com>.  *
