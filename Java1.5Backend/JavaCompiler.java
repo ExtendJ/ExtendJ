@@ -16,7 +16,6 @@ class JavaCompiler extends Frontend {
   }
 
   public static boolean compile(String args[]) {
-    Literal.parseLong("0x7");
     return new JavaCompiler().process(
         args,
         new BytecodeParser(),
