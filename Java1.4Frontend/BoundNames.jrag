@@ -91,4 +91,40 @@ aspect BoundNames {
     return new BoundTypeAccess("", name(), this);
   }
   eq BoundTypeAccess.decls() = SimpleSet.emptySet.add(getTypeDecl());
+
+  rewrite BytecodeTypeAccess {
+    to Access {
+      if(name().indexOf("$") == -1)
+        return new TypeAccess(packageName(), name());
+      else {
+        String[] names = name().split("\\$");
+        Access a = null; // the resulting access
+        String newName = null; // the subname to try
+        TypeDecl type = null; // qualifying type if one
+        for(int i = 0; i < names.length; i++) {
+          newName = newName == null ? names[i] : (newName + "$" + names[i]);
+          SimpleSet set;
+          if(type != null)
+            set = type.memberTypes(newName);
+          else if(packageName().equals(""))
+            set = lookupType(newName);
+          else {
+            TypeDecl typeDecl = lookupType(packageName(), newName);
+            set = SimpleSet.emptySet;
+            if(typeDecl != null)
+              set = set.add(typeDecl);
+          }
+          if(!set.isEmpty()) {
+            a = a == null ? new TypeAccess(packageName(), newName) : a.qualifiesAccess(new TypeAccess(newName));
+            type = (TypeDecl)set.iterator().next();
+            newName = null; // reset subname
+          }
+        }
+        if(a == null) {
+          a = new TypeAccess(packageName(), name());
+        }
+        return a;
+      }
+    }
+  }
 }

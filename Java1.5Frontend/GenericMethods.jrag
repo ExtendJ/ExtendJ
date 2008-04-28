@@ -15,7 +15,7 @@ aspect GenericMethods {
         error("can not have type parameters on a non generic method");
       else {
         ParMethodDecl m = (ParMethodDecl)decl();
-        if(m.numTypeParameter() != getNumTypeArgument())
+        if(!(m instanceof RawMethodDecl) && m.numTypeParameter() != getNumTypeArgument())
           error("generic method " + m.signature() + " requires " + m.numTypeParameter() + " type arguments");
         else {
         }
@@ -25,7 +25,8 @@ aspect GenericMethods {
 
   syn lazy final List GenericMethodDecl.getParMethodDeclList() = new List();
   syn lazy final List GenericConstructorDecl.getParConstructorDeclList() = new List();
-
+  syn lazy final MethodDecl GenericMethodDecl.rawMethodDecl() = lookupParMethodDecl(new ArrayList());
+  //syn lazy final ParConstructorDecl GenericConstructorDecl.rawConstructorDecl() = lookupParConstructorDecl(new ArrayList());
 
   inh lazy GenericMethodDecl ParMethodDecl.genericMethodDecl();
   eq GenericMethodDecl.getParMethodDecl(int i).genericMethodDecl() = this;
@@ -37,7 +38,11 @@ aspect GenericMethods {
   syn lazy MethodDecl GenericMethodDecl.lookupParMethodDecl(ArrayList typeArguments) {
     l: for(int i = 0; i < getNumParMethodDecl(); i++) {
       ParMethodDecl decl = getParMethodDecl(i);
-      if(decl.getNumTypeArgument() == typeArguments.size()) {
+      if(decl instanceof RawMethodDecl) {
+        if(typeArguments.isEmpty())
+          return decl;
+      }
+      else if(decl.getNumTypeArgument() == typeArguments.size()) {
         for(int j = 0; j < decl.getNumTypeArgument(); j++)
           if(decl.getTypeArgument(j).type() != typeArguments.get(j))
             continue l;
@@ -48,13 +53,19 @@ aspect GenericMethods {
   }
 
   public ParMethodDecl GenericMethodDecl.p(ArrayList typeArguments) {
-    ParMethodDecl methodDecl = new ParMethodDecl();
+    ParMethodDecl methodDecl = typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl();
     addParMethodDecl(methodDecl);
     List list = new List();
-    for(Iterator iter = typeArguments.iterator(); iter.hasNext(); )
-      list.add(((TypeDecl)iter.next()).createBoundAccess());
+    if(typeArguments.isEmpty()) {
+      GenericMethodDecl original = original();
+      for(int i = 0; i < original.getNumTypeParameter(); i++)
+        list.add(original.getTypeParameter(i).erasure().createBoundAccess());
+    }
+    else {
+      for(Iterator iter = typeArguments.iterator(); iter.hasNext(); )
+        list.add(((TypeDecl)iter.next()).createBoundAccess());
+    }
     methodDecl.setTypeArgumentList(list);
-
     methodDecl.setModifiers((Modifiers)getModifiers().fullCopy());
     methodDecl.setTypeAccess(getTypeAccess().type().substituteReturnType(methodDecl));
     methodDecl.setID(getID());

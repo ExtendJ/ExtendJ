@@ -375,12 +375,11 @@ aspect BytecodeReader {
       int index = s.lastIndexOf('/');
       if(index != -1)
         packageName = s.substring(0, index).replace('/', '.');
-      String[] typeNames = s.substring(index + 1).split("\\$");
-      Access result = new TypeAccess(packageName, typeNames[0]);
-      for(int i = 1; i < typeNames.length; i++)
-        result = result.qualifiesAccess(new TypeAccess(typeNames[i]));
-      return result;
-
+      String typeName = s.substring(index + 1, s.length());
+      if(typeName.indexOf('$') != -1)
+        return new BytecodeTypeAccess(packageName, typeName);
+      else
+        return new TypeAccess(packageName, typeName);
     }
 
     public static Modifiers modifiers(int flags) {
@@ -754,10 +753,9 @@ aspect BytecodeReader {
         packageName.append(typeName);
         typeName = identifier();
       }
-      String[] names = typeName.split("\\$");
-      Access a = new TypeAccess(packageName.toString(), names[0]);
-      for(int i = 1; i < names.length; i++)
-        a = a.qualifiesAccess(new TypeAccess(names[i]));
+      Access a = typeName.indexOf('$') == -1 ?
+        new TypeAccess(packageName.toString(), typeName) : 
+        new BytecodeTypeAccess(packageName.toString(), typeName);
       if(next("<")) { // type arguments of top level type
         a = new ParTypeAccess(a, typeArguments());
       }
@@ -771,10 +769,8 @@ aspect BytecodeReader {
     Access classTypeSignatureSuffix() {
       eat(".");
       String id = identifier();
-      String[] names = id.split("\\$");
-      Access a = new TypeAccess(names[0]);
-      for(int i = 1; i < names.length; i++)
-        a = a.qualifiesAccess(new TypeAccess(names[i]));
+      Access a = id.indexOf('$') == -1 ?
+        new TypeAccess(id) : new BytecodeTypeAccess("", id);
       if(next("<")) {
         a = new ParTypeAccess(a, typeArguments());
       }

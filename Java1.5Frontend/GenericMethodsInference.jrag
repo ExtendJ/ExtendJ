@@ -60,6 +60,8 @@ aspect GenericMethodsInference {
       }
       c.convertibleTo(A, F);
     }
+    if(c.rawAccess)
+      return new ArrayList();
     
     //c.printConstraints();
     //System.err.println("Resolving equality constraints");
@@ -105,6 +107,7 @@ aspect GenericMethodsInference {
     }
     private Collection typeVariables;
     private Map constraintsMap;
+    public boolean rawAccess = false;
 
     public Constraints() {
       typeVariables = new ArrayList(4);
@@ -324,7 +327,7 @@ aspect GenericMethodsInference {
     public static void addParameterizedSupertypes(TypeDecl t, HashSet processed, HashSet result) {
       if(!processed.contains(t)) {
         processed.add(t);
-        if(t.isParameterizedType() && !t.isRawType())
+        if(t.isParameterizedType() /*&& !t.isRawType()*/)
           result.add(t);
         for(Iterator iter = directSupertypes(t).iterator(); iter.hasNext(); ) {
           TypeDecl typeDecl = (TypeDecl)iter.next();
@@ -408,6 +411,9 @@ aspect GenericMethodsInference {
           ParTypeDecl PF = (ParTypeDecl)F;
           ParTypeDecl PA = (ParTypeDecl)iter.next();
           if(PF.genericDecl() == PA.genericDecl()) {
+            if(A.isRawType())
+              rawAccess = true;
+            else
             for(int i = 0; i < PF.getNumArgument(); i++) {
               TypeDecl T = PF.getArgument(i).type();
               if(T.involvesTypeParameters()) {
@@ -492,7 +498,7 @@ aspect GenericMethodsInference {
                 if(H != G) {
                   for(Iterator iter = parameterizedSupertypes(F).iterator(); iter.hasNext(); ) {
                     TypeDecl V = (TypeDecl)iter.next();
-                    if(((ParTypeDecl)V).genericDecl() == H) {
+                    if(!V.isRawType() && ((ParTypeDecl)V).genericDecl() == H) {
                       if(F.instanceOf(V))
                         convertibleFrom(A, V);
                     }
@@ -521,7 +527,7 @@ aspect GenericMethodsInference {
                 if(H != G) {
                   for(Iterator iter = parameterizedSupertypes(F).iterator(); iter.hasNext(); ) {
                     TypeDecl V = (TypeDecl)iter.next();
-                    if(((ParTypeDecl)V).genericDecl() == H) {
+                    if(!V.isRawType() && ((ParTypeDecl)V).genericDecl() == H) {
                       // replace type argument Un with ? extends Un in V
                       ArrayList list = new ArrayList();
                       for(int j = 0; j < ((ParTypeDecl)V).getNumArgument(); j++)
@@ -546,7 +552,7 @@ aspect GenericMethodsInference {
                 if(H != G) {
                   for(Iterator iter = parameterizedSupertypes(F).iterator(); iter.hasNext(); ) {
                     TypeDecl V = (TypeDecl)iter.next();
-                    if(((ParTypeDecl)V).genericDecl() == H) {
+                    if(!V.isRawType() && ((ParTypeDecl)V).genericDecl() == H) {
                       // replace type argument Un with ? super Un in V
                       ArrayList list = new ArrayList();
                       for(int j = 0; j < ((ParTypeDecl)V).getNumArgument(); j++)
@@ -568,6 +574,8 @@ aspect GenericMethodsInference {
           }
         }
       }
+      else if(F.isRawType())
+        rawAccess = true;
     }
 
     public void constraintEqual(TypeDecl A, TypeDecl F) {
@@ -600,10 +608,13 @@ aspect GenericMethodsInference {
         }
       }
       else if(F instanceof ParTypeDecl && !F.isRawType()) {
-        if(A instanceof ParTypeDecl && !A.isRawType()) {
+        if(A instanceof ParTypeDecl) {
           ParTypeDecl PF = (ParTypeDecl)F;
           ParTypeDecl PA = (ParTypeDecl)A;
           if(PF.genericDecl() == PA.genericDecl()) {
+            if(A.isRawType())
+              rawAccess = true;
+            else
             for(int i = 0; i < PF.getNumArgument(); i++) {
               TypeDecl T = PF.getArgument(i).type();
               if(T.involvesTypeParameters()) {

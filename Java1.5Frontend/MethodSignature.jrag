@@ -256,11 +256,13 @@ aspect MethodSignature15 {
     if(m instanceof GenericMethodDecl) {
       GenericMethodDecl gm = (GenericMethodDecl)m;
       ArrayList list = typeArguments(m);
-      if(gm.getNumTypeParameter() != list.size())
-        return false;
-      for(int i = 0; i < gm.getNumTypeParameter(); i++)
-        if(!((TypeDecl)list.get(i)).subtype(gm.original().getTypeParameter(i)))
+      if(list.size() != 0) {
+        if(gm.getNumTypeParameter() != list.size())
           return false;
+        for(int i = 0; i < gm.getNumTypeParameter(); i++)
+          if(!((TypeDecl)list.get(i)).subtype(gm.original().getTypeParameter(i)))
+            return false;
+      }
     }
     return true;
   }
@@ -272,6 +274,8 @@ aspect MethodSignature15 {
     if(m instanceof GenericMethodDecl) {
       GenericMethodDecl g = (GenericMethodDecl)m;
       Collection arguments = computeConstraints(g);
+      if(arguments.isEmpty())
+        return typeArguments;
       int i = 0;
       for(Iterator iter = arguments.iterator(); iter.hasNext(); i++) {
         TypeDecl typeDecl = (TypeDecl)iter.next();
@@ -335,6 +339,68 @@ aspect MethodSignature15 {
     s.append(")");
     return s.toString();
 
+  }
+
+  refine LookupMethod eq ClassDecl.methodsSignatureMap() {
+    HashMap map = new HashMap(localMethodsSignatureMap());
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
+          if(!(m instanceof MethodDeclSubstituted) || !localMethodsSignatureMap().containsKey(m.sourceMethodDecl().signature()))
+            putSimpleSetElement(map, m.signature(), m);
+        }
+      }
+    }
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
+          if(!(m instanceof MethodDeclSubstituted) || !localMethodsSignatureMap().containsKey(m.sourceMethodDecl().signature())) {
+            if(allMethodsAbstract((SimpleSet)map.get(m.signature())) &&
+              (!(m instanceof MethodDeclSubstituted) ||
+               allMethodsAbstract((SimpleSet)map.get(m.sourceMethodDecl().signature()))              )
+            )
+              putSimpleSetElement(map, m.signature(), m);
+          }
+        }
+      }
+    }
+    return map;
+  }
+  refine LookupMethod eq InterfaceDecl.methodsSignatureMap() {
+    HashMap map = new HashMap(localMethodsSignatureMap());
+    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = (MethodDecl)iter.next();
+        if(!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature()))
+          if(!(m instanceof MethodDeclSubstituted) || !localMethodsSignatureMap().containsKey(m.sourceMethodDecl().signature()))
+            putSimpleSetElement(map, m.signature(), m);
+      }
+    }
+    for(Iterator iter = typeObject().methodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(m.isPublic() && !map.containsKey(m.signature()))
+        putSimpleSetElement(map, m.signature(), m);
+    }
+    return map;
+  }
+
+  eq ParTypeDecl.unimplementedMethods() {
+    HashSet set = new HashSet();
+    HashSet result = new HashSet();
+    for(Iterator iter = genericDecl().unimplementedMethods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      set.add(m.sourceMethodDecl());
+    }
+    for(Iterator iter = super.unimplementedMethods().iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if(set.contains(m.sourceMethodDecl()))
+        result.add(m);
+    }
+    return result;
   }
 
 }

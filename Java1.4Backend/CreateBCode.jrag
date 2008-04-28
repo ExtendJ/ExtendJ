@@ -210,11 +210,18 @@ aspect CreateBCode {
   eq ConstructorAccess.needsPop() = false;
 
   eq ParExpr.needsPop() = getExpr().needsPop();
-  eq AssignExpr.needsPop() = false; // if dest is instance variable that needs accessor
+  //eq AssignExpr.needsPop() = false; // if dest is instance variable that needs accessor
+  eq AssignExpr.needsPop() = getDest().isVarAccessWithAccessor();
   eq PreIncExpr.needsPop() = false;
-  eq PostIncExpr.needsPop() = false;
+  eq PostIncExpr.needsPop() = getOperand().isVarAccessWithAccessor();
   eq PreDecExpr.needsPop() = false;
-  eq PostDecExpr.needsPop() = false;
+  eq PostDecExpr.needsPop() = getOperand().isVarAccessWithAccessor();
+
+  syn boolean Expr.isVarAccessWithAccessor() = false;
+  eq ParExpr.isVarAccessWithAccessor() = getExpr().isVarAccessWithAccessor();
+  eq AbstractDot.isVarAccessWithAccessor() = lastAccess().isVarAccessWithAccessor();
+  eq VarAccess.isVarAccessWithAccessor() = decl() instanceof FieldDeclaration && 
+        decl().isInstanceVariable() && requiresAccessor();
 
   public void VariableDeclaration.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
@@ -381,7 +388,7 @@ aspect CreateBCode {
     }
     else if(v instanceof FieldDeclaration) {
       FieldDeclaration f = (FieldDeclaration)v;
-      if(f.isPrivate() && !hostType().hasField(v.name()))
+      if(requiresAccessor())
         f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());
@@ -439,7 +446,7 @@ aspect CreateBCode {
           fieldQualifierType().emitPop(gen);
         f.constant().createBCode(gen);
       }
-      else if(f.isPrivate() && !hostType().hasField(v.name()))
+      else if(requiresAccessor())
         f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());

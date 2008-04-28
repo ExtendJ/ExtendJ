@@ -41,11 +41,11 @@ aspect GenericsCodegen {
    eq InterfaceDeclSubstituted.arrayTypeDescriptor() = original().arrayTypeDescriptor();
 
    public ConstructorDecl ConstructorDeclSubstituted.createAccessor() {
-     return erasedConstructor().createAccessor();
+     return sourceConstructorDecl().createAccessor();
    }
    
    protected TypeDecl ConstructorDeclSubstituted.createAnonymousJavaTypeDecl() {
-     return erasedConstructor().createAnonymousJavaTypeDecl();
+     return sourceConstructorDecl().createAnonymousJavaTypeDecl();
    }
 
   syn FieldDeclaration FieldDeclaration.erasedField() = this;
@@ -60,7 +60,7 @@ aspect GenericsCodegen {
     if(v instanceof FieldDeclaration) {
       FieldDeclaration f = (FieldDeclaration)v;
       f = f.erasedField();
-      if(f.isPrivate() && !hostType().hasField(v.name()))
+      if(requiresAccessor())
         f.createAccessorWrite(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitStoreField(gen, fieldQualifierType());
@@ -76,7 +76,7 @@ aspect GenericsCodegen {
         gen.emitDup();
       FieldDeclaration f = (FieldDeclaration)v;
       f = f.erasedField();
-      if(f.isPrivate() && !hostType().hasField(v.name()))
+      if(requiresAccessor())
         f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());
@@ -96,7 +96,7 @@ aspect GenericsCodegen {
           fieldQualifierType().emitPop(gen);
         f.constant().createBCode(gen);
       }
-      else if(f.isPrivate() && !hostType().hasField(v.name()))
+      else if(requiresAccessor())
         f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       else
         f.emitLoadField(gen, fieldQualifierType());
@@ -148,8 +148,10 @@ aspect GenericsCodegen {
     if(typeDecl == null)
       return null;
     typeDecl = typeDecl.erasure();
-    if(!typeDecl.memberMethods(decl().name()).contains(decl()))
-      return decl().hostType();
+    MethodDecl m = decl().sourceMethodDecl();
+    Collection methods = typeDecl.memberMethods(m.name());
+    if(!methods.contains(decl()) && !methods.contains(m))
+      return m.hostType();
     return typeDecl.erasure();
   }
 
@@ -267,8 +269,15 @@ aspect GenericsCodegen {
                     )
                   );
             }
+            List modifiersList = new List();
+            if(isPublic())
+              modifiersList.add(new Modifier("public"));
+            else if(isProtected())
+              modifiersList.add(new Modifier("protected"));
+            else if(isPrivate())
+              modifiersList.add(new Modifier("private"));
             MethodDecl bridge = new BridgeMethodDecl(
-                (Modifiers)getModifiers().fullCopy(),
+                new Modifiers(modifiersList),
                 erased.type().erasure().createBoundAccess(),
                 erased.name(),
                 parameters,
@@ -292,7 +301,7 @@ aspect GenericsCodegen {
   refine Transformations public void TypeAccess.transformation() {
     super.transformation();
     if(type().elementType().isNestedType() && hostType() != null)
-      hostType().addUsedNestedType(type().elementType().erasure());
+      hostType().addUsedNestedType(type().elementType().erasure().sourceTypeDecl());
   }
 
   // add Signature Attribute 
