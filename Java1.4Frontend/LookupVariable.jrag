@@ -268,6 +268,54 @@ aspect Fields {
     }
     return map;
   }
+  syn lazy HashMap TypeDecl.memberFieldsMap() = localFieldsMap();
+  eq ClassDecl.memberFieldsMap() {
+    HashMap map = new HashMap(localFieldsMap());
+    if(hasSuperclass()) {
+      for(Iterator iter = superclass().fieldsIterator(); iter.hasNext(); ) {
+        FieldDeclaration decl = (FieldDeclaration)iter.next();
+        if(!decl.isPrivate() && decl.accessibleFrom(this) && !localFieldsMap().containsKey(decl.name()))
+          putSimpleSetElement(map, decl.name(), decl);
+      }
+    }
+    for(Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl type = (TypeDecl)outerIter.next();
+      for(Iterator iter = type.fieldsIterator(); iter.hasNext(); ) {
+        FieldDeclaration decl = (FieldDeclaration)iter.next();
+        if(!decl.isPrivate() && decl.accessibleFrom(this) && !localFieldsMap().containsKey(decl.name()))
+          putSimpleSetElement(map, decl.name(), decl);
+      }
+    }
+    return map;
+  }
+  eq InterfaceDecl.memberFieldsMap() {
+    HashMap map = new HashMap(localFieldsMap());
+    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+      for(Iterator iter = typeDecl.fieldsIterator(); iter.hasNext(); ) {
+        FieldDeclaration f = (FieldDeclaration)iter.next();
+        if(f.accessibleFrom(this) && !f.isPrivate() && !localFieldsMap().containsKey(f.name())) {
+          putSimpleSetElement(map, f.name(), f);
+        }
+      }
+    }
+    return map;
+  }
+  public Iterator TypeDecl.fieldsIterator() {
+    return new Iterator() {
+      private Iterator outer = memberFieldsMap().values().iterator();
+      private Iterator inner = null;
+      public boolean hasNext() {
+        if((inner == null || !inner.hasNext()) && outer.hasNext())
+          inner = ((SimpleSet)outer.next()).iterator();
+        return inner != null ? inner.hasNext() : false;
+      }
+      public Object next() {
+        return inner.next();
+      }
+      public void remove() { throw new UnsupportedOperationException(); }
+    };
+  }
   
   syn lazy SimpleSet TypeDecl.memberFields(String name) = localFields(name);
 
