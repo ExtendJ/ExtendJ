@@ -28,7 +28,7 @@ class JavaCompiler extends Frontend {
   }
   protected void processNoErrors(CompilationUnit unit) {
     unit.transformation();
-    if(Program.hasOption("-print"))
+    if(program.options().hasOption("-print"))
       System.out.println(unit);
     unit.generateClassfile();
   }

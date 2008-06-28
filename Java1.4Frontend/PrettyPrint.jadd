@@ -8,18 +8,6 @@
  */
 
 aspect PrettyPrint {
-  // Helper for indentation
-  
-  protected static int ASTNode.indent = 0;
-  
-  public static String ASTNode.indent() {
-    StringBuffer s = new StringBuffer();
-    for(int i = 0; i < indent; i++) {
-      s.append("  ");
-    }
-    return s.toString();
-  }
-
   // Default output
   
   public String ASTNode.toString() {
@@ -72,6 +60,7 @@ aspect PrettyPrint {
   }
     
   public void ClassDecl.toString(StringBuffer s) {
+    s.append(indent());
     getModifiers().toString(s);
     s.append("class " + name());
     if(hasSuperClassAccess()) {
@@ -86,17 +75,15 @@ aspect PrettyPrint {
         getImplements(i).toString(s);
       }
     }
-    s.append(" {\n");
-    indent++;
+    s.append(" {");
     for(int i=0; i < getNumBodyDecl(); i++) {
       getBodyDecl(i).toString(s);
     }
-
-    indent--;
-    s.append(indent() + "}\n");
+    s.append(indent() + "}");
   }
   
   public void InterfaceDecl.toString(StringBuffer s) {
+    s.append(indent());
     getModifiers().toString(s);
     s.append("interface " + name());
     if(getNumSuperInterfaceId() > 0) {
@@ -107,14 +94,11 @@ aspect PrettyPrint {
         getSuperInterfaceId(i).toString(s);
       }
     }
-    s.append(" {\n");
-    indent++;
+    s.append(" {");
     for(int i=0; i < getNumBodyDecl(); i++) {
       getBodyDecl(i).toString(s);
     }
-    
-    indent--;
-    s.append(indent() + "}\n");
+    s.append(indent() + "}");
   }
 
   // Type body decl
@@ -153,19 +137,15 @@ aspect PrettyPrint {
       }
     }
     
-    s.append(" {\n");
-    indent++;
+    s.append(" {");
     if(hasConstructorInvocation()) {
-      s.append(indent());
       getConstructorInvocation().toString(s);
     }
     for(int i = 0; i < getBlock().getNumStmt(); i++) {
-      s.append(indent());
       getBlock().getStmt(i).toString(s);
     }
-    indent--;
     s.append(indent());
-    s.append("}\n");
+    s.append("}");
   }
 
   public void FieldDeclaration.toString(StringBuffer s) {
@@ -177,10 +157,11 @@ aspect PrettyPrint {
       s.append(" = ");
       getInit().toString(s);
     }
-    s.append(";\n");
+    s.append(";");
   }
 
   public void VariableDeclaration.toString(StringBuffer s) {
+    s.append(indent());
     getModifiers().toString(s);
     getTypeAccess().toString(s);
     s.append(" " + name());
@@ -188,7 +169,7 @@ aspect PrettyPrint {
       s.append(" = ");
       getInit().toString(s);
     }
-    s.append(";\n");
+    s.append(";");
   }
 
   public void MethodDecl.toString(StringBuffer s) {
@@ -217,7 +198,7 @@ aspect PrettyPrint {
       getBlock().toString(s);
     }
     else {
-      s.append(";\n");
+      s.append(";");
     }
   }
 
@@ -233,7 +214,7 @@ aspect PrettyPrint {
 
   public void EmptyType.toString(StringBuffer s) {
     s.append(indent());
-    s.append(";\n");
+    s.append(";");
   }
 
   public void ArrayInit.toString(StringBuffer s) {
@@ -357,14 +338,12 @@ aspect PrettyPrint {
 
     if(hasTypeDecl()) {
       TypeDecl decl = getTypeDecl();
-      s.append(" {\n");
-      indent++;
+      s.append(" {");
       for(int i = 0; i < decl.getNumBodyDecl(); i++) {
         if(!(decl.getBodyDecl(i) instanceof ConstructorDecl))
           decl.getBodyDecl(i).toString(s);
       }
-      indent--;
-      s.append(indent());
+      s.append(enclosingStmt().indent());
       s.append("}");
     }
   }
@@ -540,33 +519,35 @@ aspect PrettyPrint {
   // Stmts
 
   public void Block.toString(StringBuffer s) {
-    s.append("{\n");
-    indent++;
+    String indent = indent();
+    s.append(shouldHaveIndent() ? indent : "");
+    s.append("{");
     for(int i = 0; i < getNumStmt(); i++) {
-      s.append(indent());
       getStmt(i).toString(s);
     }
-    indent--;
-    s.append(indent());
-    s.append("}\n");
+    s.append(shouldHaveIndent() ? indent : indent.substring(0, indent.length()-2));
+    s.append("}");
   }
 
   public void EmptyStmt.toString(StringBuffer s) {
-    s.append(";\n");
+    s.append(indent());
+    s.append(";");
   }
 
   public void LabeledStmt.toString(StringBuffer s) {
-    s.append(getLabel() + ":\n");
     s.append(indent());
+    s.append(getLabel() + ":");
     getStmt().toString(s);
   }
 
   public void ExprStmt.toString(StringBuffer s) {
+    s.append(indent());
     getExpr().toString(s);
-    s.append(";\n");
+    s.append(";");
   }
 
   public void SwitchStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("switch (");
     getExpr().toString(s);
     s.append(")");
@@ -577,15 +558,16 @@ aspect PrettyPrint {
     s.append(indent());
     s.append("case ");
     getValue().toString(s);
-    s.append(":\n");
+    s.append(":");
   }
 
   public void DefaultCase.toString(StringBuffer s) {
     s.append(indent());
-    s.append("default:\n");
+    s.append("default:");
   }
 
   public void IfStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("if(");
     getCondition().toString(s);
     s.append(") ");
@@ -598,21 +580,24 @@ aspect PrettyPrint {
   }
 
   public void WhileStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("while(");
     getCondition().toString(s);
-    s.append(") ");
+    s.append(")");
     getStmt().toString(s);
   }
 
   public void DoStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("do ");
     getStmt().toString(s);
     s.append("while(");
     getCondition().toString(s);
-    s.append(");\n");
+    s.append(");");
   }
 
   public void ForStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("for(");
     if(getNumInitStmt() > 0) {
       if(getInitStmt(0) instanceof VariableDeclaration) {
@@ -675,34 +660,39 @@ aspect PrettyPrint {
   }
 
   public void BreakStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("break ");
     if(hasLabel())
       s.append(getLabel());
-    s.append(";\n");
+    s.append(";");
   }
 
   public void ContinueStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("continue ");
     if(hasLabel())
       s.append(getLabel());
-    s.append(";\n");
+    s.append(";");
   }
 
   public void ReturnStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("return ");
     if(hasResult()) {
       getResult().toString(s);
     }
-    s.append(";\n");
+    s.append(";");
   }
 
   public void ThrowStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("throw ");
     getExpr().toString(s);
-    s.append(";\n");
+    s.append(";");
   }
 
   public void SynchronizedStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("synchronized(");
     getExpr().toString(s);
     s.append(") ");
@@ -710,6 +700,7 @@ aspect PrettyPrint {
   }
 
   public void TryStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("try ");
     getBlock().toString(s);
     for(int i = 0; i < getNumCatchClause(); i++) {
@@ -731,18 +722,51 @@ aspect PrettyPrint {
   }
 
   public void AssertStmt.toString(StringBuffer s) {
+    s.append(indent());
     s.append("assert ");
     getfirst().toString(s);
     if(hasExpr()) {
       s.append(" : ");
       getExpr().toString(s);
     }
-    s.append(";\n");
+    s.append(";");
   }
   
   public void LocalClassDeclStmt.toString(StringBuffer s) {
     getClassDecl().toString(s);
   }
+
+  syn String BodyDecl.indent() {
+    String indent = extractIndent();
+    return indent.startsWith("\n") ? indent : ("\n" + indent);
+  }
+  syn String Stmt.indent() {
+    String indent = extractIndent();
+    return indent.startsWith("\n") ? indent : ("\n" + indent);
+  }
+  syn String TypeDecl.indent() {
+    String indent = extractIndent();
+    return indent.startsWith("\n") ? indent : ("\n" + indent);
+  }
+
+
+  syn String ASTNode.extractIndent() {
+    if(getParent() == null)
+      return "";
+    String indent = getParent().extractIndent();
+    if(getParent().addsIndentationLevel())
+      indent += "  ";
+    return indent;
+  }
+
+  syn boolean ASTNode.addsIndentationLevel() = false;
+  eq TypeDecl.addsIndentationLevel() = true;
+  eq BodyDecl.addsIndentationLevel() = true;
+  eq Stmt.addsIndentationLevel() = true;
+  eq Block.addsIndentationLevel() = shouldHaveIndent();
+
+  syn boolean Block.shouldHaveIndent() = 
+    getParent() instanceof List && getParent().getParent() instanceof Block;
 
   // dump the AST to standard output
 
