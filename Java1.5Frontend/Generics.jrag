@@ -17,14 +17,14 @@ aspect Generics {
       return ((GenericClassDecl)lookupType("java.lang", "Class")).lookupParTypeDecl(args);
     }
     else
-      return TypeAnalysis.MethodAccess.type();
+      return refined();
   }
 
   // imported types are considered raw types by the name resolver
   // here we replace them by their generic counter parts
-  refine LookupType eq CompilationUnit.getChild().lookupType(String name) {
+  refine TypeScopePropagation eq CompilationUnit.getChild().lookupType(String name) {
     SimpleSet result = SimpleSet.emptySet;
-    for(Iterator iter = LookupType.CompilationUnit.getChild().lookupType(name).iterator(); iter.hasNext(); ) {
+    for(Iterator iter = refined(name).iterator(); iter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)iter.next();
       if(typeDecl instanceof ParTypeDecl)
         result = result.add(((ParTypeDecl)typeDecl).genericDecl());
@@ -34,7 +34,7 @@ aspect Generics {
     return result;
   }
 
-  refine TypeAnalysis eq ClassDecl.castingConversionTo(TypeDecl type) {
+  refine TypeConversion eq ClassDecl.castingConversionTo(TypeDecl type) {
     TypeDecl S = this;
     TypeDecl T = type;
     if(T instanceof TypeVariable) {
@@ -47,10 +47,10 @@ aspect Generics {
     }
     if(T.isClassDecl() && (S.erasure() != S || T.erasure() != T))
         return S.erasure().castingConversionTo(T.erasure());
-    return TypeAnalysis.ClassDecl.castingConversionTo(type);
+    return refined(type);
   }
 
-  refine TypeAnalysis eq InterfaceDecl.castingConversionTo(TypeDecl type) {
+  refine TypeConversion eq InterfaceDecl.castingConversionTo(TypeDecl type) {
     TypeDecl S = this;
     TypeDecl T = type;
     if(T.isArrayDecl())
@@ -73,7 +73,7 @@ aspect Generics {
     return false;
   }
 
-  refine TypeAnalysis eq ArrayDecl.castingConversionTo(TypeDecl type) {
+  refine TypeConversion eq ArrayDecl.castingConversionTo(TypeDecl type) {
     TypeDecl S = this;
     TypeDecl T = type;
     if(T instanceof TypeVariable) {
@@ -93,11 +93,11 @@ aspect Generics {
       return false;
     }
     else
-      return TypeAnalysis.ArrayDecl.castingConversionTo(type);
+      return refined(type);
   }
 
   refine TypeAnalysis eq ClassAccess.type() {
-    GenericClassDecl d = (GenericClassDecl)TypeAnalysis.ClassAccess.type();
+    GenericClassDecl d = (GenericClassDecl)refined();
     TypeDecl type = qualifier().type();
     if(type.isPrimitive())
       type = type.boxed();
@@ -107,7 +107,7 @@ aspect Generics {
   }
 
   refine AutoBoxing eq ConditionalExpr.type() {
-    TypeDecl type = AutoBoxing.ConditionalExpr.type();
+    TypeDecl type = refined();
     TypeDecl trueType = getTrueExpr().type();
     TypeDecl falseType = getFalseExpr().type();
 
@@ -254,8 +254,8 @@ aspect GenericsTypeAnalysis {
   syn TypeDecl ParTypeAccess.genericDecl() = getTypeAccess().type();
   eq ParTypeAccess.isTypeAccess() = true;
 
-  refine LookupType eq TypeAccess.decl() {
-    TypeDecl decl = LookupType.TypeAccess.decl();
+  refine TypeScopePropagation eq TypeAccess.decl() {
+    TypeDecl decl = refined();
     if(decl instanceof GenericTypeDecl && isRaw())
       return ((GenericTypeDecl)decl).lookupParTypeDecl(new ArrayList());
     return decl;
@@ -284,14 +284,14 @@ aspect GenericsTypeAnalysis {
     return true;
   }
 
-  refine LookupType eq ThisAccess.decl() {
-    TypeDecl typeDecl = LookupType.ThisAccess.decl();
+  refine TypeScopePropagation eq ThisAccess.decl() {
+    TypeDecl typeDecl = refined();
     if(typeDecl instanceof ParTypeDecl)
       typeDecl = ((ParTypeDecl)typeDecl).genericDecl();
     return typeDecl;
   }
-  refine LookupType eq SuperAccess.decl() {
-    TypeDecl typeDecl = LookupType.SuperAccess.decl();
+  refine TypeScopePropagation eq SuperAccess.decl() {
+    TypeDecl typeDecl = refined();
     if(typeDecl instanceof ParTypeDecl)
       typeDecl = ((ParTypeDecl)typeDecl).genericDecl();
     return typeDecl;
@@ -324,7 +324,7 @@ aspect GenericsTypeCheck {
 
   // different parameterizations of the same generic interface may not be implemented
   refine TypeHierarchyCheck public void TypeDecl.typeCheck() {
-    TypeHierarchyCheck.TypeDecl.typeCheck();
+    refined();
     ArrayList list = new ArrayList();
     list.addAll(implementedInterfaces());
     for(int i = 0; i < list.size(); i++) {

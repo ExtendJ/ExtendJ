@@ -74,8 +74,8 @@ aspect AutoBoxing {
 
 
   // 5.2 Assignment Conversion
-  refine TypeAnalysis eq TypeDecl.assignConversionTo(TypeDecl type, Expr expr) {
-    if(TypeAnalysis.TypeDecl.assignConversionTo(type, expr))
+  refine TypeConversion eq TypeDecl.assignConversionTo(TypeDecl type, Expr expr) {
+    if(refined(type, expr))
       return true;
     boolean canBoxThis = this instanceof PrimitiveType;
     boolean canBoxType = type instanceof PrimitiveType;
@@ -96,8 +96,8 @@ aspect AutoBoxing {
   }
 
   // 5.3 Method Invocation Conversion
-  refine TypeAnalysis eq TypeDecl.methodInvocationConversionTo(TypeDecl type) {
-    if(TypeAnalysis.TypeDecl.methodInvocationConversionTo(type))
+  refine TypeConversion eq TypeDecl.methodInvocationConversionTo(TypeDecl type) {
+    if(refined(type))
       return true;
     boolean canBoxThis = this instanceof PrimitiveType;
     boolean canBoxType = type instanceof PrimitiveType;
@@ -111,8 +111,8 @@ aspect AutoBoxing {
   }
 
   // 5.5 Casting Conversion
-  refine TypeAnalysis eq TypeDecl.castingConversionTo(TypeDecl type) {
-    if(TypeAnalysis.TypeDecl.castingConversionTo(type))
+  refine TypeConversion eq TypeDecl.castingConversionTo(TypeDecl type) {
+    if(refined(type))
       return true;
     boolean canBoxThis = this instanceof PrimitiveType;
     boolean canBoxType = type instanceof PrimitiveType;
@@ -132,7 +132,7 @@ aspect AutoBoxing {
     */
   }
   refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) {
-    if(Generics.ClassDecl.castingConversionTo(type))
+    if(refined(type))
       return true;
     boolean canUnboxThis = !unboxed().isUnknown();
     boolean canUnboxType = !type.unboxed().isUnknown();
@@ -146,7 +146,7 @@ aspect AutoBoxing {
     */
   }
   refine Generics eq InterfaceDecl.castingConversionTo(TypeDecl type) {
-    if(Generics.InterfaceDecl.castingConversionTo(type))
+    if(refined(type))
       return true;
     boolean canUnboxThis = !unboxed().isUnknown();
     boolean canUnboxType = !type.unboxed().isUnknown();
@@ -162,8 +162,9 @@ aspect AutoBoxing {
   //eq PrimitiveType.castingConversionTo(TypeDecl type) = 
   //  type.isReferenceType() ? boxed().castingConversionTo(type) : super.castingConversionTo(type);
 
-  //refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) =
-  //  type.isPrimitiveType() && !unboxed().isUnknown() ? unboxed().castingConversionTo(type) : Generics.ClassDecl.castingConversionTo(type);
+  //refine Generics eq ClassDecl.castingConversionTo(TypeDecl type) {
+  //  return type.isPrimitiveType() && !unboxed().isUnknown() ? unboxed().castingConversionTo(type) : refined(type);
+  //}
 
   // 5.6.1 Unary Numeric Promotion
   eq ReferenceType.unaryNumericPromotion() = isNumericType() && !isUnknown() ? unboxed().unaryNumericPromotion() : this;
@@ -171,10 +172,10 @@ aspect AutoBoxing {
 
   // 5.6.2 Binary Numeric Promotion
   eq ReferenceType.binaryNumericPromotion(TypeDecl type) = unboxed().binaryNumericPromotion(type);
-  refine TypeAnalysis eq NumericType.binaryNumericPromotion(TypeDecl type) {
+  refine NumericPromotion eq NumericType.binaryNumericPromotion(TypeDecl type) {
     if(type.isReferenceType())
       type = type.unboxed();
-    return TypeAnalysis.NumericType.binaryNumericPromotion(type);
+    return refined(type);
   }
 
   refine TypeAnalysis eq ConditionalExpr.type() {
@@ -187,7 +188,7 @@ aspect AutoBoxing {
         return trueType.unboxed();
       return trueType;
     }
-    return TypeAnalysis.ConditionalExpr.type();
+    return refined();
   }
 
   eq UnknownType.binaryNumericPromotion(TypeDecl type) = this;
@@ -207,7 +208,7 @@ aspect AutoBoxing {
     if(leftType.isBoolean() && rightType.isBoolean()) {
       return leftType.isReferenceType() ? leftType.unboxed() : leftType;
     }
-    return ConstantExpression.Binary.binaryNumericPromotedType();
+    return refined();
   }
 
   // Affects type checking of 14.9 If, 14.10 Assert, 14.12 While, 14.13 Do, 14.14 For 

@@ -52,14 +52,14 @@ aspect MethodSignature15 {
     return maxSpecific;
   }
 
-  refine LookupConstructor eq ClassInstanceExpr.decls() {
+  refine ConstructScope eq ClassInstanceExpr.decls() {
     TypeDecl typeDecl = hasTypeDecl() ? getTypeDecl() : getAccess().type();
     return chooseConstructor(typeDecl.constructors(), getArgList());
   }
-  refine LookupConstructor eq ConstructorAccess.decls() {
+  refine ConstructScope eq ConstructorAccess.decls() {
     return chooseConstructor(lookupConstructor(), getArgList());
   }
-  refine LookupConstructor eq SuperConstructorAccess.decls() {
+  refine ConstructScope eq SuperConstructorAccess.decls() {
     Collection c = hasPrevExpr() && !prevExpr().isTypeAccess() ?
       hostType().lookupSuperConstructor() : lookupSuperConstructor();
     return chooseConstructor(c, getArgList());
@@ -137,9 +137,9 @@ aspect MethodSignature15 {
   eq ParMethodDecl.moreSpecificThan(MethodDecl m) =
     genericMethodDecl().moreSpecificThan(m instanceof ParMethodDecl ? ((ParMethodDecl)m).genericMethodDecl() : m );
 
-  refine LookupMethod eq MethodDecl.moreSpecificThan(MethodDecl m) {
+  refine MethodDecl eq MethodDecl.moreSpecificThan(MethodDecl m) {
     if(!isVariableArity() && !m.isVariableArity())
-      return LookupMethod.MethodDecl.moreSpecificThan(m);
+      return refined(m);
     int num = Math.max(getNumParameter(), m.getNumParameter());
     for(int i = 0; i < num; i++) {
       TypeDecl t1 = i < getNumParameter() - 1 ? getParameter(i).type() : getParameter(getNumParameter()-1).type().componentType();
@@ -150,9 +150,9 @@ aspect MethodSignature15 {
     return true;
   }
 
-  refine LookupConstructor eq ConstructorDecl.moreSpecificThan(ConstructorDecl m) {
+  refine ConstructorDecl eq ConstructorDecl.moreSpecificThan(ConstructorDecl m) {
     if(!isVariableArity() && !m.isVariableArity())
-      return LookupConstructor.ConstructorDecl.moreSpecificThan(m);
+      return refined(m);
     int num = Math.max(getNumParameter(), m.getNumParameter());
     for(int i = 0; i < num; i++) {
       TypeDecl t1 = i < getNumParameter() - 1 ? getParameter(i).type() : getParameter(getNumParameter()-1).type().componentType();
@@ -329,7 +329,7 @@ aspect MethodSignature15 {
     }
   }
 
-  refine LookupMethod eq MethodDecl.signature() {
+  refine MethodDecl eq MethodDecl.signature() {
     StringBuffer s = new StringBuffer();
     s.append(name() + "(");
     for(int i = 0; i < getNumParameter(); i++) {
@@ -341,7 +341,7 @@ aspect MethodSignature15 {
 
   }
 
-  refine LookupMethod eq ClassDecl.methodsSignatureMap() {
+  refine MemberMethods eq ClassDecl.methodsSignatureMap() {
     HashMap map = new HashMap(localMethodsSignatureMap());
     if(hasSuperclass()) {
       for(Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
@@ -369,7 +369,7 @@ aspect MethodSignature15 {
     }
     return map;
   }
-  refine LookupMethod eq InterfaceDecl.methodsSignatureMap() {
+  refine MemberMethods eq InterfaceDecl.methodsSignatureMap() {
     HashMap map = new HashMap(localMethodsSignatureMap());
     for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl)outerIter.next();
