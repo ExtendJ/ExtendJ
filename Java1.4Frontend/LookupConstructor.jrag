@@ -103,6 +103,7 @@ aspect ConstructorLookup {
         c.add(getBodyDecl(i));
       }
     }
+    /*
     if(c.isEmpty() && isClassDecl()) {
       Modifiers m = new Modifiers();
       if(isPublic()) m.addModifier(new Modifier("public"));
@@ -120,6 +121,7 @@ aspect ConstructorLookup {
       );
       c.add(getBodyDecl(getNumBodyDecl()-1));
     }
+    */
     return c;
   }
 }
@@ -173,6 +175,36 @@ aspect ConstructorDecl {
   }
 }
 aspect ImplicitConstructor {
+  syn boolean List.requiresDefaultConstructor() {
+    if(getParent() instanceof ClassDecl) {
+      ClassDecl c = (ClassDecl)getParent();
+      return c.getBodyDeclList() == this && !(c instanceof AnonymousDecl) && c.noConstructor();
+    }
+    return false;
+  }
+    
+  rewrite List {
+    when(requiresDefaultConstructor())
+    to List {
+      ClassDecl c = (ClassDecl)getParent();
+      Modifiers m = new Modifiers();
+      if(c.isPublic()) m.addModifier(new Modifier("public"));
+      else if(c.isProtected()) m.addModifier(new Modifier("protected"));
+      else if(c.isPrivate()) m.addModifier(new Modifier("private"));
+      c.addBodyDecl(
+          new ConstructorDecl(
+            m,
+            c.name(),
+            new List(),
+            new List(),
+            new Opt(),
+            new Block()
+          )
+      );
+      return this;
+    }
+  }
+
   syn boolean ClassDecl.noConstructor() {
     for(int i = 0; i < getNumBodyDecl(); i++)
       if(getBodyDecl(i) instanceof ConstructorDecl)
