@@ -8,10 +8,22 @@
  */
 
 aspect MethodSignature15 {
-  refine LookupMethod eq MethodAccess.decls() {
+  refine LookupMethod protected SimpleSet MethodAccess.maxSpecific(Collection candidates) {
+    SimpleSet potentiallyApplicable = potentiallyApplicable(candidates);
+    // first phase
+    SimpleSet maxSpecific = applicableBySubtyping(potentiallyApplicable);
+    // second phase
+    maxSpecific = applicableByMethodInvocationConversion(potentiallyApplicable,
+        maxSpecific);
+    // third phase
+    maxSpecific = applicableVariableArity(potentiallyApplicable, maxSpecific);
+    return maxSpecific;
+  }
+
+  protected SimpleSet MethodAccess.potentiallyApplicable(Collection candidates) {
     SimpleSet potentiallyApplicable = SimpleSet.emptySet;
     // select potentially applicable methods
-    for(Iterator iter = lookupMethod(name()).iterator(); iter.hasNext(); ) {
+    for(Iterator iter = candidates.iterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl)iter.next();
       if(potentiallyApplicable(decl) && accessible(decl)) {
         if(decl instanceof GenericMethodDecl) {
@@ -20,16 +32,20 @@ aspect MethodSignature15 {
         potentiallyApplicable = potentiallyApplicable.add(decl);
       }
     }
+    return potentiallyApplicable;
+  }
 
-    // first phase
+  protected SimpleSet MethodAccess.applicableBySubtyping(SimpleSet potentiallyApplicable) {
     SimpleSet maxSpecific = SimpleSet.emptySet;
     for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl)iter.next();
       if(applicableBySubtyping(decl))
         maxSpecific = mostSpecific(maxSpecific, decl);
     }
+    return maxSpecific;
+  }
 
-    // second phase
+  protected SimpleSet MethodAccess.applicableByMethodInvocationConversion(SimpleSet potentiallyApplicable, SimpleSet maxSpecific) {
     if(maxSpecific.isEmpty()) {
       for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
@@ -37,9 +53,10 @@ aspect MethodSignature15 {
           maxSpecific = mostSpecific(maxSpecific, decl);
       }
     }
+    return maxSpecific;
+  }
 
-
-    // third phase
+  protected SimpleSet MethodAccess.applicableVariableArity(SimpleSet potentiallyApplicable, SimpleSet maxSpecific) {
     if(maxSpecific.isEmpty()) {
       for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
         MethodDecl decl = (MethodDecl)iter.next();
@@ -47,8 +64,6 @@ aspect MethodSignature15 {
           maxSpecific = mostSpecific(maxSpecific, decl);
       }
     }
-    if(isQualified() ? qualifier().staticContextQualifier() : inStaticContext())
-      maxSpecific = removeInstanceMethods(maxSpecific);
     return maxSpecific;
   }
 
