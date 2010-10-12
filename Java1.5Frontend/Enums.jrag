@@ -182,17 +182,7 @@ aspect Enums {
   }
   
   public EnumConstant.EnumConstant(Modifiers mods, String name, List<Expr> args, List<BodyDecl> bds) {
-	  this(mods, name, args, createInitOpt(name, args, bds));
-  }
-
-  private static Opt<Expr> EnumConstant.createInitOpt(String name, List<Expr> args, List<BodyDecl> bds) {
-    return new Opt<Expr>(
-        new ClassInstanceExpr(
-          null,								// will get filled in by rewrite
-          createArgumentList(name, args),
-          createOptAnonymousDecl(bds)
-        )
-    );
+	  this(mods, name, args, new Opt<Expr>(new EnumInstanceExpr(createOptAnonymousDecl(bds))));
   }
 
   /*
@@ -202,16 +192,23 @@ aspect Enums {
     invoked is chosen using the normal overloading rules (�15.12.2). If the
     arguments are omitted, an empty argument list is assumed. 
   */
+  
+  syn lazy Access EnumInstanceExpr.getAccess() {
+	  return hostType().createQualifiedAccess();
+  }
 
-  private static List<Expr> EnumConstant.createArgumentList(String name, List<Expr> args) {
-    List<Expr> argList = new List<Expr>();
-    argList.add(new StringLiteral(name));
-    argList.add(null);						// will get filled in by rewrite
-    for(int i=0;i<args.getNumChildNoTransform();++i) {
-    	Expr arg = args.getChildNoTransform(i);
+  syn lazy List<Expr> EnumInstanceExpr.getArgList() {
+	  EnumConstant ec = (EnumConstant)getParent().getParent();
+	  List<EnumConstant> ecs = (List<EnumConstant>)ec.getParent();
+	  int idx = ecs.getIndexOfChild(ec);
+	  if(idx == -1)
+		  throw new Error("internal: cannot determine numeric value of enum constant");
+	  List<Expr> argList = new List<Expr>();
+	  argList.add(new StringLiteral(ec.name()));
+	  argList.add(new IntegerLiteral(idx));
+	  for(Expr arg : ec.getArgs())
     	argList.add((Expr)arg.fullCopy());
-    }
-    return argList;
+	  return argList;
   }
 
   /*
@@ -257,25 +254,6 @@ aspect Enums {
 	  throw new ArrayIndexOutOfBoundsException(i);
   }
   
-  // use a rewrite to fill in some information that is not available when the enum is created
-  private boolean EnumConstant.rewritten() {
-	  Opt<Expr> initopt = getInitOptNoTransform();
-	  ClassInstanceExpr init = (ClassInstanceExpr)initopt.getChildNoTransform(0);
-	  return init.getAccessNoTransform() != null;
-  }
-  
-  rewrite EnumConstant {
-	  when(!rewritten())
-	  to EnumConstant {
-		  Opt<Expr> initopt = getInitOptNoTransform();
-		  ClassInstanceExpr init = (ClassInstanceExpr)initopt.getChildNoTransform(0);
-		  List<Expr> args = init.getArgListNoTransform();
-		  args.setChild(new IntegerLiteral(Integer.toString(((List)getParent()).getIndexOfChild(this))), 1);
-		  init.setAccess(new TypeAccess(hostType().name()));	// TODO: this isn't always right (what if we have a local type of the same name?)
-		  return this;
-	  }
-  }
-
   /*
     7) It is a compile-time error for the class body of an enum constant to declare
     an abstract method.
