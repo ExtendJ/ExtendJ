@@ -180,13 +180,17 @@ aspect Enums {
   syn lazy Access EnumConstant.getTypeAccess() {
     return hostType().createQualifiedAccess();
   }
+  
+  public EnumConstant.EnumConstant(Modifiers mods, String name, List<Expr> args, List<BodyDecl> bds) {
+	  this(mods, name, args, createInitOpt(name, args, bds));
+  }
 
-  syn lazy Opt EnumConstant.getInitOpt() {
-    return new Opt(
+  private static Opt<Expr> EnumConstant.createInitOpt(String name, List<Expr> args, List<BodyDecl> bds) {
+    return new Opt<Expr>(
         new ClassInstanceExpr(
-          hostType().createQualifiedAccess(),
-          createArgumentList(),
-          createOptAnonymousDecl()
+          null,								// will get filled in by rewrite
+          createArgumentList(name, args),
+          createOptAnonymousDecl(bds)
         )
     );
   }
@@ -199,12 +203,14 @@ aspect Enums {
     arguments are omitted, an empty argument list is assumed. 
   */
 
-  private List EnumConstant.createArgumentList() {
-    List argList = new List();
-    argList.add(new StringLiteral(getID()));
-    argList.add(new IntegerLiteral(Integer.toString(((List)getParent()).getIndexOfChild(this))));
-    for(int i = 0; i < getNumArg(); i++)
-      argList.add(getArg(i).fullCopy());
+  private static List<Expr> EnumConstant.createArgumentList(String name, List<Expr> args) {
+    List<Expr> argList = new List<Expr>();
+    argList.add(new StringLiteral(name));
+    argList.add(null);						// will get filled in by rewrite
+    for(int i=0;i<args.getNumChildNoTransform();++i) {
+    	Expr arg = args.getChildNoTransform(i);
+    	argList.add((Expr)arg.fullCopy());
+    }
     return argList;
   }
 
@@ -217,18 +223,57 @@ aspect Enums {
     TODO: work on error messages
   */
   
-  private Opt EnumConstant.createOptAnonymousDecl() {
-    if(getNumBodyDecl() == 0)
-      return new Opt();
-    List list = getBodyDeclList();
-    setBodyDeclList(new List()); // TODO: get rid of this side-effect
-    return new Opt(
+  private static Opt<TypeDecl> EnumConstant.createOptAnonymousDecl(List<BodyDecl> bds) {
+    if(bds.getNumChild() == 0)
+      return new Opt<TypeDecl>();
+    return new Opt<TypeDecl>(
       new AnonymousDecl(
         new Modifiers(),
         "Anonymous",
-        list
+        bds
       )
     );
+  }
+  
+  // simulate list of body declarations
+  public int EnumConstant.getNumBodyDecl() {
+	  int cnt = 0;
+	  ClassInstanceExpr init = (ClassInstanceExpr)getInit();
+	  if(!init.hasTypeDecl())
+		  return 0;
+	  for(BodyDecl bd : init.getTypeDecl().getBodyDecls())
+		  if(!(bd instanceof ConstructorDecl))
+			  ++cnt;
+	  return cnt;
+  }
+  
+  public BodyDecl EnumConstant.getBodyDecl(int i) {
+	  ClassInstanceExpr init = (ClassInstanceExpr)getInit();
+	  if(init.hasTypeDecl())
+		  for(BodyDecl bd : init.getTypeDecl().getBodyDecls())
+			  if(!(bd instanceof ConstructorDecl))
+				  if(i-- == 0)
+					  return bd;
+	  throw new ArrayIndexOutOfBoundsException(i);
+  }
+  
+  // use a rewrite to fill in some information that is not available when the enum is created
+  private boolean EnumConstant.rewritten() {
+	  Opt<Expr> initopt = getInitOptNoTransform();
+	  ClassInstanceExpr init = (ClassInstanceExpr)initopt.getChildNoTransform(0);
+	  return init.getAccessNoTransform() != null;
+  }
+  
+  rewrite EnumConstant {
+	  when(!rewritten())
+	  to EnumConstant {
+		  Opt<Expr> initopt = getInitOptNoTransform();
+		  ClassInstanceExpr init = (ClassInstanceExpr)initopt.getChildNoTransform(0);
+		  List<Expr> args = init.getArgListNoTransform();
+		  args.setChild(new IntegerLiteral(Integer.toString(((List)getParent()).getIndexOfChild(this))), 1);
+		  init.setAccess(new TypeAccess(hostType().name()));	// TODO: this isn't always right (what if we have a local type of the same name?)
+		  return this;
+	  }
   }
 
   /*
