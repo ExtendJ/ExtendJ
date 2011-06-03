@@ -652,7 +652,7 @@ aspect GenericMethodsInference {
     for(int i = 0; i < getNumTypeBound(); i++)
       list.add(getTypeBound(i).type());
     ArrayList bounds = new ArrayList();
-    for(Iterator iter = MEC(list).iterator(); iter.hasNext(); ) {
+    for(Iterator iter = LUBType.MEC(list).iterator(); iter.hasNext(); ) {
       TypeDecl W = (TypeDecl)iter.next();
       TypeDecl C = W instanceof GenericTypeDecl ? lci(Inv(W, list), W) : W;
       bounds.add(C);
@@ -665,13 +665,13 @@ aspect GenericMethodsInference {
     // the erased candidate set for type parameter Tj, EC,
     // is the intersection of all the sets EST(U) for each
     // U in U1...Uk
-    public HashSet LUBType.EC(ArrayList list) {
+    public static HashSet LUBType.EC(ArrayList list) {
       HashSet result = new HashSet();
       boolean first = true;
       for(Iterator iter = list.iterator(); iter.hasNext(); ) {
         TypeDecl U = (TypeDecl)iter.next();
         // erased supertype set of U
-        HashSet EST = EST(U); 
+        HashSet EST = LUBType.EST(U); 
         if(first) {
           result.addAll(EST);
           first = false;
@@ -682,10 +682,13 @@ aspect GenericMethodsInference {
       return result;
     }
 
-    // The minimal erased candidate set for Tj
-    // is MEC = {V | V in EC, forall  W != V in EC, not W <: V}
-    public HashSet LUBType.MEC(ArrayList list) {
-      HashSet EC = EC(list);
+    /**
+     * The minimal erased candidate set for Tj
+     * is MEC = {V | V in EC, forall  W != V in EC, not W <: V}
+     * @return minimal erased candidate set for Tj
+     */
+    public static HashSet LUBType.MEC(ArrayList list) {
+      HashSet EC = LUBType.EC(list);
       if(EC.size() == 1)
         return EC;
       HashSet MEC = new HashSet();
@@ -703,13 +706,16 @@ aspect GenericMethodsInference {
       return MEC;
     }
 
-    // relevant invocations of G, Inv(G)
-    // Inv(G) = {V | 1 <= i <= k, V in ST(Ui), V = G<...>}
-    public HashSet LUBType.Inv(TypeDecl G, ArrayList Us) {
+    /**
+     * relevant invocations of G, Inv(G)
+     * Inv(G) = {V | 1 <= i <= k, V in ST(Ui), V = G<...>}
+     * @return set of relevant invocations of G, Inv(G)
+     */
+    public static HashSet LUBType.Inv(TypeDecl G, ArrayList Us) {
       HashSet result = new HashSet();
       for(Iterator iter = Us.iterator(); iter.hasNext(); ) {
         TypeDecl U = (TypeDecl)iter.next();
-        for(Iterator i2 = ST(U).iterator(); i2.hasNext(); ) {
+        for(Iterator i2 = LUBType.ST(U).iterator(); i2.hasNext(); ) {
           TypeDecl V = (TypeDecl)i2.next();
           if(V instanceof ParTypeDecl && !V.isRawType() && ((ParTypeDecl)V).genericDecl() == G)
             result.add(V);
@@ -718,7 +724,9 @@ aspect GenericMethodsInference {
       return result;
     }
 
-    // least containing invocation (lci)
+    /**
+     * @return least containing invocation (lci)
+     */
     public TypeDecl LUBType.lci(HashSet set, TypeDecl G) {
       ArrayList list = new ArrayList();
       boolean first = true;
@@ -737,7 +745,9 @@ aspect GenericMethodsInference {
       return ((GenericTypeDecl)G).lookupParTypeDecl(list);
     }
 
-    // least containing type arguments
+    /**
+     * least containing type arguments
+     */
     public TypeDecl LUBType.lcta(TypeDecl X, TypeDecl Y) {
       //System.err.println("Computing lcta for " + X.typeName() + " and " + Y.typeName());
       if(!X.isWildcard() && !Y.isWildcard()) {
@@ -792,9 +802,9 @@ aspect GenericMethodsInference {
     }
 
     // erased supertype set of T
-    public HashSet LUBType.EST(TypeDecl t) {
+    public static HashSet LUBType.EST(TypeDecl t) {
       HashSet result = new HashSet();
-      for(Iterator iter = ST(t).iterator(); iter.hasNext(); ) {
+      for(Iterator iter = LUBType.ST(t).iterator(); iter.hasNext(); ) {
         TypeDecl typeDecl = (TypeDecl)iter.next();
         if(typeDecl instanceof TypeVariable)
           result.add(typeDecl);
@@ -804,14 +814,16 @@ aspect GenericMethodsInference {
       return result;
     }
 
-    // supertype set of T
-    public HashSet LUBType.ST(TypeDecl t) {
+    /**
+     * @return supertype set of T
+     */
+    public static HashSet LUBType.ST(TypeDecl t) {
       HashSet result = new HashSet();
-      addSupertypes(result, t);
+      LUBType.addSupertypes(result, t);
       return result;
     }
 
-    public void LUBType.addSupertypes(HashSet set, TypeDecl t) {
+    public static void LUBType.addSupertypes(HashSet set, TypeDecl t) {
       set.add(t);
       if(t instanceof ClassDecl) {
         ClassDecl type = (ClassDecl)t;

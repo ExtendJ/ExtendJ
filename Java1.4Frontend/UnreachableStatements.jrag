@@ -119,17 +119,19 @@ aspect UnreachableStatements {
   }
   eq TryStmt.getBlock().reachable() = reachable();
   eq TryStmt.getFinally().reachable() = reachable();
-  eq CatchClause.getBlock().reachable() = reachableCatchClause();
+  eq BasicCatch.getBlock().reachable() = reachableCatchClause(getParameter().type());
 
-  inh lazy boolean CatchClause.reachableCatchClause();
-  eq TryStmt.getCatchClause(int childIndex).reachableCatchClause() {
-    TypeDecl type = getCatchClause(childIndex).getParameter().type();
+  /**
+   * @return true if an exception of type exceptionType is catchable by the catch clause
+   */
+  inh lazy boolean CatchClause.reachableCatchClause(TypeDecl exceptionType);
+  eq TryStmt.getCatchClause(int childIndex).reachableCatchClause(TypeDecl exceptionType) {
     for(int i = 0; i < childIndex; i++)
-      if(getCatchClause(i).handles(type))
+      if(getCatchClause(i).handles(exceptionType))
         return false;
-    if(reachableThrow(getCatchClause(childIndex)))
+    if(catchableException(exceptionType))
       return true;
-    if(type.mayCatch(typeError()) || type.mayCatch(typeRuntimeException()))
+    if(exceptionType.mayCatch(typeError()) || exceptionType.mayCatch(typeRuntimeException()))
       return true;
     return false;
   }
