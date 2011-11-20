@@ -1,0 +1,63 @@
+/*
+ * JastAddJ is covered by the modified BSD License. You should have received a copy of the
+ * modified BSD license with this compiler.
+ * 
+ * Copyright (c) 2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ * All rights reserved.
+ */
+
+aspect SyntacticClassification {
+  eq ResourceDeclaration.getAccess().nameType() = NameType.TYPE_NAME;
+}
+
+/*aspect TypeCheck {
+  public void TryWithResources.typeCheck() {
+  }
+}*/
+
+aspect TryWithResources {
+  // TODO: check that the resource is an instance of java.lang.AutoCloseable
+
+  /**
+   * Rewrite the TWR statment to an ARM block
+   */
+  rewrite TryWithResources {
+    to Block {
+      try {
+        Block armBlock = new Block(new List<Stmt>());
+
+        Modifiers modifiers = new Modifiers(new List<Modifier>());
+        modifiers.addModifier(new Modifier("final"));
+
+        Block resourceManagedBlock = (Block) getBlock().cloneSubtree();
+        Block fin = new Block();
+
+        for (ResourceDeclaration resource : getResourceDeclarationList()) {
+
+          Access access = (Access) resource.getAccess().cloneSubtree();
+          VariableDecl decl = resource.getVariableDecl();
+
+          String resourceName = decl.getID();
+          Opt<Expr> init = new Opt<Expr>();
+
+          if (decl.hasInit()) {
+            Expr initExpr = (Expr) decl.getInit().cloneSubtree();
+            init = new Opt<Expr>(initExpr);
+          }
+
+          fin.addStmt(new ExprStmt(
+                new Dot(new VarAccess(resourceName),
+                  new MethodAccess("close", new List<Expr>()))));
+
+          armBlock.addStmt(new VariableDeclaration(modifiers, access, resourceName, init));
+        }
+
+        armBlock.addStmt(new TryStmt(resourceManagedBlock, new List<CatchClause>(), new Opt<Block>(fin)));
+
+        return armBlock;
+      } catch (CloneNotSupportedException e) {
+        throw new RuntimeException("Clone not supported!");
+      }
+    }
+  }
+}
