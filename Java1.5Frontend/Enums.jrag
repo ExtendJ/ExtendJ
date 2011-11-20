@@ -421,25 +421,6 @@ aspect Enums {
   inh TypeDecl EnumDecl.typeString();
 
   /*
-    6) It is a compile-time error for an enum type E to have an abstract method m as
-    a member unless E has one or more enum constants, and all of E's enum
-    constants have class bodies that provide concrete implementations of m. 
- 
-    TODO: better error messages
-  */
-
-  eq EnumDecl.isAbstract() {
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl)getBodyDecl(i);
-        if(m.isAbstract())
-          return true;
-      }
-    }
-    return false;
-  }
-  
-  /*
     14) It is a compile-time error to reference a static field of an enum type that
     is not a compile-time constant (�15.28) from constructors, instance
     initializer blocks, or instance variable initializer expressions of that
@@ -620,5 +601,139 @@ aspect Enums {
       s.append(indent() + "}");
     }
     s.append(",\n");
+  }
+
+  /**
+   * From the Java Language Specification, third edition, section 8.9 Enums:
+   *
+   * It is a compile-time error for an enum type E to have an abstract method
+   * m as a member unless E has one or more enum constants, and all of E's enum
+   * constants have class bodies that provide concrete implementations of m.
+   */
+  eq EnumDecl.unimplementedMethods() {
+    Collection<MethodDecl> methods = new LinkedList<MethodDecl>();
+    for (Iterator iter = interfacesMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl method = (MethodDecl)iter.next();
+      SimpleSet set = (SimpleSet)localMethodsSignature(method.signature());
+      if (set.size() == 1) {
+        MethodDecl n = (MethodDecl)set.iterator().next();
+        if (!n.isAbstract()) 
+	  continue;
+      }
+      boolean implemented = false;
+      set = (SimpleSet)ancestorMethods(method.signature());
+      for (Iterator i2 = set.iterator(); i2.hasNext(); ) {
+        MethodDecl n = (MethodDecl)i2.next();
+        if (!n.isAbstract()) {
+          implemented = true;
+	  break;
+	}
+      }
+      if (!implemented)
+	methods.add(method);
+    }
+
+    for (Iterator iter = localMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl method = (MethodDecl)iter.next();
+      if (method.isAbstract())
+        methods.add(method);
+    }
+
+    Collection unimplemented = new ArrayList();
+    for (MethodDecl method : methods) {
+      if (enumConstants().isEmpty()) {
+	unimplemented.add(method);
+	continue;
+      }
+      boolean missing = false;
+      for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
+	if (!((EnumConstant) iter.next()).implementsMethod(method)) {
+	  missing = true;
+	  break;
+      	}
+      }
+      if (missing)
+	unimplemented.add(method);
+    }
+
+    return unimplemented;
+  }
+
+  syn SimpleSet EnumConstant.localMethodsSignature(String signature) {
+    SimpleSet set = (SimpleSet)localMethodsSignatureMap().get(signature);
+    if(set != null) return set;
+    return SimpleSet.emptySet;
+  }
+
+  // signature -> method declaration
+  syn lazy HashMap EnumConstant.localMethodsSignatureMap() {
+    HashMap map = new HashMap(getNumBodyDecl());
+    for(int i = 0; i < getNumBodyDecl(); i++) {
+      if(getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl decl = (MethodDecl)getBodyDecl(i);
+        map.put(decl.signature(), decl);
+      }
+    }
+    return map;
+  }
+
+  syn boolean EnumConstant.implementsMethod(MethodDecl method) {
+    SimpleSet set = (SimpleSet)localMethodsSignature(method.signature());
+    if (set.size() == 1) {
+      MethodDecl n = (MethodDecl)set.iterator().next();
+      if (!n.isAbstract())
+	return true;
+    }
+    return false;
+  }
+
+  refine Modifiers
+  public void MethodDecl.checkModifiers() {
+    super.checkModifiers();
+    if(hostType().isClassDecl()) {
+      // 8.4.3.1
+      if(!hostType().isEnumDecl() && isAbstract() && !hostType().isAbstract())
+        error("class must be abstract to include abstract methods");
+      // 8.4.3.1
+      if(isAbstract() && isPrivate())
+        error("method may not be abstract and private");
+      // 8.4.3.1
+      // 8.4.3.2
+      if(isAbstract() && isStatic())
+        error("method may not be abstract and static");
+      if(isAbstract() && isSynchronized())
+        error("method may not be abstract and synchronized");
+      // 8.4.3.4
+      if(isAbstract() && isNative())
+        error("method may not be abstract and native");
+      if(isAbstract() && isStrictfp())
+        error("method may not be abstract and strictfp");
+      if(isNative() && isStrictfp())
+        error("method may not be native and strictfp");
+    }
+    if(hostType().isInterfaceDecl()) {
+      // 9.4
+      if(isStatic())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be static");
+      if(isStrictfp())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be strictfp");
+      if(isNative())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be native");
+      if(isSynchronized())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be synchronized");
+      if(isProtected())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be protected");
+      if(isPrivate())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be private");
+      else if(isFinal())
+        error("interface method " + signature() + " in " +
+            hostType().typeName() +  " may not be final");
+    }
   }
 }
