@@ -496,13 +496,22 @@ aspect Enums {
   eq ConstCase.getValue().lookupVariable(String name)
     = switchType().isEnumDecl() ? switchType().memberFields(name) : lookupVariable(name);
   
-  eq EnumConstant.isConstant() = true;
-  
+  syn boolean Expr.isEnumConstant() = false;
+  eq VarAccess.isEnumConstant() = varDecl() instanceof EnumConstant;
+
   refine TypeCheck public void ConstCase.typeCheck() {
-    if(switchType().isEnumDecl() && (!(getValue() instanceof VarAccess) || !(getValue().varDecl() instanceof EnumConstant)))
+    boolean isEnumConstant = getValue().isEnumConstant();
+    if(switchType().isEnumDecl() && !isEnumConstant) {
       error("Unqualified enumeration constant required");
-    else
-      refined();
+    } else {
+      TypeDecl switchType = switchType();
+      TypeDecl type = getValue().type();
+      if(!type.assignConversionTo(switchType, getValue()))
+        error("Constant expression must be assignable to Expression");
+      if(!getValue().isConstant() && !getValue().type().isUnknown() &&
+          !isEnumConstant) 
+        error("Switch expression must be constant");
+    }
   }
   refine NameCheck eq ConstCase.constValue(Case c) {
     if(switchType().isEnumDecl()) {
