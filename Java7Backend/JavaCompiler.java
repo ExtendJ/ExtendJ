@@ -4,13 +4,17 @@
  * modified BSD license with this compiler.
  * 
  * Copyright (c) 2005-2008, Torbjorn Ekman
- *		      2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
 
 import AST.*;
 import java.util.*;
 
+/**
+ * @deprecated As of 2012-01-18. Use org.jastadd.jastaddj.JavaCompiler instead.
+ */
+@Deprecated
 class JavaCompiler extends Frontend {
 	public static void main(String args[]) {
 		if(!compile(args))
@@ -18,34 +22,6 @@ class JavaCompiler extends Frontend {
 	}
 
 	public static boolean compile(String args[]) {
-		return new JavaCompiler().process(
-				args,
-				new BytecodeParser(),
-				new JavaParser() {
-					public CompilationUnit parse(java.io.InputStream is, String fileName) throws java.io.IOException, beaver.Parser.Exception {
-						return new parser.JavaParser().parse(is, fileName);
-					}
-				});
+		return org.jastadd.jastaddj.JavaCompiler.compile(args);
 	}
-	protected void processNoErrors(CompilationUnit unit) {
-		unit.transformation();
-		unit.generateClassfile();
-	}
-
-	protected ResourceBundle resources = null;
-	protected String resourcename = "JastAddJ";
-	protected String getString(String key) {
-		if (resources == null) {
-			try {
-				resources = ResourceBundle.getBundle(resourcename);
-			} catch (MissingResourceException e) {
-				throw new Error("Could not open the resource " +
-						resourcename);
-			}
-		}
-		return resources.getString(key);
-	}
-
-	protected String name() { return getString("jastaddj.JavaCompiler"); }
-	protected String version() { return getString("jastaddj.Version"); }
 }
