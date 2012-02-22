@@ -144,8 +144,11 @@ aspect Generics {
     syn lazy TypeDecl rawType();
     public String fullName();
     public String typeName();
-    public int getNumParTypeDecl();
-    public ParTypeDecl getParTypeDecl(int index);
+  //
+  // ES: replaced these with a syn nta(param) 
+  //  public int getNumParTypeDecl();
+  //  public ParTypeDecl getParTypeDecl(int index);
+  //
     sons BodyDecl:BodyDecl* TypeParameter:TypeVariable* ParTypeDecl:ParTypeDecl*;
   }
   GenericClassDecl implements GenericTypeDecl;
@@ -589,9 +592,12 @@ aspect LookupParTypeDecl {
     return true;
   }
   
-  syn lazy final List GenericClassDecl.getParTypeDeclList() = new List();
-  syn lazy final List GenericInterfaceDecl.getParTypeDeclList() = new List();
+  // ES: removing these in benefit for parameterized syn nta attributes
+  //syn lazy final List GenericClassDecl.getParTypeDeclList() = new List();
+  //syn lazy final List GenericInterfaceDecl.getParTypeDeclList() = new List();
   
+
+/* ES: replacing these:
   syn lazy TypeDecl GenericTypeDecl.lookupParTypeDecl(ParTypeAccess p);
   eq GenericClassDecl.lookupParTypeDecl(ParTypeAccess p) {
     for(int i = 0; i < getNumParTypeDecl(); i++) {
@@ -670,6 +676,33 @@ aspect LookupParTypeDecl {
     typeDecl.is$Final = true;
     return typeDecl;
   }
+  with:
+*/
+  // Transforms the parameter and calls the lookupParTypeDecl attribute for ArrayList arguments
+  syn TypeDecl GenericTypeDecl.lookupParTypeDecl(ParTypeAccess p) {
+    ArrayList typeArguments = new ArrayList();
+    for(int i = 0; i < p.getNumTypeArgument(); i++)
+      typeArguments.add(p.getTypeArgument(i).type());
+    return lookupParTypeDecl(typeArguments);
+  }
+  syn nta TypeDecl GenericTypeDecl.lookupParTypeDecl(ArrayList list);
+  eq GenericClassDecl.lookupParTypeDecl(ArrayList list) {
+    ParClassDecl typeDecl = list.size() == 0 ? new RawClassDecl() : new ParClassDecl();
+    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    typeDecl.setID(getID());
+    typeDecl.setArgumentList(createArgumentList(list));
+    return typeDecl;
+  }
+  eq GenericInterfaceDecl.lookupParTypeDecl(ArrayList list) {
+    ParInterfaceDecl typeDecl = list.size() == 0 ? new RawInterfaceDecl() : new ParInterfaceDecl();
+    typeDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    typeDecl.setID(getID());
+    typeDecl.setArgumentList(createArgumentList(list));
+    return typeDecl;
+  }
+
+
+
   public List GenericTypeDecl.createArgumentList(ArrayList params) {
     GenericTypeDecl original = (GenericTypeDecl)original();
     List list = new List();

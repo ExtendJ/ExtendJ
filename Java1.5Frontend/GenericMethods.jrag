@@ -23,15 +23,27 @@ aspect GenericMethods {
     }
   }
 
-  syn lazy final List GenericMethodDecl.getParMethodDeclList() = new List();
-  syn lazy final List GenericConstructorDecl.getParConstructorDeclList() = new List();
+  
+  // ES: removing this, it has been replaced with a paramaterized syn nta attribute
+  //syn lazy final List GenericMethodDecl.getParMethodDeclList() = new List();
+  //
+  // ES: removing this, it appears not to be used. Maybe needed earlier due to some interface (?)
+  //syn lazy final List GenericConstructorDecl.getParConstructorDeclList() = new List();
+  //
+
   syn lazy final MethodDecl GenericMethodDecl.rawMethodDecl() = lookupParMethodDecl(new ArrayList());
   //syn lazy final ParConstructorDecl GenericConstructorDecl.rawConstructorDecl() = lookupParConstructorDecl(new ArrayList());
 
+  /* ES: replacing this with
   syn lazy GenericMethodDecl ParMethodDecl.genericMethodDecl() {
 	  if(getParent() != null && getParent().getParent() instanceof GenericMethodDecl)
 		  return (GenericMethodDecl)getParent().getParent();
 	  return null;
+  }
+  with:
+  */
+  syn lazy GenericMethodDecl ParMethodDecl.genericMethodDecl() {
+	  return getGenericMethodDecl();
   }
   
   syn lazy GenericConstructorDecl ParConstructorDecl.genericConstructorDecl() {
@@ -40,6 +52,7 @@ aspect GenericMethods {
 	  return null;
   }
 
+/* ES: replacing this:
   syn lazy MethodDecl GenericMethodDecl.lookupParMethodDecl(java.util.List typeArguments) {
     l: for(int i = 0; i < getNumParMethodDecl(); i++) {
       ParMethodDecl decl = getParMethodDecl(i);
@@ -56,7 +69,14 @@ aspect GenericMethods {
     }
     return newParMethodDecl(typeArguments);
   }
+  with:
+*/
+  syn nta MethodDecl GenericMethodDecl.lookupParMethodDecl(java.util.List typeArguments) {
+    return newParMethodDecl(typeArguments);
+  }
 
+
+/* ES: replacing this:
   public ParMethodDecl GenericMethodDecl.newParMethodDecl(java.util.List typeArguments) {
     ParMethodDecl methodDecl = typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl();
     addParMethodDecl(methodDecl);
@@ -78,6 +98,32 @@ aspect GenericMethods {
     methodDecl.setExceptionList(getExceptionList().substitute(methodDecl));
     return getParMethodDecl(getNumParMethodDecl()-1);
   }
+  with:
+*/
+  public ParMethodDecl GenericMethodDecl.newParMethodDecl(java.util.List typeArguments) {
+    ParMethodDecl methodDecl = typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl();
+    // adding a link to GenericMethodDecl to be used during substitution 
+    // instead of the not yet existing parent link
+    methodDecl.setGenericMethodDecl(this); 
+    List list = new List();
+    if(typeArguments.isEmpty()) {
+      GenericMethodDecl original = original();
+      for(int i = 0; i < original.getNumTypeParameter(); i++)
+        list.add(original.getTypeParameter(i).erasure().createBoundAccess());
+    }
+    else {
+      for(Iterator iter = typeArguments.iterator(); iter.hasNext(); )
+        list.add(((TypeDecl)iter.next()).createBoundAccess());
+    }
+    methodDecl.setTypeArgumentList(list);
+    methodDecl.setModifiers((Modifiers)getModifiers().fullCopy());
+    methodDecl.setTypeAccess(getTypeAccess().type().substituteReturnType(methodDecl));
+    methodDecl.setID(getID());
+    methodDecl.setParameterList(getParameterList().substitute(methodDecl));
+    methodDecl.setExceptionList(getExceptionList().substitute(methodDecl));
+    return methodDecl;
+  }
+
 
 }
 
