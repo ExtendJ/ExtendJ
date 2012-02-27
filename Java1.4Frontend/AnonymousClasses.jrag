@@ -10,7 +10,7 @@
 aspect AnonymousClasses {
 
   //eq ParameterDeclaration.getTypeAccess().hostType() = hostType().isAnonymous() ? ((ClassDecl)hostType()).superclass() : hostType();
-  
+
   inh TypeDecl AnonymousDecl.superType();
   eq ClassInstanceExpr.getTypeDecl().superType() = getAccess().type();
   eq Program.getChild().superType() = null;
@@ -24,7 +24,7 @@ aspect AnonymousClasses {
     return unknownConstructor();
   }
   eq Program.getChild().constructorDecl() = null;
-  
+
   public int TypeDecl.anonymousIndex = 0;
 
   eq AnonymousDecl.isCircular() = false;
@@ -48,35 +48,45 @@ aspect AnonymousClasses {
     return anonymousIndex++;
   }
 
+  /**
+   * Create the list of parameters for the anonymous class constructor.
+   */
+  protected List AnonymousDecl.constructorParameterList(ConstructorDecl decl) {
+    List parameterList = new List();
+    for(int i = 0; i < decl.getNumParameter(); i++) {
+      TypeDecl param = decl.getParameter(i);
+      parameterList.add(
+          new ParameterDeclaration(
+            param.type().createBoundAccess(),
+            param.name()
+            )
+          );
+    }
+
+    return parameterList;
+  }
+
   rewrite AnonymousDecl {
     when(noConstructor())
     to AnonymousDecl {
-            setModifiers(new Modifiers(new List().add(new Modifier("final"))));
-      
+      setModifiers(new Modifiers(new List().add(new Modifier("final"))));
+
       ConstructorDecl decl = constructorDecl();
       Modifiers modifiers = (Modifiers)decl.getModifiers().fullCopy();
-      String name = "Anonymous" + nextAnonymousIndex();
+      String anonName = "Anonymous" + nextAnonymousIndex();
 
-      List parameterList = new List();
-      for(int i = 0; i < decl.getNumParameter(); i++) {
-        parameterList.add(
-          new ParameterDeclaration(
-            decl.getParameter(i).type().createBoundAccess(),
-            decl.getParameter(i).name()
-          )
-        );
-      }
-      
-      ConstructorDecl constructor = new ConstructorDecl(modifiers, name,
-		      parameterList, new List(), new Opt(), new Block());  
+      ConstructorDecl constructor = new ConstructorDecl(modifiers, anonName,
+          constructorParameterList(decl), new List(), new Opt(), new Block());
       constructor.setDefaultConstructor();
       addBodyDecl(constructor);
 
-      setID(name);
-      
+      setID(anonName);
+
       List argList = new List();
-      for(int i = 0; i < constructor.getNumParameter(); i++)
+      for(int i = 0; i < constructor.getNumParameter(); i++) {
         argList.add(new VarAccess(constructor.getParameter(i).name()));
+      }
+
       constructor.setConstructorInvocation(
         new ExprStmt(
           new SuperConstructorAccess("super", argList)
