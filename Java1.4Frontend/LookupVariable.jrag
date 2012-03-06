@@ -162,7 +162,10 @@ aspect VariableScope {
     return SimpleSet.emptySet;
   }
 
-  // remove fields that are not accessible when using this Expr as qualifier
+  /**
+   * Remove fields that are not accessible when using this Expr as qualifier
+   * @return a set containing the accessible fields
+   */
   public SimpleSet Expr.keepAccessibleFields(SimpleSet oldSet) {
     SimpleSet newSet = SimpleSet.emptySet;
     for(Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
@@ -186,34 +189,40 @@ aspect VariableScope {
     return newSet;
   }
 
+  /**
+   * @see "JLS $6.6.2.1"
+   * @return true if the expression may access the given field
+   */
   public boolean Expr.mayAccess(FieldDeclaration f) {
-    if(f.isPublic()) 
+    if(f.isPublic()) {
       return true;
-    else if(f.isProtected()) {
+    } else if(f.isProtected()) {
       if(f.hostPackage().equals(hostPackage()))
         return true;
-      TypeDecl C = f.hostType();
-      TypeDecl S = hostType().subclassWithinBody(C);
-      TypeDecl Q = type();
-      if(S == null)
-        return false;
-      if(f.isInstanceVariable() && !isSuperAccess())
-        return Q.instanceOf(S);
-      return true;
-    }
-    else if(f.isPrivate())
+      return hostType().mayAccess(this, f);
+    } else if(f.isPrivate()) {
       return f.hostType().topLevelType() == hostType().topLevelType();
-    else
+    } else {
       return f.hostPackage().equals(hostType().hostPackage());
-  }
-  
-  public TypeDecl TypeDecl.subclassWithinBody(TypeDecl typeDecl) {
-    if(instanceOf(typeDecl))
-      return this;
-    if(isNestedType()) {
-      return enclosingType().subclassWithinBody(typeDecl);
     }
-    return null;
+  }
+
+  /**
+   * @return true if the expression may access the field
+   */
+  public boolean TypeDecl.mayAccess(Expr expr, FieldDeclaration field) {
+    if (instanceOf(field.hostType())) {
+      if (!field.isInstanceVariable()
+          || expr.isSuperAccess()
+          || expr.type().instanceOf(this))
+        return true;
+    }
+
+    if (isNestedType()) {
+      return enclosingType().mayAccess(expr, field);
+    } else {
+      return false;
+    }
   }
 }
 
