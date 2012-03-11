@@ -794,7 +794,7 @@ with:
 
   interface MemberSubstitutor extends Parameterization {
     TypeDecl original();
-    void addBodyDecl(BodyDecl b);
+   void addBodyDecl(BodyDecl b);
     TypeDecl substitute(TypeVariable typeVariable);
   }
 
@@ -1046,6 +1046,8 @@ with:
     HashMap map = new HashMap();
     for(Iterator iter = original().localMethodsIterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl)iter.next();
+
+      /* ES removing this:
       if(!decl.isStatic() && (decl.usesTypeVariable() || isRawType())) {
         BodyDecl b = decl.substitutedBodyDecl(this);
         addBodyDecl(b);
@@ -1056,14 +1058,34 @@ with:
         decl = (MethodDecl) b;
       }
       map.put(decl.signature(), decl);
+      * and replacing with:
+      */
+      if(!decl.isStatic() && (decl.usesTypeVariable() || isRawType())) {
+        BodyDecl copyDecl = localMethodSignatureCopy(decl);
+        decl = (MethodDecl) copyDecl;
+      }
+      map.put(decl.signature(), decl);
+
     }
     return map;
   }
+
+
+  // ES: Adding NTA to keep copies in
+  syn nta BodyDecl MemberSubstitutor.localMethodSignatureCopy(MethodDecl originalMethod) {
+    if(!originalMethod.isStatic() && (originalMethod.usesTypeVariable() || isRawType())) {
+        return originalMethod.substitutedBodyDecl(this);
+    }
+    return null;
+  }
+
 
   syn lazy final SimpleSet MemberSubstitutor.localFields(String name) {
     SimpleSet set = SimpleSet.emptySet;
     for(Iterator iter = original().localFields(name).iterator(); iter.hasNext(); ) {
       FieldDeclaration f = (FieldDeclaration)iter.next();
+
+      /* ES removing this:   
       if(!f.isStatic() && (f.usesTypeVariable() || isRawType())) {
         BodyDecl b = f.substitutedBodyDecl(this);
         addBodyDecl(b);
@@ -1074,14 +1096,31 @@ with:
         f = (FieldDeclaration) b;
       }
       set = set.add(f);
+      * and replacing with:
+      */
+      if(!f.isStatic() && (f.usesTypeVariable() || isRawType())) {
+        BodyDecl fCopy = localFieldCopy(f);
+        f = (FieldDeclaration) fCopy;
+      }
+      set = set.add(f);
+
     }
     return set;
   }
 
+  // ES: Adding NTA to keep copies in
+  syn nta BodyDecl MemberSubstitutor.localFieldCopy(FieldDeclaration originalDecl) {
+    return originalDecl.substitutedBodyDecl(this);
+  }
+
+
+    // TODO-ES: Add NTA for copies like above
   syn lazy final SimpleSet MemberSubstitutor.localTypeDecls(String name) {
     SimpleSet set = SimpleSet.emptySet;
     for(Iterator iter = original().localTypeDecls(name).iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl)iter.next();
+
+      /* ES: removing this:
       if(t.isStatic())
         set = set.add(t);
       else {
@@ -1095,7 +1134,7 @@ with:
       	  // Here we should access b through an ordinary
       	  // child accessor instead of setting is$Final directly,
       	  // however doing so appears to cause unexpected behaviour!
-	  b.is$Final = true;
+      	  b.is$Final = true;
           set = set.add(typeDecl);
         }
         else if(t instanceof InterfaceDecl) {
@@ -1106,27 +1145,58 @@ with:
       	  // Here we should access b through an ordinary
       	  // child accessor instead of setting is$Final directly,
       	  // however doing so appears to cause unexpected behaviour!
-	  b.is$Final = true;
+      	  b.is$Final = true;
           set = set.add(typeDecl);
         }
       }
+      * and replacing with:
+      */
+      if(t.isStatic()) {
+        set = set.add(t);
+      } else if (t instanceof ClassDecl) {
+        MemberClassDecl copy = localClassDeclCopy((ClassDecl)t);
+        set = set.add(copy.getClassDecl());
+      } else if (t instanceof InterfaceDecl) {
+        MemberInterfaceDecl copy = localInterfaceDeclCopy((InterfaceDecl)t);
+        set = set.add(copy.getInterfaceDecl());
+      }
     }
     return set;
+  }
+
+  // ES: adding NTA to store copies in
+  syn nta MemberClassDecl MemberSubstitutor.localClassDeclCopy(ClassDecl originalDecl) {
+    ClassDecl copy = originalDecl.substitutedClassDecl(this);
+    return new MemberClassDecl(copy);
+  }
+  syn nta MemberInterfaceDecl MemberSubstitutor.localInterfaceDeclCopy(InterfaceDecl originalDecl) {
+    InterfaceDecl copy = originalDecl.substitutedInterfaceDecl(this);
+    return new MemberInterfaceDecl(copy);
   }
 
   syn lazy Collection MemberSubstitutor.constructors() {
     Collection set = new ArrayList();
     for(Iterator iter = original().constructors().iterator(); iter.hasNext(); ) {
       ConstructorDecl c = (ConstructorDecl)iter.next();
+
+      /* ES: removing this:
       BodyDecl b = c.substitutedBodyDecl(this);
       addBodyDecl(b);
       // Here we should access b through an ordinary
       // child accessor instead of setting is$Final directly,
       // however doing so appears to cause unexpected behaviour!
       b.is$Final = true;
+      * and replacing with:
+      */
+      BodyDecl b = constructorCopy(c);
       set.add(b);
     }
     return set;
+  }
+
+  // ES: adding NTA to store copies in 
+  syn nta BodyDecl MemberSubstitutor.constructorCopy(ConstructorDecl originalDecl) {
+    return originalDecl.substitutedBodyDecl(this);
   }
 
   public BodyDecl BodyDecl.substitutedBodyDecl(Parameterization parTypeDecl) {
