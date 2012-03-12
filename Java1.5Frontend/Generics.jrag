@@ -1003,7 +1003,9 @@ with:
     //System.err.println("End substituting implements list");
     return list;
   }
-  syn lazy List ParClassDecl.getBodyDeclList() = new List();
+  // ES: Creating instance of List subclass instead
+  //syn lazy List ParClassDecl.getBodyDeclList() = new List();
+  syn lazy List ParClassDecl.getBodyDeclList() = new BodyDeclList();
 
   syn lazy List ParInterfaceDecl.getSuperInterfaceIdList() {
     GenericInterfaceDecl decl = (GenericInterfaceDecl)genericDecl();
@@ -1012,7 +1014,17 @@ with:
     //System.err.println("End substituting implements list");
     return list;
   }
-  syn lazy List ParInterfaceDecl.getBodyDeclList() = new List();
+
+  // ES: Creating instance of List subclass instead of List
+  //syn lazy List ParInterfaceDecl.getBodyDeclList() = new List();
+  syn lazy List ParInterfaceDecl.getBodyDeclList() = new BodyDeclList();
+
+  // ES: Adding creation of NTA list to types implementing MemberSubstitutor
+  syn lazy List ClassDeclSubstituted.getBodyDeclList() = new BodyDeclList();
+  syn lazy List InterfaceDeclSubstituted.getBodyDeclList() = new BodyDeclList();
+  syn lazy List GenericClassDeclSubstituted.getBodyDeclList() = new BodyDeclList();
+  syn lazy List GenericInterfaceDeclSubstituted.getBodyDeclList() = new BodyDeclList();
+
 
   syn boolean ASTNode.usesTypeVariable() {
     for(int i = 0; i < getNumChild(); i++)
@@ -1061,7 +1073,7 @@ with:
       * and replacing with:
       */
       if(!decl.isStatic() && (decl.usesTypeVariable() || isRawType())) {
-        BodyDecl copyDecl = localMethodSignatureCopy(decl);
+        BodyDecl copyDecl = ((BodyDeclList)getBodyDeclList()).localMethodSignatureCopy(decl, this);
         decl = (MethodDecl) copyDecl;
       }
       map.put(decl.signature(), decl);
@@ -1072,11 +1084,8 @@ with:
 
 
   // ES: Adding NTA to keep copies in
-  syn nta BodyDecl MemberSubstitutor.localMethodSignatureCopy(MethodDecl originalMethod) {
-    if(!originalMethod.isStatic() && (originalMethod.usesTypeVariable() || isRawType())) {
-        return originalMethod.substitutedBodyDecl(this);
-    }
-    return null;
+  syn nta BodyDecl BodyDeclList.localMethodSignatureCopy(MethodDecl originalMethod, MemberSubstitutor m) {
+     return originalMethod.substitutedBodyDecl(m);
   }
 
 
@@ -1099,7 +1108,7 @@ with:
       * and replacing with:
       */
       if(!f.isStatic() && (f.usesTypeVariable() || isRawType())) {
-        BodyDecl fCopy = localFieldCopy(f);
+        BodyDecl fCopy = ((BodyDeclList)getBodyDeclList()).localFieldCopy(f, this);
         f = (FieldDeclaration) fCopy;
       }
       set = set.add(f);
@@ -1109,8 +1118,8 @@ with:
   }
 
   // ES: Adding NTA to keep copies in
-  syn nta BodyDecl MemberSubstitutor.localFieldCopy(FieldDeclaration originalDecl) {
-    return originalDecl.substitutedBodyDecl(this);
+  syn nta BodyDecl BodyDeclList.localFieldCopy(FieldDeclaration originalDecl, MemberSubstitutor m) {
+    return originalDecl.substitutedBodyDecl(m);
   }
 
 
@@ -1154,10 +1163,10 @@ with:
       if(t.isStatic()) {
         set = set.add(t);
       } else if (t instanceof ClassDecl) {
-        MemberClassDecl copy = localClassDeclCopy((ClassDecl)t);
+        MemberClassDecl copy = ((BodyDeclList)getBodyDeclList()).localClassDeclCopy((ClassDecl)t, this);
         set = set.add(copy.getClassDecl());
       } else if (t instanceof InterfaceDecl) {
-        MemberInterfaceDecl copy = localInterfaceDeclCopy((InterfaceDecl)t);
+        MemberInterfaceDecl copy = ((BodyDeclList)getBodyDeclList()).localInterfaceDeclCopy((InterfaceDecl)t, this);
         set = set.add(copy.getInterfaceDecl());
       }
     }
@@ -1165,12 +1174,12 @@ with:
   }
 
   // ES: adding NTA to store copies in
-  syn nta MemberClassDecl MemberSubstitutor.localClassDeclCopy(ClassDecl originalDecl) {
-    ClassDecl copy = originalDecl.substitutedClassDecl(this);
+  syn nta MemberClassDecl BodyDeclList.localClassDeclCopy(ClassDecl originalDecl, MemberSubstitutor m) {
+    ClassDecl copy = originalDecl.substitutedClassDecl(m);
     return new MemberClassDecl(copy);
   }
-  syn nta MemberInterfaceDecl MemberSubstitutor.localInterfaceDeclCopy(InterfaceDecl originalDecl) {
-    InterfaceDecl copy = originalDecl.substitutedInterfaceDecl(this);
+  syn nta MemberInterfaceDecl BodyDeclList.localInterfaceDeclCopy(InterfaceDecl originalDecl, MemberSubstitutor m) {
+    InterfaceDecl copy = originalDecl.substitutedInterfaceDecl(m);
     return new MemberInterfaceDecl(copy);
   }
 
@@ -1188,15 +1197,15 @@ with:
       b.is$Final = true;
       * and replacing with:
       */
-      BodyDecl b = constructorCopy(c);
+      BodyDecl b = ((BodyDeclList)getBodyDeclList()).constructorCopy(c, this);
       set.add(b);
     }
     return set;
   }
 
   // ES: adding NTA to store copies in 
-  syn nta BodyDecl MemberSubstitutor.constructorCopy(ConstructorDecl originalDecl) {
-    return originalDecl.substitutedBodyDecl(this);
+  syn nta BodyDecl BodyDeclList.constructorCopy(ConstructorDecl originalDecl, MemberSubstitutor m) {
+    return originalDecl.substitutedBodyDecl(m);
   }
 
   public BodyDecl BodyDecl.substitutedBodyDecl(Parameterization parTypeDecl) {
@@ -1280,7 +1289,7 @@ with:
       getID(),
       hasSuperClassAccess() ? new Opt(getSuperClassAccess().type().substitute(parTypeDecl)) : new Opt(),
       getImplementsList().substitute(parTypeDecl),
-      new List(), 
+     // ES:  new List(), 
       this
     );
     return c;
@@ -1291,7 +1300,7 @@ with:
       getID(),
       hasSuperClassAccess() ? new Opt(getSuperClassAccess().type().substitute(parTypeDecl)) : new Opt(),
       getImplementsList().substitute(parTypeDecl),
-      new List(),
+    // ES:   new List(),
       new List(), // delegates TypeParameter lookup to original 
       this
     );
@@ -1302,7 +1311,7 @@ with:
       (Modifiers)getModifiers().fullCopy(),
       getID(),
       getSuperInterfaceIdList().substitute(parTypeDecl),
-      new List(),
+     // ES:  new List(),
       this
     );
     return c;
@@ -1312,7 +1321,7 @@ with:
       (Modifiers)getModifiers().fullCopy(),
       getID(),
       getSuperInterfaceIdList().substitute(parTypeDecl),
-      new List(),
+     // ES:  new List(),
       new List(), // delegates TypeParameter lookup to original
       this
     );
