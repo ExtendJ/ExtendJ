@@ -98,10 +98,9 @@ aspect LookupFullyQualifiedTypes {
   inh TypeDecl TypeDecl.lookupType(String packageName, String typeName);
   inh TypeDecl CompilationUnit.lookupType(String packageName, String typeName);
 
-  public int Program.classFileReadTime;
-
-/* ES: replacing this with an implementation that places library compilation units in a parameterized nta
   eq Program.getChild().lookupType(String packageName, String typeName) = lookupType(packageName, typeName);
+
+  public int Program.classFileReadTime;
   
   syn lazy TypeDecl Program.lookupType(String packageName, String typeName) {
     addPrimitiveTypes();
@@ -128,71 +127,6 @@ aspect LookupFullyQualifiedTypes {
     }
     return null;
   }
-*/
-  // Type requests from the library stays in the library
-  eq Program.getChild().lookupType(String packageName, String typeName) = lookupLibType(packageName, typeName);
-  // Type requests from the source checks the source and then the library
-  eq Program.getCompilationUnit(int i).lookupType(String packageName, String typeName) = lookupType(packageName, typeName);
-
-  // Checks source units for type and then library units
-  syn lazy TypeDecl Program.lookupType(String packageName, String typeName) {
-    String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
-    // Check for type in source
-    for(int i = 0; i < getNumCompilationUnit(); i++) {
-      for(int j = 0; j < getCompilationUnit(i).getNumTypeDecl(); j++) {
-        TypeDecl type = getCompilationUnit(i).getTypeDecl(j);
-        if(type.fullName().equals(fullName)) {
-          return type;
-        }
-      }
-    }
-    // Check for type in library
-    return lookupLibType(packageName, typeName);
-  }
-  // Lookup types in the library
-  syn lazy TypeDecl Program.lookupLibType(String packageName, String typeName) {
-    String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
-    // Check the primitive types
-    if (packageName.equals(PRIMITIVE_PACKAGE_NAME)) {
-      PrimitiveCompilationUnit unit = getPrimitiveCompilationUnit();
-      if (typeName.equals("boolean")) return unit.typeBoolean();
-      if (typeName.equals("byte")) return unit.typeByte();
-      if (typeName.equals("short")) return unit.typeShort();
-      if (typeName.equals("char")) return unit.typeChar();
-      if (typeName.equals("int")) return unit.typeInt();
-      if (typeName.equals("long")) return unit.typeLong();
-      if (typeName.equals("float")) return unit.typeFloat();
-      if (typeName.equals("double")) return unit.typeDouble();
-      if (typeName.equals("null")) return unit.typeNull();
-      if (typeName.equals("void")) return unit.typeVoid();
-      if (typeName.equals("Unknown")) return unit.unknownType(); // Is this needed?
-    } 
-    // Check the library:
-    //  A type may not be in the library but an NTA cannot map to null.
-    //  We need to do some double work to step around this.
-    //  We check the classpath directly (the same thing the library NTA does)
-    //  to prevent that we call the nta for a name that gives null back
-    //else if (getCompilationUnit(fullName) != null) { 
-    
-    // Found a library unit, check it for type
-    CompilationUnit libUnit = getLibCompilationUnit(fullName);
-    if (libUnit != null) {
-      for(int j = 0; j < libUnit.getNumTypeDecl(); j++) {
-        TypeDecl type = libUnit.getTypeDecl(j);
-        if(type.fullName().equals(fullName)) {
-          return type;
-        }
-      }
-    }
-    // No type found in the library
-    return null;
-  }
-  // Store library units (including primitive unit) in a parameterized nta
-  syn nta CompilationUnit Program.getLibCompilationUnit(String fullName) {
-    return getCompilationUnit(fullName);
-  }
-
-
 }
 
 aspect TypeScopePropagation {
