@@ -264,12 +264,19 @@ aspect GenericsTypeAnalysis {
   eq ParTypeAccess.unqualifiedScope() = getParent() instanceof Access ? ((Access)getParent()).unqualifiedScope() : super.unqualifiedScope();
   eq ParTypeAccess.getTypeArgument().lookupType(String name) = unqualifiedScope().lookupType(name);
 
+  eq Program.getChild().inExtendsOrImplements() = false;
+  eq ClassDecl.getSuperClassAccess().inExtendsOrImplements() = true;
+  eq ClassDecl.getImplements(int i).inExtendsOrImplements() = true;
+  eq InterfaceDecl.getSuperInterfaceId().inExtendsOrImplements() = true;
+  inh boolean Expr.inExtendsOrImplements();
+
   eq ParTypeAccess.type() {
     TypeDecl typeDecl = genericDecl();
     if(typeDecl instanceof GenericTypeDecl) {
       // use signature in lookup for types that are used in extends and implements clauses
-      if(unqualifiedScope().getParent().getParent() instanceof TypeDecl)
+      if (unqualifiedScope().inExtendsOrImplements()) {
         return ((GenericTypeDecl)typeDecl).lookupParTypeDecl(this);
+      }
       ArrayList args = new ArrayList();
       for(int i = 0; i < getNumTypeArgument(); i++)
         args.add(getTypeArgument(i).type());
@@ -1144,7 +1151,7 @@ with:
 
 
     // TODO-ES: Add NTA for copies like above
-  syn lazy final SimpleSet MemberSubstitutor.localTypeDecls(String name) {
+  syn lazy final SimpleSet MemberSubstitutor.localTypeDecls(String name) circular [SimpleSet.emptySet] {
     SimpleSet set = SimpleSet.emptySet;
     for(Iterator iter = original().localTypeDecls(name).iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl)iter.next();
