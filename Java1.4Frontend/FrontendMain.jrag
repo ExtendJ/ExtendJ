@@ -45,20 +45,28 @@ aspect FrontendMain {
         for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
           CompilationUnit unit = (CompilationUnit)iter.next();
           if(unit.fromSource()) {
-            Collection errors = unit.parseErrors();
-            Collection warnings = new LinkedList();
-            // compute static semantic errors when there are no parse errors or 
-            // the recover from parse errors option is specified
-            if(errors.isEmpty() || program.options().hasOption("-recover"))
-              unit.errorCheck(errors, warnings);
-            if(!errors.isEmpty()) {
-              processErrors(errors, unit);
+            try {
+              Collection errors = unit.parseErrors();
+              Collection warnings = new LinkedList();
+              // compute static semantic errors when there are no parse errors
+              // or the recover from parse errors option is specified
+              if(errors.isEmpty() || program.options().hasOption("-recover"))
+                unit.errorCheck(errors, warnings);
+              if(!errors.isEmpty()) {
+                processErrors(errors, unit);
+                return false;
+              }
+              else {
+               if(!warnings.isEmpty())
+                 processWarnings(warnings, unit);
+                processNoErrors(unit);
+              }
+            } catch (Throwable t) {
+              System.err.println("Errors:");
+              System.err.println("Fatal exception while processing " +
+                  unit.pathName() + ":");
+              t.printStackTrace(System.err);
               return false;
-            }
-            else {
-             if(!warnings.isEmpty())
-               processWarnings(warnings, unit);
-              processNoErrors(unit);
             }
           }
         }
