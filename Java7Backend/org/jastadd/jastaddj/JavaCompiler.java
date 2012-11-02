@@ -20,24 +20,18 @@ public class JavaCompiler extends Frontend {
 	}
 
 	public static boolean compile(String args[]) {
-		try {
-			return new JavaCompiler().process(
-					args,
-					new BytecodeParser(),
-					new JavaParser() {
-						public CompilationUnit parse(java.io.InputStream is,
-							String fileName) throws java.io.IOException,
-								beaver.Parser.Exception {
+		boolean result = new JavaCompiler().process(
+				args,
+				new BytecodeParser(),
+				new JavaParser() {
+					public CompilationUnit parse(java.io.InputStream is,
+						String fileName) throws java.io.IOException,
+							beaver.Parser.Exception {
 
-							return new parser.JavaParser().parse(is, fileName);
-						}
-					});
-		} catch (Throwable t) {
-			System.err.println("Errors:");
-			System.err.println("Fatal exception:");
-			t.printStackTrace(System.err);
-			return false;
-		}
+						return new parser.JavaParser().parse(is, fileName);
+					}
+				});
+		return result;
 	}
 	protected void processNoErrors(CompilationUnit unit) {
 		unit.transformation();
