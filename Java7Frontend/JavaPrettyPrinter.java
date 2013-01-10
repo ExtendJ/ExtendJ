@@ -43,7 +43,7 @@ class JavaPrettyPrinter extends Frontend {
 
 	protected void processNoErrors(CompilationUnit unit) {
 		String separator = System.getProperty("file.separator");
-		if (separator == "\\")
+		if (separator.equals("\\"))
 			// regex escape
 			separator = "\\\\";
 		String fnIn = unit.pathName();
