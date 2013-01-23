@@ -110,10 +110,11 @@ aspect PathPart {
   class FolderPart extends PathPart {
 
     /**
-     * Maps package names to a collection of the files in
+     * Maps package names to a collection of the names of files in
      * the corresponding package directory.
      */
-    private HashMap packageMap = new HashMap();
+    private Map<String, Collection<String>> packageMap =
+      new HashMap<String, Collection<String>>();
 
     /**
      * The root folder of this path part.
@@ -125,41 +126,39 @@ aspect PathPart {
     }
 
     public boolean hasPackage(String name) {
-      return filesInPackage(name) != null;
+      return !filesInPackage(name).isEmpty();
     }
 
     public boolean hasCompilationUnit(String canonicalName) {
       int index = canonicalName.lastIndexOf('.');
       String packageName = index == -1 ? "" : canonicalName.substring(0, index);
       String typeName = canonicalName.substring(index + 1, canonicalName.length());
-      Collection c = filesInPackage(packageName);
-      boolean result = c != null && c.contains(typeName + fileSuffix());
-      return result;
+      String fileName = typeName + fileSuffix();
+      return filesInPackage(packageName).contains(fileName);
     }
     
-    private Collection filesInPackage(String packageName) {
-      if(!packageMap.containsKey(packageName)) {
-        File f = new File(folder, packageName.replace('.', File.separatorChar));
-        Collection c = Collections.EMPTY_LIST;
-        if(f.exists() && f.isDirectory()) {
-          String[] files = f.list();
-          if(files.length > 0) {
+    private Collection<String> filesInPackage(String packageName) {
+      if (!packageMap.containsKey(packageName)) {
+        File pkgFolder = new File(folder, packageName.replace('.', File.separatorChar));
+        Collection<String> c = Collections.emptyList();
+        if (pkgFolder.exists() && pkgFolder.isDirectory()) {
+          String[] files = pkgFolder.list();
+          if (files.length > 0) {
             c = new HashSet();
             for(int i = 0; i < files.length; i++)
               c.add(files[i]);
           }
         }
-        else
-          c = null;
         packageMap.put(packageName, c);
       }
-      return (Collection)packageMap.get(packageName);
+      return packageMap.get(packageName);
     }
     
     public boolean selectCompilationUnit(String canonicalName) throws IOException {
       if(hasCompilationUnit(canonicalName)) {
-        String fileName = canonicalName.replace('.', File.separatorChar);
-        File classFile = new File(folder, fileName + fileSuffix());
+        String typeName = canonicalName.replace('.', File.separatorChar);
+        String fileName = typeName + fileSuffix();
+        File classFile = new File(folder, fileName);
         if(classFile.isFile()) {
           is = new FileInputStream(classFile);
           age = classFile.lastModified();
