@@ -125,6 +125,11 @@ aspect PathPart {
       this.folder = folder;
     }
 
+    /**
+     * @param name The qualified package name
+     * @return <code>true</code> if the given package exists in this source
+     * folder
+     */
     public boolean hasPackage(String name) {
       return !filesInPackage(name).isEmpty();
     }
@@ -137,17 +142,39 @@ aspect PathPart {
       return filesInPackage(packageName).contains(fileName);
     }
     
+    /**
+     * We need to use getCanonicalFile in order to get the case-sensitive
+     * package name on case-insensitive file systems or we might incorrectly
+     * report a package name conflict.
+     *
+     * NB: This does not work well with symlinks!
+     *
+     * @param packageName The qualified name of the package
+     * @return The names of the files and folders in the package
+     */
     private Collection<String> filesInPackage(String packageName) {
       if (!packageMap.containsKey(packageName)) {
-        File pkgFolder = new File(folder, packageName.replace('.', File.separatorChar));
+        int index = packageName.lastIndexOf('.');
+        String name = packageName.substring(index == -1 ? 0 : index+1);
+        String folderName = packageName.replace('.', File.separatorChar);
+        File pkgFolder = new File(folder, folderName);
         Collection<String> c = Collections.emptyList();
-        if (pkgFolder.isDirectory()) {
-          String[] files = pkgFolder.list();
-          if (files.length > 0) {
-            c = new HashSet();
-            for(int i = 0; i < files.length; i++)
-              c.add(files[i]);
+        try {
+          File canonical = pkgFolder.getCanonicalFile();
+          if (canonical.isDirectory() && canonical.getName().equals(name)) {
+            String[] files = pkgFolder.list();
+            if (files.length > 0) {
+              c = new HashSet<String>();
+              for (String file: files) {
+                c.add(files);
+              }
+            }
           }
+        } catch (Exception e) {
+          // Catch IOExceptions etc.
+          // if the exception was thrown by getCanonicalFile we will put
+          // the empty list in the packageMap, indicating that the package
+          // does not exist
         }
         packageMap.put(packageName, c);
       }
