@@ -31,5 +31,5 @@ echo ------------------------------------------------------
 echo
 echo "# 4. Tag in SVN"
 echo "svn copy http://svn.cs.lth.se/svn/jastadd-oxford/projects/trunk/JastAddJ \\"
-echo "    http://svn.cs.lth.se/svn/jastadd-oxford/projects/trunk/JastAddJ/${VERSION} \\"
+echo "    http://svn.cs.lth.se/svn/jastadd-oxford/projects/tags/JastAddJ/${VERSION} \\"
 echo "    -m \"Release ${VERSION} of JastAddJ\""
