@@ -31,5 +31,10 @@ echo ------------------------------------------------------
 echo
 echo "# 4. Tag in SVN"
 echo "svn copy http://svn.cs.lth.se/svn/jastadd-oxford/projects/trunk/JastAddJ \\"
-echo "    http://svn.cs.lth.se/svn/jastadd-oxford/projects/tags/JastAddJ/${VERSION} \\"
-echo "    -m \"Release ${VERSION} of JastAddJ\""
+echo "    http://svn.cs.lth.se/svn/jastadd-oxford/projects/tags/JastAddJ/$VERSION \\"
+echo "    -m \"Release $VERSION of JastAddJ\""
+echo
+echo "# 5. Update stable branch"
+echo "svn copy http://svn.cs.lth.se/svn/jastadd-oxford/projects/trunk/JastAddJ \\"
+echo "    http://svn.cs.lth.se/svn/jastadd-oxford/projects/branches/JastAddJ-stable \\"
+echo "    -m \"Release $VERSION of JastAddJ\""
