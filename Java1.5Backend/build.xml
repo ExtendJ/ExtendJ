@@ -1,225 +1,211 @@
-<!--
- Targets for working from terminal window:
-       build (default) - generates java files and compiles them
-       clean           - removes all generated files and class files
- Targets for working from Eclipse:
-       gen             - generates java files
-       genClean        - removes all generated files and their class files
--->
-<project name="Java1.5BytecodeBackend" default="build">
+<project name="JastAddJ Java 5.0 Module" default="build">
+	<property name="jj.root" location="${basedir}/../"/>
+	<property file="../build.properties"/>
 
-	<!-- location of Java1.4Frontend -->
-	<property name="Java1.4Frontend" value="../Java1.4Frontend"/>
-	<!-- location of Java1.4Backend -->
-	<property name="Java1.4Backend" value="../Java1.4Backend"/>
-	<!-- location of Java1.5Frontend -->
-	<property name="Java1.5Frontend" value="../Java1.5Frontend"/>
-
-	<!-- "package" is the directory where generated files will be stored -->
-	<property name="package" value="AST"/>
-
-	<!-- "tools" is the directory where generators and libraries are located. -->
-	<property name="tools" value="${Java1.4Frontend}/tools"/>
-
-	<!-- "jflex" is an ant task class for the scanner generator in JFlex.jar -->
+	<!-- define scanner generator task -->
 	<taskdef name="jflex" classname="JFlex.anttask.JFlexTask"
-		classpath="${tools}/JFlex.jar"/>
-	<!-- "beaver" is an ant task class for the parser generator in beaver-ant.jar -->
+		classpath="${tools.dir}/JFlex.jar"/>
+
+	<!-- parser generator task -->
 	<taskdef name="beaver" classname="beaver.comp.run.AntTask"
-		classpath="${tools}/beaver-ant.jar"/>
-	<!-- "jastadd" is an ant task class in jastadd2.jar -->
+		classpath="${tools.dir}/beaver-ant.jar"/>
+
+	<!-- jastadd task -->
 	<taskdef name="jastadd" classname="jastadd.JastAddTask"
-		classpath="${tools}/jastadd2.jar"/>
+		classpath="${tools.dir}/jastadd2.jar"/>
 
-	<!-- compile sources -->
-	<target name="build" depends="gen">
-		<javac debug="true" nowarn="true" srcdir="." includes="**/*.java"
-			excludes="test/**" 
-			classpath=".:${tools}/junit.jar"
-			includeantruntime="false"/>
+	<target name="build">
+		<antcall target="backend"/>
 	</target>
 
-	<!-- generate documentation -->
-	<target name="doc" depends="gen"
-		description="Build ReRAG documentation">
-		<mkdir dir="doc"/>
-		<javadoc destdir="doc" docletpath="${tools}/RagDoll.jar"
-			doclet="ragdoll.RagDollDoclet">
-			<arg value="-linksource"/>
-			<packageset dir="." defaultexcludes="yes">
-				<include name="AST"/>
-			</packageset>
-		</javadoc>
+	<target name="frontend" depends="frontend-gen" description="compile JastAddJ">
+		<mkdir dir="${bin.dir}"/>
+		<javac
+			srcdir="${src.dir}"
+			destdir="${bin.dir}"
+			debug="${debug}"
+			nowarn="true"
+			includeantruntime="true">
+			<src path="${src.dir}"/>
+			<src path="${gen.dir}"/>
+			<exclude name="JavaCompiler.java"/>
+			<exclude name="org/jastadd/jastaddj/JastAddJTask.java"/>
+			<exclude name="org/jastadd/jastaddj/JavaCompiler.java"/>
+		</javac>
+		<antcall target="copy-resources"/>
 	</target>
 
-	<!-- set the correct ant executable name, depending on OS -->
-	<condition property="ant.exec.name" value="ant.bat" else="ant">
-		<os family="windows"/>
-	</condition>
-
-	<!-- generate compiler source files -->
-	<target name="gen" depends="scanner,parser">
-		<exec executable="${ant.exec.name}" failonerror="true">
-			<env key="ANT_OPTS" value="-Xmx512M"/>
-			<arg value="gen.morememory"/>
-		</exec>
-		<!-- copy library files-->
-		<copy todir="beaver" preservelastmodified="true">
-			<fileset dir="${Java1.4Frontend}/beaver">
-				<include name="**/*.java"/>
+	<target name="frontend-gen" depends="scanner,parser">
+		<!-- generate AST node types and weave aspect modules -->
+		<!-- don't include backend stuff here -->
+		<jastadd
+			package="${ast.package}"
+			rewrite="true"
+			beaver="true"
+			noVisitCheck="true"
+			noCacheCycle="true"
+			outdir="${gen.dir}">
+			<fileset dir="${java4.dir}/ast">
+				<include name="*.ast"/>
 			</fileset>
-		</copy>
-	</target>
-
-	<target name="gen.morememory">
-		<!-- create AST node types and weave aspect modules -->
-		<jastadd package="${package}" rewrite="true" beaver="true"
-			novisitcheck="true" noCacheCycle="true" outdir="${basedir}" debug="false"
-			refineLegacy="false">
-			<fileset dir="${Java1.4Frontend}">
-				<include name="**/*.ast"/>
-				<include name="**/*.jrag"/>
-				<include name="**/*.jadd"/> 
+			<fileset dir="${java4.dir}/fe">
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
 				<exclude name="BytecodeAttributes.jrag"/>
 				<exclude name="BytecodeDescriptor.jrag"/>
 				<exclude name="BytecodeReader.jrag"/>
 			</fileset>
-			<fileset dir="${Java1.4Backend}">
-				<include name="**/*.ast"/>
-				<include name="**/*.jrag"/>
-				<include name="**/*.jadd"/>
+			<fileset dir="${java5.dir}/ast">
+				<include name="*.ast"/>
 			</fileset>
-			<fileset dir="${Java1.5Frontend}">
-				<include name="**/*.ast"/>
-				<include name="**/*.jrag"/>
-				<include name="**/*.jadd"/>
-			</fileset>
-			<fileset dir=".">
-				<include name="**/*.ast"/>
-				<include name="**/*.jrag"/>
-				<include name="**/*.jadd"/>
+			<fileset dir="${java5.dir}/fe">
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
 			</fileset>
 		</jastadd>
-		<!-- copy library files-->
-		<copy todir="beaver" preservelastmodified="true">
-			<fileset dir="${Java1.4Frontend}/beaver">
-				<include name="**/*.java"/>
+	</target>
+
+	<target name="backend" depends="backend-gen" description="compile JastAddJ">
+		<mkdir dir="${bin.dir}"/>
+		<javac
+			srcdir="${src.dir}"
+			destdir="${bin.dir}"
+			debug="${debug}"
+			nowarn="true"
+			includeantruntime="true">
+			<src path="${src.dir}"/>
+			<src path="${gen.dir}"/>
+		</javac>
+		<antcall target="copy-resources"/>
+	</target>
+
+	<target name="backend-gen" depends="scanner,parser">
+		<!-- generate AST node types and weave aspect modules -->
+		<jastadd
+			package="${ast.package}"
+			rewrite="true"
+			beaver="true"
+			noVisitCheck="true"
+			noCacheCycle="true"
+			outdir="${gen.dir}">
+			<fileset dir="${java4.dir}/ast">
+				<include name="*.ast"/>
+			</fileset>
+			<fileset dir="${java4.dir}/fe">
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
+				<exclude name="BytecodeAttributes.jrag"/>
+				<exclude name="BytecodeDescriptor.jrag"/>
+				<exclude name="BytecodeReader.jrag"/>
+			</fileset>
+			<fileset dir="${java4.dir}/be">
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
+			</fileset>
+			<fileset dir="${java5.dir}/ast">
+				<include name="*.ast"/>
+			</fileset>
+			<fileset dir="${java5.dir}/fe">
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
+			</fileset>
+			<fileset dir="${java5.dir}/be">
+				<include name="*.jrag"/>
+				<include name="*.jadd"/>
+			</fileset>
+		</jastadd>
+	</target>
+
+	<target name="copy-resources">
+		<copy todir="${bin.dir}" preservelastmodified="true">
+			<fileset dir="${res.dir}">
+				<include name="**/*"/>
 			</fileset>
 		</copy>
 	</target>
 
 	<target name="scanner">
-		<mkdir dir="scanner"/>
-		<!-- compose the scanner -->
-		<concat destfile="scanner/JavaScanner.flex" binary="true" force="false">
-			<filelist dir="${Java1.4Frontend}/scanner">
-				<file name="preamble.flex"/>
-				<file name="macros.flex"/>
+		<!-- compose scanner specification -->
+		<mkdir dir="${tmp.dir}/scanner"/>
+		<concat destfile="${tmp.dir}/scanner/JavaScanner.flex"
+			binary="true" force="false">
+			<!-- we use filelist because the order is important -->
+			<filelist dir="${java4.dir}/scanner">
+				<file name="Preamble.flex"/>
+				<file name="Macros.flex"/>
 			</filelist>
-			<filelist dir="${Java1.5Frontend}">
-				<file name="java15macros.flex"/>
+			<filelist dir="${java5.dir}/scanner">
+				<file name="Macros.flex"/>
 			</filelist>
-			<filelist dir="${Java1.4Frontend}/scanner">
-				<file name="rules_preamble.flex"/>
+			<filelist dir="${java4.dir}/scanner">
+				<file name="RulesPreamble.flex"/>
 				<file name="WhiteSpace.flex"/>
 				<file name="Comments.flex"/>
 				<file name="Keywords.flex"/>
 			</filelist>
-			<filelist dir="${Java1.5Frontend}">
-				<file name="java15keywords.flex"/>
+			<filelist dir="${java5.dir}/scanner">
+				<file name="Keywords.flex"/>
 			</filelist>
-			<filelist dir="${Java1.4Frontend}/scanner">
+			<filelist dir="${java4.dir}/scanner">
 				<file name="Literals.flex"/>
 			</filelist>
-			<filelist dir="${Java1.5Frontend}">
-				<file name="java15literals.flex"/>
+			<filelist dir="${java5.dir}/scanner">
+				<file name="Literals.flex"/>
 			</filelist>
-			<filelist dir="${Java1.4Frontend}/scanner">
+			<filelist dir="${java4.dir}/scanner">
 				<file name="Separators.flex"/>
 				<file name="Operators.flex"/>
 			</filelist>
-			<filelist dir="${Java1.5Frontend}">
-				<file name="java15operators.flex"/>
-				<file name="java15identifiers.flex"/>
+			<filelist dir="${java5.dir}/scanner">
+				<file name="Operators.flex"/>
+				<file name="Identifiers.flex"/>
 			</filelist>
-			<filelist dir="${Java1.4Frontend}/scanner">
-				<file name="postamble.flex"/>
+			<filelist dir="${java4.dir}/scanner">
+				<file name="Postamble.flex"/>
 			</filelist>
 		</concat>
-		<!-- generate the scanner -->
-		<jflex file="scanner/JavaScanner.flex" outdir="scanner" nobak="yes"/>
-		<copy todir="scanner" file="${Java1.4Frontend}/scanner/Unicode.java"
-			preservelastmodified="true"/>
+		<!-- invoke scanner generator -->
+		<mkdir dir="${gen.dir}/scanner"/>
+		<jflex file="${tmp.dir}/scanner/JavaScanner.flex"
+			outdir="${gen.dir}/scanner" nobak="yes"/>
 	</target>
 
 	<target name="parser">
-		<mkdir dir="parser"/>
-		<!-- generate the parser phase 1, create a full .lalr specification from fragments -->
-		<concat destfile="parser/JavaParser.all" binary="true" force="false">
-			<filelist dir="${Java1.4Frontend}">
-				<file name="parser/preamble.parser"/>
-				<file name="parser/java14.parser"/>
-				<file name="parser/errorrecovery.parser"/>
+		<!-- compose parser specification -->
+		<mkdir dir="${tmp.dir}/parser"/>
+		<concat destfile="${tmp.dir}/parser/JavaParser.all"
+			binary="true" force="false">
+			<!-- we use filelist because the order is important -->
+			<filelist dir="${java4.dir}/parser">
+				<file name="Preamble.parser"/>
+				<file name="Java1.4.parser"/>
+				<file name="ErrorRecovery.parser"/>
 			</filelist>
-			<fileset dir="${Java1.5Frontend}">
+			<fileset dir="${java5.dir}/parser">
 				<include name="*.parser"/>
 			</fileset>
 		</concat>
-		<!-- generate the parser phase 2, translating .lalr to .beaver -->
-		<java classpath="${tools}/JastAddParser.jar:${tools}/beaver-rt.jar"
-			classname="Main" fork="true">
-			<arg line="parser/JavaParser.all parser/JavaParser.beaver"/>
+		<java classname="Main" fork="true">
+			<classpath>
+				<pathelement path="${tools.dir}/JastAddParser.jar"/>
+				<pathelement path="${tools.dir}/beaver-rt.jar"/>
+			</classpath>
+			<arg value="${tmp.dir}/parser/JavaParser.all"/>
+			<arg value="${tmp.dir}/parser/JavaParser.beaver"/>
 		</java>
-		<!-- generate the parser phase 3, translating .beaver to .java -->
-		<beaver file="parser/JavaParser.beaver" terminalNames="yes" compress="yes"
+		<!-- invoke parser generator -->
+		<mkdir dir="${gen.dir}/parser"/>
+		<beaver file="${tmp.dir}/parser/JavaParser.beaver"
+			destdir="${gen.dir}/parser"
+			terminalNames="yes"
+			compress="no"
 			useSwitch="yes"/>
 	</target>
 
-	<!-- remove generated source files and .class files -->
-	<target name="clean" depends="cleanGen">
-		<!-- delete all .class files recursively -->
-		<delete>
-			<fileset dir="." includes="**/*.class"/>
-		</delete>
-		<delete file="JavaCompiler.jar"/>
-		<delete file="Java1.5Backend-src.jar"/>
-	</target>
-
-	<!-- remove generated source files and .class files -->
-	<target name="cleanGen">
-		<delete dir="${package}"/>
-		<delete dir="beaver"/>
-		<delete dir="scanner"/>
-		<delete dir="parser"/>
-	</target>
-
-	<!-- build binaries -->
-	<target name="jar" depends="build">
-		<jar destfile="JavaCompiler.jar" basedir="." includes="**/*.class" excludes="test/**">
-			<manifest>
-				<attribute name="Main-Class" value="JavaCompiler"/>
-			</manifest>
-		</jar>
-	</target>
-
-	<!-- build a source distribution -->
-	<target name="source" depends="build">
-		<jar destfile="Java1.5Backend-src.jar">
-			<fileset dir="..">
-				<!-- include backend source file -->
-				<include name="Java1.5Backend/JavaCompiler.java"/>
-				<include name="Java1.5Backend/**/*.ast"/>
-				<include name="Java1.5Backend/**/*.jrag"/>
-				<include name="Java1.5Backend/**/*.jadd"/>
-				<!-- include buildfile used to build the backend -->
-				<include name="Java1.5Backend/build.xml"/>
-				<!-- include readme and licence -->
-				<include name="Java1.5Backend/README"/>
-				<include name="Java1.5Backend/licences/BSD"/>
-			</fileset>
-			<manifest>
-			</manifest>
-		</jar>
+	<target name="clean" description="remove generated source and class files">
+		<delete dir="${gen.dir}"/>
+		<delete dir="${tmp.dir}"/>
+		<delete dir="${bin.dir}"/>
 	</target>
 
 </project>
