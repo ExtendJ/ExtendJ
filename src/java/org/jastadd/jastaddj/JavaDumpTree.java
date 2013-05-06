@@ -48,7 +48,7 @@ class JavaDumpTree extends Frontend {
 
 	@Override
 	protected String name() {
-		return JastAddJResources.get("JavaDumpTree.name");
+		return "Java AST Dumper";
 	}
 
 	@Override

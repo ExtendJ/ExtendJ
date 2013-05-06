@@ -44,7 +44,7 @@ class JavaPrettyPrinter extends Frontend {
 
 	@Override
 	protected String name() {
-		return JastAddJResources.get("JavaPrettyPrinter.name");
+		return "JastAddJ Java PrettyPrinter";
 	}
 
 	@Override

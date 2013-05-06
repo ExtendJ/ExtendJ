@@ -34,7 +34,7 @@ public class JavaChecker extends Frontend {
 
 	@Override
 	protected String name() {
-		return JastAddJResources.get("JavaChecker.name");
+		return "Java Checker";
 	}
 
 	@Override
