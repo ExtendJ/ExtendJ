@@ -19,10 +19,9 @@ while true; do
 	esac
 done
 
-echo "Bumping version strings..."
+echo "Bumping version string..."
 echo "version=$VERSION" > src/res/JastAddJ.properties
-echo "version.short=$VERSION" >> src/res/JastAddJ.properties
-git commit -m "Bumped version strings" src/res/JastAddJ.properties
+git commit -m "Bumped version string" src/res/JastAddJ.properties
 
 echo "Tagging the release..."
 git tag -a $VERSION -m "Version $VERSION"
