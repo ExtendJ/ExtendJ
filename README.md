@@ -14,16 +14,40 @@ All rights reserved.
 JastAddJ is covered by the Modified BSD License. The full license text is
 distributed with this software. See the `LICENSE` file.
 
+Tools Used
+----------
+
+JastAddJ uses these libraries:
+
+* JastAdd2 R20130212, Copyright (c) 2005-2013, The JastAdd Team. JastAdd2 is
+  covered by the Modified BSD License. See the file `licenses/JastAdd2-BSD` for
+the full license text.
+* Beaver 0.9.11, Copyright (c) 2003-2011 Alexander Demenchuk. Beaver is covered
+  by the Modified BSD License. See the file `licenses/Beaver-BSD` for the full
+license text.
+* JFlex 1.4.3, Copyright (c) 1998-2009 Gerwin Klein. JFlex is covered by the
+  GNU General Public License. See the file `licenses/JFlex-GPL` for the full
+license text.
+* JastAddParser, Copyright (c) 2005, The JastAdd Team. JastAddParser is covered
+  by the Modified BSD License. See the file `licenses/JastAddParser-BSD` for
+the full license text.
+* RagDoll R20120208, Copyright (c) 2011-2012 Jesper &Ouml;qvist. RagDoll is
+  covered by the GNU General Public License Version 2, with the Classpath
+Exception. See the file `licenses/RagDoll-GPL` for the full license text.
+
+The only library used by JastAddJ at runtime is the Beaver runtime component
+`beaver-rt.jar`.
+
 Building
 --------
 
-JastAddJ is built using Apache Ant. Each module has it's own Ant
-script, and there is a toplevel Ant script that contains targets to build
-JastAddJ with support for various versions of Java.  The default target will
-build JastAddJ for the highest supported Java version.
+JastAddJ is built using Apache Ant. Each module has it's own Ant script, and
+there is a toplevel Ant script that contains targets to build JastAddJ with
+support for various versions of Java.  The default target will build JastAddJ
+for the highest supported Java version.
 
-If you have Ant installed you can get a list of available build targets
-by entering the following in a terminal:
+If you have Ant installed you can get a list of available build targets by
+entering the following in a terminal:
 
     $ ant -p
 
