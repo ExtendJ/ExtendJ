@@ -192,7 +192,7 @@ aspect Generics {
           new GenericClassDecl(
             getModifiersNoTransform(),
             getID(),
-            s.hasSuperclassSignature() ? new Opt(s.superclassSignature()) : getSuperClassAccessOptNoTransform(),
+            s.hasSuperclassSignature() ? new Opt(s.superclassSignature()) : getSuperClassOptNoTransform(),
             s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getImplementsListNoTransform(),
             getBodyDeclListNoTransform(),
             s.typeParameters()
@@ -203,7 +203,7 @@ aspect Generics {
     }
     else {
       if(s.hasSuperclassSignature())
-        setSuperClassAccessOpt(new Opt(s.superclassSignature()));
+        setSuperClassOpt(new Opt(s.superclassSignature()));
       if(s.hasSuperinterfaceSignature())
         setImplementsList(s.superinterfaceSignature());
       return this;
@@ -218,7 +218,7 @@ aspect Generics {
           new GenericInterfaceDecl(
             getModifiersNoTransform(),
             getID(),
-            s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getSuperInterfaceIdListNoTransform(),
+            s.hasSuperinterfaceSignature() ? s.superinterfaceSignature() : getSuperInterfaceListNoTransform(),
             getBodyDeclListNoTransform(),
             s.typeParameters()
           ),
@@ -228,7 +228,7 @@ aspect Generics {
     }
     else {
       if(s.hasSuperinterfaceSignature())
-        setSuperInterfaceIdList(s.superinterfaceSignature());
+        setSuperInterfaceList(s.superinterfaceSignature());
       return this;
     }
   }
@@ -265,9 +265,9 @@ aspect GenericsTypeAnalysis {
   eq ParTypeAccess.getTypeArgument().lookupType(String name) = unqualifiedScope().lookupType(name);
 
   eq Program.getChild().inExtendsOrImplements() = false;
-  eq ClassDecl.getSuperClassAccess().inExtendsOrImplements() = true;
+  eq ClassDecl.getSuperClass().inExtendsOrImplements() = true;
   eq ClassDecl.getImplements(int i).inExtendsOrImplements() = true;
-  eq InterfaceDecl.getSuperInterfaceId().inExtendsOrImplements() = true;
+  eq InterfaceDecl.getSuperInterface().inExtendsOrImplements() = true;
   inh boolean Expr.inExtendsOrImplements();
 
   eq ParTypeAccess.type() {
@@ -496,11 +496,11 @@ aspect GenericsNameBinding {
     return c;
   }
 
-  eq GenericInterfaceDecl.getSuperInterfaceId().lookupType(String name) {
+  eq GenericInterfaceDecl.getSuperInterface().lookupType(String name) {
     SimpleSet c = addTypeVariables(SimpleSet.emptySet, name);
     return !c.isEmpty() ? c : lookupType(name);
   }
-  eq GenericClassDecl.getSuperClassAccess().lookupType(String name) {
+  eq GenericClassDecl.getSuperClass().lookupType(String name) {
     SimpleSet c = addTypeVariables(SimpleSet.emptySet, name);
     return !c.isEmpty() ? c : lookupType(name);
   }
@@ -1012,12 +1012,12 @@ with:
     return list;
   }
 
-  syn lazy Opt ParClassDecl.getSuperClassAccessOpt() {
+  syn lazy Opt ParClassDecl.getSuperClassOpt() {
     GenericClassDecl decl = (GenericClassDecl)genericDecl();
     Opt opt;
     //System.err.println("Begin substituting extends clause");
-    if(decl.hasSuperClassAccess())
-      opt = new Opt((decl.getSuperClassAccess().type().substitute(this)));
+    if(decl.hasSuperClass())
+      opt = new Opt((decl.getSuperClass().type().substitute(this)));
     else
       opt = new Opt();
     //System.err.println("End substituting extends clause");
@@ -1034,10 +1034,10 @@ with:
   //syn lazy List ParClassDecl.getBodyDeclList() = new List();
   syn lazy List ParClassDecl.getBodyDeclList() = new BodyDeclList();
 
-  syn lazy List ParInterfaceDecl.getSuperInterfaceIdList() {
+  syn lazy List ParInterfaceDecl.getSuperInterfaceList() {
     GenericInterfaceDecl decl = (GenericInterfaceDecl)genericDecl();
     //System.err.println("Begin substituting implements list");
-    List list = decl.getSuperInterfaceIdList().substitute(this);
+    List list = decl.getSuperInterfaceList().substitute(this);
     //System.err.println("End substituting implements list");
     return list;
   }
@@ -1314,7 +1314,7 @@ with:
     ClassDecl c = new ClassDeclSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
-      hasSuperClassAccess() ? new Opt(getSuperClassAccess().type().substitute(parTypeDecl)) : new Opt(),
+      hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
       getImplementsList().substitute(parTypeDecl),
      // ES:  new List(), 
       this
@@ -1325,7 +1325,7 @@ with:
     GenericClassDecl c = new GenericClassDeclSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
-      hasSuperClassAccess() ? new Opt(getSuperClassAccess().type().substitute(parTypeDecl)) : new Opt(),
+      hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
       getImplementsList().substitute(parTypeDecl),
     // ES:   new List(),
       new List(), // delegates TypeParameter lookup to original 
@@ -1337,7 +1337,7 @@ with:
     InterfaceDecl c = new InterfaceDeclSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
-      getSuperInterfaceIdList().substitute(parTypeDecl),
+      getSuperInterfaceList().substitute(parTypeDecl),
      // ES:  new List(),
       this
     );
@@ -1347,7 +1347,7 @@ with:
     GenericInterfaceDecl c = new GenericInterfaceDeclSubstituted(
       (Modifiers)getModifiers().fullCopy(),
       getID(),
-      getSuperInterfaceIdList().substitute(parTypeDecl),
+      getSuperInterfaceList().substitute(parTypeDecl),
      // ES:  new List(),
       new List(), // delegates TypeParameter lookup to original
       this
