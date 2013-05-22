@@ -8,6 +8,13 @@
  */
 
 aspect FrontendMain {
+  protected long Program.javaParseTime;
+  protected long Program.bytecodeParseTime;
+  protected long Program.codeGenTime;
+  protected long Program.errorCheckTime;
+  protected int Program.numJavaFiles;
+  protected int Program.numClassFiles;
+
   public class Frontend {
     protected Program program;
 
@@ -17,6 +24,16 @@ aspect FrontendMain {
     }
 
     public boolean process(String[] args, BytecodeReader reader, JavaParser parser) {
+      long start;
+
+      // reset statistics
+      program.javaParseTime = 0;
+      program.bytecodeParseTime = 0;
+      program.codeGenTime = 0;
+      program.errorCheckTime = 0;
+      program.numJavaFiles = 0;
+      program.numClassFiles = 0;
+
       program.initBytecodeReader(reader);
       program.initJavaParser(parser);
 
@@ -29,6 +46,7 @@ aspect FrontendMain {
         printVersion();
         return true;
       }
+
       if(program.options().hasOption("-help") || files.isEmpty()) {
         printUsage();
         return true;
@@ -50,16 +68,21 @@ aspect FrontendMain {
               Collection warnings = new LinkedList();
               // compute static semantic errors when there are no parse errors
               // or the recover from parse errors option is specified
-              if(errors.isEmpty() || program.options().hasOption("-recover"))
+              if(errors.isEmpty() || program.options().hasOption("-recover")) {
+                start = System.currentTimeMillis();
                 unit.errorCheck(errors, warnings);
+                program.errorCheckTime += System.currentTimeMillis() - start;
+              }
               if(!errors.isEmpty()) {
                 processErrors(errors, unit);
                 return false;
-              }
-              else {
-               if(!warnings.isEmpty())
-                 processWarnings(warnings, unit);
+              } else {
+                if(!warnings.isEmpty()) {
+                  processWarnings(warnings, unit);
+                }
+                start = System.currentTimeMillis();
                 processNoErrors(unit);
+                program.codeGenTime += System.currentTimeMillis() - start;
               }
             } catch (Throwable t) {
               System.err.println("Errors:");
@@ -75,6 +98,15 @@ aspect FrontendMain {
         System.err.println("Fatal exception:");
         t.printStackTrace(System.err);
         return false;
+      } finally {
+        if (program.options().hasOption("-profile")) {
+          System.out.println("javaParseTime: " + program.javaParseTime);
+          System.out.println("numJavaFiles: " + program.numJavaFiles);
+          System.out.println("bytecodParseTime: " + program.javaParseTime);
+          System.out.println("numClassFiles: " + program.numClassFiles);
+          System.out.println("errorCheckTime: " + program.errorCheckTime);
+          System.out.println("codeGenTime: " + program.codeGenTime);
+        }
       }
       return true;
     }
@@ -103,6 +135,7 @@ aspect FrontendMain {
       options.addKeyOption("-O");
       options.addKeyOption("-J-Xmx128M");
       options.addKeyOption("-recover");
+      options.addKeyOption("-profile"); // output profiling information
     }
     protected void processArgs(String[] args) {
       program.options().addOptions(args);
