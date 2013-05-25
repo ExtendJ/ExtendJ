@@ -42,10 +42,10 @@ public class JavaCompiler extends Frontend {
 
 	@Override
 	protected String name() {
-		return "JastAddJ Java Compiler";
+		return "JastAddJ";
 	}
 	@Override
 	protected String version() {
-		return JastAddJResources.get("version");
+		return JastAddJResources.getVersion();
 	}
 }

@@ -36,23 +36,29 @@ import java.util.ResourceBundle;
  */
 public class JastAddJResources {
 
-	private static final String RESOURCE_NAME = "JastAddJ";
+	private static final String versionString;
 
-	private static ResourceBundle resources;
 	static {
+		String version;
+		ResourceBundle resources = null;
 		try {
-			resources = ResourceBundle.getBundle(RESOURCE_NAME);
+			resources = ResourceBundle.getBundle("JastAddJ");
 		} catch (MissingResourceException e) {
-			throw new Error("Could not open the resource bundle " +
-					RESOURCE_NAME);
+			throw new Error("Could not open the resource bundle JastAddJ");
 		}
+		version = resources.getString("version");
+		try {
+			resources = ResourceBundle.getBundle("JavaSupportLevel");
+		} catch (MissingResourceException e) {
+			throw new Error("Could not open the resource bundle JavaSupportLevel");
+		}
+		versionString = version +  " " + resources.getString("javaVersion");
 	}
 
 	/**
-	 * @param key resource key
-	 * @return The string matching the given key
-	 */
-	public static String get(String key) {
-		return resources.getString(key);
+ 	 * @return Version string, including Java support level.
+ 	 */
+	public static String getVersion() {
+		return versionString;
 	}
 }
