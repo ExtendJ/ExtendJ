@@ -3,20 +3,30 @@
 # Counts number of lines in all JastAddJ modules
 # requires the sloccount program
 
+tempfile=files-$$.tmp
+echo "generic"
+printf "  java: "
+find src/java/org/jastadd/jastaddj/ -name '*.java' > $tempfile
+java_count -f $tempfile | tail -n 1
+
+echo "generated"
+printf "  java: "
+find src/gen/ -name '*.java' > $tempfile
+java_count -f $tempfile | tail -n 1
+
 for module in java*; do
 	echo $module
-	tempfile=files-$$.tmp
 
-	printf "  grammar lines: "
+	printf "  grammar: "
 	find $module -name '*.ast' > $tempfile
 	java_count -f $tempfile | tail -n 1
 
-	printf "  jrag lines: "
+	printf "  jrag: "
 	find $module -name '*.jadd' > $tempfile
 	find $module -name '*.jrag' >> $tempfile
 	java_count -f $tempfile | tail -n 1
 
-	printf "  scanner lines: "
+	printf "  scanner: "
 	find $module -name '*.flex' > $tempfile
 	numfiles=`wc -l $tempfile | awk '{print $1}'`
 	if [ "$numfiles" -gt "0" ]; then
@@ -25,8 +35,9 @@ for module in java*; do
 		printf "0\n"
 	fi
 
-	printf "  parser lines: "
+	printf "  parser: "
 	find $module -name '*.parser' > $tempfile
 	java_count -f $tempfile | tail -n 1
-	rm $tempfile
 done
+
+rm $tempfile
