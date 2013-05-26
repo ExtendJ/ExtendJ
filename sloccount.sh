@@ -22,11 +22,13 @@ parser=0
 
 for module in java*; do
 	echo $module
+	moduletot=0
 
 	printf "  grammar: "
 	find $module -name '*.ast' > $tempfile
 	num=`java_count -f $tempfile | tail -n 1`
 	grammar=`expr $grammar + $num`
+	moduletot=`expr $moduletot + $num`
 	echo $num
 
 	printf "  frontend: "
@@ -34,6 +36,7 @@ for module in java*; do
 	find $module/frontend -name '*.jrag' >> $tempfile
 	num=`java_count -f $tempfile | tail -n 1`
 	frontend=`expr $frontend + $num`
+	moduletot=`expr $moduletot + $num`
 	echo $num
 
 	printf "  backend: "
@@ -45,6 +48,7 @@ for module in java*; do
 		num=0
 	fi
 	backend=`expr $backend + $num`
+	moduletot=`expr $moduletot + $num`
 	echo $num
 
 	printf "  scanner: "
@@ -56,13 +60,17 @@ for module in java*; do
 		num=0
 	fi
 	scanner=`expr $scanner + $num`
+	moduletot=`expr $moduletot + $num`
 	echo $num
 
 	printf "  parser: "
 	find $module -name '*.parser' > $tempfile
 	num=`java_count -f $tempfile | tail -n 1`
 	parser=`expr $parser + $num`
+	moduletot=`expr $moduletot + $num`
 	echo $num
+
+	echo "  total: $moduletot"
 done
 
 echo "total"
