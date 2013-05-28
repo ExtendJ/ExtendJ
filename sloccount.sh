@@ -22,55 +22,66 @@ parser=0
 
 for module in java*; do
 	echo $module
-	moduletot=0
+	all=0
 
 	printf "    scanner: "
-	find $module -name '*.flex' > $tempfile
-	numfiles=`wc -l $tempfile | awk '{print $1}'`
-	if [ "$numfiles" -gt "0" ]; then
-		num=`wc -l $(find $module -name '*.flex') | awk '{print $1}' | tail -n 1`
+	if [ -d "$module/scanner" ]; then
+		find $module/scanner -name '*.flex' > $tempfile
+		lines=`lex_count -f $tempfile | tail -n 1`
 	else
-		num=0
+		lines=0
 	fi
-	scanner=`expr $scanner + $num`
-	moduletot=`expr $moduletot + $num`
-	echo $num
+	scanner=`expr $scanner + $lines`
+	all=`expr $all + $lines`
+	echo $lines
 
 	printf "    parser: "
-	find $module -name '*.parser' > $tempfile
-	num=`java_count -f $tempfile | tail -n 1`
-	parser=`expr $parser + $num`
-	moduletot=`expr $moduletot + $num`
-	echo $num
+	if [ -d "$module/parser" ]; then
+		find $module -name '*.parser' > $tempfile
+		lines=`java_count -f $tempfile | tail -n 1`
+	else
+		lines=0
+	fi
+	parser=`expr $parser + $lines`
+	all=`expr $all + $lines`
+	echo $lines
 
 	printf "    grammar: "
-	find $module -name '*.ast' > $tempfile
-	num=`java_count -f $tempfile | tail -n 1`
-	grammar=`expr $grammar + $num`
-	moduletot=`expr $moduletot + $num`
-	echo $num
+	if [ -d "$module/parser" ]; then
+		find $module -name '*.ast' > $tempfile
+		lines=`java_count -f $tempfile | tail -n 1`
+	else
+		lines=0
+	fi
+	grammar=`expr $grammar + $lines`
+	all=`expr $all + $lines`
+	echo $lines
 
 	printf "    frontend: "
-	find $module/frontend -name '*.jadd' > $tempfile
-	find $module/frontend -name '*.jrag' >> $tempfile
-	num=`java_count -f $tempfile | tail -n 1`
-	frontend=`expr $frontend + $num`
-	moduletot=`expr $moduletot + $num`
-	echo $num
+	if [ -d "$module/frontend" ]; then
+		find $module/frontend -name '*.jadd' > $tempfile
+		find $module/frontend -name '*.jrag' >> $tempfile
+		lines=`java_count -f $tempfile | tail -n 1`
+	else
+		lines=0
+	fi
+	frontend=`expr $frontend + $lines`
+	all=`expr $all + $lines`
+	echo $lines
 
 	printf "    backend: "
 	if [ -d "$module/backend" ]; then
 		find $module/backend -name '*.jadd' > $tempfile
 		find $module/backend -name '*.jrag' >> $tempfile
-		num=`java_count -f $tempfile | tail -n 1`
+		lines=`java_count -f $tempfile | tail -n 1`
 	else
-		num=0
+		lines=0
 	fi
-	backend=`expr $backend + $num`
-	moduletot=`expr $moduletot + $num`
-	echo $num
+	backend=`expr $backend + $lines`
+	all=`expr $all + $lines`
+	echo $lines
 
-	echo "    all: $moduletot"
+	echo "    all: $all"
 done
 
 echo "totals:"
