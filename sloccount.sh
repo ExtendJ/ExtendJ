@@ -90,6 +90,6 @@ echo "    parser: $parser"
 echo "    grammar: $grammar"
 echo "    frontend: $frontend"
 echo "    backend: $backend"
-echo "    all: " `expr $grammar + $frontend + $backend + $scanner + $parser`
+echo "    all:" `expr $grammar + $frontend + $backend + $scanner + $parser`
 
 rm $tempfile
