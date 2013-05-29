@@ -1,3 +1,3 @@
-// 3.7 Comments
+/* 3.7 Comments */
 <YYINITIAL> { {Comment} { } }
 

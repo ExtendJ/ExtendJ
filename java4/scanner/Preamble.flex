@@ -7,13 +7,13 @@ import java.io.*;
 
 %%
 
-%public 
-%final 
+%public
+%final
 %class JavaScanner
 %extends Scanner
 
-%type Symbol 
-%function nextToken 
+%type Symbol
+%function nextToken
 %yylexthrow Scanner.Exception
 
 %unicode

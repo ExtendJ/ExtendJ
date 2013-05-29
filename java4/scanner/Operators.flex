@@ -1,4 +1,4 @@
-// 3.12 Operators
+/* 3.12 Operators */
 <YYINITIAL> {
   "="                            { return sym(Terminals.EQ); }
   ">"                            { return sym(Terminals.GT); }
