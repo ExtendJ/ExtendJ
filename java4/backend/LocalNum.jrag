@@ -4,12 +4,18 @@
  * modified BSD license with this compiler.
  *
  * Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
 
 aspect LocalNum {
   inh lazy int VariableDeclaration.localNum();
+
+  /**
+   * @return The next available local variable index.
+   */
   inh lazy int Stmt.localNum();
+
   inh lazy int ParameterDeclaration.localNum();
 
   eq Program.getChild(int index).localNum() = 0;
@@ -115,7 +121,15 @@ aspect LocalNum {
     return getStmt(index-1).localNum();
   }
 
-  eq TryStmt.getChild().localNum() = localNum() + 1;
+  eq TryStmt.getChild().localNum() {
+    if (hasFinally() && getFinally().getNumStmt() > 0) {
+      return getFinally().getStmt(getFinally().getNumStmt()-1).localNum() + 1;
+    } else {
+      return localNum() + 1;
+    }
+  }
+
+  eq TryStmt.getFinally().localNum() = localNum() + 1;
 
   eq BasicCatch.getBlock().localNum() = getParameter().localNum() + getParameter().type().variableSize();
 
