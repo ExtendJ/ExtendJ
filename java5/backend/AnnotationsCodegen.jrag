@@ -194,6 +194,28 @@ aspect AnnotationsCodegen {
   public void ElementValue.appendAsAttributeTo(Attribute buf) {
     throw new Error(getClass().getName() + " does not support appendAsAttributeTo(Attribute buf)");
   }
+
+  /**
+   * Finds the host type declaration of a class access.
+   * Call this attribute only on expressions that return true for
+   * isClassAccess or it may throw an error!
+   * @return The TypeDecl corresponding to the accesssed class
+   */
+  syn TypeDecl Expr.classAccess() {
+    throw new Error(
+        "Class access can only be computed for class access expressions");
+  }
+
+  eq AbstractDot.classAccess() {
+    if (getRight() instanceof ClassAccess) {
+      return getLeft().classAccess();
+    } else {
+      return getRight().classAccess();
+    }
+  }
+
+  eq TypeAccess.classAccess() = type();
+
   public void ElementConstantValue.appendAsAttributeTo(Attribute buf) {
     if(getExpr().isConstant() && !getExpr().type().isEnumDecl()) {
       char tag = getExpr().type().isString() ? 's' : getExpr().type().typeDescriptor().charAt(0);
@@ -202,7 +224,7 @@ aspect AnnotationsCodegen {
       buf.u2(const_value_index);
     }
     else if(getExpr().isClassAccess()) {
-      int const_class_index = hostType().constantPool().addUtf8(getExpr().type().typeDescriptor());
+      int const_class_index = hostType().constantPool().addUtf8(getExpr().classAccess().typeDescriptor());
       buf.u1('c');
       buf.u2(const_class_index);
     }
