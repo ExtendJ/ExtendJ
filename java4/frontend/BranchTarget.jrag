@@ -25,10 +25,12 @@ aspect BranchTarget {
   syn lazy Stmt ContinueStmt.targetStmt();
 
   class LazyFinallyIterator implements Iterator<FinallyHost> {
+    private final Stmt branch;
     private FinallyHost enclosing;
 
     LazyFinallyIterator(Stmt root) {
-      enclosing = root.enclosingFinally();
+      branch = root;
+      enclosing = branch.enclosingFinally(branch);
     }
 
     @Override
@@ -39,7 +41,7 @@ aspect BranchTarget {
     @Override
     public FinallyHost next() {
       FinallyHost b = enclosing;
-      enclosing = enclosing.enclosingFinally();
+      enclosing = enclosing.enclosingFinally(branch);
       return b;
     }
 
@@ -233,22 +235,34 @@ aspect BranchTarget {
   /**
    * Find finally block of enclosing try-statement, or monitor exit
    * block of enclosing synchronized block.
+   * @param branch the source branch
    * @return a finally block, or <code>null</code> if there is no
    * enclosing try-statement
    */
-  inh lazy FinallyHost Stmt.enclosingFinally();
+  inh lazy FinallyHost Stmt.enclosingFinally(Stmt branch);
 
-  eq BodyDecl.getChild().enclosingFinally() = null;
+  eq BodyDecl.getChild().enclosingFinally(Stmt branch) = null;
 
-  eq TryStmt.getChild().enclosingFinally() =
-    hasNonEmptyFinally() ? this : enclosingFinally();
+  eq TryStmt.getChild().enclosingFinally(Stmt branch) =
+    hasNonEmptyFinally() ? this : enclosingFinally(branch);
 
-  eq TryStmt.getFinally().enclosingFinally() = enclosingFinally();
+  eq TryStmt.getFinally().enclosingFinally(Stmt branch) =
+    enclosingFinally(branch);
 
-  eq SynchronizedStmt.getChild().enclosingFinally() = this;
+  eq SynchronizedStmt.getChild().enclosingFinally(Stmt branch) = this;
 
-  eq SynchronizedStmt.getMonitorExit().enclosingFinally() =
-    enclosingFinally();
+  eq SynchronizedStmt.getMonitorExit().enclosingFinally(Stmt branch) =
+    enclosingFinally(branch);
+
+  eq BranchTargetStmt.getChild().enclosingFinally(Stmt branch) =
+    potentialTargetOf(branch) ? null : enclosingFinally(branch);
+
+  /**
+   * NTA finally blocks ignore their immediate enclosing finally block
+   * (otherwise nta-finally blocks would be recursive).
+   */
+  eq NTAFinallyBlock.getChild().enclosingFinally(Stmt branch) =
+    origin.enclosingFinally(branch);
 
   // find the continue statements that have this node as actual target
   eq BranchTargetStmt.targetContinues() {
@@ -265,6 +279,7 @@ aspect BranchTarget {
     }
     return set;
   }
+
   // find the break statements that have this node as their actual target
   eq BranchTargetStmt.targetBreaks() {
     HashSet<Stmt> set = new HashSet<Stmt>();

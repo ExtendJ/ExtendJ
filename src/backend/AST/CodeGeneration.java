@@ -86,13 +86,14 @@ class CodeGeneration {
 	private HashMap variableScopeLabelAddress = new HashMap();
 	private HashMap variableScopeLabelUses = new HashMap();
 
-	class LocalVariableEntry {
+	static class LocalVariableEntry {
 		int start_pc;
 		int length;
 		int name_index;
 		int descriptor_index;
 		int index;
 	}
+
 	public Collection localVariableTable = new ArrayList();
 	public void addLocalVariableEntryAtCurrentPC(String name, String typeDescriptor, int localNum, int variableScopeEndLabel) {
 		LocalVariableEntry e = new LocalVariableEntry();
@@ -115,10 +116,11 @@ class CodeGeneration {
 	// syn lazy int Block.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
 	//	Block.createBCode() { ... gen.addLabel(variableScopeLabel());
 
-	class LineNumberEntry {
+	static class LineNumberEntry {
 		int start_pc;
 		int line_number;
 	}
+
 	public Collection lineNumberTable = new ArrayList();
 	public void addLineNumberEntryAtCurrentPC(ASTNode node) {
 		LineNumberEntry e = new LineNumberEntry();
@@ -170,32 +172,10 @@ class CodeGeneration {
 		}
 	}
 
-	public void createExceptionTable(TryStmt tryStmt) {
-		for(int i = 0; i < tryStmt.getNumCatchClause(); i++) {
-			tryStmt.getCatchClause(i).exceptionTableEntries(this, tryStmt);
-		}
-		if(tryStmt.hasFinally()) {
-			addException(
-					tryStmt.label_begin(),
-					tryStmt.label_finally(),
-					tryStmt.label_exception_handler(),
-					ExceptionEntry.CATCH_ALL
-					);
-		}
-	}
-
-	public void createExceptionTable(SynchronizedStmt stmt) {
-		addException(
-				stmt.label_begin(),
-				stmt.label_finally(),
-				stmt.label_exception_handler(),
-				ExceptionEntry.CATCH_ALL
-				);
-	}
-
 	public int maxLocals() {
 		return maxLocals+1;
 	}
+
 	int maxLocals = 0;
 
 	/*
@@ -336,11 +316,6 @@ class CodeGeneration {
 		}
 	}
 
-	public void emitJsr(int label) {
-		int p = jump(label);
-		bytes.emit(Bytecode.JSR).add2(p);
-	}
-
 	public void emitCompare(byte bytecode, int label) {
 		int p = jump(label);
 		bytes.emit(bytecode).add2(p);
@@ -393,6 +368,110 @@ class CodeGeneration {
 	}
 	public void changeStackDepth(int i) {
 		bytes.changeStackDepth(i);
+	}
+
+	static class ExceptionRange {
+		int start;
+		int end;
+
+		ExceptionRange(int start, int end) {
+			this.start = start;
+			this.end = end;
+		}
+	}
+
+	static class Monitor {
+		java.util.List<ExceptionRange> ranges =
+			new ArrayList<ExceptionRange>();
+		final SynchronizedStmt mon;
+		int start_lbl = -1;
+
+		Monitor(SynchronizedStmt mon) {
+			this.mon = mon;
+		}
+
+		void rangeStart(int label) {
+			start_lbl = label;
+		}
+
+		void rangeEnd(int label) {
+			if (start_lbl != -1) {
+				ranges.add(new ExceptionRange(start_lbl, label));
+				start_lbl = -1;
+			}
+		}
+
+		void monitorEnter(CodeGeneration gen) {
+			gen.emitDup();
+			gen.emitStoreReference(mon.localNum());
+			gen.emit(Bytecode.MONITORENTER);
+		}
+
+		void monitorExit(CodeGeneration gen) {
+			MonitorExit monExit = mon.getMonitorExit();
+			monExit.emitMonitorExitHandler(gen);
+			if (start_lbl != -1 && gen.addressOf(start_lbl) !=
+					gen.addressOf(monExit.handler_label())) {
+				rangeEnd(monExit.handler_end_label());
+			}
+			for (ExceptionRange range: ranges) {
+				gen.addException(range.start, range.end,
+						monExit.handler_label(),
+						CodeGeneration.ExceptionEntry.CATCH_ALL);
+			}
+		}
+	}
+
+	java.util.List<Monitor> monitors = new ArrayList<Monitor>();
+
+	/**
+	 * Pus a new monitor to the monitor stack.
+	 * @param mon the monitor local number
+	 * @return the monitor id
+	 */
+	public int monitorEnter(SynchronizedStmt mon) {
+		Monitor monitor = new Monitor(mon);
+		monitor.monitorEnter(this);
+		monitors.add(monitor);
+		return monitors.size()-1;
+	}
+
+	/**
+	 * Exit the current top monitor.
+	 */
+	public void monitorExit() {
+		if (monitors.isEmpty())
+			throw new Error("Monitor stack is empty!");
+		Monitor monitor = monitors.remove(monitors.size()-1);
+		monitor.monitorExit(this);
+	}
+
+	/**
+	 * Start a monitor exception range.
+	 * @param monitorId the monitor id
+	 */
+	public void monitorRangeStart(int monitorId, int label) {
+		monitors.get(monitorId).rangeStart(label);
+	}
+
+	public void monitorRangesStart(Stmt branch, int label) {
+		for (Monitor monitor: monitors) {
+			if (branch.leavesMonitor(branch, monitor.mon)) {
+				monitor.rangeStart(label);
+			}
+		}
+	}
+
+	/**
+	 * End a monitor exception range.
+	 * @param monitorId the monitor id
+	 */
+	public void monitorRangeEnd(int monitorId, int label) {
+		Monitor monitor = monitors.get(monitorId);
+		emitLoadReference(monitor.mon.localNum());
+		emit(Bytecode.MONITOREXIT);
+		addLabel(label);
+		monitor.rangeEnd(label);
 	}
 }
 

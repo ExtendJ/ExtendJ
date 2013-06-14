@@ -4,23 +4,72 @@
  * modified BSD license with this compiler.
  *
  * Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
 
 import java.util.*;
 import java.io.*;
+
 aspect CreateBCode {
+
   inh TypeDecl CatchClause.hostType();
 
-  public abstract void CatchClause.exceptionTableEntries(CodeGeneration gen, TryStmt tryStmt);
+  /**
+   * @return a copy of the block as an NTAFinallyBlock
+   */
+  protected static NTAFinallyBlock ASTNode.ntaFinallyBlock(FinallyHost origin, Stmt branch, Block block) {
+    NTAFinallyBlock ntaBlock = new NTAFinallyBlock(origin);
+    ntaBlock.addStmt((Block) block.fullCopy());
+    /*if (!block.canCompleteNormally()) {
+     * // the target block's exit will replace our own exit code
+     * // so we can just goto that block!
+     * ntaBlock.addGoto(block);
+     * } else ...
+     */
+    if (block.canCompleteNormally()) {
+      FinallyHost enclosing = block.enclosingFinally(branch);
+      if (enclosing != null) {
+        ntaBlock.addStmt(ntaFinallyBlock(enclosing, branch, enclosing.getFinallyBlock()));
+      }
+    }
+    return ntaBlock;
+  }
 
-  public void BasicCatch.exceptionTableEntries(CodeGeneration gen, TryStmt tryStmt) {
+  syn lazy Opt BreakStmt.getFinallyOpt() {
+    return branchFinallyOpt();
+  }
+
+  syn lazy Opt ContinueStmt.getFinallyOpt() {
+    return branchFinallyOpt();
+  }
+
+  syn lazy Opt ReturnStmt.getFinallyOpt() {
+    return branchFinallyOpt();
+  }
+
+  /**
+   * @return An Opt node containing the finally and monitor exit blocks
+   * from the list of enclosing try-statements and synchronized blocks.
+   */
+  public Opt<Block> Stmt.branchFinallyOpt() {
+    FinallyHost enclosing = enclosingFinally(this);
+    if (enclosing != null) {
+      return new Opt<Block>(ntaFinallyBlock(enclosing, this, enclosing.getFinallyBlock()));
+    } else {
+      return new Opt<Block>();
+    }
+  }
+
+  public abstract void CatchClause.exceptionTableEntries(CodeGeneration gen, int begin_lbl, int end_lbl);
+
+  public void BasicCatch.exceptionTableEntries(CodeGeneration gen, int begin_lbl, int end_lbl) {
     gen.addException(
-      tryStmt.label_begin(),
-      tryStmt.label_block_end(),
+      begin_lbl,
+      end_lbl,
       label(),
       gen.constantPool().addClass(getParameter().type().constantPoolName())
-      );
+    );
   }
 
   syn lazy boolean TypeDecl.hasClinit() {
@@ -1346,11 +1395,12 @@ aspect CreateBCode {
 
   syn lazy int IfStmt.else_branch_label() = hostType().constantPool().newLabel();
   syn lazy int IfStmt.then_branch_label() = hostType().constantPool().newLabel();
+  syn lazy int IfStmt.end_label() = hostType().constantPool().newLabel();
   public void IfStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     int elseBranch = else_branch_label();
     int thenBranch = then_branch_label();
-    int endBranch = hostType().constantPool().newLabel();
+    int endBranch = end_label();
     getCondition().emitEvalBranch(gen);
     gen.addLabel(thenBranch);
     //if(getCondition().canBeTrue()) {
@@ -1428,16 +1478,20 @@ aspect CreateBCode {
   eq DoStmt.break_label() = end_label();
   eq LabeledStmt.break_label() = end_label();
   eq SwitchStmt.break_label() = end_label();
-  eq TryStmt.break_label() =  label_finally();
+  eq TryStmt.break_label() =  label_end();
+  syn lazy int SynchronizedStmt.start_label() = hostType().constantPool().newLabel();
 
   public void BreakStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    Iterator<FinallyHost> iter = finallyIterator();
-    while (iter.hasNext()) {
-      FinallyHost stmt = iter.next();
-      gen.emitJsr(stmt.label_finally_block());
+    if (hasFinally()) {
+      int nextRange = hostType().constantPool().newLabel();
+      getFinally().createBCode(gen);
+      gen.emitGoto(targetStmt().break_label());
+      gen.addLabel(nextRange);
+      gen.monitorRangesStart(this, nextRange);
+    } else {
+      gen.emitGoto(targetStmt().break_label());
     }
-    gen.emitGoto(targetStmt().break_label());
   }
 
   syn int Stmt.continue_label() {
@@ -1447,16 +1501,21 @@ aspect CreateBCode {
   eq WhileStmt.continue_label() = cond_label();
   eq DoStmt.continue_label() = cond_label();
   eq LabeledStmt.continue_label() = getStmt().continue_label();
-  eq TryStmt.continue_label() = label_finally();
+
+  // TODO: test continue in try-statement!!!
+  eq TryStmt.continue_label() = label_end();
 
   public void ContinueStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    Iterator<FinallyHost> iter = finallyIterator();
-    while (iter.hasNext()) {
-      FinallyHost stmt = iter.next();
-      gen.emitJsr(stmt.label_finally_block());
+    if (hasFinally()) {
+      int nextRange = hostType().constantPool().newLabel();
+      getFinally().createBCode(gen);
+      gen.emitGoto(targetStmt().continue_label());
+      gen.addLabel(nextRange);
+      gen.monitorRangesStart(this, nextRange);
+    } else {
+      gen.emitGoto(targetStmt().continue_label());
     }
-    gen.emitGoto(targetStmt().continue_label());
   }
 
   public void ReturnStmt.createBCode(CodeGeneration gen) {
@@ -1472,24 +1531,27 @@ aspect CreateBCode {
       }
       getResult().createBCode(gen);
       getResult().type().emitCastTo(gen, type);
-      Iterator<FinallyHost> iter = finallyIterator();
-      if (iter.hasNext()) {
+      if (hasFinally()) {
+        int nextRange = hostType().constantPool().newLabel();
         type.emitStoreLocal(gen, resultSaveLocalNum());
-        while (iter.hasNext()) {
-          FinallyHost stmt = iter.next();
-          gen.emitJsr(stmt.label_finally_block());
-        }
+        getFinally().createBCode(gen);
         type.emitLoadLocal(gen, resultSaveLocalNum());
+        type.emitReturn(gen);
+        gen.addLabel(nextRange);
+        gen.monitorRangesStart(this, nextRange);
+      } else {
+        type.emitReturn(gen);
       }
-      type.emitReturn(gen);
-    }
-    else {
-      Iterator<FinallyHost> iter = finallyIterator();
-      while (iter.hasNext()) {
-        FinallyHost stmt = iter.next();
-        gen.emitJsr(stmt.label_finally_block());
+    } else {
+      if (hasFinally()) {
+        int nextRange = hostType().constantPool().newLabel();
+        getFinally().createBCode(gen);
+        gen.emitReturn();
+        gen.addLabel(nextRange);
+        gen.monitorRangesStart(this, nextRange);
+      } else {
+        gen.emitReturn();
       }
-      gen.emitReturn();
     }
   }
 
@@ -1498,54 +1560,95 @@ aspect CreateBCode {
     getExpr().createBCode(gen);
     gen.emitThrow();
   }
-  syn lazy int FinallyHost.label_finally_block();
 
-  syn lazy int TryStmt.label_begin() = hostType().constantPool().newLabel();
-  syn lazy int TryStmt.label_block_end() = hostType().constantPool().newLabel();
   syn lazy int TryStmt.label_end() = hostType().constantPool().newLabel();
-  syn lazy int TryStmt.label_finally() = hostType().constantPool().newLabel();
-  eq TryStmt.label_finally_block() = hostType().constantPool().newLabel();
-  syn lazy int TryStmt.label_exception_handler() = hostType().constantPool().newLabel();
-  syn lazy int TryStmt.label_catch_end() = hostType().constantPool().newLabel();
+  syn lazy int TryStmt.fallthrough_label() =
+    hasNonEmptyFinally() ? hostType().constantPool().newLabel() : label_end();
 
   public void TryStmt.createBCode(CodeGeneration gen) {
+    int block_top_lbl = hostType().constantPool().newLabel();
+    int block_end_lbl = hostType().constantPool().newLabel();
+    int fallthrough_lbl = fallthrough_label();
+    int handler_lbl = hostType().constantPool().newLabel();
+    boolean needsHandler = false;
+
     super.createBCode(gen);
-    gen.addLabel(label_begin());
+    gen.addLabel(block_top_lbl);
     getBlock().createBCode(gen);
-    if(getBlock().canCompleteNormally())
-      gen.emitGoto(label_finally());
-    gen.addLabel(label_block_end());
-    for(int i = 0; i < getNumCatchClause(); i++) {
-      getCatchClause(i).createBCode(gen);
-      if(getCatchClause(i).getBlock().canCompleteNormally()) {
-        if(!hasFinally())
-          gen.emitGoto(label_finally());
-        else
-          gen.emitGoto(label_catch_end());
+    gen.addLabel(block_end_lbl);
+
+    if (getBlock().canCompleteNormally()) {
+      gen.emitGoto(fallthrough_lbl);
+    }
+
+    for (int i = 0; i < getNumCatchClause(); i++) {
+      CatchClause cc = getCatchClause(i);
+      cc.createBCode(gen);
+      cc.exceptionTableEntries(gen, block_top_lbl, block_end_lbl);
+      if (cc.getBlock().canCompleteNormally()) {
+        gen.emitGoto(fallthrough_lbl);
+      }
+      if (hasNonEmptyFinally()) {
+        int cc_end_lbl = hostType().constantPool().newLabel();
+        gen.addLabel(cc_end_lbl);
+        needsHandler = true;
+        gen.addException(cc.label(), cc_end_lbl, handler_lbl,
+            CodeGeneration.ExceptionEntry.CATCH_ALL);
       }
     }
 
-    gen.addLabel(label_catch_end());
-    if(hasFinally() && getNumCatchClause() > 0) {
-      gen.emitJsr(label_finally_block());
-      if(canCompleteNormally())
-        gen.emitGoto(label_end());
+    if (hasNonEmptyFinally()) {
+
+      emitExceptionHandler(gen, block_top_lbl, block_end_lbl, handler_lbl,
+          needsHandler);
+
+      // fallthrough finally
+      gen.addLabel(fallthrough_lbl);
+      getFinally().createBCode(gen);
     }
 
-    gen.addLabel(label_finally());
-    if(hasFinally()) {
-      if(getBlock().canCompleteNormally()) {
-        gen.emitJsr(label_finally_block());
-        if(canCompleteNormally())
-          gen.emitGoto(label_end());
-      }
-      gen.addLabel(label_exception_handler());
-      emitExceptionHandler(gen);
-      gen.addLabel(label_finally_block());
-      emitFinallyBlock(gen);
-    }
     gen.addLabel(label_end());
-    gen.createExceptionTable(this);
+  }
+
+  /**
+   * Outer finally host with a finally block that can complete normally
+   */
+  syn FinallyHost TryStmt.outerFinallyHost() {
+    // find outer finally
+    FinallyHost outer = this;
+    Iterator<FinallyHost> iter = finallyIterator();
+    while (iter.hasNext()) {
+      outer = iter.next();
+    }
+    return outer;
+  }
+
+  /**
+   * Generate catch-all (finally)
+   */
+  public void TryStmt.emitExceptionHandler(CodeGeneration gen, int start_lbl, int end_lbl, int handler_lbl, boolean needsHandler) {
+    int top_pc = gen.addressOf(start_lbl);
+    int end_pc = gen.addressOf(end_lbl);
+    if (needsHandler || top_pc != end_pc) {
+      // catch-all exception handler (finally)
+      gen.addLabel(handler_lbl);
+      gen.changeStackDepth(1);
+      int num = getBlock().localNum();
+      gen.emitStoreReference(num);
+      getFinally().createBCode(gen);
+      gen.emitLoadReference(num);
+      gen.emit(Bytecode.ATHROW);
+
+      gen.addException(start_lbl, end_lbl, handler_lbl,
+          CodeGeneration.ExceptionEntry.CATCH_ALL);
+    }
+  }
+
+  public void SynchronizedStmt.emitMonitorEnter(CodeGeneration gen) {
+    gen.emitDup();
+    int num = localNum();
+    gen.emitStoreReference(num);
+    gen.emit(Bytecode.MONITORENTER);
   }
 
   syn lazy int CatchClause.label() = hostType().constantPool().newLabel();
@@ -1557,36 +1660,60 @@ aspect CreateBCode {
     getBlock().createBCode(gen);
   }
 
-  syn lazy int SynchronizedStmt.label_begin() = hostType().constantPool().newLabel();
   syn lazy int SynchronizedStmt.label_end() = hostType().constantPool().newLabel();
-  syn lazy int SynchronizedStmt.label_finally() = hostType().constantPool().newLabel();
-  eq SynchronizedStmt.label_finally_block() = hostType().constantPool().newLabel();
-  syn lazy int SynchronizedStmt.label_exception_handler() = hostType().constantPool().newLabel();
+
+  protected int SynchronizedStmt.monitorId = -1;
 
   public void SynchronizedStmt.createBCode(CodeGeneration gen) {
+    int lbl_start = hostType().constantPool().newLabel();
     super.createBCode(gen);
     getExpr().createBCode(gen);
-    emitMonitorEnter(gen);
-    gen.addLabel(label_begin());
+
+    monitorId = gen.monitorEnter(this);
+    gen.addLabel(lbl_start);
+    gen.monitorRangeStart(monitorId, lbl_start);
+
     getBlock().createBCode(gen);
-    gen.addLabel(label_finally());
-    if(getBlock().canCompleteNormally()) {
-      gen.emitJsr(label_finally_block());
+
+    if (getBlock().canCompleteNormally()) {
+      getMonitorExit().createBCode(gen);
       gen.emitGoto(label_end());
     }
-    gen.addLabel(label_exception_handler());
-    emitExceptionHandler(gen);
-    gen.addLabel(label_finally_block());
-    emitFinallyBlock(gen);
+
+    gen.monitorExit();
+
     gen.addLabel(label_end());
-    gen.createExceptionTable(this);
+  }
+
+  /**
+   * Checks if the branch statement leaves the monitor.
+   * @return <code>true</code> if the branch leaves the monitor
+   */
+  inh boolean Stmt.leavesMonitor(Stmt branch, SynchronizedStmt monitor);
+
+  eq BodyDecl.getChild().leavesMonitor(Stmt branch, SynchronizedStmt monitor) {
+    throw new Error("Enclosing monitor not found!");
+  }
+
+  eq SynchronizedStmt.getChild().leavesMonitor(Stmt branch, SynchronizedStmt monitor) {
+    if (monitor == this)
+      return true;
+    else
+      return leavesMonitor(branch, monitor);
+  }
+
+  eq BranchTargetStmt.getChild().leavesMonitor(Stmt branch, SynchronizedStmt monitor) {
+    if (potentialTargetOf(branch))
+      return false;
+    else
+      return leavesMonitor(branch, monitor);
   }
 
   /**
    * Assert statement bytecode is generated through the transformed
    * version of the assert statement!
    *
-   * @see Java1.4Backend/Transformations.jrag
+   * @see java4/backend/Transformations.jrag
    */
   public void AssertStmt.createBCode(CodeGeneration gen) {
     throw new UnsupportedOperationException("Assert not yet implemented");
@@ -1630,7 +1757,39 @@ aspect CreateBCode {
    * Generate bytecode for the monitor exit call.
    */
   public void MonitorExit.createBCode(CodeGeneration gen) {
-    gen.emitLoadReference(localNum()); // monitor
+    gen.monitorRangeEnd(monitor.monitorId,
+        hostType().constantPool().newLabel());
+  }
+
+  /**
+   * Generate exception handler for monitor closing.
+   * @param gen
+   */
+  public void MonitorExit.emitMonitorExitHandler(CodeGeneration gen) {
+    int handler_lbl = handler_label();
+    int end_lbl = handler_end_label();
+
+    gen.changeStackDepth(1);
+    int num = localNum() + 1;
+
+    // handler start
+    gen.addLabel(handler_lbl);
+
+    gen.emitStoreReference(num);
+
+    gen.emitLoadReference(monitor.localNum());
     gen.emit(Bytecode.MONITOREXIT);
+
+    // handler end
+    gen.addLabel(end_lbl);
+
+    gen.emitLoadReference(num);
+    gen.emit(Bytecode.ATHROW);
+
+    // add exception handler for the monitor closing
+    // http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4414101
+    gen.addException(handler_lbl, end_lbl, handler_lbl,
+        CodeGeneration.ExceptionEntry.CATCH_ALL);
+
   }
 }

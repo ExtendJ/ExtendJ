@@ -66,3 +66,19 @@ Usage:
       -help                     Print a synopsis of standard options
       -version                  Print version information
 
+Debugging
+---------
+
+If JastAddJ should generate faulty bytecode there are a number of different
+tools that can be used to diagnose the problem.
+
+* `javap` comes with JDK
+* `asm` can be downloaded http://asm.ow2.org/
+
+`javap can be used to disassemble compiled bytecode:
+
+    $ javap -verbose -c Test.class
+
+ASM by OW2 Consortium can be used for advanced instrumentation and analysis
+of bytecode. There is also a useful plugin for eclipse called
+"Bytecode Outline" from OW2.
