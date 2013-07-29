@@ -63,9 +63,36 @@ Build a standard release:
 		<delete dir="${basedir}/doc"/>
 	</target>
 
-	<target name="release" description="build a release of JastAddJ"
+	<target name="release" if="version"
+		description="build a JastAddJ release">
+		<echo message="Bumping version string and tagging release ${version}"/>
+		<propertyfile file="${res.dir}/Version.properties">
+			<entry key="version" value="${version}"/>
+		</propertyfile>
+		<exec executable="git">
+			<arg value="update-index"/>
+			<arg value="--no-assume-unchanged"/>
+			<arg value="${res.dir}/Version.properties"/>
+		</exec>
+		<exec executable="git">
+			<arg value="commit"/>
+			<arg value="-m"/>
+			<arg value="Release ${version}"/>
+			<arg value="${res.dir}/Version.properties"/>
+		</exec>
+		<exec executable="git">
+			<arg value="tag"/>
+			<arg value="-a"/>
+			<arg value="${version}"/>
+			<arg value="-m"/>
+			<arg value="Version ${version}"/>
+		</exec>
+		<antcall target="build-dist"/>
+	</target>
+
+	<target name="build-dist" description="build JastAddJ distribution files"
 		depends="update-version-string,clean">
-		<property file="${jj.root}/src/res/JastAddJ.properties" prefix="jj"/>
+		<property file="${res.dir}/Version.properties" prefix="jj"/>
 		<echo message="Building source zip"/>
 		<zip destfile="jastaddj-${jj.version}.zip">
 			<zipfileset dir="." prefix="JastAddJ">
@@ -163,7 +190,7 @@ Build a standard release:
 		<antcall target="jar"/>
 	</target>
 
-	<target name="update-version-string">
+	<target name="update-version-string" unless="version">
 		<!-- get a new version string using git describe if possible -->
 		<echo message="Updating JastAddJ version string..."/>
 		<exec executable="git" outputproperty="version"
@@ -176,13 +203,13 @@ Build a standard release:
 	<target name="-store-version-string" if="version">
 		<!-- store the new  version string in the correct property file -->
 		<echo message="version=${version}"/>
-		<propertyfile file="src/res/JastAddJ.properties">
+		<propertyfile file="${res.dir}/Version.properties">
 			<entry key="version" value="${version}"/>
 		</propertyfile>
 		<exec executable="git">
 			<arg value="update-index"/>
 			<arg value="--assume-unchanged"/>
-			<arg value="src/res/JastAddJ.properties"/>
+			<arg value="${res.dir}/Version.properties"/>
 		</exec>
 	</target>
 

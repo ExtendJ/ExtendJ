@@ -49,6 +49,6 @@ class JavaPrettyPrinter extends Frontend {
 
 	@Override
 	protected String version() {
-		return JastAddJResources.getVersion();
+		return JastAddJVersion.getVersion();
 	}
 }

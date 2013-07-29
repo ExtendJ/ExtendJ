@@ -32,9 +32,10 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 /**
+ * JastAddJ version string provider.
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
-public class JastAddJResources {
+public class JastAddJVersion {
 
 	private static final String versionString;
 
@@ -42,15 +43,15 @@ public class JastAddJResources {
 		String version;
 		ResourceBundle resources = null;
 		try {
-			resources = ResourceBundle.getBundle("JastAddJ");
+			resources = ResourceBundle.getBundle("Version");
 		} catch (MissingResourceException e) {
-			throw new Error("Could not open the resource bundle JastAddJ");
+			throw new Error("Could not open Version resource bundle");
 		}
 		version = resources.getString("version");
 		try {
 			resources = ResourceBundle.getBundle("JavaSupportLevel");
 		} catch (MissingResourceException e) {
-			throw new Error("Could not open the resource bundle JavaSupportLevel");
+			throw new Error("Could not open JavaSupportLevel resource bundle");
 		}
 		versionString = version +  " " + resources.getString("javaVersion");
 	}

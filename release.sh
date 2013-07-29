@@ -19,15 +19,8 @@ while true; do
 	esac
 done
 
-echo "Bumping version string..."
-echo "version=$VERSION" > src/res/JastAddJ.properties
-git commit -m "Bumped version string" src/res/JastAddJ.properties
-
-echo "Tagging the release..."
-git tag -a $VERSION -m "Version $VERSION"
-
-echo "Creating source release..."
-ant release
+echo "Building release $VERSION..."
+ant -Dversion=$VERSION release
 
 echo "Creating new directory at jastadd.org..."
 ssh login.cs.lth.se "mkdir /cs/jastadd/releases/jastaddj/$VERSION"
