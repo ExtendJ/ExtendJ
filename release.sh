@@ -7,7 +7,7 @@ fi
 
 VERSION=$1
 
-echo "This will script will tag, build and upload jastaddj $VERSION" \
+echo "This script will tag, build and upload jastaddj $VERSION" \
 	"to jastadd.org/releases/jastaddj/$VERSION"
 
 while true; do
