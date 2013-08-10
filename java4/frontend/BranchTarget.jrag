@@ -24,13 +24,39 @@ aspect BranchTarget {
    */
   syn lazy Stmt ContinueStmt.targetStmt();
 
-  // an ordered list of TryStmts with finally blocks that are reached until the final target of this statement is reached
-  syn lazy ArrayList BreakStmt.finallyList();
-  syn lazy ArrayList ContinueStmt.finallyList();
-  syn lazy ArrayList ReturnStmt.finallyList();
+  class LazyFinallyIterator implements Iterator<FinallyHost> {
+    private FinallyHost enclosing;
 
+    LazyFinallyIterator(Stmt root) {
+      enclosing = root.enclosingFinally();
+    }
 
-  // ---------------------------------------------------------------------------
+    @Override
+    public boolean hasNext() {
+      return enclosing != null;
+    }
+
+    @Override
+    public FinallyHost next() {
+      FinallyHost b = enclosing;
+      enclosing = enclosing.enclosingFinally();
+      return b;
+    }
+
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException();
+    }
+  }
+
+  /**
+   * Finds enclosing finally and monitor exit blocks.
+   * @return an iterator for finally (and monitor exit) blocks that are
+   * reached before the final target of this statement is reached
+   */
+  syn lazy Iterator<FinallyHost> Stmt.finallyIterator() {
+    return new LazyFinallyIterator(this);
+  }
 
   // propagate branch statements to the statements that are their respective
   // targets taking finally blocks that can not complete normally into account
@@ -213,45 +239,22 @@ aspect BranchTarget {
   eq LabeledStmt.getStmt().lookupLabel(String name) = name.equals(getLabel()) ? this : lookupLabel(name);
   eq Program.getChild().lookupLabel(String name) = null;
 
-  // compute the list of finally blocks that are reached on the way to the target
-  eq BreakStmt.finallyList() {
-    ArrayList list = new ArrayList();
-    collectFinally(this, list);
-    return list;
-  }
-  eq ContinueStmt.finallyList() {
-    ArrayList list = new ArrayList();
-    collectFinally(this, list);
-    return list;
-  }
-  eq ReturnStmt.finallyList() {
-    ArrayList list = new ArrayList();
-    collectFinally(this, list);
-    return list;
-  }
-  public void ASTNode.collectFinally(Stmt branchStmt, ArrayList list) {
-    if(getParent() != null)
-      getParent().collectFinally(branchStmt, list);
-  }
-  public void BranchPropagation.collectFinally(Stmt branchStmt, ArrayList list) {
-    if(targetBranches().contains(branchStmt))
-      return;
-    super.collectFinally(branchStmt, list);
-  }
-  public void TryStmt.collectFinally(Stmt branchStmt, ArrayList list) {
-    if(hasFinally() && !branchesFromFinally().contains(branchStmt))
-      list.add(this);
-    if(targetBranches().contains(branchStmt))
-      return;
-    super.collectFinally(branchStmt, list);
-  }
-  public void SynchronizedStmt.collectFinally(Stmt branchStmt, ArrayList list) {
-    list.add(this);
-    super.collectFinally(branchStmt, list);
-  }
-  public void BodyDecl.collectFinally(Stmt branchStmt, ArrayList list) {
-    // terminate search if body declaration is reached
-  }
+  /**
+   * Find finally block of enclosing try-statement, or monitor exit
+   * block of enclosing synchronized block.
+   * @return a finally block, or <code>null</code> if there is no
+   * enclosing try-statement
+   */
+  inh lazy FinallyHost Stmt.enclosingFinally();
+
+  eq BodyDecl.getChild().enclosingFinally() = null;
+
+  eq TryStmt.getChild().enclosingFinally() =
+    hasNonEmptyFinally() ? this : enclosingFinally();
+
+  eq TryStmt.getFinally().enclosingFinally() = enclosingFinally();
+
+  eq SynchronizedStmt.getChild().enclosingFinally() = this;
 
   // find the continue statements that have this node as actual target
   eq BranchPropagation.targetContinues() {
