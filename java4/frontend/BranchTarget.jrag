@@ -58,122 +58,102 @@ aspect BranchTarget {
     return new LazyFinallyIterator(this);
   }
 
-  // propagate branch statements to the statements that are their respective
-  // targets taking finally blocks that can not complete normally into account
-  interface BranchPropagation {
-    syn lazy Collection targetContinues();
-    syn lazy Collection targetBreaks();
-    syn lazy Collection targetBranches();
-    syn lazy Collection escapedBranches();
-    syn lazy Collection branches();
-    //public void collectBranches(Collection c);
+  syn lazy Collection<Stmt> BranchTargetStmt.targetContinues();
+  syn lazy Collection<Stmt> BranchTargetStmt.targetBreaks();
+  syn lazy Collection<Stmt> BranchTargetStmt.targetBranches();
+  syn lazy Collection<Stmt> BranchTargetStmt.escapedBranches();
+  syn lazy Collection<Stmt> BranchTargetStmt.branches();
 
-    syn lazy boolean targetOf(ContinueStmt stmt);
-    syn lazy boolean targetOf(BreakStmt stmt);
-  }
-  BranchTargetStmt implements BranchPropagation;
-
-  public void ASTNode.collectBranches(Collection c) {
-    for(int i = 0; i < getNumChild(); i++)
+  public void ASTNode.collectBranches(Collection<Stmt> c) {
+    for (int i = 0; i < getNumChild(); i++) {
       getChild(i).collectBranches(c);
+    }
   }
-  public void ContinueStmt.collectBranches(Collection c) {
+
+  public void ContinueStmt.collectBranches(Collection<Stmt> c) {
     c.add(this);
   }
-  public void BreakStmt.collectBranches(Collection c) {
+
+  public void BreakStmt.collectBranches(Collection<Stmt> c) {
     c.add(this);
   }
-  public void ReturnStmt.collectBranches(Collection c) {
+
+  public void ReturnStmt.collectBranches(Collection<Stmt> c) {
     c.add(this);
   }
-  public void BranchPropagation.collectBranches(Collection c) {
+
+  public void BranchTargetStmt.collectBranches(Collection<Stmt> c) {
     c.addAll(escapedBranches());
   }
-  public void TryStmt.collectBranches(Collection c) {
+
+  public void TryStmt.collectBranches(Collection<Stmt> c) {
     c.addAll(escapedBranches());
   }
 
   syn boolean ContinueStmt.hasLabel() = !getLabel().equals("");
   syn boolean BreakStmt.hasLabel() = !getLabel().equals("");
 
-  eq LabeledStmt.targetOf(ContinueStmt stmt) =
-    stmt.hasLabel() && stmt.getLabel().equals(getLabel());
-  eq WhileStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
-  eq DoStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
-  eq ForStmt.targetOf(ContinueStmt stmt) = !stmt.hasLabel();
-  eq SwitchStmt.targetOf(ContinueStmt stmt) = false;
-
-  eq LabeledStmt.targetOf(BreakStmt stmt) =
-    stmt.hasLabel() && stmt.getLabel().equals(getLabel());
-  eq SwitchStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
-  eq WhileStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
-  eq DoStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
-  eq ForStmt.targetOf(BreakStmt stmt) = !stmt.hasLabel();
-
-  // the branches for which this node is the target
-  eq BranchPropagation.targetBranches() {
-    HashSet set = new HashSet();
-    for(Iterator iter = branches().iterator(); iter.hasNext(); ) {
-      Object o = iter.next();
-      if(o instanceof ContinueStmt && targetOf((ContinueStmt)o))
-        set.add(o);
-      if(o instanceof BreakStmt && targetOf((BreakStmt)o))
-        set.add(o);
+  /**
+   * The branches for which this node is the target.
+   */
+  eq BranchTargetStmt.targetBranches() {
+    Collection<Stmt> set = new HashSet<Stmt>();
+    for (Stmt branch : branches()) {
+      if (potentialTargetOf(branch)) {
+        set.add(branch);
+      }
     }
     return set;
   }
-  // the branches that escape this node
-  eq BranchPropagation.escapedBranches() {
-    HashSet set = new HashSet();
-    for(Iterator iter = branches().iterator(); iter.hasNext(); ) {
-      Object o = iter.next();
-      if(o instanceof ContinueStmt && !targetOf((ContinueStmt)o))
-        set.add(o);
-      if(o instanceof BreakStmt && !targetOf((BreakStmt)o))
-        set.add(o);
-      if(o instanceof ReturnStmt)
-        set.add(o);
+
+  /**
+   * The branches that escape this node.
+   */
+  eq BranchTargetStmt.escapedBranches() {
+    Collection<Stmt> set = new HashSet<Stmt>();
+    for (Stmt branch : branches()) {
+      if (!potentialTargetOf(branch)) {
+        set.add(branch);
+      } else if(branch instanceof ReturnStmt) {
+        set.add(branch);
+      }
     }
     return set;
   }
-  // all branches that reach this node
-  eq BranchPropagation.branches() {
-    HashSet set = new HashSet();
+
+  /**
+   * All branches that reach this node.
+   */
+  eq BranchTargetStmt.branches() {
+    Collection<Stmt> set = new HashSet<Stmt>();
     super.collectBranches(set);
     return set;
   }
 
-  // all branches that reach this node
-  syn lazy Collection TryStmt.branches() {
-    HashSet set = new HashSet();
+  /**
+   * All branches that reach this node.
+   */
+  syn lazy Collection<Stmt> TryStmt.branches() {
+    Collection<Stmt> set = new HashSet<Stmt>();
     getBlock().collectBranches(set);
-    for(int i = 0; i < getNumCatchClause(); i++)
+    for (int i = 0; i < getNumCatchClause(); i++) {
       getCatchClause(i).collectBranches(set);
+    }
     return set;
   }
 
-  syn lazy Collection TryStmt.branchesFromFinally() {
-    HashSet set = new HashSet();
-    if(hasFinally())
+  /**
+   * All branches that escape this node
+   */
+  syn lazy Collection<Stmt> TryStmt.escapedBranches() {
+    Collection<Stmt> set = new HashSet<Stmt>();
+    if (hasNonEmptyFinally()) {
+      // branches from finally
       getFinally().collectBranches(set);
-    return set;
-  }
-
-  // all branches the this node is target for
-  syn lazy Collection TryStmt.targetBranches() {
-    HashSet set = new HashSet();
-    if(hasFinally() && !getFinally().canCompleteNormally())
+    }
+    if (!hasFinally() || getFinally().canCompleteNormally()) {
       set.addAll(branches());
-    return set;
-  }
-
-  // all branches that escapes
-  syn lazy Collection TryStmt.escapedBranches() {
-    HashSet set = new HashSet();
-    if(hasFinally())
-      set.addAll(branchesFromFinally());
-    if(!hasFinally() || getFinally().canCompleteNormally())
-      set.addAll(branches());
+    }
     return set;
   }
 
@@ -206,6 +186,17 @@ aspect BranchTarget {
   // find the target statement for break and continue
   eq BreakStmt.targetStmt() = branchTarget(this);
   eq ContinueStmt.targetStmt() = branchTarget(this);
+
+  /**
+   * @return <code>true</code> if this statement is a potential
+   * branch target of the given branch statement.
+   */
+  syn boolean BranchTargetStmt.potentialTargetOf(Stmt branch) = false;
+  eq LabeledStmt.potentialTargetOf(Stmt branch) = branch.canBranchTo(this);
+  eq WhileStmt.potentialTargetOf(Stmt branch) = branch.canBranchTo(this);
+  eq DoStmt.potentialTargetOf(Stmt branch) = branch.canBranchTo(this);
+  eq ForStmt.potentialTargetOf(Stmt branch) = branch.canBranchTo(this);
+  eq SwitchStmt.potentialTargetOf(Stmt branch) = branch.canBranchTo(this);
 
   /**
    * @return the target statement for a break or continue
@@ -257,29 +248,26 @@ aspect BranchTarget {
   eq SynchronizedStmt.getChild().enclosingFinally() = this;
 
   // find the continue statements that have this node as actual target
-  eq BranchPropagation.targetContinues() {
-    HashSet set = new HashSet();
-    for(Iterator iter = targetBranches().iterator(); iter.hasNext(); ) {
-      Object o = iter.next();
-      if(o instanceof ContinueStmt)
-        set.add(o);
+  eq BranchTargetStmt.targetContinues() {
+    HashSet<Stmt> set = new HashSet<Stmt>();
+    for (Stmt branch : targetBranches()) {
+      if (branch instanceof ContinueStmt)
+        set.add(branch);
     }
-    if(getParent() instanceof LabeledStmt) {
-      for(Iterator iter = ((LabeledStmt)getParent()).targetBranches().iterator(); iter.hasNext(); ) {
-        Object o = iter.next();
-        if(o instanceof ContinueStmt)
-          set.add(o);
+    if (getParent() instanceof LabeledStmt) {
+      for (Stmt branch : ((LabeledStmt)getParent()).targetBranches()) {
+        if (branch instanceof ContinueStmt)
+          set.add(branch);
       }
     }
     return set;
   }
   // find the break statements that have this node as their actual target
-  eq BranchPropagation.targetBreaks() {
-    HashSet set = new HashSet();
-    for(Iterator iter = targetBranches().iterator(); iter.hasNext(); ) {
-      Object o = iter.next();
-      if(o instanceof BreakStmt)
-        set.add(o);
+  eq BranchTargetStmt.targetBreaks() {
+    HashSet<Stmt> set = new HashSet<Stmt>();
+    for (Stmt branch : targetBranches()) {
+      if (branch instanceof BreakStmt)
+        set.add(branch);
     }
     return set;
   }
