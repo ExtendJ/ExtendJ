@@ -144,40 +144,67 @@ aspect CodeGeneration {
     }
 
     public Collection exceptions = new ArrayList();
-    public void addException(int start_pc, int end_pc, int handler_pc, int catch_type) {
-      ExceptionEntry e = new ExceptionEntry();
-      e.start_pc = start_pc;
-      e.end_pc = end_pc;
-      e.handler_pc = handler_pc;
-      e.catch_type = catch_type;
-      if(e.start_pc != e.end_pc)
-        exceptions.add(e);
+
+    /**
+     * Adds an exception handler for the given exception type.
+     * If catch_type is zero then this handler catches any exception.
+     * @param start_lbl
+     * @param end_lbl
+     * @param handler_lbl
+     * @param catch_type
+     */
+    public void addException(int start_lbl, int end_lbl, int handler_lbl, int catch_type) {
+      int start_pc = addressOf(start_lbl);
+      int end_pc = addressOf(end_lbl);
+      if (start_pc != end_pc) {
+        exceptions.add(new ExceptionEntry(
+              start_pc,
+              end_pc,
+              handler_lbl,
+              catch_type));
+      }
     }
+
     class ExceptionEntry {
+      public static final int CATCH_ALL = 0;
+
       int start_pc;
       int end_pc;
-      int handler_pc;
+      int handler_lbl;
       int catch_type;
+
+      public ExceptionEntry(int start_pc, int end_pc, int handler_lbl, int catch_type) {
+        this.start_pc = start_pc;
+        this.end_pc = end_pc;
+        this.handler_lbl = handler_lbl;
+        this.catch_type = catch_type;
+      }
+
+      public int handlerPC() {
+        return addressOf(handler_lbl);
+      }
     }
+
     public void createExceptionTable(TryStmt tryStmt) {
       for(int i = 0; i < tryStmt.getNumCatchClause(); i++) {
         tryStmt.getCatchClause(i).exceptionTableEntries(this, tryStmt);
       }
       if(tryStmt.hasFinally()) {
         addException(
-            addressOf(tryStmt.label_begin()),
-            addressOf(tryStmt.label_finally()),
-            addressOf(tryStmt.label_exception_handler()),
-            0
+            tryStmt.label_begin(),
+            tryStmt.label_finally(),
+            tryStmt.label_exception_handler(),
+            ExceptionEntry.CATCH_ALL
             );
       }
     }
+
     public void createExceptionTable(SynchronizedStmt stmt) {
       addException(
-          addressOf(stmt.label_begin()),
-          addressOf(stmt.label_finally()),
-          addressOf(stmt.label_exception_handler()),
-          0
+          stmt.label_begin(),
+          stmt.label_finally(),
+          stmt.label_exception_handler(),
+          ExceptionEntry.CATCH_ALL
           );
     }
 
