@@ -1220,56 +1220,71 @@ aspect CreateBCode {
 
   public void SwitchStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    int cond_label = hostType().constantPool().newLabel();
     int switch_label = hostType().constantPool().newLabel();
 
-    gen.emitGoto(cond_label);
-    getBlock().createBCode(gen);
-    if(canCompleteNormally())
-      gen.emitGoto(end_label());
-    gen.addLabel(cond_label);
     getExpr().createBCode(gen);
 
-    TreeMap map = new TreeMap();
+    TreeMap<Integer, ConstCase> map = new TreeMap<Integer, ConstCase>();
     for(int i = 0; i < getBlock().getNumStmt(); i++) {
       if(getBlock().getStmt(i) instanceof ConstCase) {
         ConstCase ca = (ConstCase)getBlock().getStmt(i);
-        map.put(new Integer(ca.getValue().constant().intValue()), ca);
+        map.put(ca.getValue().constant().intValue(), ca);
       }
     }
 
-    long low = map.isEmpty() ? 0 : ((Integer)map.firstKey()).intValue();
-    long high = map.isEmpty() ? 0 : ((Integer)map.lastKey()).intValue();
+    long low = map.isEmpty() ? 0 : map.firstKey();
+    long high = map.isEmpty() ? 0 : map.lastKey();
 
     long tableSwitchSize = 8L + (high - low + 1L) * 4L;
     long lookupSwitchSize = 4L + map.size() * 8L;
+    int pad;
+    int tblpos;
+    boolean tableSwitch = tableSwitchSize < lookupSwitchSize;
 
     gen.addLabel(switch_label);
-    if(tableSwitchSize < lookupSwitchSize) {
+    if (tableSwitch) {
+      // TABLESWITCH
       gen.emit(Bytecode.TABLESWITCH);
-      int pad = emitPad(gen);
+      pad = emitPad(gen);
+      tblpos = gen.pos();
+
+      // leave room for the address table
+      gen.skip(4 * 3 + 4 * (int) (high-low+1));
+    } else {
+      // LOOKUPSWITCH
+      gen.emit(Bytecode.LOOKUPSWITCH);
+      pad = emitPad(gen);
+      tblpos = gen.pos();
+
+      // leave room for the address table
+      gen.skip(4 * 2 + 4 * map.size());
+    }
+
+    getBlock().createBCode(gen);
+
+    // write jump address table
+    int endpos = gen.pos();
+    gen.setPos(tblpos);
+    if (tableSwitch) {
       int defaultOffset = defaultOffset(gen, switch_label);
+      int numCase = (int) (high-low+1);
       if(defaultOffset == 0) {
-        defaultOffset = 1 + pad + 4 + 4 + 4 + 4 * (int)(high - low + 1);
+        defaultOffset = 1 + pad + 4 * 3 + 4 * numCase;
       }
       gen.add4(defaultOffset);
-      gen.add4((int)low);
-      gen.add4((int)high);
+      gen.add4((int) low);
+      gen.add4((int) high);
       for(long i = low; i <= high; i++) {
-        ConstCase ca = (ConstCase)map.get(new Integer((int)i));
-        if(ca != null) {
+        ConstCase ca = map.get((int) i);
+        if (ca != null) {
           int offset = gen.addressOf(ca.label(gen))
             - gen.addressOf(switch_label);
           gen.add4(offset);
-        }
-        else {
+        } else {
           gen.add4(defaultOffset);
         }
       }
-    }
-    else {
-      gen.emit(Bytecode.LOOKUPSWITCH);
-      int pad = emitPad(gen);
+    } else {
       int defaultOffset = defaultOffset(gen, switch_label);
       if(defaultOffset == 0) {
         defaultOffset = 1 + pad + 4 + 4 + 8 * numCase();
@@ -1284,6 +1299,8 @@ aspect CreateBCode {
         gen.add4(offset);
       }
     }
+    gen.setPos(endpos);
+
     gen.addLabel(end_label());
   }
 
@@ -1303,10 +1320,16 @@ aspect CreateBCode {
       throw new Error("Switch not at 4-byte boundary:" + gen.pos());
     return pad;
   }
+
+  /**
+   * Calculate offset to the default label.
+   * @return bytecode offset to default label (or zero if there is no
+   * default label)
+   */
   private int SwitchStmt.defaultOffset(CodeGeneration gen, int switch_label) {
-    boolean hasDefault = defaultCase() != null;
-    if(hasDefault) {
-      int offset = gen.addressOf(defaultCase().label(gen))
+    DefaultCase defaultCase = defaultCase();
+    if (defaultCase != null) {
+      int offset = gen.addressOf(defaultCase.label(gen))
         - gen.addressOf(switch_label);
       return offset;
     }

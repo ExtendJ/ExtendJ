@@ -157,12 +157,59 @@ aspect StringsInSwitch {
       CodeGeneration gen,
       TreeMap<Integer, CaseGroup> groups,
       int index_a) {
-    int cond_label = hostType().constantPool().newLabel();
     int switch_label = hostType().constantPool().newLabel();
     int end_label1 = hostType().constantPool().newLabel();
     int index_b = localNumB();
 
-    gen.emitGoto(cond_label);
+    // Initialize switch variable for second switch
+    IntegerLiteral.push(gen, 0);
+    typeInt().emitStoreLocal(gen, index_a);
+
+    // Store the value of the switch expr so that it is only evaluated once!
+    getExpr().createBCode(gen);
+
+    // Push the hash code for the switch instruction
+    if (getExpr().isConstant()) {
+      typeString().emitStoreLocal(gen, index_b);
+
+      int hashCode = getExpr().constant().stringValue().hashCode();
+      IntegerLiteral.push(gen, hashCode);
+    } else {
+      typeString().emitDup(gen);
+      typeString().emitStoreLocal(gen, index_b);
+      hashCodeMethod().emitInvokeMethod(gen,
+          lookupType("java.lang", "Object"));
+    }
+
+    // Emit switch instruction
+    gen.addLabel(switch_label);
+    long low = groups.isEmpty() ? 0 : groups.firstKey();
+    long high = groups.isEmpty() ? 0 : groups.lastKey();
+
+    long tableSwitchSize = 8L + (high - low + 1L) * 4L;
+    long lookupSwitchSize = 4L + groups.size() * 8L;
+    int pad;
+    int tblpos;
+    boolean tableSwitch = tableSwitchSize < lookupSwitchSize;
+
+    // Select the switch type which produces the smallest switch instr.
+    if (tableSwitch) {
+      // TABLESWITCH
+      gen.emit(Bytecode.TABLESWITCH);
+      pad = emitPad(gen);
+      tblpos = gen.pos();
+
+      // leave room for the address table
+      gen.skip(4 * 3 + 4 * (int) (high-low+1));
+    } else {
+      // LOOKUPSWITCH
+      gen.emit(Bytecode.LOOKUPSWITCH);
+      pad = emitPad(gen);
+      tblpos = gen.pos();
+
+      // leave room for the address table
+      gen.skip(4 * 2 + 4 * groups.size());
+    }
 
     // Code generation for switch body
     for (CaseGroup group : groups.values()) {
@@ -193,48 +240,18 @@ aspect StringsInSwitch {
       }
     }
 
-    gen.addLabel(cond_label);
-
-    // Initialize switch variable for second switch
-    IntegerLiteral.push(gen, 0);
-    typeInt().emitStoreLocal(gen, index_a);
-
-    // Store the value of the switch expr so that it is only evaluated once!
-    getExpr().createBCode(gen);
-
-    // Push the hash code for the switch instruction
-    if (getExpr().isConstant()) {
-      typeString().emitStoreLocal(gen, index_b);
-
-      int hashCode = getExpr().constant().stringValue().hashCode();
-      IntegerLiteral.push(gen, hashCode);
-    } else {
-      typeString().emitDup(gen);
-      typeString().emitStoreLocal(gen, index_b);
-      hashCodeMethod().emitInvokeMethod(gen,
-          lookupType("java.lang", "Object"));
-    }
-
-    // Emit switch instruction
-    gen.addLabel(switch_label);
-    long low = groups.isEmpty() ? 0 : groups.firstKey();
-    long high = groups.isEmpty() ? 0 : groups.lastKey();
-
-    long tableSwitchSize = 8L + (high - low + 1L) * 4L;
-    long lookupSwitchSize = 4L + groups.size() * 8L;
-
-    // Select the switch type which produces the smallest switch instr.
-    if (tableSwitchSize < lookupSwitchSize) {
-      gen.emit(Bytecode.TABLESWITCH);
-      int pad = emitPad(gen);
-      int defaultOffset = 1 + pad + 4 + 4 + 4 +
-        4 * (int)(high - low + 1);
+    // write jump address table
+    int endpos = gen.pos();
+    gen.setPos(tblpos);
+    if (tableSwitch) {
+      int numCase = (int) (high-low+1);
+      int defaultOffset = 1 + pad + 4 * 3 + 4 * numCase;
       gen.add4(defaultOffset);
-      gen.add4((int)low);
-      gen.add4((int)high);
+      gen.add4((int) low);
+      gen.add4((int) high);
       for(long i = low; i <= high; i++) {
-        if (groups.containsKey((int)i)) {
-          CaseGroup group = groups.get((int)i);
+        if (groups.containsKey((int) i)) {
+          CaseGroup group = groups.get((int) i);
           int offset = labelOffset(gen, group.lbl, switch_label);
           gen.add4(offset);
         } else {
@@ -242,8 +259,6 @@ aspect StringsInSwitch {
         }
       }
     } else {
-      gen.emit(Bytecode.LOOKUPSWITCH);
-      int pad = emitPad(gen);
       int defaultOffset = 1 + pad + 4 + 4 + 8 * groups.size();
       gen.add4(defaultOffset);
       gen.add4(groups.size());
@@ -253,6 +268,8 @@ aspect StringsInSwitch {
         gen.add4(offset);
       }
     }
+    gen.setPos(endpos);
+
     gen.addLabel(end_label1);
   }
 
@@ -261,11 +278,20 @@ aspect StringsInSwitch {
       java.util.List<CaseLbl> labels,
       int index_a,
       CaseLbl defaultLbl) {
-    int cond_label = hostType().constantPool().newLabel();
     int switch_label = hostType().constantPool().newLabel();
     int default_label = hostType().constantPool().newLabel();
 
-    gen.emitGoto(cond_label);
+    // push the switch variable
+    typeInt().emitLoadLocal(gen, index_a);
+
+    // Emit switch instruction
+    gen.addLabel(switch_label);
+    gen.emit(Bytecode.TABLESWITCH);
+    long high = labels.size();
+    long tableSwitchSize = 8L + (high + 1L) * 4L;
+    int pad = emitPad(gen);
+    int tblpos = gen.pos();
+    gen.skip(4 * 3 + 4 * (int) (high+1));
 
     // Code generation for case labels
 
@@ -279,35 +305,23 @@ aspect StringsInSwitch {
       defaultLbl.createBCode(gen);
 
     }
-    if (canCompleteNormally())
-      gen.emitGoto(end_label());
 
-    gen.addLabel(cond_label);
-
-    // push the switch variable
-    typeInt().emitLoadLocal(gen, index_a);
-
-    // Emit switch instruction
-      gen.addLabel(switch_label);
-    gen.emit(Bytecode.TABLESWITCH);
-    long high = labels.size();
-    long tableSwitchSize = 8L + (high + 1L) * 4L;
-    int pad = emitPad(gen);
+    int endpos = gen.pos();
+    gen.setPos(tblpos);
     int defaultOffset = 1 + pad + 4 + 4 + 4 +
         4 * (int)(high + 1);
     gen.add4(defaultOffset);
     gen.add4(0);
-    gen.add4((int)high);
-
+    gen.add4((int) high);
     int offset = labelOffset(gen, default_label, switch_label);
     gen.add4(offset);
     for (CaseLbl lbl : labels) {
       offset = labelOffset(gen, lbl.lbl, switch_label);
       gen.add4(offset);
     }
+    gen.setPos(endpos);
 
-    if (canCompleteNormally())
-      gen.addLabel(end_label());
+    gen.addLabel(end_label());
   }
 
   /**
