@@ -394,9 +394,10 @@ aspect CodeGeneration {
       bytes.changeStackDepth(i);
     }
   }
-  /*************************************************************
-   * Auxiliary class
-   *************************************************************/
+
+  /**
+   * Utility class for bytecode generation.
+   */
   class ByteArray {
     private int stackDepth = 0;
     private int maxStackDepth = 0;
@@ -404,40 +405,69 @@ aspect CodeGeneration {
     private byte[] bytes = new byte[size];
     private int pos = 0;
     private int lastGotoPos = 0;
-    ByteArray add(int i) {return add((byte)i);}
-    ByteArray add(byte b) {
-      if(pos >= size) {
-        byte[] ba = new byte[size * 2];
+
+    /**
+     * Grow the byte array to fit more bytes if needed.
+     * @param num number of bytes to grow
+     */
+    void grow(int num) {
+      int newsize = pos + num;
+      if(newsize-1 >= size) {
+        newsize = Math.max(newsize, size * 2);
+        byte[] ba = new byte[newsize];
         System.arraycopy(bytes, 0, ba, 0, size);
-        size *= 2;
+        size = newsize;
         bytes = ba;
       }
+    }
+
+    ByteArray add(int i) {
+      return add((byte) i);
+    }
+
+    ByteArray add(byte b) {
+      grow(1);
       bytes[pos++] = b;
       return this;
     }
+
+    /**
+     * Skip forward a number of bytes.
+     */
+    void skip(int num) {
+      grow(num);
+      pos += num;
+    }
+
     ByteArray add4(int i) {
-      add(i >> 24 & 0xff);
-      add(i >> 16 & 0xff);
-      add(i >> 8 & 0xff);
-      add(i & 0xff);
+      grow(4);
+      bytes[pos++] = (byte) (i >> 24 & 0xFF);
+      bytes[pos++] = (byte) (i >> 16 & 0xFF);
+      bytes[pos++] = (byte) (i >> 8 & 0xFF);
+      bytes[pos++] = (byte) (i & 0xFF);
       return this;
     }
+
     ByteArray add2(int index) {
-      add(index >> 8 & 0xff);
-      add(index & 0xff);
+      grow(2);
+      bytes[pos++] = (byte) (index >> 8 & 0xff);
+      bytes[pos++] = (byte) (index & 0xff);
       return this;
     }
+
     ByteArray emit(byte b) {
       changeStackDepth(BytecodeDebug.stackChange(b));
       add(b);
       return this;
     }
+
     ByteArray emitGoto(byte b) {
       changeStackDepth(BytecodeDebug.stackChange(b));
       lastGotoPos = pos;
       add(b);
       return this;
     }
+
     ByteArray emit(byte b, int stackChange) {
       changeStackDepth(stackChange);
       add(b);
@@ -447,26 +477,42 @@ aspect CodeGeneration {
     public int maxStackDepth() {
       return maxStackDepth;
     }
+
     public int stackDepth() {
       return stackDepth;
     }
+
     public void changeStackDepth(int i) {
       stackDepth += i;
       if(stackDepth > maxStackDepth)
         maxStackDepth = stackDepth;
     }
 
-    public int pos() {return pos;}
-    public int lastGotoPos() {return lastGotoPos;}
-    public void setPos(int index) { pos = index; }
-    public int size() {return pos;}
-    public byte get(int index) {return bytes[index];}
-    public void set(int index, byte value) {bytes[index] = value;}
+    public int pos() { return pos; }
+
+    public int lastGotoPos() { return lastGotoPos; }
+
+    public void setPos(int index) {
+      pos = index;
+      grow(0);
+    }
+
+    public int size() { return pos; }
+
+    public byte get(int index) throws IndexOutOfBoundsException {
+      return bytes[index];
+    }
+
+    public void set(int index, byte value) throws IndexOutOfBoundsException {
+      bytes[index] = value;
+    }
+
     public String toString() {
-      StringBuffer b = new StringBuffer();
+      StringBuilder b = new StringBuilder();
       for(int i = 0; i < pos; i++) b.append(" " + bytes[i]);
       return b.toString();
     }
+
     public byte[] toArray() {
       byte[] b = new byte[pos];
       System.arraycopy(bytes, 0, b, 0, pos);
