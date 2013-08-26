@@ -15,18 +15,20 @@ import java.io.IOException;
 /**
  * Defines an interface expected by a generated parser.
  */
+@SuppressWarnings("javadoc")
 public abstract class Scanner
 {
+	@SuppressWarnings("serial")
 	public static class Exception extends java.lang.Exception
 	{
 		public final int line;
 		public final int column;
-		
+
 		public Exception(String msg)
 		{
 			this(0, 0, msg);
 		}
-		
+
 		public Exception(int line, int column, String msg)
 		{
 			super(msg);

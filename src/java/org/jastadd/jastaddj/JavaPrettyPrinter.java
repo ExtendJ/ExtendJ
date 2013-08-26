@@ -3,7 +3,7 @@ package org.jastadd.jastaddj;
  * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
  * by the modified BSD License. You should have received a copy of the
  * modified BSD license with this compiler.
- * 
+ *
  * Copyright (c) 2005-2008, Torbjorn Ekman
  * All rights reserved.
  */
@@ -32,6 +32,7 @@ class JavaPrettyPrinter extends Frontend {
 				});
 	}
 
+	@SuppressWarnings("rawtypes")
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
 		super.processErrors(errors, unit);

@@ -60,7 +60,7 @@ public final class ParsingTables
 
 	/** Indicates whether action tables were compressed. */
 	final boolean compressed;
-	
+
 	/** Number of terminal symbols. */
 	final int n_term;
 
@@ -69,16 +69,18 @@ public final class ParsingTables
 	 *
 	 * @param impl_class class of the instance of the Parser
 	 */
+	@SuppressWarnings("rawtypes")
 	public ParsingTables(Class impl_class)
 	{
 		this(getSpecAsResourceStream(impl_class));
 	}
-	
+
+	@SuppressWarnings("javadoc")
 	public ParsingTables(String spec)
 	{
 		this(new ByteArrayInputStream(decode(spec)));
 	}
-	
+
 	private ParsingTables(InputStream in)
 	{
 		try
@@ -97,7 +99,7 @@ public final class ParsingTables
 				{
 					lookaheads[i] = data.readShort();
 				}
-				
+
 				len = data.readInt();
 				actn_offsets = new int[len];
 				for (int i = 0; i < len; i++)
@@ -109,7 +111,7 @@ public final class ParsingTables
 				{
 					goto_offsets[i] = data.readInt();
 				}
-				
+
 				len = data.readInt();
 				compressed = len != 0;
 				if (compressed)
@@ -124,7 +126,7 @@ public final class ParsingTables
 				{
 					default_actions = null;
 				}
-				
+
 				int min_nt_id = Integer.MAX_VALUE;
 				len = data.readInt();
 				rule_infos = new int[len];
@@ -134,7 +136,7 @@ public final class ParsingTables
 					min_nt_id = Math.min(min_nt_id, rule_infos[i] >>> 16);
 				}
 				n_term = min_nt_id;
-				
+
 				error_symbol_id = data.readShort();
 			}
 			finally
@@ -147,11 +149,11 @@ public final class ParsingTables
 			throw new IllegalStateException("cannot initialize parser tables: " + e.getMessage());
 		}
 	}
-	
+
 	/**
 	 * Scans lookaheads expected in a given state for a terminal symbol.
 	 * Used in error recovery when an unexpected terminal is replaced with one that is expected.
-	 * 
+	 *
 	 * @param state in which error occured
 	 * @return ID of the expected terminal symbol or -1 if there is none
 	 */
@@ -213,7 +215,7 @@ public final class ParsingTables
 	}
 
 	static final int UNUSED_OFFSET = Integer.MIN_VALUE;
-	
+
 	static byte[] decode(String spec)
 	{
 		char[] chars = spec.toCharArray();
@@ -221,7 +223,7 @@ public final class ParsingTables
 			throw new IllegalArgumentException("corrupted encoding");
 		int len = chars.length / 4 * 3;
 		byte[] bytes = new byte[chars[chars.length - 1] == '=' ? chars[chars.length - 2] == '=' ? len - 2 : len - 1 : len];
-		
+
 		len -= 3;
 		int ci = 0, bi = 0;
 		while (bi < len)
@@ -243,7 +245,7 @@ public final class ParsingTables
 		}
 		return bytes;
 	}
-	
+
 	static int decode(char c)
 	{
 		if (c <= '9')
@@ -266,9 +268,9 @@ public final class ParsingTables
 			return c - 'a' + 36;
 		throw new IllegalStateException("illegal encoding character '" + c + "'");
 	}
-	
-	static InputStream getSpecAsResourceStream(Class impl_class)
-	{
+
+	@SuppressWarnings("rawtypes")
+	static InputStream getSpecAsResourceStream(Class impl_class) {
 		String name = impl_class.getName();
 		name = name.substring(name.lastIndexOf('.') + 1) + ".spec";
 		InputStream spec_stream = impl_class.getResourceAsStream(name);

@@ -14,8 +14,10 @@ import java.io.IOException;
  * Almost complete implementation of a LALR parser. Two components that it lacks to parse a concrete
  * grammar -- rule actions and parsing tables -- are provided by a generated subclass.
  */
+@SuppressWarnings("javadoc")
 public abstract class Parser
 {
+	@SuppressWarnings("serial")
 	static public class Exception extends java.lang.Exception
 	{
 		Exception(String msg)
@@ -23,7 +25,7 @@ public abstract class Parser
 			super(msg);
 		}
 	}
-	
+
 	/**
 	 * This class "lists" reportable events that might happen during parsing.
 	 */
@@ -147,22 +149,22 @@ public abstract class Parser
 			System.err.println(": Recovered: removed error phrase");
 		}
 	}
-	
+
 	/**
 	 * This class wrapps a Scanner and provides a token "accumulator" for a parsing simulation.
-	 * <p>If a source that is being parsed does not have syntax errors this wrapper only adds 
+	 * <p>If a source that is being parsed does not have syntax errors this wrapper only adds
 	 * one indirection while it delivers the next token. However when parser needs to recover
 	 * from a syntax error this wrapper accumulates tokens shifted by a forward parsing simulation
 	 * and later feeds them to the recovered parser.
 	 */
 	public class TokenStream
 	{
-		private Scanner  scanner;
+		private final Scanner  scanner;
 		private Symbol[] buffer;
 		private int      n_marked;
 		private int      n_read;
 		private int      n_written;
-		
+
 		public TokenStream(Scanner scanner)
 		{
 			this.scanner = scanner;
@@ -175,14 +177,14 @@ public abstract class Parser
             buffer[0] = first_symbol;
             n_written++;
         }
-        
+
 		public Symbol nextToken() throws IOException
 		{
 			if (buffer != null)
-			{				
+			{
 				if (n_read < n_written)
 					return buffer[n_read++];
-				
+
 				if (n_written < n_marked)
 				{
 					n_read++;
@@ -195,7 +197,7 @@ public abstract class Parser
 
 		/**
 		 * Prepare a stream to accumulate tokens.
-		 * 
+		 *
 		 * @param size number of shifted tokens to accumulate
 		 */
 		public void alloc(int size)
@@ -203,7 +205,7 @@ public abstract class Parser
 			buffer = new Symbol[(n_marked = size) + 1];
 			n_read = n_written = 0;
 		}
-		
+
 		/**
 		 * Prepare accumulated tokens to be reread by a next simulation run
 		 * or by a recovered parser.
@@ -212,10 +214,10 @@ public abstract class Parser
 		{
 			n_read = 0;
 		}
-        
+
 		/**
 		 * Insert two tokens at the beginning of a stream.
-		 * 
+		 *
 		 * @param t0 first token to be inserted
 		 * @param t1 second token to be inserted
 		 */
@@ -228,10 +230,10 @@ public abstract class Parser
 			buffer[1] = t1;
 			n_written += 2;
 		}
-		
+
 		/**
 		 * Removes a token from the accumulator.
-		 * 
+		 *
 		 * @param i index of a token in the accumulator.
 		 * @return removed token
 		 */
@@ -248,21 +250,21 @@ public abstract class Parser
 		}
 
 		/**
-		 * Checks whether a simulation filled the token accumulator. 
-		 * 
+		 * Checks whether a simulation filled the token accumulator.
+		 *
 		 * @return true if accumulator is full
 		 */
 		boolean isFull()
 		{
 			return n_read == n_marked;
 		}
-		
+
 		/**
 		 * Reads next recognized token from the scanner. If scanner fails to recognize a token and
 		 * throws an exception it will be reported via Parser.scannerError().
 		 * <p>It is expected that scanner is capable of returning at least an EOF token after the
 		 * exception.</p>
-		 * 
+		 *
 		 * @return next recognized token
 		 * @throws IOException
 		 *             as thrown by a scanner
@@ -388,7 +390,7 @@ public abstract class Parser
 
 	/** Parsing events notification "gateway" */
 	protected Events report;
-	
+
 
 	protected Parser(ParsingTables tables)
 	{
@@ -399,7 +401,7 @@ public abstract class Parser
 
     /**
      * Parses a source and returns a semantic value of the accepted nonterminal
-     * 
+     *
      * @param source of tokens - a Scanner
      * @return semantic value of the accepted nonterminal
      */
@@ -408,12 +410,12 @@ public abstract class Parser
 		init();
 		return parse(new TokenStream(source));
 	}
-    
+
     /**
      * Parses a source and returns a semantic value of the accepted nonterminal.
      * Before parsing starts injects alternative goal marker into the source to
      * indicate that an alternative goal should be matched.
-     * 
+     *
      * @param source of tokens - a Scanner
      * @param alt_goal_marker_id ID of a token like symbol that will be used as a marker
      * @return semantic value of the accepted nonterminal
@@ -424,7 +426,7 @@ public abstract class Parser
         TokenStream in = new TokenStream(source, new Symbol(alt_goal_marker_id));
         return parse(in);
     }
-    
+
     private Object parse(TokenStream in) throws IOException, Parser.Exception
     {
         while (true)
@@ -475,7 +477,7 @@ public abstract class Parser
 	/**
 	 * Invoke actual reduce action routine.
 	 * Method must be implemented by a generated parser
-	 * 
+	 *
 	 * @param rule_num ID of a reduce action routine to invoke
 	 * @param offset to the symbol before first action routine argument
 	 * @return reduced nonterminal
@@ -488,10 +490,10 @@ public abstract class Parser
 	private void init()
 	{
 		if (report == null) report = new Events();
-		
+
 		_symbols = new Symbol[states.length];
 		top = 0; // i.e. it's not empty
-		_symbols[top] = new Symbol("none"); // need a symbol here for a default reduce on the very first erroneous token  
+		_symbols[top] = new Symbol("none"); // need a symbol here for a default reduce on the very first erroneous token
 		states[top] = 1; // initial/first state
 	}
 
@@ -510,8 +512,8 @@ public abstract class Parser
 	}
 
 	/**
-	 * Shift a symbol to stack and go to a new state 
-	 * 
+	 * Shift a symbol to stack and go to a new state
+	 *
 	 * @param sym
 	 *            symbol that will be shifted
 	 * @param goto_state
@@ -527,7 +529,7 @@ public abstract class Parser
 
 	/**
 	 * Perform a reduce action.
-	 * 
+	 *
 	 * @param rule_id
 	 *            Number of the production by which to reduce
 	 * @return nonterminal created by a reduction
@@ -556,11 +558,11 @@ public abstract class Parser
      * Implements parsing error recovery. Tries several simple approches first, like deleting "bad" token
      * or replacing the latter with one of the expected in his state (if possible). If simple methods did
      * not work tries to do error phrase recovery.
-     * 
+     *
      * It is expected that normally descendand parsers do not need to alter this method. In same cases though
-     * they may want to override it if they need a different error recovery strategy. 
-     * 
-     * @param token a lookahead terminal symbol that messed parsing 
+     * they may want to override it if they need a different error recovery strategy.
+     *
+     * @param token a lookahead terminal symbol that messed parsing
      * @param in token stream
      * @throws IOException propagated from a scanner if it has issues with the source
      * @throws Parser.Exception if Parser cannot recover
@@ -569,7 +571,7 @@ public abstract class Parser
 	{
 		if (token.id == 0) // end of input
 			throw new Parser.Exception("Cannot recover from the syntax error");
-		
+
 		Simulator sim = new Simulator();
 		in.alloc(3);
 		short current_state = states[top];
@@ -587,9 +589,9 @@ public abstract class Parser
 					report.missingTokenInserted(term);
 					return;
 				}
-				
+
 				int offset = tables.actn_offsets[current_state];
-				
+
 				for (short term_id = (short) (first_term_id + 1); term_id < tables.n_term; term_id++)
 				{
 					int index = offset + term_id;
@@ -607,11 +609,11 @@ public abstract class Parser
 						}
 					}
 				}
-				in.remove(1); // unexpected token, i.e. alter stream as if we replaced 
+				in.remove(1); // unexpected token, i.e. alter stream as if we replaced
 				              // the unexpected token to an expected terminal
 				term.start = token.start;
 				term.end = token.end;
-				
+
 				for (short term_id = first_term_id; term_id < tables.n_term; term_id++)
 				{
 					int index = offset + term_id;
@@ -629,17 +631,17 @@ public abstract class Parser
 						}
 					}
 				}
-				in.remove(0); // simple recoveries failed - remove all stream changes 
+				in.remove(0); // simple recoveries failed - remove all stream changes
 			}
 		}
 		// finally try parsing without unexpected token (as if it was "deleted")
-        if (sim.parse(in)) 
+        if (sim.parse(in))
         {
             in.rewind();
             report.unexpectedTokenRemoved(token);
             return;
         }
-		
+
 		// Simple recoveries failed or are not applicable. Next step is an error phrase recovery.
 		/*
 		 * Find a state where parser can shift "error" symbol. Discard already reduced (and shifted)

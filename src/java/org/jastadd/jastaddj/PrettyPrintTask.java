@@ -1,9 +1,10 @@
 package org.jastadd.jastaddj;
+
 /*
  * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
  * by the modified BSD License. You should have received a copy of the
  * modified BSD license with this compiler.
- * 
+ *
  * Copyright (c) 2005-2008, Torbjorn Ekman
  *                    2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
@@ -13,22 +14,22 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
 import org.apache.tools.ant.Task;
-import org.apache.tools.ant.types.Resource;
 import org.apache.tools.ant.types.Path;
-import org.apache.tools.ant.types.FileSet;
 import org.apache.tools.ant.types.Reference;
-import AST.*;
 
 /**
- * Apache Ant Task for Java7 pretty printer.
- * Works similarly to the compiler Task.
+ * Apache Ant Task for Java7 pretty printer. Works similarly to the compiler
+ * Task.
  */
+@SuppressWarnings("javadoc")
 public class PrettyPrintTask extends Task {
-	private Path	cp;
-	private Path	srcdir;
-	private Path	destdir;
+	private Path cp;
+	private Path srcdir;
+	private Path destdir;
 
+	@Override
 	public void execute() {
 		ArrayList<String> args = new ArrayList<String>();
 		if (cp != null) {
@@ -38,8 +39,8 @@ public class PrettyPrintTask extends Task {
 		if (srcdir != null) {
 			File fsrcdir = new File(srcdir.toString());
 			if (!fsrcdir.exists()) {
-				System.err.println("could not open directory "+
-						srcdir.toString());
+				System.err.println("could not open directory "
+					+ srcdir.toString());
 			} else {
 				addSrcFiles(args, fsrcdir);
 			}
@@ -55,6 +56,7 @@ public class PrettyPrintTask extends Task {
 	}
 
 	private static Pattern srcPattern = Pattern.compile(".+\\.java");
+
 	private void addSrcFiles(ArrayList<String> args, File srcdir) {
 		for (String child : srcdir.list()) {
 			File childFile = new File(srcdir, child);

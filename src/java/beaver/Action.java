@@ -11,24 +11,27 @@ package beaver;
 /**
  * An "interface" to Java code executed when a production is reduced.
  */
+@SuppressWarnings("javadoc")
 public abstract class Action
 {
 	static public final Action NONE = new Action()
 	{
+		@Override
 		public Symbol reduce(Symbol[] args, int offset)
 		{
 			return new Symbol(null);
 		}
 	};
-	
+
 	static public final Action RETURN = new Action()
 	{
+		@Override
 		public Symbol reduce(Symbol[] args, int offset)
 		{
 			return args[offset + 1];
 		}
 	};
-	
+
 	/**
 	 * Am action code that is executed when the production is reduced.
 	 *
