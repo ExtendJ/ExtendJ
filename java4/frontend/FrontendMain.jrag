@@ -1,11 +1,33 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- *
- * Copyright (c) 2005-2008, Torbjorn Ekman
+/* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
+
+import org.jastadd.util.*;
 
 aspect FrontendMain {
   protected long Program.javaParseTime;
@@ -24,7 +46,6 @@ aspect FrontendMain {
     }
 
     public boolean process(String[] args, BytecodeReader reader, JavaParser parser) {
-      long start;
 
       // reset statistics
       program.javaParseTime = 0;
@@ -60,39 +81,25 @@ aspect FrontendMain {
           program.addSourceFile(name);
         }
 
-        for(Iterator iter = program.compilationUnitIterator(); iter.hasNext(); ) {
-          CompilationUnit unit = (CompilationUnit)iter.next();
-          if(unit.fromSource()) {
-            try {
-              Collection errors = unit.parseErrors();
-              Collection warnings = new LinkedList();
-              // compute static semantic errors when there are no parse errors
-              // or the recover from parse errors option is specified
-              if(errors.isEmpty() || program.options().hasOption("-recover")) {
-                start = System.nanoTime();
-                unit.errorCheck(errors, warnings);
-                program.errorCheckTime += System.nanoTime() - start;
-              }
-              if(!errors.isEmpty()) {
-                processErrors(errors, unit);
-                return false;
-              } else {
-                if(!warnings.isEmpty()) {
-                  processWarnings(warnings, unit);
-                }
-                start = System.nanoTime();
-                processNoErrors(unit);
-                program.codeGenTime += System.nanoTime() - start;
-              }
-            } catch (Throwable t) {
-              System.err.println("Errors:");
-              System.err.println("Fatal exception while processing " +
-                  unit.pathName() + ":");
-              t.printStackTrace(System.err);
+        Iterator<CompilationUnit> iter = program.compilationUnitIterator();
+        while (iter.hasNext()) {
+          if (!processCompilationUnit(iter.next())) {
+            return false;
+          }
+        }
+
+        // fill in library dependencies
+        RobustMap<String, CompilationUnit> valueMap =
+          (RobustMap<String, CompilationUnit>) program.getLibCompilationUnitValueMap();
+        if (valueMap != null) {
+          iter = valueMap.robustValueIterator();
+          while (iter.hasNext()) {
+            if (!processCompilationUnit(iter.next())) {
               return false;
             }
           }
         }
+
       } catch (Throwable t) {
         System.err.println("Errors:");
         System.err.println("Fatal exception:");
@@ -106,6 +113,42 @@ aspect FrontendMain {
           System.out.println("numClassFiles: " + program.numClassFiles);
           System.out.println("errorCheckTime: " + program.errorCheckTime);
           System.out.println("codeGenTime: " + program.codeGenTime);
+        }
+      }
+      return true;
+    }
+
+    protected boolean processCompilationUnit(CompilationUnit unit) {
+      long start;
+
+      if (unit != null && unit.fromSource()) {
+        try {
+          Collection errors = unit.parseErrors();
+          Collection warnings = new LinkedList();
+          // compute static semantic errors when there are no parse errors
+          // or the recover from parse errors option is specified
+          if(errors.isEmpty() || program.options().hasOption("-recover")) {
+            start = System.nanoTime();
+            unit.errorCheck(errors, warnings);
+            program.errorCheckTime += System.nanoTime() - start;
+          }
+          if(!errors.isEmpty()) {
+            processErrors(errors, unit);
+            return false;
+          } else {
+            if(!warnings.isEmpty()) {
+              processWarnings(warnings, unit);
+            }
+            start = System.nanoTime();
+            processNoErrors(unit);
+            program.codeGenTime += System.nanoTime() - start;
+          }
+        } catch (Throwable t) {
+          System.err.println("Errors:");
+          System.err.println("Fatal exception while processing " +
+              unit.pathName() + ":");
+          t.printStackTrace(System.err);
+          return false;
         }
       }
       return true;
