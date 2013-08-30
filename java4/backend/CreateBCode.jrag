@@ -34,65 +34,6 @@ aspect CreateBCode {
 
   inh TypeDecl CatchClause.hostType();
 
-  /**
-   * @return a copy of the block as an NTAFinallyBlock
-   */
-  protected static NTAFinallyBlock ASTNode.ntaFinallyBlock(FinallyHost origin, Stmt branch, Block block) {
-    NTAFinallyBlock ntaBlock = new NTAFinallyBlock(origin);
-    ntaBlock.addStmt((Block) block.fullCopy());
-    /*if (!block.canCompleteNormally()) {
-     * // the target block's exit will replace our own exit code
-     * // so we can just goto that block!
-     * ntaBlock.addGoto(block);
-     * } else ...
-     */
-    if (block.canCompleteNormally()) {
-      FinallyHost enclosing = block.enclosingFinally(branch);
-      if (enclosing != null) {
-        ntaBlock.addStmt(ntaFinallyBlock(enclosing, branch, enclosing.getFinallyBlock()));
-      }
-    }
-    return ntaBlock;
-  }
-
-  syn lazy Opt BreakStmt.getFinallyOpt() {
-    return branchFinallyOpt();
-  }
-
-  syn lazy Opt ContinueStmt.getFinallyOpt() {
-    return branchFinallyOpt();
-  }
-
-  syn lazy Opt ReturnStmt.getFinallyOpt() {
-    return branchFinallyOpt();
-  }
-
-  /**
-   * Copy of the finally block for catch-all exception handling.
-   */
-  syn lazy Block TryStmt.getExceptionHandler() {
-    if (hasNonEmptyFinally()) {
-      NTAFinallyBlock ntaBlock = new NTAFinallyBlock(this);
-      ntaBlock.addStmt((Block) getFinally().fullCopy());
-      return ntaBlock;
-    } else {
-      return new NTAFinallyBlock();
-    }
-  }
-
-  /**
-   * @return An Opt node containing the finally and monitor exit blocks
-   * from the list of enclosing try-statements and synchronized blocks.
-   */
-  public Opt<Block> Stmt.branchFinallyOpt() {
-    FinallyHost enclosing = enclosingFinally(this);
-    if (enclosing != null) {
-      return new Opt<Block>(ntaFinallyBlock(enclosing, this, enclosing.getFinallyBlock()));
-    } else {
-      return new Opt<Block>();
-    }
-  }
-
   public abstract void CatchClause.exceptionTableEntries(CodeGeneration gen, int begin_lbl, int end_lbl);
 
   public void BasicCatch.exceptionTableEntries(CodeGeneration gen, int begin_lbl, int end_lbl) {
@@ -1593,7 +1534,6 @@ aspect CreateBCode {
     gen.emitThrow();
   }
 
-  syn lazy int TryStmt.label_end() = hostType().constantPool().newLabel();
   syn lazy int TryStmt.fallthrough_label() =
     hasNonEmptyFinally() ? hostType().constantPool().newLabel() : label_end();
 
@@ -1691,8 +1631,6 @@ aspect CreateBCode {
     getParameter().type().emitStoreLocal(gen, getParameter().localNum());
     getBlock().createBCode(gen);
   }
-
-  syn lazy int SynchronizedStmt.label_end() = hostType().constantPool().newLabel();
 
   protected int SynchronizedStmt.monitorId = -1;
 
