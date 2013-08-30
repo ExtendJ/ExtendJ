@@ -1,10 +1,30 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- *
- * Copyright (c) 2005-2008, Torbjorn Ekman
+/* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 aspect NameCheck {
@@ -23,6 +43,7 @@ aspect NameCheck {
     else if(allImportedTypes(getAccess().type().name()).size() > 1)
       error(getAccess().type().name() + " is imported multiple times");
   }
+
   inh SimpleSet SingleTypeImportDecl.allImportedTypes(String name);
   eq CompilationUnit.getImportDecl().allImportedTypes(String name) =
     importedTypes(name);
@@ -68,7 +89,6 @@ aspect NameCheck {
         return false;
     return true;
   }
-
 
   public void ConstructorDecl.nameCheck() {
     super.nameCheck();
@@ -132,6 +152,7 @@ aspect NameCheck {
         return false;
     return true;
   }
+
   syn boolean ClassInstanceExpr.validArgs() {
     for(int i = 0; i < getNumArg(); i++)
       if(getArg(i).type().isUnknown())
@@ -351,6 +372,7 @@ aspect NameCheck {
       error("duplicate declaration of parameter " + name());
     }
   }
+
   inh BodyDecl ParameterDeclaration.enclosingBodyDecl();
 
   public void LabeledStmt.nameCheck() {
@@ -408,6 +430,7 @@ aspect NameCheck {
       error("constant expression " + getValue() + " is multiply declared in two case statements");
     }
   }
+
   public void DefaultCase.nameCheck() {
     if(bind(this) != this) {
       error("only one default case statement allowed");
@@ -437,4 +460,38 @@ aspect NameCheck {
     return getValue().constant().intValue() == ((ConstCase)c).getValue().constant().intValue();
   }
   eq DefaultCase.constValue(Case c) = c instanceof DefaultCase;
+
+  inh SimpleSet LocalClassDeclStmt.otherLocalClassDecls(String name);
+  inh SimpleSet Block.otherLocalClassDecls(String name);
+
+  eq BodyDecl.getChild().otherLocalClassDecls(String name) = SimpleSet.emptySet;
+
+  eq Block.getStmt(int index).otherLocalClassDecls(String name) {
+    SimpleSet local = SimpleSet.emptySet;
+    for (int i = index-1; i >= 0 && !(getStmt(i) instanceof Case); --i) {
+      if (getStmt(i) instanceof LocalClassDeclStmt) {
+        TypeDecl t = ((LocalClassDeclStmt)getStmt(i)).getClassDecl();
+        if (t.name().equals(name)) {
+          local = local.add(t);
+        }
+      }
+    }
+    if (!local.isEmpty())
+      return local;
+    else
+      return otherLocalClassDecls(name);
+  }
+
+  /**
+   * Checks that this local class declaration does not conflict with a previous
+   * declaration in the local scope.
+   */
+  public void LocalClassDeclStmt.nameCheck() {
+    TypeDecl decl = getClassDecl();
+    SimpleSet decls = otherLocalClassDecls(decl.name());
+    if (!decls.isEmpty()) {
+      error("another local class " + decl.name() +
+          " has already been declared in this scope");
+    }
+  }
 }
