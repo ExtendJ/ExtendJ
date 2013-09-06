@@ -1,12 +1,20 @@
 #!/bin/bash
 
+interrupted()
+{
+    exit $?
+}
+
+trap interrupted SIGINT
+
 # Counts number of lines in all JastAddJ modules
 # requires the sloccount program
 
 tempfile=files-$$.tmp
 echo "generic"
 printf "    java: "
-find src/java/org/jastadd/jastaddj/ -name '*.java' > $tempfile
+find src/frontend/org/jastadd/jastaddj/ -name '*.java' > $tempfile
+find src/backend/org/jastadd/jastaddj/ -name '*.java' >> $tempfile
 java_count -f $tempfile | tail -n 1
 
 echo "generated"
