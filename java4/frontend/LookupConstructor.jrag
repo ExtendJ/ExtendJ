@@ -13,11 +13,11 @@ import java.util.ArrayList;
 aspect ConstructScope {
   inh Collection ConstructorAccess.lookupConstructor();
   eq Program.getChild().lookupConstructor() = Collections.EMPTY_LIST;
-  eq TypeDecl.getBodyDecl().lookupConstructor() = constructors();
+  eq TypeDecl.getChild().lookupConstructor() = constructors();
   eq AbstractDot.getRight().lookupConstructor() = getLeft().type().constructors();
 
   inh Collection SuperConstructorAccess.lookupSuperConstructor();
-  eq TypeDecl.getBodyDecl().lookupSuperConstructor() = lookupSuperConstructor();
+  eq TypeDecl.getChild().lookupSuperConstructor() = lookupSuperConstructor();
   syn Collection TypeDecl.lookupSuperConstructor() = Collections.EMPTY_LIST;
   eq ClassDecl.lookupSuperConstructor() = hasSuperclass() ? superclass().constructors() : Collections.EMPTY_LIST;
   eq InterfaceDecl.lookupSuperConstructor() = typeObject().constructors();
@@ -26,9 +26,11 @@ aspect ConstructScope {
 
   inh TypeDecl ClassInstanceExpr.typeObject();
 
-  // compute the most specific constructor in a collection
-  // the constructor is invoked with the arguments specified in argList
-  // the curent context (this) is used to evaluate the hostType for accessibility
+  /**
+   * Compute the most specific constructor in a collection
+   * the constructor is invoked with the arguments specified in argList
+   * the curent context (this) is used to evaluate the hostType for accessibility
+   */
   syn SimpleSet Expr.mostSpecificConstructor(Collection constructors) {
     SimpleSet maxSpecific = SimpleSet.emptySet;
     for(Iterator iter = constructors.iterator(); iter.hasNext(); ) {
@@ -77,30 +79,41 @@ aspect ConstructScope {
 
   syn lazy ConstructorDecl ClassInstanceExpr.decl() {
     SimpleSet decls = decls();
-    if(decls.size() == 1)
-      return (ConstructorDecl)decls.iterator().next();
-    return unknownConstructor();
+    if (decls.size() == 1) {
+      return (ConstructorDecl) decls.iterator().next();
+    } else {
+      return unknownConstructor();
+    }
   }
+
   inh ConstructorDecl ClassInstanceExpr.unknownConstructor();
 }
 
 aspect ConstructorLookup {
   public ConstructorDecl TypeDecl.lookupConstructor(ConstructorDecl signature) {
-    for(Iterator iter = constructors().iterator(); iter.hasNext(); ) {
+    for (Iterator iter = constructors().iterator(); iter.hasNext(); ) {
       ConstructorDecl decl = (ConstructorDecl)iter.next();
-      if(decl.sameSignature(signature)) {
+      if (decl.sameSignature(signature)) {
         return decl;
       }
     }
     return null;
   }
 
-  syn lazy Collection TypeDecl.constructors() {
-    Collection c = new ArrayList();
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof ConstructorDecl) {
-        c.add(getBodyDecl(i));
+  syn lazy Collection<ConstructorDecl> TypeDecl.constructors() {
+    Collection<ConstructorDecl> c = new ArrayList();
+    for (int i = 0; i < getNumBodyDecl(); i++) {
+      if (getBodyDecl(i) instanceof ConstructorDecl) {
+        c.add((ConstructorDecl) getBodyDecl(i));
       }
+    }
+    return c;
+  }
+
+  eq ClassDecl.constructors() {
+    Collection<ConstructorDecl> c = super.constructors();
+    if (hasImplicitConstructor()) {
+      c.add(getImplicitConstructor());
     }
     return c;
   }
@@ -155,64 +168,129 @@ aspect ConstructorDecl {
   }
 }
 aspect ImplicitConstructor {
-  syn boolean List.requiresDefaultConstructor() {
-    if(getParent() instanceof ClassDecl) {
-      ClassDecl c = (ClassDecl)getParent();
-      return c.noConstructor() && c.getBodyDeclListNoTransform() == this && !(c instanceof AnonymousDecl);
-    }
-    return false;
-  }
+
+  /**
+   * A class declaration requires an implicit constructor if it has no
+   * explicit constructor.
+   * @return <code>true</code> if this class requires an implicit default
+   * contstructor.
+   */
+  syn boolean ClassDecl.needsImplicitConstructor() =
+    compilationUnit().fromSource() && !hasExplicitConstructor();
 
   /**
    * Flag to indicate if this constructor is an auto-generated
-   * default constructor. Default constructors are not pretty
+   * default constructor. Implicit constructors are not pretty
    * printed.
    */
-  private boolean ConstructorDecl.isDefaultConstructor = false;
+  private boolean ConstructorDecl.isImplicitConstructor = false;
+
   /**
    * Set the default constructor flag. Causes this constructor
    * to not be pretty printed.
    */
-  public void ConstructorDecl.setDefaultConstructor() {
-    isDefaultConstructor = true;
+  public void ConstructorDecl.setImplicitConstructor() {
+    isImplicitConstructor = true;
   }
+
   /**
    * @return true if this is an auto-generated default constructor
    */
-  syn boolean ConstructorDecl.isDefaultConstructor() =
-    isDefaultConstructor;
+  syn boolean ConstructorDecl.isImplicitConstructor() =
+    isImplicitConstructor;
 
-  rewrite List {
-    when(requiresDefaultConstructor())
-    to List {
-      ClassDecl c = (ClassDecl)getParent();
+  syn lazy Opt<ConstructorDecl> ClassDecl.getImplicitConstructorOpt() {
+    if (needsImplicitConstructor()) {
       Modifiers m = new Modifiers();
-      if(c.isPublic()) m.addModifier(new Modifier("public"));
-      else if(c.isProtected()) m.addModifier(new Modifier("protected"));
-      else if(c.isPrivate()) m.addModifier(new Modifier("private"));
+      if (isPublic()) {
+        m.addModifier(new Modifier("public"));
+      } else if(isProtected()) {
+        m.addModifier(new Modifier("protected"));
+      } else if(isPrivate()) {
+        m.addModifier(new Modifier("private"));
+      }
       ConstructorDecl constructor = new ConstructorDecl(
-            m,
-            c.name(),
-            new List(),
-            new List(),
-            new Opt(),
-            new Block()
+          m,
+          name(),
+          new List(),
+          new List(),
+          new Opt(),
+          new Block()
       );
-      constructor.setDefaultConstructor();
-      c.addBodyDecl(constructor);
-      return this;
+      constructor.setImplicitConstructor();
+      return new Opt<ConstructorDecl>(constructor);
+    } else {
+      return new Opt<ConstructorDecl>();
     }
   }
 
-  syn boolean ClassDecl.noConstructor() {
-    if(!compilationUnit().fromSource())
-      return false;
-    for(int i = 0; i < getNumBodyDecl(); i++)
-      if(getBodyDecl(i) instanceof ConstructorDecl)
-        return false;
-    return true;
+  syn lazy Opt<ConstructorDecl> AnonymousDecl.getImplicitConstructorOpt() {
+    if (needsImplicitConstructor()) {
+      ConstructorDecl decl = constructorDecl();
+      Modifiers modifiers = (Modifiers) decl.getModifiers().fullCopy();
+      String anonName = "Anonymous" + nextAnonymousIndex();
+
+      ConstructorDecl constructor = new ConstructorDecl(modifiers, anonName,
+          constructorParameterList(decl), new List(), new Opt(), new Block());
+
+      setID(anonName);
+
+      List argList = new List();
+      for(int i = 0; i < constructor.getNumParameter(); i++) {
+        argList.add(new VarAccess(constructor.getParameter(i).name()));
+      }
+
+      constructor.setConstructorInvocation(
+        new ExprStmt(
+          new SuperConstructorAccess("super", argList)
+        )
+      );
+
+      HashSet set = new HashSet();
+
+      // add initializer and field declaration exceptions
+      for(int i = 0; i < getNumBodyDecl(); i++) {
+        if(getBodyDecl(i) instanceof InstanceInitializer) {
+          InstanceInitializer init = (InstanceInitializer)getBodyDecl(i);
+          set.addAll(init.exceptions());
+        }
+        else if(getBodyDecl(i) instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration)getBodyDecl(i);
+          if(f.isInstanceVariable()) {
+            set.addAll(f.exceptions());
+          }
+        }
+      }
+
+      // add superconstructor exceptions
+      for (int i = 0; i < decl.getNumException(); ++i) {
+        set.add(decl.getException(i).type());
+      }
+
+      List exceptionList = new List();
+      for(Iterator iter = set.iterator(); iter.hasNext(); ) {
+        TypeDecl exceptionType = (TypeDecl)iter.next();
+        if(exceptionType.isNull())
+          exceptionType = typeNullPointerException();
+        exceptionList.add(exceptionType.createQualifiedAccess());
+      }
+      constructor.setExceptionList(exceptionList);
+      return new Opt<ConstructorDecl>(constructor);
+    } else {
+      return new Opt<ConstructorDecl>();
+    }
   }
 
+  syn boolean ClassDecl.hasExplicitConstructor() {
+    for (int i = 0; i < getNumBodyDecl(); i++) {
+      if (getBodyDecl(i) instanceof ConstructorDecl) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // TODO make NTA
   // 8.8.5
   rewrite ConstructorDecl {
     when(!hasConstructorInvocation() && !hostType().isObject())

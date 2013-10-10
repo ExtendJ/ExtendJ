@@ -120,23 +120,20 @@ aspect InnerClasses {
 
   // The set of TypeDecls that has this TypeDecl as their directly enclosing TypeDecl.
   // I.e., NestedTypes, InnerTypes, AnonymousClasses, LocalClasses.
-  private Collection TypeDecl.nestedTypes;
-  public Collection TypeDecl.nestedTypes() {
-    return nestedTypes != null ? nestedTypes : new HashSet();
-  }
+  public Collection<TypeDecl> TypeDecl.nestedTypes =
+    new RobustLinkedList<TypeDecl>();
+
   public void TypeDecl.addNestedType(TypeDecl typeDecl) {
-    if(nestedTypes == null) nestedTypes = new HashSet();
-    if(typeDecl != this)
+    if (typeDecl != this) {
       nestedTypes.add(typeDecl);
+    }
   }
 
   // The set of nested TypeDecls that are accessed in this TypeDecl
-  private Collection TypeDecl.usedNestedTypes;
-  public Collection TypeDecl.usedNestedTypes() {
-    return usedNestedTypes != null ? usedNestedTypes : new HashSet();
-  }
+  public Collection<TypeDecl> TypeDecl.usedNestedTypes =
+    new RobustLinkedList<TypeDecl>();
+
   public void TypeDecl.addUsedNestedType(TypeDecl typeDecl) {
-    if(usedNestedTypes == null) usedNestedTypes = new HashSet();
     usedNestedTypes.add(typeDecl);
   }
 
@@ -396,36 +393,43 @@ aspect InnerClasses {
            && (!inExplicitConstructorInvocation() || enclosingBodyDecl().hostType().isInnerType());
   }
 
-  syn boolean TypeDecl.needsEnclosing() {
-    if(isAnonymous())
+  syn lazy boolean TypeDecl.needsEnclosing() {
+    if(isAnonymous()) {
       return isAnonymousInNonStaticContext();
-    else if(isLocalClass())
+    } else if(isLocalClass()) {
       return !inStaticContext();
-    else if(isInnerType())
+    } else if(isInnerType()) {
       return true;
+    }
     return false;
   }
 
-  syn boolean TypeDecl.needsSuperEnclosing() {
-    if(!isAnonymous())
+  syn lazy boolean TypeDecl.needsSuperEnclosing() {
+    if(!isAnonymous()) {
       return false;
+    }
     TypeDecl superClass = ((ClassDecl)this).superclass();
-    if(superClass.isLocalClass())
+    if(superClass.isLocalClass()) {
       return !superClass.inStaticContext();
-    else if(superClass.isInnerType())
+    } else if(superClass.isInnerType()) {
       return true;
-    if(needsEnclosing() && enclosing() == superEnclosing())
+    } if(needsEnclosing() && enclosing() == superEnclosing()) {
       return false;
+    }
     return false;
   }
+
   syn TypeDecl TypeDecl.enclosing() {
-    if(!needsEnclosing())
+    if(!needsEnclosing()) {
       return null;
+    }
     TypeDecl typeDecl = enclosingType();
-    if(isAnonymous() && inExplicitConstructorInvocation())
+    if(isAnonymous() && inExplicitConstructorInvocation()) {
       typeDecl = typeDecl.enclosingType();
+    }
     return typeDecl;
   }
+
   syn TypeDecl TypeDecl.superEnclosing() = null;
   eq ClassDecl.superEnclosing() = superclass().enclosing();
 
@@ -434,8 +438,6 @@ aspect InnerClasses {
 
   syn TypeDecl ConstructorDecl.enclosing() = hostType().enclosing();
   syn TypeDecl ConstructorDecl.superEnclosing() = hostType().superEnclosing();
-
-
 
   // add val$name as fields to the class
   private boolean TypeDecl.addEnclosingVariables = true;
@@ -507,8 +509,9 @@ aspect InnerClasses {
 
     // add all parameters as arguments except for the dummy parameter
     List args = new List();
-    for(int i = 0; i < parameters.getNumChildNoTransform() - 1; i++)
+    for(int i = 0; i < parameters.getNumChildNoTransform() - 1; i++) {
       args.add(new VarAccess(((ParameterDeclaration)parameters.getChildNoTransform(i)).name()));
+    }
     ConstructorAccess access = new ConstructorAccess("this", args);
     access.addEnclosingVariables = false;
 

@@ -17,7 +17,7 @@ aspect DefiniteAssignment {
   eq AssignSimpleExpr.getDest().isDest() = true;
   eq AssignExpr.getDest().isDest() = true;
   eq AssignExpr.getSource().isDest() = false;
-  eq TypeDecl.getBodyDecl().isDest() = false;
+  eq TypeDecl.getChild().isDest() = false;
   eq AbstractDot.getLeft().isDest() = false;
 
   eq ImportDecl.getAccess().isDest() = false;
@@ -27,7 +27,7 @@ aspect DefiniteAssignment {
   eq AssignSimpleExpr.getDest().isSource() = false;
   eq AssignExpr.getDest().isSource() = true;
   eq AssignExpr.getSource().isSource() = true;
-  eq TypeDecl.getBodyDecl().isSource() = true;
+  eq TypeDecl.getChild().isSource() = true;
   eq AbstractDot.getLeft().isSource() = true;
   eq ImportDecl.getAccess().isSource() = true;
 
@@ -239,11 +239,17 @@ aspect DA {
 
   inh lazy boolean TypeDecl.isDAbefore(Variable v);
 
-  inh lazy boolean BodyDecl.isDAbefore(Variable v);
   syn lazy boolean BodyDecl.isDAafter(Variable v) = true;
 
-  eq TypeDecl.getBodyDecl(int childIndex).isDAbefore(Variable v) {
-    BodyDecl b = getBodyDecl(childIndex);
+  eq BodyDecl.getChild().isDAbefore(Variable v) =
+    isDAbefore(v, this);
+
+  syn lazy boolean BodyDecl.isDAbefore(Variable v) =
+    isDAbefore(v, this);
+
+  inh boolean BodyDecl.isDAbefore(Variable v, BodyDecl b);
+
+  eq TypeDecl.getChild().isDAbefore(Variable v, BodyDecl b) {
     //if(b instanceof MethodDecl || b instanceof MemberTypeDecl) {
     if(!v.isInstanceVariable() && !v.isClassVariable()) {
       if(v.hostType() != this)
@@ -261,27 +267,34 @@ aspect DA {
     if(v.isClassVariable() || v.isInstanceVariable()) {
       if(v.isFinal() &&  v.hostType() != this && instanceOf(v.hostType()))
         return true;
-      int index = childIndex - 1;
-      if(b instanceof ConstructorDecl)
-        index = getNumBodyDecl() - 1;
 
-      for(int i = index; i >= 0; i--) {
-        b = getBodyDecl(i);
-        if(b instanceof FieldDeclaration) {
-          FieldDeclaration f = (FieldDeclaration)b;
-          if((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
+      boolean search = true;
+      if (b instanceof ConstructorDecl) {
+        search = false;
+      }
+
+      for (int i = getNumBodyDecl() - 1; i >= 0; --i) {
+        BodyDecl decl = getBodyDecl(i);
+        if (b == decl) {
+          search = false;
+          continue;
+        }
+        if (search) {
+          continue;
+        }
+        if (decl instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration) decl;
+          if ((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
             boolean c = f.isDAafter(v);
             //System.err.println("DefiniteAssignment: is " + v.name() + " DA after index " + i + ", " + f + ": " + c);
             return c;
             //return f.isDAafter(v);
           }
-        }
-        else if(b instanceof StaticInitializer && v.isClassVariable()) {
-          StaticInitializer si = (StaticInitializer)b;
+        } else if (decl instanceof StaticInitializer && v.isClassVariable()) {
+          StaticInitializer si = (StaticInitializer) decl;
           return si.isDAafter(v);
-        }
-        else if(b instanceof InstanceInitializer && v.isInstanceVariable()) {
-          InstanceInitializer ii = (InstanceInitializer)b;
+        } else if (decl instanceof InstanceInitializer && v.isInstanceVariable()) {
+          InstanceInitializer ii = (InstanceInitializer) decl;
           return ii.isDAafter(v);
         }
       }
@@ -704,39 +717,51 @@ aspect DU {
 
   inh lazy boolean TypeDecl.isDUbefore(Variable v);
 
-  inh lazy boolean BodyDecl.isDUbefore(Variable v);
   syn lazy boolean BodyDecl.isDUafter(Variable v) = true;
 
   eq Program.getChild().isDUbefore(Variable v) = true;
 
-  eq TypeDecl.getBodyDecl().isDUbefore(Variable v) {
-    BodyDecl b = getBodyDecl(childIndex);
-    if(b instanceof MethodDecl || b instanceof MemberTypeDecl) {
+  eq BodyDecl.getChild().isDUbefore(Variable v) =
+    isDUbefore(v, this);
+
+  syn lazy boolean BodyDecl.isDUbefore(Variable v) =
+    isDUbefore(v, this);
+
+  inh boolean BodyDecl.isDUbefore(Variable v, BodyDecl b);
+
+  eq TypeDecl.getChild().isDUbefore(Variable v, BodyDecl b) {
+    if (b instanceof MethodDecl || b instanceof MemberTypeDecl) {
       return false;
     }
-    if(v.isClassVariable() || v.isInstanceVariable()) {
-      int index = childIndex - 1;
-      if(b instanceof ConstructorDecl)
-        index = getNumBodyDecl() - 1;
+    if (v.isClassVariable() || v.isInstanceVariable()) {
+      boolean search = true;
+      if (b instanceof ConstructorDecl) {
+        search = false;
+      }
 
-      for(int i = index; i >= 0; i--) {
-        b = getBodyDecl(i);
-        if(b instanceof FieldDeclaration) {
-          FieldDeclaration f = (FieldDeclaration)b;
+      for (int i = getNumBodyDecl() - 1; i >= 0; --i) {
+        BodyDecl decl = getBodyDecl(i);
+        if (b == decl) {
+          search = false;
+          continue;
+        }
+        if (search) {
+          continue;
+        }
+        if (decl instanceof FieldDeclaration) {
+          FieldDeclaration f = (FieldDeclaration) decl;
           //System.err.println("  working on field " + f.name() + " which is child " + i);
-          if(f == v)
+          if (f == v)
             return !f.hasInit();
-          if((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic()))
+          if ((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic()))
             return f.isDUafter(v);
           //System.err.println("  field " + f.name() + " can not affect " + v.name());
-        }
-        else if(b instanceof StaticInitializer && v.isClassVariable()) {
-          StaticInitializer si = (StaticInitializer)b;
+        } else if (decl instanceof StaticInitializer && v.isClassVariable()) {
+          StaticInitializer si = (StaticInitializer) decl;
           //System.err.println("  working on static initializer which is child " + i);
           return si.isDUafter(v);
-        }
-        else if(b instanceof InstanceInitializer && v.isInstanceVariable()) {
-          InstanceInitializer ii = (InstanceInitializer)b;
+        } else if (decl instanceof InstanceInitializer && v.isInstanceVariable()) {
+          InstanceInitializer ii = (InstanceInitializer) decl;
           //System.err.println("  working on instance initializer which is child " + i);
           return ii.isDUafter(v);
         }

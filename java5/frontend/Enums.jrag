@@ -78,53 +78,56 @@ aspect Enums {
 
   eq ParameterDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
+  // TODO Remove
   private boolean EnumDecl.done = false;
   private boolean EnumDecl.done() {
     if(done) return true;
     done = true;
     return false;
   }
+
+  // TODO Remove
   rewrite EnumDecl {
-    when(!done())
+    when (!done())
     to EnumDecl {
-      if(noConstructor()) {
-        List parameterList = new List();
-        parameterList.add(
+      transformEnumConstructors();
+      addValues(); // Add the values() and getValue(String s) methods
+      return this;
+    }
+  }
+
+  syn lazy Opt<ConstructorDecl> EnumDecl.getImplicitConstructorOpt() {
+    if (needsImplicitConstructor()) {
+      List parameterList = new List();
+      parameterList.add(
           new ParameterDeclaration(new TypeAccess("java.lang", "String"), "p0")
-        );
-        parameterList.add(
+      );
+      parameterList.add(
           new ParameterDeclaration(new TypeAccess("int"), "p1")
-        );
-        addBodyDecl(
-          new ConstructorDecl(
-            new Modifiers(new List().add(
-              new Modifier("private")).add(
-        new Modifier("synthetic"))
+      );
+      ConstructorDecl constructor = new ConstructorDecl(
+          new Modifiers(new List()
+            .add(new Modifier("private"))
+            .add(new Modifier("synthetic"))
             ),
-            name(),
-            parameterList,
-            new List(),
-            new Opt(
-              new ExprStmt(
-                new SuperConstructorAccess(
-                  "super",
-                  new List().add(
-                    new VarAccess("p0")
-                  ).add(
-                    new VarAccess("p1")
-                  )
+          name(),
+          parameterList,
+          new List(),
+          new Opt(
+            new ExprStmt(
+              new SuperConstructorAccess(
+                "super",
+                new List()
+                .add(new VarAccess("p0"))
+                .add(new VarAccess("p1"))
                 )
               )
             ),
-            new Block(new List())
-          )
-        );
-      }
-      else {
-        transformEnumConstructors();
-      }
-      addValues(); // Add the values() and getValue(String s) methods
-      return this;
+          new Block(new List())
+          );
+      return new Opt<ConstructorDecl>(constructor);
+    } else {
+      return new Opt<ConstructorDecl>();
     }
   }
 
