@@ -50,6 +50,7 @@ aspect VariableScope {
     if(!set.isEmpty()) return set;
     return lookupVariable(name);
   }
+
   eq ConstructorDecl.getConstructorInvocation().lookupVariable(String name) {
     SimpleSet set = parameterDeclaration(name);
     if(!set.isEmpty()) return set;
@@ -63,8 +64,19 @@ aspect VariableScope {
 
   eq ConstructorDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
-    // The scope of a local variable declaration in a block is the rest of
-    // the block in which the declaration appears
+  eq VarDeclStmt.getSingleDecl(int index).lookupVariable(String name) {
+    for (int i = index; i >= 0; --i) {
+      if (getSingleDecl(i).declaresVariable(name)) {
+        return getSingleDecl(i);
+      }
+    }
+    return lookupVariable(name);
+  }
+
+  /**
+   * The scope of a local variable declaration in a block is the rest of
+   * the block in which the declaration appears
+   */
   eq Block.getStmt(int index).lookupVariable(String name) {
     VariableDeclaration v = localVariableDeclaration(name);
     // declare before use and shadowing
@@ -102,32 +114,52 @@ aspect VariableScope {
         return (ParameterDeclaration)getParameter(i);
     return SimpleSet.emptySet;
   }
+
   syn lazy SimpleSet ConstructorDecl.parameterDeclaration(String name) {
     for(int i = 0; i < getNumParameter(); i++)
       if(getParameter(i).name().equals(name))
         return (ParameterDeclaration)getParameter(i);
     return SimpleSet.emptySet;
   }
+
   syn lazy SimpleSet CatchClause.parameterDeclaration(String name) =
     SimpleSet.emptySet;
   eq BasicCatch.parameterDeclaration(String name) =
     getParameter().name().equals(name) ? getParameter() : SimpleSet.emptySet;
 
   syn lazy VariableDeclaration Block.localVariableDeclaration(String name) {
-    for(int i = 0; i < getNumStmt(); i++)
-      if(getStmt(i).declaresVariable(name))
-        return (VariableDeclaration)getStmt(i);
+    for (Stmt stmt: getStmtList()) {
+      VariableDeclaration decl = stmt.variableDeclaration(name);
+      if (decl != null) {
+        return decl;
+      }
+    }
     return null;
   }
 
   syn lazy VariableDeclaration ForStmt.localVariableDeclaration(String name) {
-    for(int i = 0; i < getNumInitStmt(); i++)
-      if(getInitStmt(i).declaresVariable(name))
-        return (VariableDeclaration)getInitStmt(i);
+    for (Stmt stmt: getInitStmtList()) {
+      VariableDeclaration decl = stmt.variableDeclaration(name);
+      if (decl != null) {
+        return decl;
+      }
+    }
     return null;
   }
-  syn boolean Stmt.declaresVariable(String name) = false;
-  eq VariableDeclaration.declaresVariable(String name) = name().equals(name);
+
+  syn VariableDeclaration Stmt.variableDeclaration(String name) = null;
+
+  eq VarDeclStmt.variableDeclaration(String name) {
+    for (VariableDeclaration decl: getSingleDeclList()) {
+      if (decl.declaresVariable(name)) {
+        return decl;
+      }
+    }
+    return null;
+  }
+
+  syn boolean VariableDeclaration.declaresVariable(String name) =
+    getID().equals(name);
 
   eq MethodAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
   eq ConstructorAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);

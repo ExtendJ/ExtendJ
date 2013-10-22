@@ -50,6 +50,7 @@ aspect DefiniteAssignment {
   eq Program.getChild().isIncOrDec() = false;
   eq CompilationUnit.getTypeDecl().isIncOrDec() = false;
   eq Block.getStmt().isIncOrDec() = false;
+  eq VarDeclStmt.getSingleDecl().isIncOrDec() = false;
   eq PostfixExpr.getOperand().isIncOrDec() = true;
   eq PreIncExpr.getOperand().isIncOrDec() = true;
   eq PreDecExpr.getOperand().isIncOrDec() = true;
@@ -94,7 +95,7 @@ aspect DefiniteAssignment {
   public void VarAccess.definiteAssignment() {
     if(isSource()) {
       if(decl() instanceof VariableDeclaration) {
-        VariableDeclaration v = (VariableDeclaration)decl();
+        VariableDeclaration v = (VariableDeclaration) decl();
         //System.err.println("Is " + v + " final? " + v.isFinal() + ", DAbefore: " + isDAbefore(v));
         if(v.isValue()) {
         }
@@ -131,7 +132,7 @@ aspect DefiniteAssignment {
 
       // local variable or parameter
       else if(v instanceof VariableDeclaration) {
-        VariableDeclaration var = (VariableDeclaration)v;
+        VariableDeclaration var = (VariableDeclaration) v;
         //System.out.println("### is variable");
         if(!var.isValue() && var.getParent().getParent().getParent() instanceof SwitchStmt && var.isFinal()) {
           if(!isDUbefore(var))
@@ -230,6 +231,7 @@ aspect DA {
   syn lazy boolean ConditionalExpr.booleanOperator() = getTrueExpr().type().isBoolean() && getFalseExpr().type().isBoolean();
 
   inh boolean Stmt.isDAbefore(Variable v);
+  inh boolean VariableDeclaration.isDAbefore(Variable v);
   syn lazy boolean Stmt.isDAafter(Variable v);
   inh boolean Expr.isDAbefore(Variable v);
   syn boolean Expr.isDAafter(Variable v);
@@ -454,7 +456,10 @@ aspect DA {
   eq Block.isDAafter(Variable v) = getNumStmt() == 0 ? isDAbefore(v) : getStmt(getNumStmt()-1).isDAafter(v);
 
   // 16.2.2 7th bullet
-  eq Block.getStmt(int index).isDAbefore(Variable v) = index == 0 ? isDAbefore(v) : getStmt(index - 1).isDAafter(v);
+  eq Block.getStmt(int index).isDAbefore(Variable v) =
+    index == 0 ? isDAbefore(v) : getStmt(index - 1).isDAafter(v);
+  eq VarDeclStmt.getSingleDecl(int index).isDAbefore(Variable v) =
+    index == 0 ? isDAbefore(v) : getSingleDecl(index - 1).isDAafter(v);
 
   // 16.2.2 8th, 9th, 10th bullet
   syn boolean Block.isDUeverywhere(Variable v) = isDUbefore(v) && checkDUeverywhere(v);
@@ -502,9 +507,13 @@ aspect DA {
 
   eq LocalClassDeclStmt.isDAafter(Variable v) = isDAbefore(v);
 
-  eq VariableDeclaration.isDAafter(Variable v) {
-    if(v == this)
+  eq VarDeclStmt.isDAafter(Variable v) =
+    getSingleDecl(getNumSingleDecl()-1).isDAafter(v);
+
+  syn lazy boolean VariableDeclaration.isDAafter(Variable v) {
+    if (v == this) {
       return hasInit();
+    }
     return hasInit() ? getInit().isDAafter(v) : isDAbefore(v);
   }
   eq VariableDeclaration.getInit().isDAbefore(Variable v) = isDAbefore(v);
@@ -702,6 +711,7 @@ aspect DA {
 
 aspect DU {
   inh boolean Stmt.isDUbefore(Variable v);
+  inh boolean VariableDeclaration.isDUbefore(Variable v);
   syn lazy boolean Stmt.isDUafter(Variable v);
   inh boolean Expr.isDUbefore(Variable v);
   syn boolean Expr.isDUafter(Variable v);
@@ -911,11 +921,17 @@ aspect DU {
   eq MethodDecl.getBlock().isDUbefore(Variable v) = v.isFinal() && (v.isClassVariable() || v.isInstanceVariable()) ? false : true;
 
   eq Block.isDUafter(Variable v) = getNumStmt() == 0 ? isDUbefore(v) : getStmt(getNumStmt()-1).isDUafter(v);
-  eq Block.getStmt(int index).isDUbefore(Variable v) = index == 0 ? isDUbefore(v) : getStmt(index - 1).isDUafter(v);
+  eq Block.getStmt(int index).isDUbefore(Variable v) =
+    index == 0 ? isDUbefore(v) : getStmt(index - 1).isDUafter(v);
+  eq VarDeclStmt.getSingleDecl(int index).isDUbefore(Variable v) =
+    index == 0 ? isDUbefore(v) : getSingleDecl(index - 1).isDUafter(v);
 
   eq LocalClassDeclStmt.isDUafter(Variable v) = isDUbefore(v);
 
-  eq VariableDeclaration.isDUafter(Variable v) {
+  eq VarDeclStmt.isDUafter(Variable v) =
+    getSingleDecl(getNumSingleDecl()-1).isDUafter(v);
+
+  syn lazy boolean VariableDeclaration.isDUafter(Variable v) {
     if(v == this)
       return !hasInit();
     return hasInit() ? getInit().isDUafter(v) : isDUbefore(v);

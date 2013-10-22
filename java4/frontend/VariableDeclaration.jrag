@@ -139,47 +139,18 @@ aspect VariableDeclarationTransformation {
   }
 
 
-  // VarDeclStmt with single VariableDecl -> VariableDeclaration
-  rewrite VarDeclStmt {
-    when(getNumVariableDecl() == 1)
-    to VariableDeclaration {
-      VariableDeclaration decl = getVariableDecl(0).createVariableDeclarationFrom(getModifiers(), getTypeAccess());
-      decl.setStart(start); // copy location information
-      decl.setEnd(end); // copy location information
-      return decl;
+  syn lazy List<VariableDeclaration> VarDeclStmt.getSingleDeclList() {
+    List<VariableDeclaration> decls = new List<VariableDeclaration>();
+    for (int i = 0; i < getNumVariableDecl(); ++i) {
+      VariableDecl varDecl = getVariableDecl(i);
+      VariableDeclaration decl = varDecl.createVariableDeclarationFrom(getModifiers(), getTypeAccess());
+      decls.add(decl);
     }
-  }
-
-  // VarDeclStmt with multiple VariableDecl -> VariableDeclaration+
-  rewrite VarDeclStmt in Block.getStmt() {
-    when(getNumVariableDecl() > 1)
-    to List createVariableDeclarationList();
-  }
-  rewrite VarDeclStmt in ForStmt.getInitStmt() {
-    when(getNumVariableDecl() > 1)
-    to List createVariableDeclarationList();
-  }
-
-  private List VarDeclStmt.createVariableDeclarationList() {
-    List varList = new List();
-    for(int j = 0; j < getNumVariableDecl(); j++) {
-      VariableDeclaration v =
-        getVariableDecl(j).createVariableDeclarationFrom(
-          (Modifiers)getModifiers().fullCopy(),
-          (Access)getTypeAccess().fullCopy()
-        );
-      if(j == 0)
-        v.setStart(start);
-      else {
-        v.getModifiersNoTransform().clearLocations();
-        v.getTypeAccessNoTransform().clearLocations();
-      }
-      varList.add(v);
-    }
-    return varList;
+    return decls;
   }
 
   public VariableDeclaration VariableDecl.createVariableDeclarationFrom(Modifiers modifiers, Access type) {
+    // TODO should treeCopy modifiers init opt etc???
     VariableDeclaration decl = new VariableDeclaration(
       modifiers,
       type.addArrayDims(getDimsList()),
@@ -194,6 +165,7 @@ aspect VariableDeclarationTransformation {
   }
 
   public FieldDeclaration VariableDecl.createFieldDeclarationFrom(Modifiers modifiers, Access type) {
+    // TODO should treeCopy modifiers init opt etc???
     FieldDeclaration decl = new FieldDeclaration(
       modifiers,
       type.addArrayDims(getDimsList()),
