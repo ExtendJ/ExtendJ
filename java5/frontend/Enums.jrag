@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -46,7 +47,10 @@ aspect Enums {
   }
 
   syn boolean BodyDecl.isEnumConstant() = false;
+
   eq EnumConstant.isEnumConstant() = true;
+
+  syn String EnumConstant.name() = getID();
 
   /*
     5) Enum types (�8.9) must not be declared abstract; doing so will result in a
@@ -217,9 +221,73 @@ aspect Enums {
     the corresponding field is initialized.
   */
 
-  eq EnumConstant.isPublic() = true;
-  eq EnumConstant.isStatic() = true;
-  eq EnumConstant.isFinal() = true;
+  EnumConstant implements Variable;
+
+  eq EnumConstant.getChild().inStaticContext() = isStatic();
+
+  eq EnumConstant.isField() = true;
+
+  syn boolean EnumConstant.isPublic() = true;
+  syn boolean EnumConstant.isStatic() = true;
+  syn boolean EnumConstant.isFinal() = true;
+  syn boolean EnumConstant.isTransient() = getModifiers().isTransient();
+  syn boolean EnumConstant.isVolatile() = getModifiers().isVolatile();
+  syn boolean EnumConstant.isSynthetic() = getModifiers().isSynthetic();
+  syn boolean EnumConstant.isClassVariable() = true;
+  syn boolean EnumConstant.isInstanceVariable() = false;
+  syn boolean EnumConstant.isLocalVariable() = false;
+  syn boolean EnumConstant.isBlank() = !hasInit();
+  syn boolean EnumConstant.isParameter() = false;
+  syn boolean EnumConstant.isMethodParameter() = false;
+  syn boolean EnumConstant.isConstructorParameter() = false;
+  syn boolean EnumConstant.isExceptionHandlerParameter() = !hasInit();
+  syn lazy boolean EnumConstant.isEffectivelyFinal() = isFinal();
+
+  syn boolean EnumConstant.accessibleFrom(TypeDecl type) {
+    if (isPublic()) {
+      return true;
+    } else if (isProtected()) {
+      if (hostPackage().equals(type.hostPackage())) {
+        return true;
+      }
+      if (type.withinBodyThatSubclasses(hostType()) != null) {
+        return true;
+      }
+      return false;
+    } else if (isPrivate()) {
+      return hostType().topLevelType() == type.topLevelType();
+    } else {
+      return hostPackage().equals(type.hostPackage());
+    }
+  }
+
+  syn boolean EnumConstant.isConstant() = true;
+
+  syn lazy Collection<TypeDecl> EnumConstant.throwTypes() {
+    Collection<TypeDecl> tts = new LinkedList<TypeDecl>();
+    tts.add(type());
+    return tts;
+  }
+
+  syn lazy Map<String, SimpleSet<Variable>> EnumDecl.localFieldsMap() {
+    Map<String, SimpleSet<Variable>> map = super.localFieldsMap();
+    for (BodyDecl decl : getBodyDeclList()) {
+      if (decl instanceof EnumConstant) {
+        EnumConstant field = (EnumConstant) decl;
+        SimpleSet<Variable> fields = map.get(field.name());
+        if (fields == null) {
+          fields = ASTNode.<Variable>emptySet();
+        }
+        fields = fields.add(field);
+        map.put(field.name(), fields);
+      }
+    }
+    return map;
+  }
+
+  syn TypeDecl EnumConstant.type() = hostType();
+
+  syn lazy Constant EnumConstant.constant() = type().cast(getInit().constant());
 
   syn lazy Access EnumConstant.getTypeAccess() = hostType().createQualifiedAccess();
 
@@ -278,7 +346,7 @@ aspect Enums {
     );
   }
 
-  // simulate list of body declarations
+  // Simulate list of body declarations.
   public int EnumConstant.getNumBodyDecl() {
     int cnt = 0;
     ClassInstanceExpr init = (ClassInstanceExpr) getInit();
@@ -342,6 +410,25 @@ aspect Enums {
     return list;
   }
 
+  /** Create an access to this field. */
+  public Access EnumConstant.createBoundAccess() {
+    if (isStatic()) {
+      return hostType().createQualifiedAccess().qualifiesAccess(new BoundEnumConstant(this));
+    } else {
+      return new ThisAccess("this").qualifiesAccess(new BoundEnumConstant(this));
+    }
+  }
+
+  eq BoundEnumConstant.decl() = getEnumConstant();
+
+  public boolean BoundEnumConstant.isExactVarAccess() {
+    return false;
+  }
+
+  public BoundEnumConstant.BoundEnumConstant(EnumConstant c) {
+    this(c.name(), c);
+  }
+
   /*
     13) In addition, if E is the name of an enum type, then that type has the
     following implicitly declared static methods:
@@ -353,32 +440,29 @@ aspect Enums {
     int numConstants = enumConstants().size();
     List initValues = new List();
     for (EnumConstant c : enumConstants()) {
-      initValues.add(c.createBoundFieldAccess());
+      initValues.add(c.createBoundAccess());
     }
-    FieldDeclaration values = new FieldDeclaration(
-      new Modifiers(new List().add(
-        new Modifier("private")).add(
-        new Modifier("static")).add(
-        new Modifier("final")).add(
-        new Modifier("synthetic"))
-      ),
-      arrayType().createQualifiedAccess(),
-      "$VALUES",
-      new Opt(
-          new ArrayCreationExpr(
-            new ArrayTypeWithSizeAccess(
-              createQualifiedAccess(),
-              Literal.buildIntegerLiteral(enumConstants().size())
-            ),
-            new Opt(
-              new ArrayInit(
-                initValues
-              )
-            )
-          )
-      )
+    FieldDeclarator values = new FieldDeclarator(
+        "$VALUES",
+        new List<Dims>(),
+        new Opt<Expr>(
+            new ArrayCreationExpr(
+              new ArrayTypeWithSizeAccess(
+                createQualifiedAccess(),
+                Literal.buildIntegerLiteral(enumConstants().size())),
+              new Opt(
+                new ArrayInit(
+                  initValues)))));
+    FieldDecl decl = new FieldDecl(
+        new Modifiers(new List<Modifier>(
+            new Modifier("private"),
+            new Modifier("static"),
+            new Modifier("final"),
+            new Modifier("synthetic"))),
+        arrayType().createQualifiedAccess(),
+        new List<FieldDeclarator>(values)
     );
-    addBodyDecl(values);
+    addBodyDecl(decl);
     // public static final Test[] values() { return (Test[])$VALUES.clone(); }
     addBodyDecl(
       new MethodDecl(
@@ -399,7 +483,7 @@ aspect Enums {
                 new Opt(
                   new CastExpr(
                     arrayType().createQualifiedAccess(),
-                    values.createBoundFieldAccess().qualifiesAccess(
+                    values.createBoundAccess().qualifiesAccess(
                       new MethodAccess(
                         "clone",
                         new List()
@@ -496,8 +580,8 @@ aspect Enums {
         getBodyDecl(i).checkEnum(enumDecl);
       } else if (getBodyDecl(i) instanceof InstanceInitializer) {
         getBodyDecl(i).checkEnum(enumDecl);
-      } else if (getBodyDecl(i) instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration) getBodyDecl(i);
+      } else if (getBodyDecl(i) instanceof FieldDecl) {
+        FieldDecl f = (FieldDecl) getBodyDecl(i);
         if (!f.isStatic() && f.hasInit()) {
           f.checkEnum(enumDecl);
         }
@@ -557,7 +641,6 @@ aspect Enums {
   Comment: This is done in Annotations.jrag
   */
 
-
   eq EnumConstant.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
   refine TypeCheck public void SwitchStmt.typeCheck() {
@@ -567,10 +650,13 @@ aspect Enums {
     }
   }
 
-  eq ConstCase.getValue().lookupVariable(String name)
-    = switchType().isEnumDecl() ? switchType().memberFields(name) : lookupVariable(name);
+  eq ConstCase.getValue().lookupVariable(String name) =
+      switchType().isEnumDecl()
+      ? switchType().memberFields(name)
+      : lookupVariable(name);
 
   syn boolean Expr.isEnumConstant() = false;
+
   eq VarAccess.isEnumConstant() = varDecl() instanceof EnumConstant;
 
   refine TypeCheck public void ConstCase.typeCheck() {

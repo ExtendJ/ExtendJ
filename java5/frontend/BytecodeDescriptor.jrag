@@ -73,35 +73,47 @@ aspect BytecodeDescriptor {
     }
 
     public BodyDecl bodyDecl() {
-      FieldDeclaration f;
       if ((flags & Flags.ACC_ENUM) != 0) {
-        f = new EnumConstant(
+        EnumConstant constant = new EnumConstant(
             AbstractClassfileParser.modifiers(flags),
             name,
             new List(),
             new List());
+        if (attributes.constantValue() != null) {
+          if (fieldDescriptor.isBoolean()) {
+            constant.setInit(attributes.constantValue().exprAsBoolean());
+          } else {
+            constant.setInit(attributes.constantValue().expr());
+          }
+        }
+        if (attributes.annotations != null) {
+          for (Annotation annotation : attributes.annotations) {
+            constant.getModifiersNoTransform().addModifier(annotation);
+          }
+        }
+        return constant;
       } else {
         Signatures.FieldSignature s = attributes.fieldSignature;
         Access type = s != null ? s.fieldTypeAccess() : fieldDescriptor.type();
-        f = new FieldDeclaration(
+        FieldDeclarator decl = new FieldDeclarator(name, new List<Dims>(), new Opt<Expr>());
+        FieldDecl f = new FieldDecl(
             AbstractClassfileParser.modifiers(flags),
             type,
-            name,
-            new Opt());
-      }
-      if (attributes.constantValue() != null) {
-        if (fieldDescriptor.isBoolean()) {
-          f.setInit(attributes.constantValue().exprAsBoolean());
-        } else {
-          f.setInit(attributes.constantValue().expr());
+            new List<FieldDeclarator>(decl));
+        if (attributes.constantValue() != null) {
+          if (fieldDescriptor.isBoolean()) {
+            decl.setInit(attributes.constantValue().exprAsBoolean());
+          } else {
+            decl.setInit(attributes.constantValue().expr());
+          }
         }
-      }
-      if (attributes.annotations != null) {
-        for (Annotation annotation : attributes.annotations) {
-          f.getModifiersNoTransform().addModifier(annotation);
+        if (attributes.annotations != null) {
+          for (Annotation annotation : attributes.annotations) {
+            f.getModifiersNoTransform().addModifier(annotation);
+          }
         }
+        return f;
       }
-      return f;
     }
 
     public boolean isSynthetic() {

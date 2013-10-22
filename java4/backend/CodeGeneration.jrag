@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -67,7 +68,7 @@ aspect CodeGeneration {
     return -1;
   }
 
-  inh int VariableDecl.variableScopeEndLabel(CodeGeneration gen);
+  inh int VariableDeclarator.variableScopeEndLabel(CodeGeneration gen);
 
   syn lazy int Block.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
 
@@ -388,22 +389,23 @@ aspect CodeGeneration {
     gen.emitLoadReference(pos);
   }
 
-  public void FieldDeclaration.emitLoadField(CodeGeneration gen, TypeDecl typeDecl) {
-    if (hostType().isArrayDecl() && name().equals("length")) {
+  /** Generate bytecode to load this field. */
+  protected static void ASTNode.emitLoadField(CodeGeneration gen, Variable field,
+      TypeDecl typeDecl) {
+    if (field.hostType().isArrayDecl() && field.name().equals("length")) {
       gen.emit(Bytecode.ARRAYLENGTH);
       return;
     }
     String classname = typeDecl.constantPoolName();
-    String desc = type().typeDescriptor();
-    String name = name();
+    String desc = field.type().typeDescriptor();
+    String name = field.name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
-    if (isStatic()) {
-      gen.emit(Bytecode.GETSTATIC, type().variableSize()).add2(index);
+    if (field.isStatic()) {
+      gen.emit(Bytecode.GETSTATIC, field.type().variableSize()).add2(index);
     } else {
-      gen.emit(Bytecode.GETFIELD, type().variableSize() - 1).add2(index);
+      gen.emit(Bytecode.GETFIELD, field.type().variableSize() - 1).add2(index);
     }
   }
-
 
   public void Expr.emitStore(CodeGeneration gen) {
     error("emitStore called with " + getClass().getName());
@@ -415,23 +417,23 @@ aspect CodeGeneration {
 
   public void VarAccess.emitStore(CodeGeneration gen) {
     Variable v = decl();
-    if (v instanceof VariableDecl) {
-      VariableDecl decl = (VariableDecl) v;
+    if (v instanceof VariableDeclarator) {
+      VariableDeclarator var = (VariableDeclarator) v;
       if (unassignedBefore(v)) {
-         gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type().typeDescriptor(),
-             decl.localNum(), decl.variableScopeEndLabel(gen));
+         gen.addLocalVariableEntryAtCurrentPC(var.name(), var.type().typeDescriptor(),
+             var.localNum(), var.variableScopeEndLabel(gen));
       }
-      decl.type().emitStoreLocal(gen, decl.localNum());
+      var.type().emitStoreLocal(gen, var.localNum());
+    } else if (v.isField()) {
+      if (v.isPrivate() && !hostType().hasField(v.name())) {
+        createFieldAccessorWrite(v, fieldQualifierType())
+          .emitInvokeMethod(gen, fieldQualifierType());
+      } else {
+        emitStoreField(gen, v, fieldQualifierType());
+      }
     } else if (v instanceof ParameterDeclaration) {
       ParameterDeclaration decl = (ParameterDeclaration) v;
       decl.type().emitStoreLocal(gen, decl.localNum());
-    } else if (v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration) v;
-      if (f.isPrivate() && !hostType().hasField(v.name())) {
-        f.createAccessorWrite(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      } else {
-        f.emitStoreField(gen, fieldQualifierType());
-      }
     }
   }
 
@@ -461,15 +463,16 @@ aspect CodeGeneration {
 
   eq BooleanType.arrayStore() = Bytecode.BASTORE;
 
-  public void FieldDeclaration.emitStoreField(CodeGeneration gen, TypeDecl typeDecl) {
-    String classname = typeDecl.constantPoolName();
-    String desc = type().typeDescriptor();
-    String name = name();
+  /** Generate bytecode to store a field in the given hostType. */
+  protected void ASTNode.emitStoreField(CodeGeneration gen, Variable var, TypeDecl hostType) {
+    String classname = hostType.constantPoolName();
+    String desc = var.type().typeDescriptor();
+    String name = var.name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
-    if (isStatic()) {
-      gen.emit(Bytecode.PUTSTATIC, -type().variableSize()).add2(index);
+    if (var.isStatic()) {
+      gen.emit(Bytecode.PUTSTATIC, -var.type().variableSize()).add2(index);
     } else {
-      gen.emit(Bytecode.PUTFIELD, -type().variableSize() - 1).add2(index);
+      gen.emit(Bytecode.PUTFIELD, -var.type().variableSize() - 1).add2(index);
     }
   }
 

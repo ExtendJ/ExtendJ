@@ -357,9 +357,28 @@ aspect ConstantExpression {
 
   syn boolean MemberDecl.isConstant() = false;
 
-  eq FieldDeclaration.isConstant() =
+  syn boolean Declarator.isConstant() =
       isFinal() && hasInit() && getInit().isConstant()
       && (type() instanceof PrimitiveType || type().isString());
+
+  /**
+   * A field declaration is constant if the modifier final is used and all
+   * declared fields in the declaration are initialized to constant values.
+   * @return {@code true} if this field declaration is constant
+   */
+  eq FieldDecl.isConstant() {
+    if (!isFinal()) {
+      return false;
+    }
+    for (FieldDeclarator decl : getDeclaratorList()) {
+      TypeDecl type = decl.type();
+      if (!decl.hasInit() || !decl.getInit().isConstant()
+          || !(decl.type() instanceof PrimitiveType || decl.type().isString())) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   syn boolean Expr.isConstant() = false;
 
@@ -403,13 +422,13 @@ aspect ConstantExpression {
 
   syn lazy boolean VarAccess.isConstant() circular [false] {
     Variable v = decl();
-    if (v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration) v;
-      return f.isConstant() && (!isQualified() || (isQualified() && qualifier().isTypeAccess()));
+    if (v.isField()) {
+      return v.isConstant() && (!isQualified() || (isQualified() && qualifier().isTypeAccess()));
+    } else {
+      return v.isFinal() && v.hasInit()
+          && v.getInit().isConstant() && (v.type().isPrimitive() || v.type().isString())
+          && (!isQualified() || (isQualified() && qualifier().isTypeAccess()));
     }
-    return v.isFinal() && v.hasInit()
-        && v.getInit().isConstant() && (v.type().isPrimitive() || v.type().isString())
-        && (!isQualified() || (isQualified() && qualifier().isTypeAccess()));
   }
 
   // BooleanType is used to discard UnknownType which also responds true for isBoolean().

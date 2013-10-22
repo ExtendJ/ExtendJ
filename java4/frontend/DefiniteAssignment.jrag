@@ -58,8 +58,7 @@ aspect DefiniteAssignment {
   eq ArrayTypeWithSizeAccess.getExpr().isDest() = false;
   eq ArrayTypeWithSizeAccess.getExpr().isSource() = true;
 
-  eq FieldDeclaration.getInit().isSource() = true;
-  eq VariableDecl.getInit().isSource() = true;
+  eq Declarator.getInit().isSource() = true;
   eq ArrayInit.getInit().isSource() = true;
 
   eq Unary.getOperand().isSource() = true;
@@ -71,7 +70,8 @@ aspect DefiniteAssignment {
   eq Program.getChild().isIncOrDec() = false;
   eq CompilationUnit.getTypeDecl().isIncOrDec() = false;
   eq Block.getStmt().isIncOrDec() = false;
-  eq VarDeclStmt.getVariableDecl().isIncOrDec() = false;
+  eq VarDeclStmt.getDeclarator().isIncOrDec() = false;
+  eq FieldDecl.getDeclarator().isIncOrDec() = false;
   eq PostfixExpr.getOperand().isIncOrDec() = true;
   eq PreIncExpr.getOperand().isIncOrDec() = true;
   eq PreDecExpr.getOperand().isIncOrDec() = true;
@@ -110,32 +110,31 @@ aspect DefiniteAssignment {
   }
 
   // TODO(joqvist): Why test (!getInit().isConstant()) here? Shouldn't it just be (!hasInit())?
-  syn boolean VariableDecl.isBlankFinal() = isFinal() && (!hasInit() || !getInit().isConstant());
+  syn boolean Declarator.isBlankFinal() = isFinal() && (!hasInit() || !getInit().isConstant());
 
   // Final variables with a constant initializer are considered values and not variables.
-  syn boolean VariableDecl.isValue() = isFinal() && hasInit() && getInit().isConstant();
+  syn boolean Declarator.isValue() = isFinal() && hasInit() && getInit().isConstant();
 
   public void VarAccess.definiteAssignment() {
     if (isSource()) {
-      if (decl() instanceof VariableDecl) {
-        VariableDecl v = (VariableDecl) decl();
-        if (v.isValue()) {
-        } else if (v.isBlankFinal()) {
-          if (!assignedBefore(v)) {
-            errorf("Final variable %s is not assigned before used", v.name());
+      if (decl() instanceof Declarator) {
+        Declarator v = (Declarator) decl();
+        if (v.isField()) {
+          if (v.isFinal() && !v.hasInit() && !isQualified() && !assignedBefore(v)) {
+            errorf("Final field %s is not assigned before used", v.name());
           }
-        } else {
-          if (!assignedBefore(v)) {
-            errorf("Local variable %s is not assigned before used", v.name());
+        } else if (!v.isValue()) {
+          if (v.isBlankFinal()) {
+            if (!assignedBefore(v)) {
+              errorf("Final variable %s is not assigned before used", v.name());
+            }
+          } else {
+            if (!assignedBefore(v)) {
+              errorf("Local variable %s is not assigned before used", v.name());
+            }
           }
-        }
-      } else if (decl() instanceof FieldDeclaration && !isQualified()) {
-        FieldDeclaration f = (FieldDeclaration) decl();
-        if (f.isFinal() && !f.hasInit() && !assignedBefore(f)) {
-          errorf("Final field %s is not assigned before used", f.name());
         }
       }
-
     }
     if (isDest()) {
       Variable v = decl();
@@ -146,10 +145,12 @@ aspect DefiniteAssignment {
       } else if (v.isFinal() && isQualified()
           && (!qualifier().isThisAccess() || ((Access) qualifier()).isQualified())) {
         errorf("the blank final field %s may only be assigned by simple name", v.name());
-      } else if (v instanceof VariableDecl) {
-        // Local variable or parameter.
-        VariableDecl var = (VariableDecl) v;
-        if (!var.isValue() && var.getParent().getParent().getParent() instanceof SwitchStmt
+      } else if (v instanceof VariableDeclarator) {
+        // Local variable.
+        VariableDeclarator var = (VariableDeclarator) v;
+        if (!var.isValue()
+            // TODO(joqvist): use inherited attribute instead.
+            && var.getParent().getParent().getParent() instanceof SwitchStmt
             && var.isFinal()) {
           if (!unassignedBefore(var)) {
             errorf("Final variable %s may only be assigned once", var.name());
@@ -163,22 +164,21 @@ aspect DefiniteAssignment {
             errorf("Final variable %s may only be assigned once", var.name());
           }
         }
-      } else if (v instanceof FieldDeclaration) {
+      } else if (v.isField()) {
         // Field.
-        FieldDeclaration f = (FieldDeclaration) v;
-        if (f.isFinal()) {
-          if (f.hasInit()) {
-            errorf("already initialized final field %s can not be assigned", f.name());
+        if (v.isFinal()) {
+          if (v.hasInit()) {
+            errorf("already initialized final field %s can not be assigned", v.name());
           } else {
             BodyDecl bodyDecl = enclosingBodyDecl();
             if (!(bodyDecl instanceof ConstructorDecl)
                 && !(bodyDecl instanceof InstanceInitializer)
                 && !(bodyDecl instanceof StaticInitializer)
-                && !(bodyDecl instanceof FieldDeclaration)) {
+                && !(bodyDecl instanceof FieldDecl)) {
               errorf("final field %s may only be assigned in constructors and initializers",
-                  f.name());
-            } else if (!unassignedBefore(f)) {
-              errorf("blank final field %s may only be assigned once", f.name());
+                  v.name());
+            } else if (!unassignedBefore(v)) {
+              errorf("blank final field %s may only be assigned once", v.name());
             }
           }
         }
@@ -188,11 +188,10 @@ aspect DefiniteAssignment {
           errorf("Final parameter %s may not be assigned", v.name());
         }
       }
-
     }
   }
 
-  public void FieldDeclaration.definiteAssignment() {
+  public void FieldDeclarator.definiteAssignment() {
     super.definiteAssignment();
     if (isBlank() && isFinal() && isClassVariable()) {
       boolean found = false;
@@ -203,28 +202,24 @@ aspect DefiniteAssignment {
           if (s.assignedAfter(this)) {
             found = true;
           }
-        }
-
-        else if (typeDecl.getBodyDecl(i) instanceof FieldDeclaration) {
-          FieldDeclaration f = (FieldDeclaration) typeDecl.getBodyDecl(i);
+        } else if (typeDecl.getBodyDecl(i) instanceof FieldDecl) {
+          FieldDecl f = (FieldDecl) typeDecl.getBodyDecl(i);
           if (f.isStatic() && f.assignedAfter(this)) {
             found = true;
           }
         }
-
       }
       if (!found) {
         errorf("blank final class variable %s in %s is not definitely assigned "
             + "in static initializer", name(), hostType().typeName());
       }
-
     }
     if (isBlank() && isFinal() && isInstanceVariable()) {
       TypeDecl typeDecl = hostType();
       boolean found = false;
       for (int i = 0; !found && i < typeDecl.getNumBodyDecl(); i++) {
-        if (typeDecl.getBodyDecl(i) instanceof FieldDeclaration) {
-          FieldDeclaration f = (FieldDeclaration) typeDecl.getBodyDecl(i);
+        if (typeDecl.getBodyDecl(i) instanceof FieldDecl) {
+          FieldDecl f = (FieldDecl) typeDecl.getBodyDecl(i);
           if (!f.isStatic() && f.assignedAfter(this)) {
             found = true;
           }
@@ -255,7 +250,7 @@ aspect DefiniteAssignment {
 
   inh boolean Stmt.assignedBefore(Variable v);
 
-  inh boolean VariableDecl.assignedBefore(Variable v);
+  inh boolean Declarator.assignedBefore(Variable v);
 
   /**
    * @return {@code true} if the given variable is definitely assigned after
@@ -290,25 +285,23 @@ aspect DefiniteAssignment {
    * <p>This attribute is not circular.
    */
   eq TypeDecl.getChild().assignedBefore(Variable v, BodyDecl b) {
-    if (!v.isInstanceVariable() && !v.isClassVariable()) {
+    if (!v.isField()) {
       if (v.hostType() != this) {
         return assignedBefore(v);
       }
       return false;
     }
-    if (b instanceof FieldDeclaration && !((FieldDeclaration) b).isStatic()
-        && v.isClassVariable()) {
+    if (b instanceof FieldDecl && !((FieldDecl) b).isStatic() && v.isClassVariable()) {
       return true;
     }
-
     if (b instanceof MethodDecl) {
       return true;
     }
     if (b instanceof MemberTypeDecl && v.isBlank() && v.isFinal() && v.hostType() == this) {
       return true;
     }
-    if (v.isClassVariable() || v.isInstanceVariable()) {
-      if (v.isFinal() &&  v.hostType() != this && instanceOf(v.hostType())) {
+    if (v.isField()) {
+      if (v.isFinal() && v.hostType() != this && instanceOf(v.hostType())) {
         return true;
       }
       boolean skip = !(b instanceof ConstructorDecl);
@@ -317,8 +310,8 @@ aspect DefiniteAssignment {
         if (skip && b == decl) {
           skip = false;
         } else if (!skip) {
-          if (decl instanceof FieldDeclaration) {
-            FieldDeclaration f = (FieldDeclaration) decl;
+          if (decl instanceof FieldDecl) {
+            FieldDecl f = (FieldDecl) decl;
             if ((v.isClassVariable() && f.isStatic())
                 || (v.isInstanceVariable() && !f.isStatic())) {
               return f.assignedAfter(v);
@@ -343,8 +336,7 @@ aspect DefiniteAssignment {
   eq ConstructorDecl.assignedAfter(Variable v) =
       getBlock().assignedAfter(v) && getBlock().assignedAfterReturn(v);
 
-  eq ConstructorAccess.assignedAfter(Variable v) =
-      v.isInstanceVariable() || v.isClassVariable();
+  eq ConstructorAccess.assignedAfter(Variable v) = v.isField();
 
   eq SuperConstructorAccess.assignedAfter(Variable v) =
       v.isInstanceVariable() ? assignedBefore(v) : v.isClassVariable();
@@ -366,10 +358,12 @@ aspect DefiniteAssignment {
     return true;
   }
 
-  eq FieldDeclaration.assignedAfter(Variable v) =
-      hasInit() ? getInit().assignedAfter(v) : assignedBefore(v);
+  eq FieldDeclarator.assignedAfter(Variable v) =
+      hasInit()
+      ? v == this || getInit().assignedAfter(v)
+      : assignedBefore(v);
 
-  eq FieldDeclaration.getInit().assignedBefore(Variable v) = assignedBefore(v);
+  eq FieldDeclarator.getInit().assignedBefore(Variable v) = assignedBefore(v);
 
   // Missing assignment => not definitely assigned.
   eq Program.getChild().assignedBefore(Variable v) = false;
@@ -549,7 +543,7 @@ aspect DefiniteAssignment {
 
   // 16.2.2 1st bullet
   eq MethodDecl.getBlock().assignedBefore(Variable v) =
-      v.isFinal() && (v.isClassVariable() || v.isInstanceVariable()) ? true : assignedBefore(v);
+      v.isFinal() && v.isField() || assignedBefore(v);
 
   eq InstanceInitializer.getBlock().assignedBefore(Variable v) = assignedBefore(v);
 
@@ -562,8 +556,11 @@ aspect DefiniteAssignment {
   eq Block.getStmt(int index).assignedBefore(Variable v) =
       index == 0 ? assignedBefore(v) : getStmt(index - 1).assignedAfter(v);
 
-  eq VarDeclStmt.getVariableDecl(int index).assignedBefore(Variable v) =
-      index == 0 ? assignedBefore(v) : getVariableDecl(index - 1).assignedAfter(v);
+  eq VarDeclStmt.getDeclarator(int index).assignedBefore(Variable v) =
+      index == 0 ? assignedBefore(v) : getDeclarator(index - 1).assignedAfter(v);
+
+  eq FieldDecl.getDeclarator(int index).assignedBefore(Variable v) =
+      index == 0 ? assignedBefore(v) : getDeclarator(index - 1).assignedAfter(v);
 
   // 16.2.2 8th, 9th, 10th bullet
   syn boolean Block.unassignedEverywhere(Variable v) = unassignedBefore(v) && checkDUeverywhere(v);
@@ -626,9 +623,12 @@ aspect DefiniteAssignment {
   eq LocalClassDeclStmt.assignedAfter(Variable v) = assignedBefore(v);
 
   eq VarDeclStmt.assignedAfter(Variable v) =
-      getVariableDecl(getNumVariableDecl() - 1).assignedAfter(v);
+      getDeclarator(getNumDeclarator() - 1).assignedAfter(v);
 
-  syn boolean VariableDecl.assignedAfter(Variable v) circular [true] {
+  eq FieldDecl.assignedAfter(Variable v) =
+      getDeclarator(getNumDeclarator() - 1).assignedAfter(v);
+
+  syn boolean Declarator.assignedAfter(Variable v) circular [true] {
     if (v == this) {
       return hasInit();
     } else {
@@ -636,7 +636,7 @@ aspect DefiniteAssignment {
     }
   }
 
-  eq VariableDecl.getInit().assignedBefore(Variable v) = assignedBefore(v);
+  eq Declarator.getInit().assignedBefore(Variable v) = assignedBefore(v);
 
   eq ArrayInit.assignedAfter(Variable v) =
       getNumInit() == 0
@@ -885,7 +885,7 @@ aspect DefiniteAssignment {
 aspect DefiniteUnassignment {
   inh boolean Stmt.unassignedBefore(Variable v);
 
-  inh boolean VariableDecl.unassignedBefore(Variable v);
+  inh boolean Declarator.unassignedBefore(Variable v);
 
   /**
    * @return {@code true} if the given variable is definitely unassigned after
@@ -931,19 +931,15 @@ aspect DefiniteUnassignment {
     if (b instanceof MethodDecl || b instanceof MemberTypeDecl) {
       return false;
     }
-    if (v.isClassVariable() || v.isInstanceVariable()) {
+    if (v.isField()) {
       boolean skip = !(b instanceof ConstructorDecl);
-
       for (int i = getNumBodyDecl() - 1; i >= 0; --i) {
         BodyDecl decl = getBodyDecl(i);
         if (skip && b == decl) {
           skip = false;
         } else if (!skip) {
-          if (decl instanceof FieldDeclaration) {
-            FieldDeclaration f = (FieldDeclaration) decl;
-            if (f == v) {
-              return !f.hasInit();
-            }
+          if (decl instanceof FieldDecl) {
+            FieldDecl f = (FieldDecl) decl;
             if ((v.isClassVariable() && f.isStatic())
                 || (v.isInstanceVariable() && !f.isStatic())) {
               return f.unassignedAfter(v);
@@ -968,8 +964,7 @@ aspect DefiniteUnassignment {
   eq ConstructorDecl.unassignedAfter(Variable v) =
       getBlock().unassignedAfter(v) && getBlock().unassignedAfterReturn(v);
 
-  eq ConstructorAccess.unassignedAfter(Variable v) =
-      !v.isInstanceVariable() && !v.isClassVariable();
+  eq ConstructorAccess.unassignedAfter(Variable v) = !v.isField();
 
   eq SuperConstructorAccess.unassignedAfter(Variable v) =
       v.isInstanceVariable() ? unassignedBefore(v) : !v.isClassVariable();
@@ -991,8 +986,10 @@ aspect DefiniteUnassignment {
     return true;
   }
 
-  eq FieldDeclaration.unassignedAfter(Variable v) =
-      hasInit() ? getInit().unassignedAfter(v) : unassignedBefore(v);
+  eq FieldDeclarator.unassignedAfter(Variable v) =
+      hasInit()
+      ? v != this && getInit().unassignedAfter(v)
+      : v == this || unassignedBefore(v);
 
   eq Stmt.unassignedAfter(Variable v) {
     throw new Error("unassignedAfter in " + getClass().getName());
@@ -1157,24 +1154,29 @@ aspect DefiniteUnassignment {
 
   eq AssertStmt.unassignedAfter(Variable v) = getCondition().unassignedAfter(v);
 
-  eq MethodDecl.getBlock().unassignedBefore(Variable v) =
-      v.isFinal() && (v.isClassVariable() || v.isInstanceVariable()) ? false : true;
+  eq MethodDecl.getBlock().unassignedBefore(Variable v) = !(v.isFinal() && v.isField());
 
   eq Block.unassignedAfter(Variable v) =
-      getNumStmt() == 0 ? unassignedBefore(v) : getStmt(getNumStmt()-1).unassignedAfter(v);
+      getNumStmt() == 0 ? unassignedBefore(v) : getStmt(getNumStmt() - 1).unassignedAfter(v);
 
   eq Block.getStmt(int index).unassignedBefore(Variable v) =
       index == 0 ? unassignedBefore(v) : getStmt(index - 1).unassignedAfter(v);
 
-  eq VarDeclStmt.getVariableDecl(int index).unassignedBefore(Variable v) =
-      index == 0 ? unassignedBefore(v) : getVariableDecl(index - 1).unassignedAfter(v);
+  eq VarDeclStmt.getDeclarator(int index).unassignedBefore(Variable v) =
+      index == 0 ? unassignedBefore(v) : getDeclarator(index - 1).unassignedAfter(v);
+
+  eq FieldDecl.getDeclarator(int index).unassignedBefore(Variable v) =
+      index == 0 ? unassignedBefore(v) : getDeclarator(index - 1).unassignedAfter(v);
 
   eq LocalClassDeclStmt.unassignedAfter(Variable v) = unassignedBefore(v);
 
   eq VarDeclStmt.unassignedAfter(Variable v) =
-      getVariableDecl(getNumVariableDecl() - 1).unassignedAfter(v);
+      getDeclarator(getNumDeclarator() - 1).unassignedAfter(v);
 
-  syn boolean VariableDecl.unassignedAfter(Variable v) circular [true] {
+  eq FieldDecl.unassignedAfter(Variable v) =
+      getDeclarator(getNumDeclarator() - 1).unassignedAfter(v);
+
+  syn boolean Declarator.unassignedAfter(Variable v) circular [true] {
     if (v == this) {
       return !hasInit();
     } else {
@@ -1182,7 +1184,7 @@ aspect DefiniteUnassignment {
     }
   }
 
-  eq VariableDecl.getInit().unassignedBefore(Variable v) = unassignedBefore(v);
+  eq Declarator.getInit().unassignedBefore(Variable v) = unassignedBefore(v);
 
   eq ArrayInit.unassignedAfter(Variable v) =
       getNumInit() == 0 ? unassignedBefore(v) : getInit(getNumInit()-1).unassignedAfter(v);

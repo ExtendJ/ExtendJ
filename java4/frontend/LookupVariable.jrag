@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +42,7 @@ aspect VariableScope {
   inh lazy SimpleSet<Variable> ForStmt.lookupVariable(String name);
   inh SimpleSet<Variable> Expr.lookupVariable(String name);
   inh lazy SimpleSet<Variable> CatchClause.lookupVariable(String name);
-  inh SimpleSet<Variable> VariableDecl.lookupVariable(String name);
+  inh SimpleSet<Variable> Declarator.lookupVariable(String name);
   inh SimpleSet<Variable> ParameterDeclaration.lookupVariable(String name);
 
   eq Program.getChild().lookupVariable(String name) = emptySet();
@@ -110,10 +111,10 @@ aspect VariableScope {
 
   eq ConstructorDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
-  eq VarDeclStmt.getVariableDecl(int index).lookupVariable(String name) {
+  eq VarDeclStmt.getDeclarator(int index).lookupVariable(String name) {
     for (int i = index; i >= 0; --i) {
-      if (getVariableDecl(i).declaresVariable(name)) {
-        return getVariableDecl(i);
+      if (getDeclarator(i).declaresVariable(name)) {
+        return getDeclarator(i);
       }
     }
     return lookupVariable(name);
@@ -124,7 +125,7 @@ aspect VariableScope {
    * the block in which the declaration appears.
    */
   eq Block.getStmt(int index).lookupVariable(String name) {
-    VariableDecl v = localVariableDeclaration(name);
+    VariableDeclarator v = localVariableDeclaration(name);
     // Declare before use and shadowing.
     if (v != null && declaredBeforeUse(v, index)) {
       return v;
@@ -154,7 +155,7 @@ aspect VariableScope {
   eq ForStmt.getStmt().lookupVariable(String name) = localLookup(name);
 
   syn lazy SimpleSet<Variable> ForStmt.localLookup(String name) {
-    VariableDecl v = localVariableDeclaration(name);
+    VariableDeclarator v = localVariableDeclaration(name);
     if (v != null) {
       return v;
     }
@@ -187,9 +188,9 @@ aspect VariableScope {
       ? getParameter()
       : ASTNode.<Variable>emptySet();
 
-  syn lazy VariableDecl Block.localVariableDeclaration(String name) {
+  syn lazy VariableDeclarator Block.localVariableDeclaration(String name) {
     for (Stmt stmt : getStmtList()) {
-      VariableDecl decl = stmt.variableDeclaration(name);
+      VariableDeclarator decl = stmt.variableDeclaration(name);
       if (decl != null) {
         return decl;
       }
@@ -197,9 +198,9 @@ aspect VariableScope {
     return null;
   }
 
-  syn lazy VariableDecl ForStmt.localVariableDeclaration(String name) {
+  syn lazy VariableDeclarator ForStmt.localVariableDeclaration(String name) {
     for (Stmt stmt : getInitStmtList()) {
-      VariableDecl decl = stmt.variableDeclaration(name);
+      VariableDeclarator decl = stmt.variableDeclaration(name);
       if (decl != null) {
         return decl;
       }
@@ -207,10 +208,10 @@ aspect VariableScope {
     return null;
   }
 
-  syn VariableDecl Stmt.variableDeclaration(String name) = null;
+  syn VariableDeclarator Stmt.variableDeclaration(String name) = null;
 
   eq VarDeclStmt.variableDeclaration(String name) {
-    for (VariableDecl decl : getVariableDeclList()) {
+    for (VariableDeclarator decl : getDeclaratorList()) {
       if (decl.declaresVariable(name)) {
         return decl;
       }
@@ -218,7 +219,8 @@ aspect VariableScope {
     return null;
   }
 
-  syn boolean VariableDecl.declaresVariable(String name) = getID().equals(name);
+  /** @return {@code true} if this declarator declares a local variable with the given name. */
+  syn boolean VariableDeclarator.declaresVariable(String name) = getID().equals(name);
 
   eq MethodAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
 
@@ -271,12 +273,9 @@ aspect VariableScope {
    */
   public SimpleSet<Variable> Expr.keepAccessibleFields(SimpleSet<Variable> fields) {
     SimpleSet<Variable> newSet = emptySet();
-    for (Variable v : fields) {
-      if (v instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration) v;
-        if (mayAccess(f)) {
-          newSet = newSet.add(f);
-        }
+    for (Variable f : fields) {
+      if (mayAccess(f)) {
+        newSet = newSet.add(f);
       }
     }
     return newSet;
@@ -296,7 +295,7 @@ aspect VariableScope {
    * @see "JLS $6.6.2.1"
    * @return true if the expression may access the given field
    */
-  public boolean Expr.mayAccess(FieldDeclaration f) {
+  public boolean Expr.mayAccess(Variable f) {
     if (f.isPublic()) {
       return true;
     } else if (f.isProtected()) {
@@ -314,15 +313,12 @@ aspect VariableScope {
   /**
    * @return true if the expression may access the field
    */
-  public boolean TypeDecl.mayAccess(Expr expr, FieldDeclaration field) {
+  public boolean TypeDecl.mayAccess(Expr expr, Variable field) {
     if (instanceOf(field.hostType())) {
-      if (!field.isInstanceVariable()
-          || expr.isSuperAccess()
-          || expr.type().instanceOf(this)) {
+      if (!field.isInstanceVariable() || expr.isSuperAccess() || expr.type().instanceOf(this)) {
         return true;
       }
     }
-
     if (isNestedType()) {
       return enclosingType().mayAccess(expr, field);
     } else {
@@ -378,15 +374,16 @@ aspect Fields {
 
   syn lazy Map<String, SimpleSet<Variable>> TypeDecl.localFieldsMap() {
     Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>();
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      if (getBodyDecl(i) instanceof FieldDeclaration) {
-        FieldDeclaration decl = (FieldDeclaration) getBodyDecl(i);
-        SimpleSet<Variable> fields = map.get(decl.name());
-        if (fields == null) {
-          fields = ASTNode.<Variable>emptySet();
+    for (BodyDecl decl : getBodyDeclList()) {
+      if (decl instanceof FieldDecl) {
+        for (FieldDeclarator field : ((FieldDecl) decl).getDeclaratorList()) {
+          SimpleSet<Variable> fields = map.get(field.name());
+          if (fields == null) {
+            fields = ASTNode.<Variable>emptySet();
+          }
+          fields = fields.add(field);
+          map.put(field.name(), fields);
         }
-        fields = fields.add(decl);
-        map.put(decl.name(), fields);
       }
     }
     return map;
@@ -395,12 +392,12 @@ aspect Fields {
   syn lazy Map<String, SimpleSet<Variable>> TypeDecl.memberFieldsMap() = localFieldsMap();
 
   eq ClassDecl.memberFieldsMap() {
-    Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>(
-        localFieldsMap());
+    Map<String, SimpleSet<Variable>> map =
+        new HashMap<String, SimpleSet<Variable>>(localFieldsMap());
     if (hasSuperclass()) {
-      Iterator<FieldDeclaration> iter = superclass().fieldsIterator();
+      Iterator<Variable> iter = superclass().fieldsIterator();
       while (iter.hasNext()) {
-        FieldDeclaration decl = iter.next();
+        Variable decl = iter.next();
         if (!decl.isPrivate() && decl.accessibleFrom(this)
             && !localFieldsMap().containsKey(decl.name())) {
           putSimpleSetElement(map, decl.name(), decl);
@@ -410,9 +407,9 @@ aspect Fields {
     Iterator<TypeDecl> outerIter = interfacesIterator();
     while (outerIter.hasNext()) {
       TypeDecl type = outerIter.next();
-      Iterator iter = type.fieldsIterator();
+      Iterator<Variable> iter = type.fieldsIterator();
       while (iter.hasNext()) {
-        FieldDeclaration decl = (FieldDeclaration) iter.next();
+        Variable decl = iter.next();
         if (!decl.isPrivate() && decl.accessibleFrom(this)
             && !localFieldsMap().containsKey(decl.name())) {
           putSimpleSetElement(map, decl.name(), decl);
@@ -423,14 +420,14 @@ aspect Fields {
   }
 
   eq InterfaceDecl.memberFieldsMap() {
-    Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>(
-        localFieldsMap());
+    Map<String, SimpleSet<Variable>> map =
+        new HashMap<String, SimpleSet<Variable>>(localFieldsMap());
     Iterator<TypeDecl> outerIter = interfacesIterator();
     while (outerIter.hasNext()) {
       TypeDecl typeDecl = outerIter.next();
-      Iterator<FieldDeclaration> iter = typeDecl.fieldsIterator();
+      Iterator<Variable> iter = typeDecl.fieldsIterator();
       while (iter.hasNext()) {
-        FieldDeclaration f = iter.next();
+        Variable f = iter.next();
         if (f.accessibleFrom(this) && !f.isPrivate() && !localFieldsMap().containsKey(f.name())) {
           putSimpleSetElement(map, f.name(), f);
         }
@@ -439,8 +436,8 @@ aspect Fields {
     return map;
   }
 
-  public Iterator<FieldDeclaration> TypeDecl.fieldsIterator() {
-    return new Iterator<FieldDeclaration>() {
+  public Iterator<Variable> TypeDecl.fieldsIterator() {
+    return new Iterator<Variable>() {
       private Iterator<SimpleSet<Variable>> outer = memberFieldsMap().values().iterator();
 
       private Iterator<Variable> inner = null;
@@ -454,8 +451,8 @@ aspect Fields {
       }
 
       @Override
-      public FieldDeclaration next() {
-        return (FieldDeclaration) inner.next();
+      public FieldDeclarator next() {
+        return (FieldDeclarator) inner.next();
       }
 
       @Override
@@ -476,7 +473,7 @@ aspect Fields {
     if (hasSuperclass()) {
       Iterator<Variable> iter = superclass().memberFields(name).iterator();
       while (iter.hasNext()) {
-        FieldDeclaration decl = (FieldDeclaration) iter.next();
+        Variable decl = iter.next();
         if (!decl.isPrivate() && decl.accessibleFrom(this)) {
           fields = fields.add(decl);
         }
@@ -485,9 +482,9 @@ aspect Fields {
     Iterator<TypeDecl> outerIter = interfacesIterator();
     while (outerIter.hasNext()) {
       TypeDecl type = outerIter.next();
-      Iterator iter = type.memberFields(name).iterator();
+      Iterator<Variable> iter = type.memberFields(name).iterator();
       while (iter.hasNext()) {
-        FieldDeclaration decl = (FieldDeclaration) iter.next();
+        Variable decl = iter.next();
         if (!decl.isPrivate() && decl.accessibleFrom(this)) {
           fields = fields.add(decl);
         }
@@ -505,7 +502,7 @@ aspect Fields {
       TypeDecl typeDecl = outerIter.next();
       Iterator<Variable> iter = typeDecl.memberFields(name).iterator();
       while (iter.hasNext()) {
-        FieldDeclaration f = (FieldDeclaration) iter.next();
+        Variable f = iter.next();
         if (f.accessibleFrom(this) && !f.isPrivate()) {
           fields = fields.add(f);
         }

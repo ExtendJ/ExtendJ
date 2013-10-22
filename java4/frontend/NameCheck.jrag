@@ -232,16 +232,16 @@ aspect NameCheck {
   }
 
   public void VarAccess.nameCheck() {
-    if (decls().isEmpty() && (!isQualified()
-        || !qualifier().type().isUnknown() || qualifier().isPackageAccess())) {
+    if (decls().isEmpty()
+        && (!isQualified() || !qualifier().type().isUnknown() || qualifier().isPackageAccess())) {
       errorf("no field named %s is accessible", name());
     }
     if (decls().size() > 1) {
       StringBuffer sb = new StringBuffer();
       sb.append("several fields named " + name());
       for (Variable v : decls()) {
-        sb.append("\n    " + v.type().typeName() + " " + v.name() + " declared in "
-            + v.hostType().typeName());
+        sb.append(String.format("%n    %s %s declared in %s",
+            v.type().typeName(), v.name(), v.hostType().typeName()));
       }
       error(sb.toString());
     }
@@ -260,15 +260,14 @@ aspect NameCheck {
     }
 
     // 8.3.2.3
-    if ((decl().isInstanceVariable() || decl().isClassVariable()) && !isQualified()) {
-      if (hostType() != null && !hostType().declaredBeforeUse(decl(), this)) {
+    if (decl().isField() && !isQualified()) {
+      if (hostType() != null && !declaredBefore(decl())) {
         if (inSameInitializer() && !simpleAssignment() && inDeclaringClass()) {
           BodyDecl b = closestBodyDecl(hostType());
           errorf("variable %s is used in %s before it is declared", decl().name(), b.prettyPrint());
         }
       }
     }
-
   }
 
   // Find the bodydecl declared in t in which this construct is nested.
@@ -289,7 +288,8 @@ aspect NameCheck {
     if (b == null) {
       return false;
     }
-    if (b instanceof FieldDeclaration && ((FieldDeclaration) b).isStatic() == decl().isStatic()) {
+    if (b instanceof FieldDecl && ((FieldDecl) b).isStatic() == decl().isStatic()) {
+      // TODO(joqvist): fixme
       return true;
     }
     if (b instanceof InstanceInitializer && !decl().isStatic()) {
@@ -353,19 +353,22 @@ aspect NameCheck {
     return false;
   }
 
-  public void FieldDeclaration.nameCheck() {
+  public void FieldDecl.nameCheck() {
     super.nameCheck();
     // 8.3
-    for (Variable v : hostType().memberFields(name())) {
-      if (v != this && v.hostType() == hostType()) {
-        errorf("field named %s is multiply declared in type %s", name(), hostType().typeName());
+    for (FieldDeclarator decl : getDeclaratorList()) {
+      for (Variable v : hostType().memberFields(decl.name())) {
+        if (v != decl && v.hostType() == hostType()) {
+          errorf("field named %s is multiply declared in type %s",
+              decl.name(), hostType().typeName());
+        }
       }
     }
   }
 
   inh VariableScope ParameterDeclaration.outerScope();
 
-  inh VariableScope VariableDecl.outerScope();
+  inh VariableScope VariableDeclarator.outerScope();
 
   eq BasicCatch.getParameter().outerScope() = this;
 
@@ -381,11 +384,11 @@ aspect NameCheck {
     throw new UnsupportedOperationException("outerScope() not defined");
   }
 
-  public void VariableDecl.nameCheck() {
+  public void VariableDeclarator.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
-      if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl != this && decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of local variable %s in enclosing scope", name());
         }
@@ -414,8 +417,8 @@ aspect NameCheck {
   public void ParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
-      if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of local variable %s", name());
         }

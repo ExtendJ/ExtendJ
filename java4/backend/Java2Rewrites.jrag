@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -93,39 +94,44 @@ aspect Java2Rewrites {
       "array" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
 
   // Lazily build a static field for assertionsDisabled.
-  private FieldDeclaration TypeDecl.createAssertionsDisabled = null;
+  private FieldDeclarator TypeDecl.createAssertionsDisabled = null;
 
-  public FieldDeclaration TypeDecl.createAssertionsDisabled() {
+  public FieldDeclarator TypeDecl.createAssertionsDisabled() {
     if (createAssertionsDisabled != null) {
       return createAssertionsDisabled;
     }
-    createAssertionsDisabled = new FieldDeclaration(
-      new Modifiers(new List().add(new Modifier("public")).add(new Modifier("static")).add(new Modifier("final"))),
-      new PrimitiveTypeAccess("boolean"),
-      "$assertionsDisabled",
-      new Opt(
+    createAssertionsDisabled = new FieldDeclarator(
+        "$assertiosDisabled",
+        new List<Dims>(),
+        new Opt<Expr>(
           new LogNotExpr(
             topLevelType().createQualifiedAccess().qualifiesAccess(
               new ClassAccess().qualifiesAccess(
                 new MethodAccess(
                   "desiredAssertionStatus",
                   new List()
+                  )
                 )
               )
             )
-          )
-      )
-    );
-    getBodyDeclList().insertChild(createAssertionsDisabled, 0);
+          ));
+    FieldDecl decl = new FieldDecl(
+        new Modifiers(new List<Modifier>(
+            new Modifier("public"),
+            new Modifier("static"),
+            new Modifier("final"))),
+        new PrimitiveTypeAccess("boolean"),
+        new List<FieldDeclarator>(createAssertionsDisabled));
+    getBodyDeclList().insertChild(decl, 0);
     // TODO(joqvist): remove this!
     // Explicit read to trigger possible rewrites.
-    createAssertionsDisabled = (FieldDeclaration) getBodyDeclList().getChild(0);
+    decl = (FieldDecl) getBodyDeclList().getChild(0);
     // Transform the generated initalization, e.g., the ClassAccess construct.
-    createAssertionsDisabled.transformation();
+    decl.transformation();
     return createAssertionsDisabled;
   }
 
-  public FieldDeclaration InterfaceDecl.createStaticClassField(String name) {
+  public FieldDecl InterfaceDecl.createStaticClassField(String name) {
     return methodHolder().createStaticClassField(name);
   }
 
@@ -154,29 +160,33 @@ aspect Java2Rewrites {
 
   // Lazily build a static field for each typename used in a .class expression.
   private HashMap TypeDecl.createStaticClassField = null;
-  public FieldDeclaration TypeDecl.createStaticClassField(String name) {
+
+  public FieldDecl TypeDecl.createStaticClassField(String name) {
     if (createStaticClassField == null) {
       createStaticClassField = new HashMap();
     }
     if (createStaticClassField.containsKey(name)) {
-      return (FieldDeclaration) createStaticClassField.get(name);
+      return (FieldDecl) createStaticClassField.get(name);
     }
-    FieldDeclaration f = new FieldDeclaration(
-      new Modifiers(new List().add(new Modifier("public")).add(new Modifier("static"))),
-      lookupType("java.lang", "Class").createQualifiedAccess(),
-      name,
-      new Opt()
-    ) {
+    FieldDeclarator decl = new FieldDeclarator(name, new List<Dims>(), new Opt<Expr>()) {
+      @Override
       public boolean isConstant() {
         return true;
       }
     };
+    FieldDecl f = new FieldDecl(
+        new Modifiers(new List<Modifier>(
+            new Modifier("public"),
+            new Modifier("static"))),
+        lookupType("java.lang", "Class").createQualifiedAccess(),
+        new List<FieldDeclarator>(decl));
     createStaticClassField.put(name, f);
     return addMemberField(f);
   }
 
   // Lazily build a static class$ method in this type declaration.
   private MethodDecl TypeDecl.createStaticClassMethod = null;
+
   public MethodDecl TypeDecl.createStaticClassMethod() {
     if (createStaticClassMethod != null) {
       return createStaticClassMethod;

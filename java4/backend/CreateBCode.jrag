@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,14 +48,26 @@ aspect CreateBCode {
   }
 
   syn lazy boolean TypeDecl.hasClinit() {
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      BodyDecl b = getBodyDecl(i);
-      if (b instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration) b;
-        if (f.isStatic() && f.hasInit()) {
+    for (BodyDecl b : getBodyDeclList()) {
+      if (b instanceof FieldDecl) {
+        FieldDecl field = (FieldDecl) b;
+        if (field.isStatic() && field.hasInit()) {
           return true;
         }
       } else if (b instanceof StaticInitializer) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * @return {@code true} if any of the contained field declarations has an
+   * initializer
+   */
+  syn lazy boolean FieldDecl.hasInit() {
+    for (FieldDeclarator decl : getDeclaratorList()) {
+      if (decl.hasInit()) {
         return true;
       }
     }
@@ -76,12 +88,18 @@ aspect CreateBCode {
     throw new Error("Could not generate code for initializers in " + hostType().typeName());
   }
 
-  private void TypeDecl.generateBytecodes(CodeGeneration gen) {
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      BodyDecl b = getBodyDecl(i);
-      if (b.isField()) {
-        FieldDeclaration f = (FieldDeclaration) b;
-        f.emitStaticInitializer(gen, this);
+  protected void TypeDecl.generateBytecodes(CodeGeneration gen) {
+    for (BodyDecl b : getBodyDeclList()) {
+      if (b instanceof FieldDecl) {
+        FieldDecl field = (FieldDecl) b;
+        if (field.isStatic()) {
+          for (FieldDeclarator decl : field.getDeclaratorList()) {
+            if (decl.hasInit()) {
+              decl.emitInitializerBCode(gen);
+              emitStoreField(gen, decl, this);
+            }
+          }
+        }
       } else if (b instanceof StaticInitializer) {
         b.createBCode(gen);
       }
@@ -212,11 +230,18 @@ aspect CreateBCode {
 
       if (needsInit) {
         TypeDecl typeDecl = hostType();
-        for (int i = 0; i < typeDecl.getNumBodyDecl(); i++) {
-          BodyDecl b = typeDecl.getBodyDecl(i);
-          if (b.isField()) {
-            FieldDeclaration f = (FieldDeclaration) b;
-            f.emitInstanceInitializer(gen, hostType());
+        for (BodyDecl b : typeDecl.getBodyDeclList()) {
+          if (b instanceof FieldDecl) {
+            FieldDecl field = (FieldDecl) b;
+            if (!field.isStatic()) {
+              for (FieldDeclarator decl : field.getDeclaratorList()) {
+                if (decl.hasInit()) {
+                  gen.emit(Bytecode.ALOAD_0);
+                  decl.emitInitializerBCode(gen);
+                  emitStoreField(gen, decl, hostType());
+                }
+              }
+            }
           } else if (b instanceof InstanceInitializer) {
             b.createBCode(gen);
           }
@@ -270,12 +295,12 @@ aspect CreateBCode {
 
   public void VarDeclStmt.createBCode(CodeGeneration gen) {
     gen.addLineNumberEntryAtCurrentPC(this); // Generate line number entry.
-    for (VariableDecl decl : getVariableDeclList()) {
+    for (VariableDeclarator decl : getDeclaratorList()) {
       decl.createBCode(gen);
     }
   }
 
-  public void VariableDecl.createBCode(CodeGeneration gen) {
+  public void VariableDeclarator.createBCode(CodeGeneration gen) {
     if (hasInit()) {
       gen.addLocalVariableEntryAtCurrentPC(name(), type().typeDescriptor(),
           localNum(), variableScopeEndLabel(gen));
@@ -287,36 +312,7 @@ aspect CreateBCode {
   /**
    * Generate variable initialization bytecode.
    */
-  protected void VariableDecl.emitInitializerBCode(CodeGeneration gen) {
-    getInit().createBCode(gen);
-    getInit().type().emitAssignConvTo(gen, type());
-  }
-
-  /**
-   * Generate static initialization code for the field.
-   */
-  public void FieldDeclaration.emitStaticInitializer(CodeGeneration gen, TypeDecl hostType) {
-    if (isStatic() && hasInit()) {
-      emitInitializerBCode(gen);
-      emitStoreField(gen, hostType);
-    }
-  }
-
-  /**
-   * Generate instance initialization code for the field.
-   */
-  public void FieldDeclaration.emitInstanceInitializer(CodeGeneration gen, TypeDecl hostType) {
-    if (!isStatic() && hasInit()) {
-      gen.emit(Bytecode.ALOAD_0);
-      emitInitializerBCode(gen);
-      emitStoreField(gen, hostType);
-    }
-  }
-
-  /**
-   * Generate field initialization bytecode.
-   */
-  protected void FieldDeclaration.emitInitializerBCode(CodeGeneration gen) {
+  protected void Declarator.emitInitializerBCode(CodeGeneration gen) {
     getInit().createBCode(gen);
     getInit().type().emitAssignConvTo(gen, type());
   }
@@ -493,21 +489,21 @@ aspect CreateBCode {
     if (v.isInstanceVariable()) {
       gen.emitDup();
     }
-    if (v instanceof VariableDecl) {
-      VariableDecl decl = (VariableDecl) v;
-      decl.type().emitLoadLocal(gen, decl.localNum());
+    if (v instanceof VariableDeclarator) {
+      VariableDeclarator var = (VariableDeclarator) v;
+      var.type().emitLoadLocal(gen, var.localNum());
+    } else if (v.isField()) {
+      if (requiresAccessor()) {
+        createFieldAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+      } else {
+        emitLoadField(gen, v, fieldQualifierType());
+      }
     } else if (v instanceof ParameterDeclaration) {
       ParameterDeclaration decl = (ParameterDeclaration) v;
       decl.type().emitLoadLocal(gen, decl.localNum());
-    } else if (v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration) v;
-      if (requiresAccessor()) {
-        f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      } else {
-        f.emitLoadField(gen, fieldQualifierType());
-      }
     }
   }
+
   public void ArrayAccess.createAssignLoadDest(CodeGeneration gen) {
     prevExpr().createBCode(gen);
     gen.emitDup();
@@ -571,12 +567,24 @@ aspect CreateBCode {
 
   public void VarAccess.createBCode(CodeGeneration gen) {
     Variable v = decl();
-    if (v instanceof VariableDecl) {
-      VariableDecl decl = (VariableDecl) v;
-      if (decl.hostType() == hostType()) {
-        decl.type().emitLoadLocal(gen, decl.localNum());
+    if (v instanceof VariableDeclarator) {
+      VariableDeclarator var = (VariableDeclarator) v;
+      if (var.hostType() == hostType()) {
+        var.type().emitLoadLocal(gen, var.localNum());
       } else {
-        emitLoadLocalInNestedClass(gen, decl);
+        emitLoadLocalInNestedClass(gen, var);
+      }
+    } else if (v.isField()) {
+      createLoadQualifier(gen);
+      if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
+        if (!v.isStatic()) {
+          fieldQualifierType().emitPop(gen);
+        }
+        v.constant().createBCode(gen);
+      } else if (requiresAccessor()) {
+        createFieldAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+      } else {
+        emitLoadField(gen, v, fieldQualifierType());
       }
     } else if (v instanceof ParameterDeclaration) {
       ParameterDeclaration decl = (ParameterDeclaration) v;
@@ -585,31 +593,17 @@ aspect CreateBCode {
       } else {
         emitLoadLocalInNestedClass(gen, decl);
       }
-    } else if (v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration) v;
-      createLoadQualifier(gen);
-      if (f.isConstant() && (f.type().isPrimitive() || f.type().isString())) {
-        if (!f.isStatic()) {
-          fieldQualifierType().emitPop(gen);
-        }
-        f.constant().createBCode(gen);
-      } else if (requiresAccessor()) {
-        f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      } else {
-        f.emitLoadField(gen, fieldQualifierType());
-      }
     }
   }
 
   syn boolean TypeDecl.needsAccessorFor(Variable v) {
-    if (!(v instanceof FieldDeclaration)) {
+    if (!(v instanceof FieldDeclarator)) {
       return false;
     }
-    FieldDeclaration f = (FieldDeclaration) v;
-    if (f.isConstant() && (f.type().isPrimitive() || f.type().isString())) {
+    if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
       return false;
     }
-    return f.isPrivate() && !hasField(v.name());
+    return v.isPrivate() && !hasField(v.name());
   }
 
   inh boolean Access.inExplicitConstructorInvocation();
@@ -630,17 +624,16 @@ aspect CreateBCode {
 
   protected void VarAccess.createLoadQualifier(CodeGeneration gen) {
     Variable v = decl();
-    if (v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration) v;
+    if (v.isField()) {
       if (hasPrevExpr()) {
         // Load explicit qualifier.
         prevExpr().createBCode(gen);
         // Pop qualifier stack element for class variables.
         // This qualifier must be computed to ensure side effects are evaluated.
-        if (!prevExpr().isTypeAccess() && f.isClassVariable()) {
+        if (!prevExpr().isTypeAccess() && v.isClassVariable()) {
           prevExpr().type().emitPop(gen);
         }
-      } else if (f.isInstanceVariable()) {
+      } else if (v.isInstanceVariable()) {
         emitThis(gen, fieldQualifierType());
       }
     }
@@ -741,7 +734,6 @@ aspect CreateBCode {
     }
   }
 
-
   public void ConstructorAccess.createBCode(CodeGeneration gen) {
     ConstructorDecl c = decl();
     int index = 0;
@@ -835,13 +827,14 @@ aspect CreateBCode {
       }
     }
   }
+
   public void ClassInstanceExpr.createBCode(CodeGeneration gen) {
     type().emitNew(gen);
     type().emitDup(gen);
 
     // 15.9.2 first part
     if (type().isAnonymous()) {
-      if (type().isAnonymousInNonStaticContext()) {
+      if (isAnonymousInNonStaticContext()) {
         if (type().inExplicitConstructorInvocation()) {
           gen.emit(Bytecode.ALOAD_1);
         } else {
@@ -1960,27 +1953,28 @@ aspect CreateBCode {
     if (prevExpr().type().isPrimitiveType() || prevExpr().type().isVoid()) {
       TypeDecl typeDecl = lookupType("java.lang", prevExpr().type().primitiveClassName());
       SimpleSet<Variable> fields = typeDecl.memberFields("TYPE");
-      FieldDeclaration f = (FieldDeclaration) fields.iterator().next();
-      f.emitLoadField(gen, typeDecl);
+      Variable f = fields.iterator().next();
+      emitLoadField(gen, f, typeDecl);
     } else {
-      FieldDeclaration f = hostType().topLevelType().createStaticClassField(prevExpr().type().referenceClassFieldName());
+      FieldDecl field = hostType().topLevelType().createStaticClassField(prevExpr().type().referenceClassFieldName());
+      FieldDeclarator f = field.getDeclarator(0);
       // Add method to perform lookup as a side-effect.
       MethodDecl m = hostType().topLevelType().createStaticClassMethod();
 
       int next_label = gen.constantPool().newLabel();
       int end_label = gen.constantPool().newLabel();
-      f.emitLoadField(gen, hostType());
+      emitLoadField(gen, f, hostType());
       gen.emitBranchNonNull(next_label);
 
       // Emit string literal.
       StringLiteral.push(gen, prevExpr().type().jvmName());
       m.emitInvokeMethod(gen, hostType());
       gen.emitDup();
-      f.emitStoreField(gen, hostType());
+      emitStoreField(gen, f, hostType());
       gen.emitGoto(end_label);
       gen.addLabel(next_label);
       gen.changeStackDepth(-1);
-      f.emitLoadField(gen, hostType());
+      emitLoadField(gen, f, hostType());
       gen.addLabel(end_label);
     }
   }

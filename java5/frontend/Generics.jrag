@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2014-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1220,7 +1220,6 @@ aspect LookupParTypeDecl {
   syn lazy List GenericClassDeclSubstituted.getBodyDeclList() = new BodyDeclList();
   syn lazy List GenericInterfaceDeclSubstituted.getBodyDeclList() = new BodyDeclList();
 
-
   syn boolean ASTNode.usesTypeVariable() {
     for (int i = 0; i < getNumChild(); i++) {
       if (getChild(i).usesTypeVariable()) {
@@ -1234,7 +1233,9 @@ aspect LookupParTypeDecl {
       getModifiers().usesTypeVariable() || getTypeAccess().usesTypeVariable()
       || getParameterList().usesTypeVariable() || getExceptionList().usesTypeVariable();
 
-  syn lazy boolean FieldDeclaration.usesTypeVariable() = getTypeAccess().usesTypeVariable();
+  syn lazy boolean FieldDecl.usesTypeVariable() = getTypeAccess().usesTypeVariable();
+
+  syn lazy boolean FieldDeclarator.usesTypeVariable() = getTypeAccess().usesTypeVariable();
 
   eq TypeAccess.usesTypeVariable() = decl().usesTypeVariable() || super.usesTypeVariable();
 
@@ -1279,21 +1280,39 @@ aspect LookupParTypeDecl {
 
   syn lazy final SimpleSet<Variable> MemberSubstitutor.localFields(String name) {
     SimpleSet<Variable> set = emptySet();
-    for (Iterator<Variable> iter = original().localFields(name).iterator(); iter.hasNext(); ) {
-      FieldDeclaration f = (FieldDeclaration) iter.next();
-
-      if (!f.isStatic() && (f.usesTypeVariable() || isRawType())) {
-        BodyDecl fCopy = ((BodyDeclList) getBodyDeclList()).localFieldCopy(f, this);
-        f = (FieldDeclaration) fCopy;
+    Set<FieldDecl> substitutedDecls = new HashSet<FieldDecl>();
+    for (Variable f : original().localFields(name)) {
+      if (!f.isStatic() && (((ASTNode) f).usesTypeVariable() || isRawType())) {
+        if (f.fieldDecl() != null) {
+          substitutedDecls.add(f.fieldDecl());
+        }
+      } else {
+        set = set.add(f);
       }
-      set = set.add(f);
-
+    }
+    for (FieldDecl decl : substitutedDecls) {
+      FieldDecl f = ((BodyDeclList) getBodyDeclList()).localFieldCopy(decl, this);
+      for (FieldDeclarator field : f.getDeclaratorList()) {
+        if (field.name().equals(name)) {
+          set = set.add(field);
+        }
+      }
     }
     return set;
   }
 
-  syn nta BodyDecl BodyDeclList.localFieldCopy(FieldDeclaration originalDecl, MemberSubstitutor m) =
-      originalDecl.substitutedBodyDecl(m);
+  inh FieldDecl Variable.fieldDecl();
+
+  eq FieldDecl.getDeclarator().fieldDecl() = this;
+
+  eq VarDeclStmt.getDeclarator().fieldDecl() = null;
+
+  eq EnhancedForStmt.getVariableDecl().fieldDecl() = null;
+
+  eq Program.getChild().fieldDecl() = null;
+
+  syn nta FieldDecl BodyDeclList.localFieldCopy(FieldDecl originalDecl, MemberSubstitutor m) =
+      (FieldDecl) originalDecl.substitutedBodyDecl(m);
 
   // TODO(ES): add NTA for copies like above.
   syn lazy final SimpleSet<TypeDecl> MemberSubstitutor.localTypeDecls(String name)
@@ -1379,21 +1398,37 @@ aspect LookupParTypeDecl {
     );
   }
 
-  public BodyDecl FieldDeclaration.substitutedBodyDecl(Parameterization parTypeDecl) {
-    return new FieldDeclarationSubstituted(
-      (Modifiers) getModifiers().treeCopyNoTransform(),
-      getTypeAccess().type().substituteReturnType(parTypeDecl),
-      getID(),
-      new Opt(),
-      this
-    );
+  public BodyDecl FieldDecl.substitutedBodyDecl(Parameterization parTypeDecl) {
+    List<FieldDeclarator> decls = new List<FieldDeclarator>();
+    for (FieldDeclarator decl : getDeclaratorList()) {
+      decls.add((FieldDeclarator) decl.treeCopyNoTransform());
+    }
+    return new FieldDeclSubstituted(
+        (Modifiers) getModifiers().treeCopyNoTransform(),
+        getTypeAccess().type().substituteReturnType(parTypeDecl),
+        decls,
+        this);
   }
 
-  syn FieldDeclaration FieldDeclaration.erasedField() = this;
-  eq FieldDeclarationSubstituted.erasedField() = getOriginal().erasedField();
+  inh FieldDeclarator FieldDeclarator.erasedField();
+
+  eq FieldDecl.getDeclarator(int index).erasedField() = getDeclarator(index);
+
+  eq FieldDeclSubstituted.getDeclarator(int index).erasedField() =
+      getOriginal().getDeclarator(index);
+
+  eq VarDeclStmt.getDeclarator().erasedField() {
+    throw new Error("FieldDeclarator child of VarDeclStmt");
+  }
+
+  eq EnhancedForStmt.getVariableDecl().erasedField() {
+    throw new Error("FieldDeclarator child of EnhancedForStmt");
+  }
 
   syn MethodDecl MethodDecl.erasedMethod() = this;
+
   eq MethodDeclSubstituted.erasedMethod() = getOriginal().erasedMethod();
+
   eq ParMethodDecl.erasedMethod() = genericMethodDecl().erasedMethod();
 
   syn TypeDecl TypeDecl.original() = this;
@@ -1405,12 +1440,11 @@ aspect LookupParTypeDecl {
 
   public ClassDecl ClassDecl.substitutedClassDecl(Parameterization parTypeDecl) {
     return new ClassDeclSubstituted(
-      (Modifiers) getModifiers().treeCopyNoTransform(),
-      getID(),
-      hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
-      getImplementsList().substitute(parTypeDecl),
-      this
-    );
+        (Modifiers) getModifiers().treeCopyNoTransform(),
+        getID(),
+        hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
+        getImplementsList().substitute(parTypeDecl),
+        this);
   }
 
   public ClassDecl GenericClassDecl.substitutedClassDecl(Parameterization parTypeDecl) {
@@ -1616,11 +1650,4 @@ aspect SourceDeclarations {
 
   eq ConstructorDeclSubstituted.sourceConstructorDecl() =
       getOriginal().sourceConstructorDecl();
-
-  syn lazy Variable Variable.sourceVariableDecl();
-  eq VariableDecl.sourceVariableDecl() = this;
-  eq FieldDeclaration.sourceVariableDecl() = this;
-  eq FieldDeclarationSubstituted.sourceVariableDecl() = getOriginal().sourceVariableDecl();
-  eq ParameterDeclaration.sourceVariableDecl() = this;
-  eq ParameterDeclarationSubstituted.sourceVariableDecl() = getOriginal().sourceVariableDecl();
 }

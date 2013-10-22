@@ -92,24 +92,23 @@ aspect Transformations {
     super.transformation();
   }
 
-  // remote collection / demand driven creation of accessor
+  // TODO(joqvist): use collection attribute for this.
+  // Remote collection / demand driven creation of accessor.
   public void VarAccess.transformation() {
     Variable v = decl();
-    if (v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration) v;
+    if (v.isField()) {
       if (requiresAccessor()) {
         TypeDecl typeDecl = fieldQualifierType();
         if (isSource()) {
-          f.createAccessor(typeDecl);
+          createFieldAccessor(v, typeDecl);
         }
         if (isDest()) {
-          f.createAccessorWrite(typeDecl);
+          createFieldAccessorWrite(v, typeDecl);
         }
       }
     }
     super.transformation();
   }
-
 
   public void ConstructorDecl.transformation() {
     // Add this$val as fields and constructor parameters.
@@ -157,7 +156,7 @@ aspect Transformations {
     // Touch static class method before any accessors to make it first in method.
     if (isQualified() && qualifier().type().isReferenceType()) {
       hostType().topLevelType().createStaticClassMethod();
-      FieldDeclaration f = hostType().topLevelType().createStaticClassField(
+      hostType().topLevelType().createStaticClassField(
           prevExpr().type().referenceClassFieldName());
     }
 
@@ -166,9 +165,9 @@ aspect Transformations {
   public void AssertStmt.transformation() {
     super.transformation();
     // Add field to hold cached result as a side-effect.
-    FieldDeclaration f = hostType().topLevelType().createStaticClassField(
+    hostType().topLevelType().createStaticClassField(
         hostType().topLevelType().referenceClassFieldName());
-    FieldDeclaration assertionsDisabled = hostType().createAssertionsDisabled();
+    FieldDeclarator assertionsDisabled = hostType().createAssertionsDisabled();
     Expr condition = (Expr) getCondition().treeCopyNoTransform();
     List args = new List();
     if (hasMessage()) {

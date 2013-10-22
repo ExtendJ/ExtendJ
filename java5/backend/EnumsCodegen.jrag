@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -31,8 +32,34 @@
 aspect EnumsCodegen {
   // Add flags to enums.
   public static final int Modifiers.ACC_ENUM = 0x4000;
+
   eq EnumDecl.flags() = super.flags() | Modifiers.ACC_ENUM;
-  eq EnumConstant.flags() = super.flags() | Modifiers.ACC_ENUM;
+
+  syn int EnumConstant.flags() {
+    int flags = Modifiers.ACC_ENUM;
+    if (isPublic()) {
+      flags |= Modifiers.ACC_PUBLIC;
+    }
+    if (isPrivate()) {
+      flags |= Modifiers.ACC_PRIVATE;
+    }
+    if (isProtected()) {
+      flags |= Modifiers.ACC_PROTECTED;
+    }
+    if (isStatic()) {
+      flags |= Modifiers.ACC_STATIC;
+    }
+    if (isFinal()) {
+      flags |= Modifiers.ACC_FINAL;
+    }
+    if (isVolatile()) {
+      flags |= Modifiers.ACC_VOLATILE;
+    }
+    if (isTransient()) {
+      flags |= Modifiers.ACC_TRANSIENT;
+    }
+    return flags;
+  }
 
   // Transform enum switch statements into integer indexed switch statements.
   public void SwitchStmt.transformation() {
@@ -57,27 +84,32 @@ aspect EnumsCodegen {
     super.transformation();
   }
 
-  // Static method with lazy initalization.
-  syn lazy MethodDecl TypeDecl.createEnumMethod(TypeDecl enumDecl) {
+  protected MethodDecl TypeDecl.enumMethod = null;
+
+  // TODO(joqvist): Remove side effects by using collection to collect enum index methods.
+  protected MethodDecl TypeDecl.createEnumMethod(TypeDecl enumDecl) {
+    if (enumMethod != null) {
+      return enumMethod;
+    }
     MethodDecl m = new MethodDecl(
-      new Modifiers(new List()
-          .add(new Modifier("static"))
-          .add(new Modifier("final"))
-          .add(new Modifier("private"))),
+      new Modifiers(new List<Modifier>(
+          new Modifier("static"),
+          new Modifier("final"),
+          new Modifier("private"))),
       typeInt().arrayType().createQualifiedAccess(),
       "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
       new List(),
       new List(),
-      new Opt(
+      new Opt<Block>(
         new Block(
-          new List().add(
+          new List<Stmt>(
             new IfStmt(
               new EQExpr(
-                createEnumArray(enumDecl).createBoundFieldAccess(),
+                createEnumArray(enumDecl).createBoundAccess(),
                 new NullLiteral("null")
               ),
               AssignExpr.asStmt(
-                createEnumArray(enumDecl).createBoundFieldAccess(),
+                createEnumArray(enumDecl).createBoundAccess(),
                 new ArrayCreationExpr(
                   new ArrayTypeWithSizeAccess(
                     typeInt().createQualifiedAccess(),
@@ -89,10 +121,9 @@ aspect EnumsCodegen {
                 )
               ),
               new Opt()
-            )
-          ).add(
+            ),
             new ReturnStmt(
-              createEnumArray(enumDecl).createBoundFieldAccess()
+              createEnumArray(enumDecl).createBoundAccess()
             )
           )
         )
@@ -101,7 +132,8 @@ aspect EnumsCodegen {
     // Add method declaration as a body declaration.
     getBodyDeclList().insertChild(m, 1);
     // Trigger possible rewrites.
-    return (MethodDecl) getBodyDeclList().getChild(1);
+    enumMethod = (MethodDecl) getBodyDeclList().getChild(1);
+    return enumMethod;
   }
 
   // Compute index of enum constants.
@@ -125,9 +157,9 @@ aspect EnumsCodegen {
         new Block(
           new List().add(
             AssignExpr.asStmt(
-              createEnumArray(e.hostType()).createBoundFieldAccess().qualifiesAccess(
+              createEnumArray(e.hostType()).createBoundAccess().qualifiesAccess(
                 new ArrayAccess(
-                  e.createBoundFieldAccess().qualifiesAccess(
+                  e.createBoundAccess().qualifiesAccess(
                       new MethodAccess("ordinal", new List()))
                 )
               ),
@@ -148,25 +180,89 @@ aspect EnumsCodegen {
         ),
         new Opt()
       ),
-      list.getNumChild()-1
+      list.getNumChild() - 1
     );
     return i.intValue();
   }
 
   // Static field with array contents..
-  syn lazy FieldDeclaration TypeDecl.createEnumArray(TypeDecl enumDecl) {
-    FieldDeclaration f = new FieldDeclaration(
-      new Modifiers(new List()
-          .add(new Modifier("static"))
-          .add(new Modifier("final"))
-          .add(new Modifier("private"))),
-      typeInt().arrayType().createQualifiedAccess(),
-      "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
-      new Opt()
-    );
+  syn lazy FieldDeclarator TypeDecl.createEnumArray(TypeDecl enumDecl) {
+    FieldDeclarator decl = new FieldDeclarator(
+        "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
+        new List<Dims>(),
+        new Opt<Expr>());
+    FieldDecl f = new FieldDecl(
+        new Modifiers(new List<Modifier>(
+            new Modifier("static"),
+            new Modifier("final"),
+            new Modifier("private"))),
+        typeInt().arrayType().createQualifiedAccess(),
+        new List<FieldDeclarator>(decl));
     // Add field declaration as a body declaration.
     getBodyDeclList().insertChild(f, 0);
     // Trigger possible rewrites.
-    return (FieldDeclaration) getBodyDeclList().getChild(0);
+    return decl;
+  }
+
+  @Override
+  protected void EnumDecl.generateBytecodes(CodeGeneration gen) {
+    for (BodyDecl b : getBodyDeclList()) {
+      if (b instanceof FieldDecl) {
+        FieldDecl field = (FieldDecl) b;
+        if (field.isStatic()) {
+          for (FieldDeclarator decl : field.getDeclaratorList()) {
+            if (decl.hasInit()) {
+              decl.emitInitializerBCode(gen);
+              emitStoreField(gen, decl, this);
+            }
+          }
+        }
+      } else if (b instanceof StaticInitializer) {
+        b.createBCode(gen);
+      } else if (b instanceof EnumConstant) {
+        EnumConstant cons = (EnumConstant) b;
+        cons.emitInitializerBCode(gen);
+        emitStoreField(gen, cons, this);
+      }
+    }
+    gen.emitReturn();
+  }
+
+  protected void EnumConstant.emitInitializerBCode(CodeGeneration gen) {
+    getInit().createBCode(gen);
+    getInit().type().emitAssignConvTo(gen, type());
+  }
+
+  @Override
+  protected void EnumDecl.generateFields(DataOutputStream out, ConstantPool cp) throws IOException {
+    Collection<FieldDeclarator> fields = fieldDeclarations();
+    Collection<EnumConstant> constants = new ArrayList<EnumConstant>();
+    for (BodyDecl b : getBodyDeclList()) {
+      if (b instanceof EnumConstant) {
+        constants.add((EnumConstant) b);
+      }
+    }
+    out.writeChar(constants.size() + fields.size());
+    for (EnumConstant cons : constants) {
+      out.writeChar(cons.flags());
+      out.writeChar(cp.addUtf8(cons.name()));
+      out.writeChar(cp.addUtf8(cons.type().typeDescriptor()));
+      out.writeChar(0);
+    }
+    for (FieldDeclarator field : fields) {
+      out.writeChar(field.flags());
+      out.writeChar(cp.addUtf8(field.name()));
+      out.writeChar(cp.addUtf8(field.type().typeDescriptor()));
+      out.writeChar(field.attributes().size());
+      for (Attribute attribute : field.attributes()) {
+        attribute.emit(out);
+      }
+    }
+  }
+
+  public boolean EnumConstant.clear() {
+    // Don't clear this node because it resets the parent pointer and prevents
+    // things using this node as a variable declaration from working.
+    return false;
   }
 }

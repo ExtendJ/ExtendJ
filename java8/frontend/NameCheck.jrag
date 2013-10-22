@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -38,8 +39,8 @@ aspect Java8NameCheck {
   public void InferredParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
-      if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of parameter %s", name());
         }
@@ -71,8 +72,8 @@ aspect Java8NameCheck {
   public void CatchParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
-      if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of catch parameter %s", name());
         }
@@ -104,8 +105,8 @@ aspect Java8NameCheck {
   public void ParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
-      if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of parameter %s", name());
         }
@@ -134,17 +135,16 @@ aspect Java8NameCheck {
   }
 
   refine MultiCatch
-  public void VariableDecl.nameCheck() {
+  public void VariableDeclarator.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
-      if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl != this && decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of local variable %s", name());
         }
-      }
-      // 8.4.1
-      else if (var instanceof ParameterDeclaration) {
+      } else if (var instanceof ParameterDeclaration) {
+        // 8.4.1
         ParameterDeclaration decl = (ParameterDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
           errorf("duplicate declaration of local variable %s", name());
@@ -185,8 +185,8 @@ aspect Java8NameCheck {
       StringBuffer sb = new StringBuffer();
       sb.append("several fields named " + name());
       for (Variable var : decls()) {
-        sb.append("\n    " + var.type().typeName() + " " + var.name() + " declared in "
-            + var.hostType().typeName());
+        sb.append(String.format("%n    %s %s declared in %s",
+            var.type().typeName(), var.name(), var.hostType().typeName()));
       }
       error(sb.toString());
     }
@@ -207,7 +207,7 @@ aspect Java8NameCheck {
 
     // 8.3.2.3
     if ((decl().isInstanceVariable() || decl().isClassVariable()) && !isQualified()) {
-      if (hostType() != null && !hostType().declaredBeforeUse(decl(), this)) {
+      if (hostType() != null && !declaredBefore(decl())) {
         if (inSameInitializer() && !simpleAssignment() && inDeclaringClass()) {
           BodyDecl b = closestBodyDecl(hostType());
           errorf("variable %s is used in %s before it is declared", decl().name(), b.prettyPrint());
@@ -232,8 +232,8 @@ aspect Java8NameCheck {
             errorf("Parameter %s must be effectively final", var.name());
           }
         }
-      } else if (var instanceof VariableDecl) {
-        VariableDecl decl = (VariableDecl) var;
+      } else if (var instanceof VariableDeclarator) {
+        VariableDeclarator decl = (VariableDeclarator) var;
         if (decl.enclosingLambda() != enclosingLambda()) {
           // 15.27.2
           if (!decl.isEffectivelyFinal()) {
@@ -246,7 +246,6 @@ aspect Java8NameCheck {
         }
       }
     }
-
   }
 
   refine TypeCheck
