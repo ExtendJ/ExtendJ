@@ -36,11 +36,11 @@ class JavaPrettyPrinter extends Frontend {
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
 		super.processErrors(errors, unit);
-		System.out.println(unit);
+		System.out.println(unit.prettyPrint());
 	}
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
-		System.out.println(unit);
+		System.out.println(unit.prettyPrint());
 	}
 
 	@Override
