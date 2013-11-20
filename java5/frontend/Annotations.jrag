@@ -265,41 +265,41 @@ aspect Annotations {
   any warning identified by one of S1, ... , Sk if that warning would have been
   generated as a result of the annotated declaration or any of its parts.
   Unchecked warnings are identified by the string "unchecked"*/
-  inh boolean Access.withinSuppressWarnings(String s);
-  eq Program.getChild().withinSuppressWarnings(String s) = false;
+  inh boolean Access.withinSuppressWarnings(String annot);
+  eq Program.getChild().withinSuppressWarnings(String annot) = false;
 
-  eq TypeDecl.getBodyDecl(int i).withinSuppressWarnings(String s) =
-    getBodyDecl(i).hasAnnotationSuppressWarnings(s) || hasAnnotationSuppressWarnings(s) ||
-    withinSuppressWarnings(s);
-  eq ClassDecl.getSuperClass().withinSuppressWarnings(String s) =
-    hasAnnotationSuppressWarnings(s) || withinSuppressWarnings(s);
-  eq ClassDecl.getImplements().withinSuppressWarnings(String s) =
-    hasAnnotationSuppressWarnings(s) || withinSuppressWarnings(s);
-  eq InterfaceDecl.getSuperInterface().withinSuppressWarnings(String s) =
-    hasAnnotationSuppressWarnings(s) || withinSuppressWarnings(s);
-  inh boolean TypeDecl.withinSuppressWarnings(String s);
+  eq TypeDecl.getBodyDecl(int i).withinSuppressWarnings(String annot) =
+    getBodyDecl(i).hasAnnotationSuppressWarnings(annot) || hasAnnotationSuppressWarnings(annot) ||
+    withinSuppressWarnings(annot);
+  eq ClassDecl.getSuperClass().withinSuppressWarnings(String annot) =
+    hasAnnotationSuppressWarnings(annot) || withinSuppressWarnings(annot);
+  eq ClassDecl.getImplements().withinSuppressWarnings(String annot) =
+    hasAnnotationSuppressWarnings(annot) || withinSuppressWarnings(annot);
+  eq InterfaceDecl.getSuperInterface().withinSuppressWarnings(String annot) =
+    hasAnnotationSuppressWarnings(annot) || withinSuppressWarnings(annot);
+  inh boolean TypeDecl.withinSuppressWarnings(String annot);
 
-  syn boolean TypeDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
-  syn boolean BodyDecl.hasAnnotationSuppressWarnings(String s) = false;
-  eq MemberTypeDecl.hasAnnotationSuppressWarnings(String s) = typeDecl().hasAnnotationSuppressWarnings(s);
-  eq MethodDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
-  eq ConstructorDecl.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
-  eq FieldDeclaration.hasAnnotationSuppressWarnings(String s) = getModifiers().hasAnnotationSuppressWarnings(s);
+  syn boolean TypeDecl.hasAnnotationSuppressWarnings(String annot) = getModifiers().hasAnnotationSuppressWarnings(annot);
+  syn boolean BodyDecl.hasAnnotationSuppressWarnings(String annot) = false;
+  eq MemberTypeDecl.hasAnnotationSuppressWarnings(String annot) = typeDecl().hasAnnotationSuppressWarnings(annot);
+  eq MethodDecl.hasAnnotationSuppressWarnings(String annot) = getModifiers().hasAnnotationSuppressWarnings(annot);
+  eq ConstructorDecl.hasAnnotationSuppressWarnings(String annot) = getModifiers().hasAnnotationSuppressWarnings(annot);
+  eq FieldDeclaration.hasAnnotationSuppressWarnings(String annot) = getModifiers().hasAnnotationSuppressWarnings(annot);
 
-  syn boolean Modifiers.hasAnnotationSuppressWarnings(String s) {
+  syn boolean Modifiers.hasAnnotationSuppressWarnings(String annot) {
     Annotation a = annotation(lookupType("java.lang", "SuppressWarnings"));
     if(a != null && a.getNumElementValuePair() == 1 && a.getElementValuePair(0).getName().equals("value"))
-      return a.getElementValuePair(0).getElementValue().hasValue(s);
+      return a.getElementValuePair(0).getElementValue().hasValue(annot);
     return false;
   }
-  syn boolean ElementValue.hasValue(String s) = false;
-  eq ElementConstantValue.hasValue(String s) =
+  syn boolean ElementValue.hasValue(String annot) = false;
+  eq ElementConstantValue.hasValue(String annot) =
     getExpr().type().isString() &&
     getExpr().isConstant() &&
-    getExpr().constant().stringValue().equals(s);
-  eq ElementArrayValue.hasValue(String s) {
+    getExpr().constant().stringValue().equals(annot);
+  eq ElementArrayValue.hasValue(String annot) {
     for(int i = 0;  i < getNumElementValue(); i++)
-      if(getElementValue(i).hasValue(s))
+      if(getElementValue(i).hasValue(annot))
         return true;
     return false;
   }
@@ -504,7 +504,7 @@ aspect Annotations {
   public void ElementValuePair.typeCheck() {
     if(!type().commensurateWith(getElementValue()))
       error("can not construct annotation with " + getName() +
-          " = " + getElementValue().toString() + "; " + type().typeName() +
+          " = " + getElementValue().prettyPrint() + "; " + type().typeName() +
           " is not commensurate with " + getElementValue().type().typeName());
   }
   syn TypeDecl ElementValue.type() = unknownType();
@@ -554,59 +554,69 @@ aspect Annotations {
   // provide error message for method calls in
   eq ElementConstantValue.getExpr().methodHost() = enclosingAnnotationDecl().typeName();
 
-  public void AnnotatedCompilationUnit.toString(StringBuffer s) {
-      getModifiers().toString(s);
-      super.toString(s);
+}
+
+aspect AnnotationPrettyPrinting {
+
+  public void AnnotatedCompilationUnit.prettyPrint(StringBuffer sb) {
+      getModifiers().prettyPrint(sb);
+      super.prettyPrint(sb);
   }
 
-  public void AnnotationDecl.toString(StringBuffer s) {
-    getModifiers().toString(s);
-    s.append("@interface " + name());
-    s.append(" {");
-    for(int i=0; i < getNumBodyDecl(); i++) {
-      getBodyDecl(i).toString(s);
+  public void AnnotationDecl.toString(StringBuffer sb) {
+    getModifiers().prettyPrint(sb);
+    sb.append("@interface " + name());
+    sb.append(" {");
+    for (int i=0; i < getNumBodyDecl(); i++) {
+      getBodyDecl(i).prettyPrint(sb);
     }
-    s.append(indent() + "}");
+    sb.append(indent() + "}");
   }
-  public void AnnotationMethodDecl.toString(StringBuffer s) {
-    s.append(indent());
-    getModifiers().toString(s);
-    getTypeAccess().toString(s);
-    s.append(" " + name() + "()");
-    if(hasDefaultValue()) {
-      s.append(" default ");
-      getDefaultValue().toString(s);
+
+  public void AnnotationMethodDecl.toString(StringBuffer sb) {
+    sb.append(indent());
+    getModifiers().prettyPrint(sb);
+    getTypeAccess().prettyPrint(sb);
+    sb.append(" " + name() + "()");
+    if (hasDefaultValue()) {
+      sb.append(" default ");
+      getDefaultValue().prettyPrint(sb);
     }
-    s.append(";\n");
+    sb.append(";\n");
   }
-  public void Annotation.toString(StringBuffer s) {
-    s.append("@");
-    getAccess().toString(s);
-    s.append("(");
+
+  public void Annotation.prettyPrint(StringBuffer sb) {
+    sb.append("@");
+    getAccess().prettyPrint(sb);
+    sb.append("(");
     for(int i = 0; i < getNumElementValuePair(); i++) {
       if(i != 0)
-        s.append(", ");
-      getElementValuePair(i).toString(s);
+        sb.append(", ");
+      getElementValuePair(i).prettyPrint(sb);
     }
-    s.append(")");
+    sb.append(")");
   }
-  public void ElementValuePair.toString(StringBuffer s) {
-    s.append(getName() + " = ");
-    getElementValue().toString(s);
+
+  public void ElementValuePair.prettyPrint(StringBuffer sb) {
+    sb.append(getName() + " = ");
+    getElementValue().prettyPrint(sb);
   }
-  public void ElementConstantValue.toString(StringBuffer s) {
-    getExpr().toString(s);
+
+  public void ElementConstantValue.prettyPrint(StringBuffer sb) {
+    getExpr().prettyPrint(sb);
   }
-  public void ElementAnnotationValue.toString(StringBuffer s) {
-    getAnnotation().toString(s);
+
+  public void ElementAnnotationValue.prettyPrint(StringBuffer sb) {
+    getAnnotation().prettyPrint(sb);
   }
-  public void ElementArrayValue.toString(StringBuffer s) {
-    s.append("{");
-    for(int i = 0; i < getNumElementValue(); i++) {
-      getElementValue(i).toString(s);
-      s.append(", ");
+
+  public void ElementArrayValue.prettyPrint(StringBuffer sb) {
+    sb.append("{");
+    for (int i = 0; i < getNumElementValue(); i++) {
+      getElementValue(i).prettyPrint(sb);
+      sb.append(", ");
     }
-    s.append("}");
+    sb.append("}");
   }
 
 }
