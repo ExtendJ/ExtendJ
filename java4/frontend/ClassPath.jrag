@@ -8,7 +8,8 @@
  */
 
 import java.io.File;
-import java.util.*;
+import java.util.Set;
+import java.util.HashSet;
 import beaver.*;
 
 aspect ClassPath {
@@ -20,44 +21,77 @@ aspect ClassPath {
   }
 
   protected BytecodeReader Program.bytecodeReader;
-  public void Program.initBytecodeReader(BytecodeReader r) { bytecodeReader = r; }
-  protected JavaParser Program.javaParser;
-  public void Program.initJavaParser(JavaParser p) { javaParser = p; }
+  public void Program.initBytecodeReader(BytecodeReader r) {
+    bytecodeReader = r;
+  }
 
-  syn String CompilationUnit.relativeName() = relativeName;
-  syn String CompilationUnit.pathName() = pathName;
+  protected JavaParser Program.javaParser;
+  public void Program.initJavaParser(JavaParser p) {
+    javaParser = p;
+  }
+
+  /**
+   * @return The path to the source file, or the path to the file inside a Jar
+   * file.
+   */
+  syn String CompilationUnit.relativeName() = getClassSource().relativeName();
+
+  /**
+   * @return The path to the source file, or the enclosing Jar file.
+   */
+  syn String CompilationUnit.pathName() = getClassSource().pathName();
+
+  /**
+   * @return {@code true} if this compilation unit was parsed from source.
+   */
   syn boolean CompilationUnit.fromSource() = fromSource;
 
   inh CompilationUnit TypeDecl.compilationUnit();
   eq CompilationUnit.getChild().compilationUnit() = this;
 
   /**
+   * Tracks all currently loaded classes in the program.
+   */
+  private Map<String,CompilationUnit> Program.classIndex =
+    new HashMap<String,CompilationUnit>();
+
+  /**
+   * Tracks all currently available packages in the program classpath.
+   */
+  private Set<String> Program.packageIndex = new HashSet<String>();
+
+  /**
    * Add a filename to the list of source files to process.
+   * @param fileName file name of the source file
    * @return The CompilationUnit representing the source file,
    * or <code>null</code> if no such file exists
    */
-  public CompilationUnit Program.addSourceFile(String name) {
-    return sourceFiles.addSourceFile(name);
+  public CompilationUnit Program.addSourceFile(String fileName) {
+    try {
+      FilePath pathPart = new FilePath(fileName);
+      packageIndex.addAll(pathPart.packages());
+      CompilationUnit cu = pathPart.getCompilationUnit(this, fileName);
+      if (cu != null) {
+        addCompilationUnit(cu);
+      }
+      return cu;
+    } catch (IOException e) {
+      return null;
+    }
   }
 
-  // iterate over all source files and demand-loaded compilation units
-  public Iterator Program.compilationUnitIterator() {
-    initPaths();
-    return new Iterator() {
+  /**
+   * Iterate over all source files and on-demand loaded compilation units.
+   */
+  public Iterator<CompilationUnit> Program.compilationUnitIterator() {
+    return new Iterator<CompilationUnit>() {
       int index = 0;
       public boolean hasNext() {
-        return index < getNumCompilationUnit() || !sourceFiles.isEmpty();
+        return index < getNumCompilationUnit();
       }
-      public Object next() {
-        if(getNumCompilationUnit() == index) {
-          String typename = (String)sourceFiles.keySet().iterator().next();
-          CompilationUnit u = getCompilationUnit(typename);
-          if(u != null) {
-            addCompilationUnit(u);
-            getCompilationUnit(getNumCompilationUnit()-1);
-          }
-          else
-            throw new Error("File " + typename + " not found");
+      public CompilationUnit next() {
+        if (getNumCompilationUnit() == index) {
+          throw new java.util.NoSuchElementException();
         }
         return getCompilationUnit(index++);
       }
@@ -67,195 +101,185 @@ aspect ClassPath {
     };
   }
 
-  // get the input stream for a compilation unit specified using
-  // a canonical name. This is used by the bytecode reader to load
-  // nested types
+  /**
+   * Get the input stream for a compilation unit specified using a canonical
+   * name. This is used by the bytecode reader to load nested types
+   */
   public InputStream Program.getInputStream(String name) {
-    initPaths();
     try {
-      for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
-        PathPart part = (PathPart)iter.next();
-        if(part.selectCompilationUnit(name))
-          return part.is;
+      for (Iterator iter = classPath.iterator(); iter.hasNext(); ) {
+        PathPart part = (PathPart) iter.next();
+        ClassSource source = part.findSource(name);
+        if (source != ClassSource.NONE) {
+          return source.openInputStream();
+        }
       }
-    }
-    catch(IOException e) {
+    } catch(IOException e) {
     }
     throw new Error("Could not find nested type " + name);
   }
 
   /**
-   * TODO: not used?
+   * Load a compilation unit from disk using the following rules:
+   * <ol>
+   *   <li>Specified on the command line
+   *   <li>Class file not older than source file
+   *   <li>Source file
+   * </ol>
+   *
+   * @param name Qualified name of class to load.
+   * @return the loaded compilation unit
    */
-  refine public List Program.getCompilationUnitList() {
-    initPaths();
-    return refined();
-  }
-
-  // load a compilation unit from disc using the following rules:
-  //   1) specified on the command line
-  //   2) class file not older than source file
-  //   3) source file
   public CompilationUnit Program.getCompilationUnit(String name) {
-    initPaths();
+    CompilationUnit available = classIndex.get(name);
+    if (available != null) {
+      return available;
+    }
     try {
-      if(sourceFiles.selectCompilationUnit(name))
-        return sourceFiles.getCompilationUnit();
-      PathPart sourcePart = null;
-      PathPart classPart = null;
-      for(Iterator iter = sourcePath.iterator(); iter.hasNext() && sourcePart == null; ) {
-        PathPart part = (PathPart)iter.next();
-        if(part.selectCompilationUnit(name))
-          sourcePart = part;
+      ClassSource sourcePart = ClassSource.NONE;
+      ClassSource classPart = ClassSource.NONE;
+      for (PathPart part: sourcePath) {
+        sourcePart = part.findSource(name);
+        if (sourcePart != ClassSource.NONE) {
+          break;
+        }
       }
-      for(Iterator iter = classPath.iterator(); iter.hasNext() && classPart == null; ) {
-        PathPart part = (PathPart)iter.next();
-        if(part.selectCompilationUnit(name))
-          classPart = part;
+      for (PathPart part: classPath) {
+        classPart = part.findSource(name);
+        if (classPart != ClassSource.NONE) {
+          break;
+        }
       }
 
-      if(sourcePart != null && (classPart == null || classPart.age < sourcePart.age)) {
-        CompilationUnit unit = sourcePart.getCompilationUnit();
+      if (sourcePart != ClassSource.NONE && (classPart == ClassSource.NONE ||
+            classPart.getAge() < sourcePart.getAge())) {
+        CompilationUnit unit = sourcePart.parseCompilationUnit(this);
         int index = name.lastIndexOf('.');
-        if(index == -1)
+        if (index == -1) {
           return unit;
+        }
         String pkgName = name.substring(0, index);
-        if(pkgName.equals(unit.getPackageDecl()))
+        if (pkgName.equals(unit.getPackageDecl())) {
           return unit;
+        }
       }
-      if(classPart != null) {
-        CompilationUnit unit = classPart.getCompilationUnit();
+      if (classPart != ClassSource.NONE) {
+        CompilationUnit unit = classPart.parseCompilationUnit(this);
         int index = name.lastIndexOf('.');
-        if(index == -1)
+        if (index == -1) {
           return unit;
+        }
         String pkgName = name.substring(0, index);
-        if(pkgName.equals(unit.getPackageDecl()))
+        if (pkgName.equals(unit.getPackageDecl())) {
           return unit;
+        }
       }
       return null;
-    }
-    catch(IOException e) {
+    } catch(IOException e) {
     }
     return null;
   }
 
   /**
    * @return <code>true</code> if there is a package with the given name on
-   * the path
+   * the classpath
    */
   public boolean Program.isPackage(String name) {
-    if(sourceFiles.hasPackage(name))
-      return true;
-    for(Iterator iter = classPath.iterator(); iter.hasNext(); ) {
-      PathPart part = (PathPart)iter.next();
-      if(part.hasPackage(name))
-        return true;
-    }
-    for(Iterator iter = sourcePath.iterator(); iter.hasNext(); ) {
-      PathPart part = (PathPart)iter.next();
-      if(part.hasPackage(name))
-        return true;
-    }
-    return false;
+    return packageIndex.contains(name);
   }
 
-  private String CompilationUnit.relativeName;
-  private String CompilationUnit.pathName;
-  private boolean CompilationUnit.fromSource;
+  private ClassSource CompilationUnit.classSource = ClassSource.NONE;
+  private boolean CompilationUnit.fromSource = false;
 
-  public void CompilationUnit.setRelativeName(String name) {
-    relativeName = name;
+  public void CompilationUnit.setClassSource(ClassSource source) {
+    this.classSource = source;
   }
-  public void CompilationUnit.setPathName(String name) {
-    pathName = name;
+  public ClassSource CompilationUnit.getClassSource() {
+    return classSource;
   }
   public void CompilationUnit.setFromSource(boolean value) {
-    fromSource = value;
+    this.fromSource = value;
   }
 
-  private boolean Program.pathsInitialized = false;
-  private java.util.ArrayList Program.classPath;
-  private java.util.ArrayList Program.sourcePath;
-  private FileNamesPart Program.sourceFiles = new FileNamesPart(this);
+  private ArrayList<PathPart> Program.classPath = new ArrayList<PathPart>();
+  private ArrayList<PathPart> Program.sourcePath = new ArrayList<PathPart>();
 
+  /**
+   * Set up the classpaths (standard + boot classpath).
+   */
   public void Program.initPaths() {
-    if(!pathsInitialized) {
-      pathsInitialized = true;
+    //System.err.println("Initializing class paths");
 
-      //System.err.println("Initializing class paths");
+    ArrayList<String> classPaths = new ArrayList<String>();
+    ArrayList<String> sourcePaths = new ArrayList<String>();
 
-      ArrayList classPaths = new ArrayList();
-      ArrayList sourcePaths = new ArrayList();
+    String[] bootclasspaths;
+    if (options().hasValueForOption("-bootclasspath")) {
+      bootclasspaths = options().getValueForOption("-bootclasspath").split(File.pathSeparator);
+    } else {
+      bootclasspaths = System.getProperty("sun.boot.class.path").split(File.pathSeparator);
+    }
+    for(int i = 0; i < bootclasspaths.length; i++) {
+      classPaths.add(bootclasspaths[i]);
+      //System.err.println("Adding classpath " + bootclasspaths[i]);
+    }
 
-      String[] bootclasspaths;
-      if(options().hasValueForOption("-bootclasspath"))
-        bootclasspaths = options().getValueForOption("-bootclasspath").split(File.pathSeparator);
-      else
-        bootclasspaths = System.getProperty("sun.boot.class.path").split(File.pathSeparator);
-      for(int i = 0; i < bootclasspaths.length; i++) {
-        classPaths.add(bootclasspaths[i]);
-        //System.err.println("Adding classpath " + bootclasspaths[i]);
+    String[] extdirs;
+    if (options().hasValueForOption("-extdirs")) {
+      extdirs = options().getValueForOption("-extdirs").split(File.pathSeparator);
+    } else {
+      extdirs = System.getProperty("java.ext.dirs").split(File.pathSeparator);
+    }
+    for (int i = 0; i < extdirs.length; i++) {
+      classPaths.add(extdirs[i]);
+      //System.err.println("Adding classpath " + extdirs[i]);
+    }
+
+    String[] userClasses = null;
+    if (options().hasValueForOption("-classpath")) {
+      userClasses = options().getValueForOption("-classpath").split(File.pathSeparator);
+    } else if (options().hasValueForOption("-cp")) {
+      userClasses = options().getValueForOption("-cp").split(File.pathSeparator);
+    } else {
+      userClasses = ".".split(File.pathSeparator);
+    }
+    if (!options().hasValueForOption("-sourcepath")) {
+      for (int i = 0; i < userClasses.length; i++) {
+        classPaths.add(userClasses[i]);
+        sourcePaths.add(userClasses[i]);
+        //System.err.println("Adding classpath/sourcepath " + userClasses[i]);
       }
+    } else {
+      for (int i = 0; i < userClasses.length; i++) {
+        classPaths.add(userClasses[i]);
+        //System.err.println("Adding classpath " + userClasses[i]);
+      }
+      userClasses = options().getValueForOption("-sourcepath").split(File.pathSeparator);
+      for (int i = 0; i < userClasses.length; i++) {
+        sourcePaths.add(userClasses[i]);
+        //System.err.println("Adding sourcepath " + userClasses[i]);
+      }
+    }
 
-      String[] extdirs;
-      if(options().hasValueForOption("-extdirs"))
-        extdirs = options().getValueForOption("-extdirs").split(File.pathSeparator);
-      else
-        extdirs = System.getProperty("java.ext.dirs").split(File.pathSeparator);
-      for(int i = 0; i < extdirs.length; i++) {
-        classPaths.add(extdirs[i]);
-        //System.err.println("Adding classpath " + extdirs[i]);
-      }
+    classPath = new ArrayList<PathPart>();
+    sourcePath = new ArrayList<PathPart>();
 
-      String[] userClasses = null;
-      if(options().hasValueForOption("-classpath"))
-        userClasses = options().getValueForOption("-classpath").split(File.pathSeparator);
-      else if(options().hasValueForOption("-cp"))
-        userClasses = options().getValueForOption("-cp").split(File.pathSeparator);
-      else {
-        userClasses = ".".split(File.pathSeparator);
+    for (String path: classPaths) {
+      PathPart part = PathPart.createClassPath(path);
+      if (part != null) {
+        addClassPath(part);
+        //System.out.println("Adding classpath " + s);
+      } else if (options().verbose()) {
+        System.out.println("Warning: Could not use " + path + " as class path");
       }
-      if(!options().hasValueForOption("-sourcepath")) {
-        for(int i = 0; i < userClasses.length; i++) {
-          classPaths.add(userClasses[i]);
-          sourcePaths.add(userClasses[i]);
-          //System.err.println("Adding classpath/sourcepath " + userClasses[i]);
-        }
-      }
-      else {
-        for(int i = 0; i < userClasses.length; i++) {
-          classPaths.add(userClasses[i]);
-          //System.err.println("Adding classpath " + userClasses[i]);
-        }
-        userClasses = options().getValueForOption("-sourcepath").split(File.pathSeparator);
-        for(int i = 0; i < userClasses.length; i++) {
-          sourcePaths.add(userClasses[i]);
-          //System.err.println("Adding sourcepath " + userClasses[i]);
-        }
-      }
-
-      classPath = new ArrayList();
-      sourcePath = new ArrayList();
-
-      for(Iterator iter = classPaths.iterator(); iter.hasNext(); ) {
-        String s = (String)iter.next();
-        PathPart part = PathPart.createClassPath(s, this);
-        if(part != null) {
-          classPath.add(part);
-          //System.out.println("Adding classpath " + s);
-        }
-        else if(options().verbose())
-          System.out.println("Warning: Could not use " + s + " as class path");
-      }
-      for(Iterator iter = sourcePaths.iterator(); iter.hasNext(); ) {
-        String s = (String)iter.next();
-        PathPart part = PathPart.createSourcePath(s, this);
-        if(part != null) {
-          sourcePath.add(part);
-          //System.out.println("Adding sourcepath " + s);
-        }
-        else if(options().verbose())
-          System.out.println("Warning: Could not use " + s + " as source path");
+    }
+    for (String path: sourcePaths) {
+      PathPart part = PathPart.createSourcePath(path);
+      if (part != null) {
+        addSourcePath(part);
+        //System.out.println("Adding sourcepath " + path);
+      } else if(options().verbose()) {
+        System.out.println("Warning: Could not use " + path + " as source path");
       }
     }
   }
@@ -265,7 +289,7 @@ aspect ClassPath {
    */
   public void Program.addClassPath(PathPart pathPart) {
     classPath.add(pathPart);
-    pathPart.program = this;
+    packageIndex.addAll(pathPart.packages());
   }
 
   /**
@@ -273,6 +297,6 @@ aspect ClassPath {
    */
   public void Program.addSourcePath(PathPart pathPart) {
     sourcePath.add(pathPart);
-    pathPart.program = this;
+    packageIndex.addAll(pathPart.packages());
   }
 }

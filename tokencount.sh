@@ -17,6 +17,9 @@ count_tokens()
 	java -cp ant-bin org.jastadd.jastaddj.TokenCounter @$tempfile 2>/dev/null |cut -d ' ' -f 2
 }
 
+# exit the script if any command fails
+set -e
+
 echo "generic"
 printf "    java: "
 find src/frontend/org/jastadd/jastaddj/ -name '*.java' > $tempfile
