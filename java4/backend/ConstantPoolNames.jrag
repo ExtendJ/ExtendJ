@@ -1,29 +1,73 @@
 /*
  * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
+ * by the Modified BSD License. You should have received a copy of the
+ * Modified BSD license with this compiler.
  *
  * Copyright (c) 2005-2008, Torbjorn Ekman
+ * Copyright (c) 2013, Jesper Ã–qvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
 
 aspect ConstantPoolNames {
 
+  /**
+   * For a top-level type the constant pool name of the type is the same as the
+   * canonical name but with dots replaced by solidus.
+   *
+   * <p>For nested types the constant pool name is based on the enclosing top-level
+   * types constant pool name followed by a dollar sign and a unique index and/or
+   * the type name.
+   *
+   * @return constant pool name of this type
+   */
+  syn lazy String TypeDecl.constantPoolName() {
+    String packageName = packageName();
+    if (!packageName.equals("")) {
+      packageName = packageName.replace('.', '/') + "/";
+    }
+    return packageName + uniqueName();
+  }
+
+  /**
+   * Computes a unique name for this type in the enclosing package.
+   * <p>For top-level types the unique name is just the type name.  For nested
+   * types it is the enclosing types unique name followed by a dollar sign and
+   * a unique index and/or the type name.
+   *
+   * @return a name for this type that is unique in the enclosing package
+   */
+  syn lazy String TypeDecl.uniqueName() {
+    if (!isNestedType()) {
+      return getID();
+    } else {
+      String prefix = enclosingType().uniqueName();
+      if (isAnonymous()) {
+        return prefix + "$" + uniqueIndex();
+      } else if (isLocalClass()) {
+        return prefix + "$" + uniqueIndex() + getID();
+      } else {
+        return prefix + "$" + getID();
+      }
+    }
+  }
+
+  syn lazy String ArrayDecl.constantPoolName() = typeDescriptor();
+
   syn lazy String TypeDecl.typeDescriptor() {
     throw new Error("Can not compute typeDescriptor for " + getClass().getName());
   }
-  eq ClassDecl.typeDescriptor() = "L" + constantPoolName() + ";";
+  eq     ClassDecl.typeDescriptor() = "L" + constantPoolName() + ";";
   eq InterfaceDecl.typeDescriptor() = "L" + constantPoolName() + ";";
-  eq BooleanType.typeDescriptor() = "Z";
-  eq    ByteType.typeDescriptor() = "B";
-  eq   ShortType.typeDescriptor() = "S";
-  eq     IntType.typeDescriptor() = "I";
-  eq    LongType.typeDescriptor() = "J";
-  eq    CharType.typeDescriptor() = "C";
-  eq   FloatType.typeDescriptor() = "F";
-  eq  DoubleType.typeDescriptor() = "D";
-  eq    VoidType.typeDescriptor() = "V";
-  eq   ArrayDecl.typeDescriptor() {
+  eq   BooleanType.typeDescriptor() = "Z";
+  eq      ByteType.typeDescriptor() = "B";
+  eq     ShortType.typeDescriptor() = "S";
+  eq       IntType.typeDescriptor() = "I";
+  eq      LongType.typeDescriptor() = "J";
+  eq      CharType.typeDescriptor() = "C";
+  eq     FloatType.typeDescriptor() = "F";
+  eq    DoubleType.typeDescriptor() = "D";
+  eq      VoidType.typeDescriptor() = "V";
+  eq     ArrayDecl.typeDescriptor() {
     StringBuilder dim = new StringBuilder();
     for (int i = 0; i < dimension(); i++) {
       dim.append("[");
@@ -66,80 +110,35 @@ aspect ConstantPoolNames {
     return b.toString();
   }
 
-  inh lazy String TypeDecl.destinationPath();
-  eq CompilationUnit.getChild().destinationPath() = destinationPath();
-
+  /**
+   * Computes the path to the parent directory of the source file of this
+   * compilation unit.
+   *
+   * <p>If the parent directory of the source file could not be computed
+   * the path to the working directory is returned.
+   *
+   * @return The path to the parent directory of the source file for this
+   * compilation unit, or "." if the path could not be computed.
+   */
   syn lazy String CompilationUnit.destinationPath() {
-    if(options().hasValueForOption("-d")) {
-      return options().getValueForOption("-d");
+    String parentPath = new File(pathName()).getParent();
+    if (parentPath == null) {
+      return ".";
+    } else {
+      return parentPath;
     }
-    else {
-      if(fromSource()) {
-        // ta paketnamnet p och om det har fler än 3 delar så kontrollera om det finns som substring i pathen
-        // använd i så fall den delen av pathen
-        // fortsätt genom att ta bort sista delen i paketnamnet och gör om proceduren
-        // sluta när namnet är mindre är 3 eller mindre
+  }
 
-        String sourceName = pathName(); //relativeName();         // ex AST/Defines_AST_hello
-        // extract source path including package directories
-        String sourcePath = null;
-        if(sourceName.lastIndexOf(java.io.File.separator) == -1)
-          sourcePath = ".";
-        else
-          sourcePath = sourceName.substring(0, sourceName.lastIndexOf(java.io.File.separator));
-        String sourcePathPattern = sourcePath.replace(java.io.File.separatorChar, '.');
-        String[] parts = packageName().split("\\.");
-        int num = parts.length;
-        while (num > 3) {
-          StringBuilder packagePattern = new StringBuilder();
-          for (int i = 0; i < num; i++) {
-            if(i != 0) packagePattern.append(".");
-            packagePattern.append(parts[i]);
-          }
-          int index = sourcePathPattern.lastIndexOf(packagePattern.toString());
-          if (index > 0) {
-            return sourcePath.substring(0, index-1);
-          }
-          num--;
-        }
-
-        //System.err.println("SourcePath: " + sourcePath);
-        //String[] parts = packageName().split("\\.");
-        int k = parts.length - 1;
-        while(k >= 0 && !sourcePath.endsWith(parts[k])) {
-          //System.err.println(sourcePath + " does not end with " + parts[k]);
-          k--;
-        }
-        if(k >= 0) {
-          for(int i = k; i >= 0; i--) {
-            sourcePath = sourcePath.substring(0, sourcePath.lastIndexOf(parts[i]));
-            //System.err.println("new candidate is " + sourcePath);
-          }
-        }
-        if(sourcePath.equals(""))
-          sourcePath = ".";
-        //System.err.println("SourcePath after: " + sourcePath);
-        return sourcePath;
-        /*
-        // extract first part of package name
-        String prefix;
-        int pos = packageName().indexOf('.');       // AST
-        if(pos != -1)
-          prefix = packageName().substring(0, pos-1);
-        else
-          prefix = packageName();
-        // add separator
-        prefix = prefix + java.io.File.separator;
-        // find last occurance
-        pos = sourceName.lastIndexOf(prefix);
-        if(pos > 0 && !packageName().equals(""))
-          return sourceName.substring(0, pos-1);
-        */
-      }
-      if(pathName != null)
-        return pathName;
-      else
-        return ".";
+  /**
+   * @return The path to the classfiles that should be generated for this type.
+   */
+  syn lazy String TypeDecl.destinationPath() {
+    if (options().hasValueForOption("-d")) {
+      return options().getValueForOption("-d") + File.separator +
+        constantPoolName() + ".class";
+    } else {
+      return compilationUnit().destinationPath() + File.separator +
+        uniqueName() + ".class";
     }
   }
 }
