@@ -21,11 +21,13 @@ aspect TypeHierarchyCheck {
   eq PackageAccess.isUnknown() = !hasPackage(packageName());
 
   public void MethodAccess.nameCheck() {
-    if (isQualified() && qualifier().isPackageAccess() && !qualifier().isUnknown())
+    if (isQualified() && qualifier().isPackageAccess() && !qualifier().isUnknown()) {
       error("The method " + decl().signature() +
           " can not be qualified by a package name.");
-    if (isQualified() && decl().isAbstract() && qualifier().isSuperAccess())
+    }
+    if (isQualified() && decl().isAbstract() && qualifier().isSuperAccess()) {
       error("may not access abstract methods in superclass");
+    }
     if (decls().isEmpty() && (!isQualified() || !qualifier().isUnknown())) {
       StringBuilder sb = new StringBuilder();
       sb.append("no method named " + name());
@@ -95,27 +97,31 @@ aspect TypeHierarchyCheck {
       }
     }
     // 8.8.5.1
-    if(inExplicitConstructorInvocation() && hostType().instanceOf(decl().hostType()) )
+    if (inExplicitConstructorInvocation() && hostType().instanceOf(decl().hostType())) {
       error("super may not be accessed in an explicit constructor invocation");
+    }
     // 8.4.3.2
-    if(inStaticContext())
+    if (inStaticContext()) {
       error("super may not be accessed in a static context");
+    }
   }
 
   public void ThisAccess.nameCheck() {
     // 8.8.5.1
-    if(inExplicitConstructorInvocation() && hostType() == type())
+    if (inExplicitConstructorInvocation() && hostType() == type()) {
       error("this may not be accessed in an explicit constructor invocation");
-    else if(isQualified()) {
+    } else if (isQualified()) {
       // 15.8.4
-      if(inStaticContext())
+      if (inStaticContext()) {
         error("qualified this may not occur in static context");
-      else if(!hostType().isInnerTypeOf(decl()) && hostType() != decl())
-        error("qualified this must name an enclosing type: " + getParent());
+      } else if (!hostType().isInnerTypeOf(decl()) && hostType() != decl()) {
+        error("qualified this access must name an enclosing type which " +
+            decl().typeName() + " is not");
+      }
+    } else if (!isQualified() && inStaticContext()) {
+      // 8.4.3.2
+      error("this access may not be used in a static context");
     }
-    // 8.4.3.2
-    else if(!isQualified() && inStaticContext())
-      error("this may not be accessed in static context: " + enclosingStmt());
   }
 
 
@@ -167,13 +173,19 @@ aspect TypeHierarchyCheck {
         MethodDecl decl = (MethodDecl)i2.next();
         if(m.overrides(decl)) {
           // 8.4.6.1
-          if(!m.isStatic() && decl.isStatic())
+          if (!m.isStatic() && decl.isStatic()) {
             target.error("an instance method may not override a static method");
+          }
 
           // regardless of overriding
           // 8.4.6.3
-          if(!m.mayOverrideReturn(decl))
-            target.error("the return type of method " + m.signature() + " in " + m.hostType().typeName() + " does not match the return type of method " + decl.signature() + " in " + decl.hostType().typeName() + " and may thus not be overriden");
+          if (!m.mayOverrideReturn(decl)) {
+            target.error("the return type of method " + m.signature() +
+                " in " + m.hostType().typeName() +
+                " does not match the return type of method " +
+                decl.signature() + " in " + decl.hostType().typeName() +
+                " and may thus not be overriden");
+          }
 
           // regardless of overriding
           // 8.4.4
@@ -184,9 +196,11 @@ aspect TypeHierarchyCheck {
               if(e.type().instanceOf(decl.getException(j).type()))
                 found = true;
             }
-            if(!found && e.type().isUncheckedException())
-              target.error(m.signature() + " in " + m.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
-               decl.signature() + " in " + decl.hostType().typeName());
+            if (!found && e.type().isUncheckedException()) {
+              target.error(m.signature() + " in " + m.hostType().typeName() +
+                  " may not throw more checked exceptions than overridden method " +
+                  decl.signature() + " in " + decl.hostType().typeName());
+            }
           }
           // 8.4.6.3
           if(decl.isPublic() && !m.isPublic())
@@ -199,8 +213,11 @@ aspect TypeHierarchyCheck {
             target.error("overriding access modifier error");
 
           // regardless of overriding
-          if(decl.isFinal())
-            target.error("method " + m.signature() + " in " + hostType().typeName() + " can not override final method " + decl.signature() + " in " + decl.hostType().typeName());
+          if (decl.isFinal()) {
+            target.error("method " + m.signature() + " in " +
+                hostType().typeName() + " can not override final method " +
+                decl.signature() + " in " + decl.hostType().typeName());
+          }
         }
         if(m.hides(decl)) {
           // 8.4.6.2
@@ -217,20 +234,36 @@ aspect TypeHierarchyCheck {
               if(e.type().instanceOf(decl.getException(j).type()))
                 found = true;
             }
-            if(!found)
+            if (!found) {
               target.error("may not throw more checked exceptions than hidden method");
+            }
           }
           // 8.4.6.3
-          if(decl.isPublic() && !m.isPublic())
-            target.error("hiding access modifier error: public method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non public method " + m.signature() + " in " + m.hostType().typeName());
+          if (decl.isPublic() && !m.isPublic()) {
+            target.error("hiding access modifier error: public method " +
+                decl.signature() + " in " + decl.hostType().typeName() +
+                " is hidden by non public method " + m.signature() + " in " +
+                m.hostType().typeName());
+          }
           // 8.4.6.3
-          if(decl.isProtected() && !(m.isPublic() || m.isProtected()))
-            target.error("hiding access modifier error: protected method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by non (public|protected) method " + m.signature() + " in " + m.hostType().typeName());
+          if (decl.isProtected() && !(m.isPublic() || m.isProtected())) {
+            target.error("hiding access modifier error: protected method " +
+                decl.signature() + " in " + decl.hostType().typeName() +
+                " is hidden by non (public|protected) method " +
+                m.signature() + " in " + m.hostType().typeName());
+          }
           // 8.4.6.3
-          if((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate())
-            target.error("hiding access modifier error: default method " + decl.signature() + " in " + decl.hostType().typeName() + " is hidden by private method " + m.signature() + " in " + m.hostType().typeName());
-          if(decl.isFinal())
-            target.error("method " + m.signature() + " in " + hostType().typeName() + " can not hide final method " + decl.signature() + " in " + decl.hostType().typeName());
+          if ((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate()) {
+            target.error("hiding access modifier error: default method " +
+                decl.signature() + " in " + decl.hostType().typeName() +
+                " is hidden by private method " + m.signature() + " in " +
+                m.hostType().typeName());
+          }
+          if (decl.isFinal()) {
+            target.error("method " + m.signature() + " in " +
+                hostType().typeName() + " can not hide final method " +
+                decl.signature() + " in " + decl.hostType().typeName());
+          }
         }
       }
     }
@@ -240,25 +273,34 @@ aspect TypeHierarchyCheck {
 
   public void ClassDecl.nameCheck() {
     super.nameCheck();
-    if(hasSuperClass() && !getSuperClass().type().isClassDecl())
-      error("class may only inherit a class and not " + getSuperClass().type().typeName());
-    if(isObject() && hasSuperClass())
+    if (hasSuperClass() && !getSuperClass().type().isClassDecl()) {
+      error("class may only inherit a class and not " +
+          getSuperClass().type().typeName());
+    }
+    if (isObject() && hasSuperClass()) {
       error("class Object may not have superclass");
-    if(isObject() && getNumImplements() != 0)
+    }
+    if (isObject() && getNumImplements() != 0) {
       error("class Object may not implement interfaces");
+    }
 
     // 8.1.3
-    if(isCircular())
+    if (isCircular()) {
       error("circular inheritance dependency in " + typeName());
+    }
 
     // 8.1.4
     HashSet set = new HashSet();
-    for(int i = 0; i < getNumImplements(); i++) {
+    for (int i = 0; i < getNumImplements(); i++) {
       TypeDecl decl = getImplements(i).type();
-      if(!decl.isInterfaceDecl() && !decl.isUnknown())
-        error("type " + fullName() + " tries to implement non interface type " + decl.fullName());
-      if(set.contains(decl))
-        error("type " + decl.fullName() + " mentionened multiple times in implements clause");
+      if (!decl.isInterfaceDecl() && !decl.isUnknown()) {
+        error("type " + fullName() +
+            " tries to implement non interface type " + decl.fullName());
+      }
+      if (set.contains(decl)) {
+        error("type " + decl.fullName() +
+            " mentionened multiple times in implements clause");
+      }
       set.add(decl);
     }
 
@@ -276,9 +318,11 @@ aspect TypeHierarchyCheck {
           for(Iterator i2 = interfacesMethodsSignature(m.signature()).iterator(); i2.hasNext(); ) {
             MethodDecl n = (MethodDecl)i2.next();
             if(!n.mayOverrideReturn(m) && !m.mayOverrideReturn(n))
-              error("Xthe return type of method " + m.signature() + " in " + m.hostType().typeName() +
-                  " does not match the return type of method " + n.signature() + " in " +
-                  n.hostType().typeName() + " and may thus not be overriden");
+              error("Xthe return type of method " + m.signature() +
+                  " in " + m.hostType().typeName() +
+                  " does not match the return type of method " +
+                  n.signature() + " in " + n.hostType().typeName() +
+                  " and may thus not be overriden");
           }
         }
       }
@@ -286,51 +330,60 @@ aspect TypeHierarchyCheck {
   }
 
   private void ClassDecl.interfaceMethodCompatibleWithInherited(MethodDecl m, MethodDecl n) {
-    if(n.isStatic())
+    if (n.isStatic()) {
       error("Xa static method may not hide an instance method");
-    if(!n.isAbstract() && !n.isPublic())
-      error("Xoverriding access modifier error for " + m.signature() + " in " + m.hostType().typeName() + " and " + n.hostType().typeName());
-    if(!n.mayOverrideReturn(m) && !m.mayOverrideReturn(m))
-      error("Xthe return type of method " + m.signature() + " in " + m.hostType().typeName() +
-            " does not match the return type of method " + n.signature() + " in " +
-            n.hostType().typeName() + " and may thus not be overriden");
-    if(!n.isAbstract()) {
+    }
+    if (!n.isAbstract() && !n.isPublic()) {
+      error("Xoverriding access modifier error for " + m.signature() + " in " +
+          m.hostType().typeName() + " and " + n.hostType().typeName());
+    }
+    if (!n.mayOverrideReturn(m) && !m.mayOverrideReturn(m)) {
+      error("Xthe return type of method " +
+          m.signature() + " in " + m.hostType().typeName() +
+          " does not match the return type of method " + n.signature() + " in "
+          + n.hostType().typeName() + " and may thus not be overriden");
+    }
+    if (!n.isAbstract()) {
       // n implements and overrides method m in the interface
       // may not throw more checked exceptions
-      for(int i = 0; i < n.getNumException(); i++) {
+      for (int i = 0; i < n.getNumException(); i++) {
         Access e = n.getException(i);
         boolean found = false;
-        for(int j = 0; !found && j < m.getNumException(); j++) {
-          if(e.type().instanceOf(m.getException(j).type()))
+        for (int j = 0; !found && j < m.getNumException(); j++) {
+          if (e.type().instanceOf(m.getException(j).type())) {
             found = true;
+          }
         }
-        if(!found && e.type().isUncheckedException())
-          error("X" + n.signature() + " in " + n.hostType().typeName() + " may not throw more checked exceptions than overridden method " +
-           m.signature() + " in " + m.hostType().typeName());
+        if (!found && e.type().isUncheckedException()) {
+          error("X" + n.signature() + " in " + n.hostType().typeName() +
+              " may not throw more checked exceptions than overridden method " +
+              m.signature() + " in " + m.hostType().typeName());
+        }
       }
     }
   }
 
   public void InterfaceDecl.nameCheck() {
     super.nameCheck();
-    if(isCircular())
+    if (isCircular()) {
       error("circular inheritance dependency in " + typeName());
-    else {
+    } else {
       for(int i = 0; i < getNumSuperInterface(); i++) {
         TypeDecl typeDecl = getSuperInterface(i).type();
         if(typeDecl.isCircular())
           error("circular inheritance dependency in " + typeName());
       }
     }
-    for(Iterator iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
+    for (Iterator iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
       SimpleSet set = (SimpleSet)iter.next();
-      if(set.size() > 1) {
+      if (set.size() > 1) {
         Iterator i2 = set.iterator();
         MethodDecl m = (MethodDecl)i2.next();
-        while(i2.hasNext()) {
+        while (i2.hasNext()) {
           MethodDecl n = (MethodDecl)i2.next();
-          if(!n.mayOverrideReturn(m) && !m.mayOverrideReturn(n))
+          if (!n.mayOverrideReturn(m) && !m.mayOverrideReturn(n)) {
             error("multiply inherited methods with the same signature must have the same return type");
+          }
         }
       }
     }
