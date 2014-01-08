@@ -28,6 +28,29 @@ currently checked out version of JastAddJ by the command
 If you encounter problems not listed here, please report them on the [JastAddJ
 issue tracker at bitbucket][1].
 
+Jan 7, 2017: Fixed/improved semantic error messages
+---------------------------------------------------
+
+**JastAddJ commit [f518c1e][26]** (Fixed/improved semantic error messages)
+
+This commit fixed an error where some things were not properly pretty-printed
+in semantic error messages. Some error messages were also altered to be more
+informative and in some cases a little more brief.
+
+The changed error messages are:
+
++ imported type conflicting with visible type error
++ method invocation type error (added argument index)
++ qualified this access error (added enclosing type name)
+
+Other error messages should be the same as before the Nov 20 commit below.
+
+### Extensions that are affected:
+
+If you have tests that check the contents of compile-time error messages, these
+might fail.
+
+
 Nov 20, 2013: New semantics for ASTNode.toString()
 --------------------------------------------------
 
