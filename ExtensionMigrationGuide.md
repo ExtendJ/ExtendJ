@@ -28,12 +28,14 @@ currently checked out version of JastAddJ by the command
 If you encounter problems not listed here, please report them on the [JastAddJ
 issue tracker at bitbucket][1].
 
-Jan 7, 2017: Fixed/improved semantic error messages
----------------------------------------------------
+Jan 7-8, 2017: Fixed/improved semantic error messages
+-----------------------------------------------------
 
-**JastAddJ commit [f518c1e][26]** (Fixed/improved semantic error messages)
+**JastAddJ commit [f518c1e][26] (Jan 7, 2014)** (Fixed/improved semantic error messages)
 
-This commit fixed an error where some things were not properly pretty-printed
+**JastAddJ commit [c572865][27] (Jan 8, 2014)** (Fixed some more semantic error messages)
+
+These commits fixed an error where some things were not properly pretty-printed
 in semantic error messages. Some error messages were also altered to be more
 informative and in some cases a little more brief.
 
@@ -47,9 +49,29 @@ Other error messages should be the same as before the Nov 20 commit below.
 
 ### Extensions that are affected:
 
-If you have tests that check the contents of compile-time error messages, these
-might fail.
++ If you have tests that check the contents of the changed compile-time error messages, these
+might fail, and you will need to update the oracles.
++ If you have extensions that generate new compile-time error messages, the messages might need to be adapted.
 
+### How to adapt:
+
+Go through all your calls to `error("...")`. If you access ASTNodes in them, using implicit calls to `toString()`, these need to be adapted to call `prettyPrint()`. For example, replace
+
+    error("illegal to foo " + getP());
+    error("illegal to foo " + getQ().name());
+    error("illegal to foo " + this);
+    error("illegal to foo " + getR().bar());
+
+by
+
+    error("illegal to foo " + getP().prettyPrint());
+    error("illegal to foo " + getQ().name());
+    error("illegal to foo " + this.prettyPrint());
+    error("illegal to foo " + getR().bar().prettyPrint());
+
+(assuming that `getQ().name()` is a `String`, but `getR().bar()` is an `ASTNode`). 
+
+For real examples, see [this NonNullChecker commit][28], and [the c572865 JastAddJ commit][27].
 
 Nov 20, 2013: New semantics for ASTNode.toString()
 --------------------------------------------------
@@ -73,9 +95,13 @@ behavior for the messages to come out right. This is fixed in the commit
 If you have tests that check the contents of compile-time error messages, these
 might fail.
 
+### How to adapt:
+
 As a temporary measure, you can locally revert the change by adding an aspect
 to your extension that refines ASTNode.toString to again prettyprint.  See
 [this NonNullChecker commit][3] for an example.
+
+Alternatively (and better), go to the above step.
 
 Oct 17, 2013: Added utf-8 encoding in javac task
 ------------------------------------------------
@@ -312,3 +338,5 @@ Update your build file. See [example from JSR308][25]
 [24]: https://bitbucket.org/jastadd/jastaddj/commits/5da7c86487f452b2753456473c0001a2201f4bbf
 [25]: https://bitbucket.org/jastadd/jastaddj-jsr308/commits/1e423876a7826a7b2753b12a92272099737dadcc
 [26]: https://bitbucket.org/jastadd/jastaddj/commits/f518c1e12452ee7ebb175afacbc628e717e07e5c
+[27]: https://bitbucket.org/jastadd/jastaddj/commits/c5728657928539e49e9a45942a623ca7711a85f8
+[28]: https://bitbucket.org/jastadd/jastaddj-nonnullchecker/commits/1afb20532a52d9f596872a0acf34ac23524d81a8
