@@ -1,7 +1,8 @@
-<!-- created by GH (jan 2014) -->
-<!-- updated by JO (jan 2014) -->
 Migration Guide for JastAddJ Extensions
 =======================================
+
+* created by GH (jan 2014)
+* updated by JO (jan 2014)
 
 The JastAddJ API up to version 7.1 was mostly much unchanged for several years.
 Since version 7.1 though many things have changed in JastAddJ in order to
