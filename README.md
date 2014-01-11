@@ -63,6 +63,7 @@ Usage:
       -bootclasspath <path>     Override location of bootstrap class files
       -extdirs <dirs>           Override location of installed extensions
       -d <directory>            Specify where to place generated class files
+      -nowarn                   Disable warning messages
       -help                     Print a synopsis of standard options
       -version                  Print version information
 
