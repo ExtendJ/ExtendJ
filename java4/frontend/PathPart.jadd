@@ -1,7 +1,6 @@
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
-import java.util.LinkedList;
 
 /**
  * PathPart classes are used to represent parts of the bootclasspath and user
@@ -97,7 +96,7 @@ aspect PathPart {
       InputStream is = openInputStream();
       try {
         if (program.options().verbose()) {
-          System.out.print("Loading " + sourceName() + " ");
+          System.out.print("Loading " + sourceName());
         }
 
         long start = System.nanoTime();
@@ -110,7 +109,7 @@ aspect PathPart {
         u.setClassSource(this);
 
         if (program.options().verbose()) {
-          System.out.println("in " + (elapsed / 1000000) + " ms");
+          System.out.println(" in " + (elapsed / 1000000) + " ms");
         }
         return u;
       } catch (Exception e) {
@@ -168,7 +167,7 @@ aspect PathPart {
       InputStream is = openInputStream();
       try {
         if (program.options().verbose()) {
-          System.out.print("Loading " + sourceName() + " ");
+          System.out.print("Loading " + sourceName());
         }
 
         long start = System.nanoTime();
@@ -226,34 +225,34 @@ aspect PathPart {
 
   public class JarClassSource extends BytecodeClassSource {
     private final ZipFile jar;
+    private final ZipEntry entry;
     private final String name;
 
-    public JarClassSource(PathPart sourcePath, ZipFile jar, String name) {
+    public JarClassSource(PathPart sourcePath, ZipFile jar, ZipEntry entry,
+        String name) {
       super(sourcePath);
       this.jar = jar;
+      this.entry = entry;
       this.name = name;
     }
 
     public String jarFilePath() {
-      return jar.getName();
+      return entry.getName();
     }
 
     @Override
     public long getAge() {
-      // last modification time computed only when needed
-      ZipEntry entry = jar.getEntry(name);
       return entry.getTime();
     }
 
     @Override
     public InputStream openInputStream() throws IOException {
-      ZipEntry entry = jar.getEntry(name);
       return jar.getInputStream(entry);
     }
 
     @Override
     public String pathName() {
-      return jar.getName();
+      return entry.getName();
     }
 
     @Override
@@ -288,9 +287,14 @@ aspect PathPart {
     }
 
     /**
-     * @return the set of all available packages in this path part
+     * Test if a package is available in this path part.
+     *
+     * <p>The implementations of this method may use caching to improve the
+     * efficiency of subsequent calls to the method.
+     *
+     * @return {@code true} if the given package name exists in this path part
      */
-    abstract public Collection<String> packages();
+    abstract public boolean hasPackage(String name);
 
     public static PathPart createSourcePath(String fileName) {
       return createPathPart(fileName, true);
@@ -344,32 +348,54 @@ aspect PathPart {
      * The root folder of this path part.
      */
     private final File folder;
-    private final Collection<String> packages = new LinkedList<String>();
 
     public FolderPath(File folder, boolean isSource) {
       super(isSource);
       this.folder = folder;
-
-      scanPackages(folder, "");
     }
 
-    private void scanPackages(File folder, String parent) {
-      for (File child: folder.listFiles()) {
-        if (child.isDirectory()) {
-          String pkgName = parent;
-          if (!pkgName.isEmpty()) {
-            pkgName += ".";
-          }
-          pkgName += child.getName();
-          packages.add(pkgName);
-          scanPackages(child, pkgName);
-        }
-      }
-    }
-
+    /**
+     * Check if the package exists as a subdirectory.
+     *
+     * <p>We need to use getCanonicalFile in order to get the case-sensitive
+     * package name on case-insensitive file systems or we might incorrectly
+     * report a package name conflict.
+     *
+     * <p>NB: This does not work well with symlinks!
+     *
+     * @param name The qualified name of the package
+     * @return {@code true} if the subdirectory matching the package exists
+     * and contains at least one source or class file.
+     */
     @Override
-    public Collection<String> packages() {
-      return packages;
+    public boolean hasPackage(String name) {
+      boolean packageIsEmpty = true;
+      int index = name.lastIndexOf('.');
+      String basePackageName = name.substring(index == -1 ? 0 : index+1);
+      String subdir = name.replace('.', File.separatorChar);
+      File pkgFolder = new File(folder, subdir);
+      Collection<String> fileSet = Collections.emptyList();
+      try {
+        // Make sure that there exists a directory with the same name
+        // (case-sensitive) as the requested package
+        File canonical = pkgFolder.getCanonicalFile();
+        if (canonical.isDirectory() && (name.isEmpty() ||
+              canonical.getName().equals(basePackageName))) {
+          File[] files = canonical.listFiles();
+          for (File file: files) {
+            if (file.isFile() && file.getName().endsWith(fileSuffix)) {
+              // found one source file in the package
+              packageIsEmpty = false;
+              break;
+            }
+          }
+        }
+      } catch (Exception e) {
+        // if an exception is thrown then packageIsEmpty will be false
+        // which indicates that the package does not exist
+        // The likely cause of the exception would be getCanonicalFile
+      }
+      return !packageIsEmpty;
     }
 
     @Override
@@ -395,10 +421,10 @@ aspect PathPart {
 
   /**
    * A Jar file path listed in the classpath. Can contain many .class files.
+   * This PathPart lazily initializes its package set and entry set.
    */
   public class JarFilePath extends PathPart {
-    private final Collection<String> packages = new HashSet<String>();
-    private final HashSet<String> entrySet = new HashSet<String>();
+    private Collection<String> packageIndex = null;
     private final ZipFile jar;
     private final String jarPath;
 
@@ -406,49 +432,54 @@ aspect PathPart {
       super(false);
       this.jar = new ZipFile(jarFile);
       this.jarPath = jar.getName();
-
-      scanJar();
     }
 
-    private void scanJar() {
+    private static void scanJar(ZipFile jar, Collection<String> packages,
+        String fileSuffix) {
       // Add all zip entries to a set so that we can quickly check if the Jar
       // contains a given class
       for (Enumeration entries = jar.entries(); entries.hasMoreElements(); ) {
         ZipEntry entry = (ZipEntry) entries.nextElement();
         String path = entry.getName();
-        if (entry.isDirectory()) {
-          addPackages(path);
-        } else if (path.endsWith(fileSuffix)) {
-          addPackages(path);
-          entrySet.add(path);
+        if (path.endsWith(fileSuffix)) {
+          addPackages(packages, path);
         }
       }
     }
 
-    private void addPackages(String path) {
-      String canonical = path.replace('/', '.');
-      int index = path.lastIndexOf('/', path.length()-1);
-      while (index >= 0) {
-        if (!packages.add(canonical.substring(0, index))) {
-          break;
-        }
+    private static void addPackages(Collection<String> packages, String path) {
+      String name = path.replace('/', '.');
+      int index = path.length();
+      do {
         index = path.lastIndexOf('/', index-1);
-      }
+      } while (index >= 0 && packages.add(name.substring(0, index)));
     }
 
+    /**
+     * Caches the package index from the Jar file so that subsequent calls to
+     * this method are quicker.
+     */
     @Override
-    public Collection<String> packages() {
-      return packages;
+    public boolean hasPackage(String name) {
+      synchronized (this) {
+        if (packageIndex == null) {
+          packageIndex = new HashSet<String>();
+          scanJar(jar, packageIndex, fileSuffix);
+        }
+      }
+      return packageIndex.contains(name);
     }
 
     @Override
     public ClassSource findSource(String name) {
       // ZipFiles always use '/' as separator
       String jarName = name.replace('.', '/') + fileSuffix;
-      if (entrySet.contains(jarName)) {
-        return new JarClassSource(this, jar, jarName);
+      ZipEntry entry = jar.getEntry(jarName);
+      if (entry != null) {
+        return new JarClassSource(this, jar, entry, jarName);
+      } else {
+        return ClassSource.NONE;
       }
-      return ClassSource.NONE;
     }
 
     @Override
@@ -461,31 +492,20 @@ aspect PathPart {
    * A file specified explicitly on the commandline as a source file.
    * Must point to a .java file.
    */
-  public class FilePath extends PathPart {
+  public class SourceFilePath extends PathPart {
     private final String fileName;
-    private final Collection<String> packages = new LinkedList<String>();
 
-    public FilePath(String path) {
+    public SourceFilePath(String path) {
       super(true);
       this.fileName = path;
-
-      scanPackages(path);
     }
 
-    private void scanPackages(String path) {
-      // normalize file separators to '/'
-      String norm = path.replace(File.separatorChar, '/');
-      String canonical = norm.replace('/', '.');
-      int index = norm.indexOf('/', 0);
-      while (index >= 0) {
-        packages.add(canonical.substring(0, index));
-        index = norm.indexOf('/', index+1);
-      }
-    }
-
+    /**
+     * <b>Use the parsed CompilationUnit to find the package name of the file!
+     */
     @Override
-    public Collection<String> packages() {
-      return packages;
+    public boolean hasPackage(String name) {
+      return false;
     }
 
     @Override
