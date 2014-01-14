@@ -29,6 +29,7 @@ class JavaDumpTree extends Frontend {
 		}
 	}
 
+	
 	private final JavaParser parser;
 	private final BytecodeParser bytecodeParser;
 

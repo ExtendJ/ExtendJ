@@ -1,3 +1,32 @@
+%left LBRACK, RBRACK, DOT, LPAREN, RPAREN, POSTINCDEC;
+%right PLUSPLUS, MINUSMINUS, NOT, COMP, UNARY;
+%right NEW, CAST;
+%left MULT, DIV, MOD;
+%left PLUS, MINUS;
+%left LSHIFT, RSHIFT, URSHIFT;
+%left INSTANCEOF;
+%left LT, GT, LTEQ, GTEQ;
+%left EQEQ, NOTEQ;
+%left AND;
+%left XOR;
+%left OR;
+%left ANDAND;
+%left OROR;
+%right QUESTION, COLON;
+%right EQ, PLUSEQ, MINUSEQ, MULTEQ, DIVEQ, MODEQ, ANDEQ,
+		XOREQ, OREQ, LSHIFTEQ, RSHIFTEQ, URSHIFTEQ;
+%left DOUBLECOLON, RARROW;
+
+%nonassoc BOTTOM;
+
+/*%nonassoc LBRACK, PLUSPLUS, MINUSMINUS, MULT, DIV, MOD, DOT,
+PLUS, MINUS, LSHIFT, RSHIFT, URSHIFT, LT, GT, LTEQ, GTEQ, INSTANCEOF, EQEQ, NOTEQ, AND, XOR, OR,
+ANDAND, OROR, QUESTION, DOUBLECOLON, EQ, MULTEQ, DIVEQ, MODEQ, PLUSEQ, MINUSEQ, LSHIFTEQ, RSHIFTEQ,
+URSHIFTEQ, ANDEQ, XOREQ, OREQ;
+
+%nonassoc BOTTOM;*/
+
+
 %goal goal;
 
 CompilationUnit goal = compilation_unit;
@@ -49,8 +78,8 @@ Access interface_type =
     class_or_interface_type
   ;
 Access array_type =
-    primitive_type.t dims   {: return t.addArrayDims(dims); :}
-  | name dims               {: return name.addArrayDims(dims); :}
+    primitive_type.t dims @BOTTOM  {: return t.addArrayDims(dims); :}
+  | name dims     		  @BOTTOM  {: return name.addArrayDims(dims); :}
   ;
 Access name =
     simple_name
@@ -439,9 +468,9 @@ AssertStmt assert_statement =
   | ASSERT expression.e COLON expression.s SEMICOLON {: return new AssertStmt(e, new Opt(s)); :}
   ;
 Expr primary =
-    primary_no_new_array
-  | array_creation_init
-  | array_creation_uninit
+    primary_no_new_array @BOTTOM
+  | array_creation_init 
+  | array_creation_uninit 
   ;
 
 ClassAccess class_literal =
@@ -583,12 +612,12 @@ Access method_invocation =
      return name.qualifiesAccess(s).qualifiesAccess(m); :}
   ;
 Access array_access =
-  name LBRACK expression.e RBRACK
+  name LBRACK expression.e RBRACK 
   {: ArrayAccess a = new ArrayAccess(e);
      a.setStart(LBRACK.getStart());
      a.setEnd(RBRACK.getEnd());
      return name.qualifiesAccess(a); :}
-  | primary_no_new_array.p LBRACK expression.e RBRACK
+  | primary_no_new_array.p LBRACK expression.e RBRACK 
   {: ArrayAccess a = new ArrayAccess(e);
      a.setStart(LBRACK.getStart());
      a.setEnd(RBRACK.getEnd());
@@ -601,22 +630,22 @@ Access array_access =
  */
   ;
 Expr postfix_expression =
-    primary
-  | name
+    primary @BOTTOM
+  | name @BOTTOM
   | postincrement_expression
   | postdecrement_expression
   ;
 Expr postincrement_expression =
-    postfix_expression.e PLUSPLUS              {: return new PostIncExpr(e); :}
+    postfix_expression.e PLUSPLUS @POSTINCDEC {: return new PostIncExpr(e); :}
   ;
 Expr postdecrement_expression =
-    postfix_expression.e MINUSMINUS            {: return new PostDecExpr(e); :}
+    postfix_expression.e MINUSMINUS @POSTINCDEC {: return new PostDecExpr(e); :}
   ;
 Expr unary_expression =
     preincrement_expression
   | predecrement_expression
-  | PLUS unary_expression.e                    {: return new PlusExpr(e); :}
-  | MINUS unary_expression.e                   {: return new MinusExpr(e); :}
+  | PLUS unary_expression.e    @UNARY             {: return new PlusExpr(e); :}
+  | MINUS unary_expression.e   @UNARY            {: return new MinusExpr(e); :}
   | unary_expression_not_plus_minus
   ;
 Expr preincrement_expression =
@@ -626,14 +655,14 @@ Expr predecrement_expression =
     MINUSMINUS unary_expression.e              {: return new PreDecExpr(e); :}
   ;
 Expr unary_expression_not_plus_minus =
-    postfix_expression
+    postfix_expression @BOTTOM
   | COMP unary_expression.e                    {: return new BitNotExpr(e); :}
   | NOT unary_expression.e                     {: return new LogNotExpr(e); :}
   | cast_expression
   ;
 Expr cast_expression =
-    LPAREN primitive_type.t dims.d? RPAREN unary_expression.e      {: return new CastExpr(t.addArrayDims(d), e); :}
-  | LPAREN name.t dims.d? RPAREN unary_expression_not_plus_minus.e {: return new CastExpr(t.addArrayDims(d), e); :}
+    LPAREN primitive_type.t dims.d? RPAREN unary_expression.e  @CAST   {: return new CastExpr(t.addArrayDims(d), e); :}
+  | LPAREN name.t dims.d? RPAREN unary_expression_not_plus_minus.e @CAST {: return new CastExpr(t.addArrayDims(d), e); :}
   ;
 Expr multiplicative_expression =
     unary_expression
@@ -642,18 +671,18 @@ Expr multiplicative_expression =
   | multiplicative_expression.e1 MOD unary_expression.e2   {: return new ModExpr(e1, e2); :}
   ;
 Expr additive_expression =
-    multiplicative_expression
+    multiplicative_expression @BOTTOM
   | additive_expression.e1 PLUS multiplicative_expression.e2   {: return new AddExpr(e1, e2); :}
   | additive_expression.e1 MINUS multiplicative_expression.e2  {: return new SubExpr(e1, e2); :}
   ;
 Expr shift_expression =
-    additive_expression
+    additive_expression @BOTTOM
   | shift_expression.e1 LSHIFT additive_expression.e2   {: return new LShiftExpr(e1, e2); :}
   | shift_expression.e1 RSHIFT additive_expression.e2   {: return new RShiftExpr(e1, e2); :}
   | shift_expression.e1 URSHIFT additive_expression.e2  {: return new URShiftExpr(e1, e2); :}
   ;
 Expr relational_expression =
-    shift_expression
+    shift_expression 
   | relational_expression.e1 LT shift_expression.e2     {: return new LTExpr(e1, e2); :}
   | relational_expression.e1 GT shift_expression.e2     {: return new GTExpr(e1, e2); :}
   | relational_expression.e1 LTEQ shift_expression.e2   {: return new LEExpr(e1, e2); :}
@@ -666,27 +695,27 @@ Expr equality_expression =
   | equality_expression.e1 NOTEQ relational_expression.e2 {: return new NEExpr(e1, e2); :}
   ;
 Expr and_expression =
-    equality_expression
+    equality_expression @BOTTOM
   | and_expression.e1 AND equality_expression.e2        {: return new AndBitwiseExpr(e1, e2); :}
   ;
 Expr exclusive_or_expression =
-    and_expression
+    and_expression @BOTTOM
   | exclusive_or_expression.e1 XOR and_expression.e2    {: return new XorBitwiseExpr(e1, e2); :}
   ;
 Expr inclusive_or_expression =
-    exclusive_or_expression
+    exclusive_or_expression @BOTTOM
   | inclusive_or_expression.e1 OR exclusive_or_expression.e2 {: return new OrBitwiseExpr(e1, e2); :}
   ;
 Expr conditional_and_expression =
-    inclusive_or_expression
+    inclusive_or_expression @BOTTOM
   | conditional_and_expression.e1 ANDAND inclusive_or_expression.e2 {: return new AndLogicalExpr(e1, e2); :}
   ;
 Expr conditional_or_expression =
-    conditional_and_expression
+    conditional_and_expression @BOTTOM
   | conditional_or_expression.e1 OROR conditional_and_expression.e2 {: return new OrLogicalExpr(e1, e2); :}
   ;
 Expr conditional_expression =
-    conditional_or_expression
+    conditional_or_expression @BOTTOM
   | conditional_or_expression.c QUESTION expression.e1 COLON conditional_expression.e2 {: return new ConditionalExpr(c, e1, e2); :}
   ;
 Expr assignment_expression =
