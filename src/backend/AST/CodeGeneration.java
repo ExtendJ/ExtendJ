@@ -33,6 +33,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 
+@SuppressWarnings({"javadoc","unchecked","rawtypes"})
 class CodeGeneration {
 	private ByteArray bytes = new ByteArray();
 	private ConstantPool constantPool;
@@ -321,6 +322,7 @@ class CodeGeneration {
 		bytes.emit(bytecode).add2(p);
 	}
 
+	@Override
 	public String toString() {
 		return bytes.toString();
 	}

@@ -40,15 +40,73 @@ aspect FrontendMain {
   /**
    * Abstract Java compiler frontend.
    */
-  public abstract class Frontend {
+  abstract public class Frontend {
     protected Program program;
 
+    /**
+     * Compile success
+     */
+    public static final int EXIT_SUCCESS = 0;
+
+    /**
+     * Lexical/semantic error.
+     */
+    public static final int EXIT_ERROR = 1;
+
+    /**
+     * Command-line configuration error.
+     */
+    public static final int EXIT_CONFIG_ERROR = 2;
+
+    /**
+     * The compiler terminated by system error.
+     */
+    public static final int EXIT_SYSTEM_ERROR = 3;
+
+    /**
+     * The compiler terminated abnormally.
+     */
+    public static final int EXIT_UNHANDLED_ERROR = 4;
+
+    private final String name;
+    private final String version;
+
+    /**
+     * Initialize the program object.
+     */
     protected Frontend() {
+      this("Unknown", "0");
+    }
+
+    /**
+     * Initialize the program object and set compiler name and version.
+     * @param name compiler name
+     * @param version compiler version
+     */
+    protected Frontend(String name, String version) {
+      this.name = name;
+      this.version = version;
       program = new Program();
       program.state().reset();
     }
 
-    public boolean process(String[] args, BytecodeReader reader, JavaParser parser) {
+    /**
+     * @deprecated Use run instead.
+     */
+    public boolean process(String[] args, BytecodeReader reader,
+        JavaParser parser) {
+      int result = run(args, reader, parser);
+      return result == 0;
+    }
+
+    /**
+     * Process all compilation units listed in the command-line arguments, and
+     * all compilation units referenced from those.
+     * 
+     * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
+     * error, 4 on unhandled error
+     */
+    public int run(String[] args, BytecodeReader reader, JavaParser parser) {
 
       // reset statistics
       program.javaParseTime = 0;
@@ -62,18 +120,21 @@ aspect FrontendMain {
       program.initJavaParser(parser);
 
       initOptions();
-      processArgs(args);
+      int argResult = processArgs(args);
+      if (argResult != 0) {
+        return argResult;
+      }
 
       Collection files = program.options().files();
 
       if (program.options().hasOption("-version")) {
         printVersion();
-        return true;
+        return EXIT_SUCCESS;
       }
 
       if (program.options().hasOption("-help") || files.isEmpty()) {
         printUsage();
-        return true;
+        return EXIT_SUCCESS;
       }
 
       try {
@@ -88,19 +149,22 @@ aspect FrontendMain {
         // process source compilation units
         Iterator<CompilationUnit> iter = program.compilationUnitIterator();
         while (iter.hasNext()) {
-          if (!processCompilationUnit(iter.next())) {
-            return false;
+          int compileResult = processCompilationUnit(iter.next());
+          if (compileResult != 0) {
+            return compileResult;
           }
         }
 
         // process library compilation units
         RobustMap<String, CompilationUnit> valueMap =
-          (RobustMap<String, CompilationUnit>) program.getLibCompilationUnitValueMap();
+          (RobustMap<String, CompilationUnit>)
+            program.getLibCompilationUnitValueMap();
         if (valueMap != null) {
           iter = valueMap.robustValueIterator();
           while (iter.hasNext()) {
-            if (!processCompilationUnit(iter.next())) {
-              return false;
+            int compileResult = processCompilationUnit(iter.next());
+            if (compileResult != 0) {
+              return compileResult;
             }
           }
         }
@@ -108,7 +172,7 @@ aspect FrontendMain {
         System.err.println("Errors:");
         System.err.println("Fatal exception:");
         t.printStackTrace(System.err);
-        return false;
+        return EXIT_UNHANDLED_ERROR;
       } finally {
         if (program.options().hasOption("-profile")) {
           System.out.println("javaParseTime: " + program.javaParseTime);
@@ -119,10 +183,17 @@ aspect FrontendMain {
           System.out.println("codeGenTime: " + program.codeGenTime);
         }
       }
-      return true;
+      return EXIT_SUCCESS;
     }
 
-    protected boolean processCompilationUnit(CompilationUnit unit) {
+    /**
+     * Processes from-source compilation units by error-checking them
+     * and then (if there were no errors) invoking the processNoErrors
+     * method on the compilation unit.
+     *
+     * @return zero on success, non-zero on error
+     */
+    protected int processCompilationUnit(CompilationUnit unit) {
       long start;
 
       if (unit != null && unit.fromSource()) {
@@ -131,16 +202,17 @@ aspect FrontendMain {
           Collection warnings = new LinkedList();
           // compute static semantic errors when there are no parse errors
           // or the recover from parse errors option is specified
-          if(errors.isEmpty() || program.options().hasOption("-recover")) {
+          if (errors.isEmpty() || program.options().hasOption("-recover")) {
             start = System.nanoTime();
             unit.errorCheck(errors, warnings);
             program.errorCheckTime += System.nanoTime() - start;
           }
-          if(!errors.isEmpty()) {
+          if (!errors.isEmpty()) {
             processErrors(errors, unit);
-            return false;
+            return EXIT_ERROR;
           } else {
-            if(!warnings.isEmpty() && !program.options().hasOption("-nowarn")) {
+            if (!warnings.isEmpty() &&
+                !program.options().hasOption("-nowarn")) {
               processWarnings(warnings, unit);
             }
             start = System.nanoTime();
@@ -152,12 +224,16 @@ aspect FrontendMain {
           System.err.println("Fatal exception while processing " +
               unit.pathName() + ":");
           t.printStackTrace(System.err);
-          return false;
+          return EXIT_UNHANDLED_ERROR;
         }
       }
-      return true;
+      return EXIT_SUCCESS;
     }
 
+    /**
+     * Initialize the command-line options.
+     * Override this method to add your own command-line options.
+     */
     protected void initOptions() {
       Options options = program.options();
       options.initOptions();
@@ -184,17 +260,35 @@ aspect FrontendMain {
       options.addKeyOption("-recover");
       options.addKeyOption("-profile"); // output profiling information
     }
-    protected void processArgs(String[] args) {
+
+    /**
+     * Configure the compiler with command-line arguments.
+     * @return 0 if there were no configuration errors
+     */
+    protected int processArgs(String[] args) {
       program.options().addOptions(args);
+      return EXIT_SUCCESS;
     }
 
+    /**
+     * Print the errors.
+     *
+     * @param errors collection of compile problems
+     * @param unit affected compilation unit
+     */
     protected void processErrors(Collection errors, CompilationUnit unit) {
       System.err.println("Errors:");
-      for(Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
+      for (Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
         System.err.println(iter2.next());
       }
     }
 
+    /**
+     * Print the warnings.
+     *
+     * @param warnings collection of compile problems
+     * @param unit affected compilation unit
+     */
     protected void processWarnings(Collection warnings, CompilationUnit unit) {
       System.err.println("Warnings:");
       for(Iterator iter2 = warnings.iterator(); iter2.hasNext(); ) {
@@ -202,9 +296,15 @@ aspect FrontendMain {
       }
     }
 
+    /**
+     * Called for each from-source compilation unit with no errors.
+     */
     protected void processNoErrors(CompilationUnit unit) {
     }
 
+    /**
+     * Echo the command-line usage help to sysout.
+     */
     protected void printUsage() {
       System.out.println(name() + " " + version());
       System.out.println(
@@ -222,12 +322,25 @@ aspect FrontendMain {
           );
     }
 
+    /**
+     * Echo the version to sysout.
+     */
     protected void printVersion() {
       System.out.println(name() + " " + version());
     }
 
-    abstract protected String name();
+    /**
+     * @return the name of the compiler
+     */
+    protected String name() {
+      return name;
+    }
 
-    abstract protected String version();
+    /**
+     * @return the version of the compiler
+     */
+    protected String version() {
+      return version;
+    }
   }
 }

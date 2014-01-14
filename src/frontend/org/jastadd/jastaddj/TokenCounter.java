@@ -48,6 +48,10 @@ import parser.JavaParser.Terminals;
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class TokenCounter {
+	/**
+	 * Count tokens in some Java source files.
+	 * @param args
+	 */
 	public static void main(String[] args) {
 		if (args.length == 0) {
 			System.err.println("No arguments given!");
@@ -71,6 +75,9 @@ public class TokenCounter {
 		System.out.println("tokens: " + numTokens);
 	}
 
+	/**
+	 * Print help
+	 */
 	public static void printHelp() {
 		System.out.println("Usage: TokenCounter <Java files> [@filelist]");
 		System.out.println();
@@ -80,6 +87,10 @@ public class TokenCounter {
 		System.out.println("character increases the total token count by one.");
 	}
 
+	/**
+	 * @param filename
+	 * @return number of tokens in the files listed in the file list
+	 */
 	public static int processFileList(String filename) {
 		int numTokens = 0;
 		try {
@@ -93,6 +104,10 @@ public class TokenCounter {
 		return numTokens;
 	}
 
+	/**
+	 * @param filename
+	 * @return number of tokens in the file
+	 */
 	public static int process(String filename) {
 		int numTokens = 0;
 		File file = new File(filename);

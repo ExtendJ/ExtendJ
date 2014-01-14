@@ -4,48 +4,70 @@
  * modified BSD license with this compiler.
  *
  * Copyright (c) 2005-2008, Torbjorn Ekman
- *               2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
-
 package org.jastadd.jastaddj;
 
 import AST.*;
 
-@SuppressWarnings("javadoc")
+/**
+ * Compile Java programs.
+ */
 public class JavaCompiler extends Frontend {
+
+	/**
+	 * Entry point for the compiler frontend.
+	 * @param args command-line arguments
+	 */
 	public static void main(String args[]) {
-		if(!compile(args))
-			System.exit(1);
+		int exitCode = new JavaCompiler().run(args);
+		if (exitCode != 0) {
+			System.exit(exitCode);
+		}
 	}
 
+	private final JavaParser parser;
+	private final BytecodeParser bytecodeParser;
+
+	/**
+	 * Initialize the compiler.
+	 */
+	public JavaCompiler() {
+		super("JastAddJ", JastAddJVersion.getVersion());
+		parser = new JavaParser() {
+			@Override
+			public CompilationUnit parse(java.io.InputStream is,
+					String fileName) throws java.io.IOException,
+					beaver.Parser.Exception {
+				return new parser.JavaParser().parse(is, fileName);
+			}
+		};
+		bytecodeParser = new BytecodeParser();
+	}
+
+	/**
+	 * @param args command-line arguments
+	 * @return {@code true} on success, {@code false} on error
+	 * @deprecated Use run instead!
+	 */
+	@Deprecated
 	public static boolean compile(String args[]) {
-		boolean result = new JavaCompiler().process(
-				args,
-				new BytecodeParser(),
-				new JavaParser() {
-					@Override
-					public CompilationUnit parse(java.io.InputStream is,
-							String fileName) throws java.io.IOException,
-							beaver.Parser.Exception {
-
-						return new parser.JavaParser().parse(is, fileName);
-					}
-				});
-		return result;
+		return 0 == new JavaCompiler().run(args);
 	}
+
+	/**
+	 * Run the compiler.
+	 * @param args command-line arguments
+	 * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
+	 */
+	public int run(String args[]) {
+		return run(args, bytecodeParser, parser);
+	}
+
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
 		unit.transformation();
 		unit.generateClassfile();
-	}
-
-	@Override
-	protected String name() {
-		return "JastAddJ";
-	}
-	@Override
-	protected String version() {
-		return JastAddJVersion.getVersion();
 	}
 }
