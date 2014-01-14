@@ -67,6 +67,24 @@ Usage:
       -help                     Print a synopsis of standard options
       -version                  Print version information
 
+Extensions
+----------
+
+JastAddJ is intended to be an extensible compiler, however right now we are
+changing things in JastAddJ rapidly and breaking backward-compatibility.
+
+The JastAddJ API up to version 7.1 was mostly much unchanged for several years.
+Since version 7.1 though many things have changed in JastAddJ in order to
+remove side effects, fix errors, and make the code more understandable. The
+next release should be much more stable, but right now JastAddJ is changing
+very much. Most of these non-compatible changes have happened since we moved
+the main development code to bitbucket. What you see in the bitbucket
+repository should be considered unstable.
+
+[See the extension migration guide][1] for more information about migrating
+an extension from an older version of JastAddJ to the latest development
+version.
+
 Debugging
 ---------
 
@@ -83,3 +101,5 @@ tools that can be used to diagnose the problem.
 ASM by OW2 Consortium can be used for advanced instrumentation and analysis
 of bytecode. There is also a useful plugin for eclipse called
 "Bytecode Outline" from OW2.
+
+[1]: https://bitbucket.org/jastadd/jastaddj/src/HEAD/ExtensionMigrationGuide.md?at=master

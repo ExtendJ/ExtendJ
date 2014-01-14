@@ -10,30 +10,55 @@ remove side effects, fix errors, and make the code more understandable. The
 next release should be much more stable, but right now JastAddJ is changing
 very much.
 
-As JastAddJ is changed and refactored, your extensions building on JastAddJ may
-need to be adapted. This guide explains how. Migrating to the latest version of
+If you are maintaining a JastAddJ extension we understand that these API
+changes can be difficult or frustrating to keep up with, but we see the changes
+are seen as a necessary evil.
+
+This guide is meant to help with migrating an extension from an older version
+of JastAddJ to the current version.  Migrating to the latest version of
 JastAddJ means that your extensions will become more conformant with the Java
 specification, due to the bug fixes that have been added to JastAddJ since
-version 7.1. 
+version 7.1. You should also see increased performance after updating.
+
+Please keep in mind that we are still changing JastAddJ rapidly at this moment,
+so if you want to continue with a more stable version you may want to wait for
+the next release.
 
 To migrate your extension, we recommend that you start out with an older
 version of JastAddJ that works with your extension (in most cases version 7.1
 will work), and apply the adaptations one after the other, verifying after each
 step that your extension works as expected. You can easily change your
-currently checked out version of JastAddJ by the command
+currently checked out version of JastAddJ with the commands
 
     cd jastaddj
     git checkout commit-id
 
+This guide should be used together with the ChangeLog. The ChangeLog has less
+detailed descriptions of some commits, but some changes may be omitted here
+and are better covered in the ChangeLog.
+
 If you encounter problems not listed here, please report them on the [JastAddJ
 issue tracker at bitbucket][1].
 
-Jan 7-8, 2017: Fixed/improved semantic error messages
+Jan 14, 2014: Fail if output directory does not exist
 -----------------------------------------------------
 
-**JastAddJ commit [f518c1e][26] (Jan 7, 2014)** (Fixed/improved semantic error messages)
+**JastAddJ commit [7e1d8ef][29]**
 
-**JastAddJ commit [c572865][27] (Jan 8, 2014)** (Fixed some more semantic error messages)
+The `-d` command-line option is used to set the output directory for generated
+class files. Javac does not allow using a directory that does not exist,
+however previous versions of JastAddJ would just create the output directory.
+After this commit JastAddJ will fail with an error message if a non-existent
+output directory is specified.
+
+Jan 7-8, 2014: Fixed/improved semantic error messages
+-----------------------------------------------------
+
+**JastAddJ commit [f518c1e][26] (Jan 7, 2014)** (Fixed/improved semantic error
+messages)
+
+**JastAddJ commit [c572865][27] (Jan 8, 2014)** (Fixed some more semantic error
+messages)
 
 These commits fixed an error where some things were not properly pretty-printed
 in semantic error messages. Some error messages were also altered to be more
@@ -49,13 +74,16 @@ Other error messages should be the same as before the Nov 20 commit below.
 
 ### Extensions that are affected:
 
-+ If you have tests that check the contents of the changed compile-time error messages, these
-might fail, and you will need to update the oracles.
-+ If you have extensions that generate new compile-time error messages, the messages might need to be adapted.
++ If you have tests that check the contents of the changed compile-time error
+  messages, these might fail, and you will need to update the oracles.
++ If you have extensions that generate new compile-time error messages, the
+  messages might need to be adapted.
 
 ### How to adapt:
 
-Go through all your calls to `error("...")`. If you access ASTNodes in them, using implicit calls to `toString()`, these need to be adapted to call `prettyPrint()`. For example, replace
+Go through all your calls to `error("...")`. If you access ASTNodes in them,
+using implicit calls to `toString()`, these need to be adapted to call
+`prettyPrint()`. For example, replace
 
     error("illegal to foo " + getP());
     error("illegal to foo " + getQ().name());
@@ -71,7 +99,8 @@ by
 
 (assuming that `getQ().name()` is a `String`, but `getR().bar()` is an `ASTNode`). 
 
-For real examples, see [this NonNullChecker commit][28], and [the c572865 JastAddJ commit][27].
+For real examples, see [this NonNullChecker commit][28], and [the c572865
+JastAddJ commit][27].
 
 Nov 20, 2013: New semantics for ASTNode.toString()
 --------------------------------------------------
@@ -340,3 +369,4 @@ Update your build file. See [example from JSR308][25]
 [26]: https://bitbucket.org/jastadd/jastaddj/commits/f518c1e12452ee7ebb175afacbc628e717e07e5c
 [27]: https://bitbucket.org/jastadd/jastaddj/commits/c5728657928539e49e9a45942a623ca7711a85f8
 [28]: https://bitbucket.org/jastadd/jastaddj-nonnullchecker/commits/1afb20532a52d9f596872a0acf34ac23524d81a8
+[29]: https://bitbucket.org/jastadd/jastaddj/commits/7e1d8efbb0e2091aea616e433451cf0e969be94e
