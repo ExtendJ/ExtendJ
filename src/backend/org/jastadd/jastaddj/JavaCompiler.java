@@ -9,6 +9,8 @@
  */
 package org.jastadd.jastaddj;
 
+import java.io.File;
+
 import AST.*;
 
 /**
@@ -69,5 +71,25 @@ public class JavaCompiler extends Frontend {
 	protected void processNoErrors(CompilationUnit unit) {
 		unit.transformation();
 		unit.generateClassfile();
+	}
+
+	/**
+	 * Check that the output directory given in args exists.
+	 */
+	@Override
+	public int processArgs(String[] args) {
+		int result = super.processArgs(args);
+		if (result != 0) {
+			return result;
+		}
+		if (program.options().hasValueForOption("-d")) {
+			String destDir = program.options().getValueForOption("-d");
+			File dir = new File(destDir);
+			if (!dir.isDirectory()) {
+				System.err.println("Error: output directory not found: " + destDir);
+				return EXIT_CONFIG_ERROR;
+			}
+		}
+		return 0;
 	}
 }
