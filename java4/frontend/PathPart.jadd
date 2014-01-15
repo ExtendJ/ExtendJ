@@ -287,6 +287,11 @@ aspect PathPart {
     }
 
     /**
+     * @return the path which this path part represents
+     */
+    abstract public String getPath();
+
+    /**
      * Test if a package is available in this path part.
      *
      * <p>The implementations of this method may use caching to improve the
@@ -304,16 +309,16 @@ aspect PathPart {
       return createPathPart(fileName, false);
     }
 
-    private static PathPart createPathPart(String source, boolean fromSource) {
+    private static PathPart createPathPart(String path, boolean fromSource) {
       try {
-        File file = new File(source);
+        File file = new File(path);
         if (file.isDirectory()) {
-          return new FolderPath(file, fromSource);
+          return new FolderPath(path, fromSource);
         } else if (file.isFile()) {
-          return new JarFilePath(file);
+          return new JarFilePath(path);
         }
       } catch (IOException e) {
-        System.err.println("Warning: can not open class path " + source);
+        System.err.println("Warning: can not open class path " + path);
       }
       return null;
     }
@@ -348,10 +353,23 @@ aspect PathPart {
      * The root folder of this path part.
      */
     private final File folder;
+    private final String folderPath;
+
+    public FolderPath(String folderPath, boolean isSource) {
+      super(isSource);
+      this.folder = new File(folderPath);
+      this.folderPath = folderPath;
+    }
 
     public FolderPath(File folder, boolean isSource) {
       super(isSource);
       this.folder = folder;
+      this.folderPath = folder.getPath();
+    }
+
+    @Override
+    public String getPath() {
+      return folderPath;
     }
 
     /**
@@ -400,8 +418,8 @@ aspect PathPart {
 
     @Override
     public ClassSource findSource(String name) {
-      String fileName = name.replace('.', File.separatorChar) + fileSuffix;
-      File classFile = new File(folder, fileName);
+      String filePath = name.replace('.', File.separatorChar) + fileSuffix;
+      File classFile = new File(folder, filePath);
       if (classFile.isFile() && classFile.canRead()) {
         String pathName = classFile.getPath();
         if (isSource) {
@@ -428,10 +446,21 @@ aspect PathPart {
     private final ZipFile jar;
     private final String jarPath;
 
+    public JarFilePath(String jarPath) throws IOException {
+      super(false);
+      this.jar = new ZipFile(jarPath);
+      this.jarPath = jarPath;
+    }
+
     public JarFilePath(File jarFile) throws IOException {
       super(false);
       this.jar = new ZipFile(jarFile);
-      this.jarPath = jar.getName();
+      this.jarPath = jarFile.getPath();
+    }
+
+    @Override
+    public String getPath() {
+      return jarPath;
     }
 
     private static void scanJar(ZipFile jar, Collection<String> packages,
@@ -493,11 +522,16 @@ aspect PathPart {
    * Must point to a .java file.
    */
   public class SourceFilePath extends PathPart {
-    private final String fileName;
+    private final String filePath;
 
     public SourceFilePath(String path) {
       super(true);
-      this.fileName = path;
+      this.filePath = path;
+    }
+
+    @Override
+    public String getPath() {
+      return filePath;
     }
 
     /**
@@ -510,10 +544,10 @@ aspect PathPart {
 
     @Override
     public ClassSource findSource(String name) {
-      if (fileName.equals(name)) {
-        File file = new File(fileName);
+      if (filePath.equals(name)) {
+        File file = new File(filePath);
         if (file.isFile() && file.canRead()) {
-          return new FileClassSource(this, fileName);
+          return new FileClassSource(this, filePath);
         }
       }
       return ClassSource.NONE;
@@ -521,7 +555,7 @@ aspect PathPart {
 
     @Override
     public String toString() {
-      return fileName;
+      return filePath;
     }
   }
 
