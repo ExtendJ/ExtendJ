@@ -75,15 +75,54 @@ Expr relational_expression_nn =
   | relational_expression_nn.e1 LTEQ shift_expression.e2    {: return new LEExpr(e1, e2); :}
   | name.e1 GTEQ shift_expression.e2                        {: return new GEExpr(e1, e2); :}
   | relational_expression_nn.e1 GTEQ shift_expression.e2    {: return new GEExpr(e1, e2); :}
-  | name.e INSTANCEOF reference_type.t                      {: return new InstanceOfExpr(e, t); :}
-  | relational_expression_nn.e INSTANCEOF reference_type.t  {: return new InstanceOfExpr(e, t); :}
+  ;
+/**
+ * Relational expressions are in practice non-associative.  Although the JLS
+ * (version 7, section 15.20) states that relational expressions are
+ * left-associative, it also mentions that it is a compile-time error to use
+ * relational expressions on boolean values.
+ *
+ * In order to avoid a shift-reduce conflict between instanceof and less-than
+ * expressions we have chosen to let instanceof expressions have higher
+ * precedence.  This means the grammar here deviates slightly from the JLS, but
+ * with no effect on actual compileable relational expressions. The parse tree
+ * is slightly different - but you will still get the same type of compile
+ * error.
+ *
+ * This was inspired by the way the CUP Java 1.5 grammar
+ * (http://people.csail.mit.edu/jhbrown/javagrammar/index.html)
+ */
+Expr instanceof_expression_nn =
+    relational_expression_nn
+  | name.e INSTANCEOF reference_type.t                        {: return new InstanceOfExpr(e, t); :}
+  | shift_expression_nn.e INSTANCEOF reference_type.t         {: return new InstanceOfExpr(e, t); :}
   ;
 Expr equality_expression_nn =
-    relational_expression_nn
-  | name.e1 EQEQ relational_expression.e2                     {: return new EQExpr(e1, e2); :}
-  | equality_expression_nn.e1 EQEQ relational_expression.e2   {: return new EQExpr(e1, e2); :}
-  | name.e1 NOTEQ relational_expression.e2                    {: return new NEExpr(e1, e2); :}
-  | equality_expression_nn.e1 NOTEQ relational_expression.e2  {: return new NEExpr(e1, e2); :}
+    instanceof_expression_nn
+  | name.e1 EQEQ instanceof_expression.e2                     {: return new EQExpr(e1, e2); :}
+  | equality_expression_nn.e1 EQEQ instanceof_expression.e2   {: return new EQExpr(e1, e2); :}
+  | name.e1 NOTEQ instanceof_expression.e2                    {: return new NEExpr(e1, e2); :}
+  | equality_expression_nn.e1 NOTEQ instanceof_expression.e2  {: return new NEExpr(e1, e2); :}
+  ;
+/**
+ * Rewrites of Java 1.4 productions to use same precedence as described above
+ * for instanceof_expression_nn.
+ */
+Expr relational_expression :=
+    shift_expression
+  | relational_expression.e1 LT shift_expression.e2     {: return new LTExpr(e1, e2); :}
+  | relational_expression.e1 GT shift_expression.e2     {: return new GTExpr(e1, e2); :}
+  | relational_expression.e1 LTEQ shift_expression.e2   {: return new LEExpr(e1, e2); :}
+  | relational_expression.e1 GTEQ shift_expression.e2   {: return new GEExpr(e1, e2); :}
+  ;
+Expr instanceof_expression =
+    relational_expression
+  | shift_expression.e INSTANCEOF reference_type.t            {: return new InstanceOfExpr(e, t); :}
+  ;
+Expr equality_expression :=
+    instanceof_expression
+  | equality_expression.e1 EQEQ relational_expression.e2  {: return new EQExpr(e1, e2); :}
+  | equality_expression.e1 NOTEQ relational_expression.e2 {: return new NEExpr(e1, e2); :}
   ;
 Expr and_expression_nn =
     equality_expression_nn
