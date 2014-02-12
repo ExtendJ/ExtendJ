@@ -18,7 +18,7 @@ import beaver.Symbol;
 public class JavaScanner extends Scanner{
  	private OriginalScanner scanner;
  	private LinkedList<Symbol> tokenBuffer = new LinkedList<Symbol>();
- 	private boolean foundIntercast = false;
+ 	private boolean foundLparenConstruct = false;
  	private Symbol currentSymbol = null;
  	private Symbol lastSymbol = null;
 	
@@ -81,6 +81,60 @@ public class JavaScanner extends Scanner{
 			case Terminals.SWITCH : return false;
 			case Terminals.FOR : return false;
 			default : return true;	
+		}
+	}
+	
+	/**
+	 * Peeks three tokens ahead to spot an inferred lambda expression
+	 * using a single parameter variable
+	 * @return true if an inferred lambda expression was found, otherwise false
+	 * @throws IOException
+	 * @throws Exception
+	 */
+	private boolean isInferredLambda() throws IOException, Exception {
+		Symbol firstLookahead;
+		Symbol secondLookahead;
+		Symbol thirdLookahead;
+		if(tokenBuffer.size() >= 3) {
+			firstLookahead = tokenBuffer.peek();
+			secondLookahead = tokenBuffer.get(1);
+			thirdLookahead = tokenBuffer.get(2);
+		}
+		else if(tokenBuffer.size() == 2) {
+			firstLookahead = tokenBuffer.peek();
+			secondLookahead = tokenBuffer.get(1);
+			thirdLookahead = scanner.nextToken();
+			tokenBuffer.addLast(thirdLookahead);
+		}
+		else if(tokenBuffer.size() == 1) {
+			firstLookahead = tokenBuffer.peek();
+			secondLookahead = scanner.nextToken();
+			thirdLookahead = scanner.nextToken();
+			tokenBuffer.addLast(secondLookahead);
+			tokenBuffer.addLast(thirdLookahead);
+		}
+		else {
+			firstLookahead = scanner.nextToken();
+			tokenBuffer.addLast(firstLookahead);
+			if(firstLookahead.getId() == Terminals.EOF) {
+				return false;
+			}
+			secondLookahead = scanner.nextToken();
+			tokenBuffer.addLast(secondLookahead);
+			if(secondLookahead.getId() == Terminals.EOF) {
+				return false;
+			}
+			thirdLookahead = scanner.nextToken();
+			tokenBuffer.addLast(thirdLookahead);
+		}
+		
+		if(firstLookahead.getId() == Terminals.IDENTIFIER &&
+				secondLookahead.getId() == Terminals.RPAREN &&
+				thirdLookahead.getId() == Terminals.RARROW) {
+			return true;
+		}
+		else {
+			return false;
 		}
 	}
 	
@@ -294,8 +348,8 @@ public class JavaScanner extends Scanner{
 			token = tokenBuffer.poll();
 		}
 		
-		if(foundIntercast) {
-			foundIntercast = false;
+		if(foundLparenConstruct) {
+			foundLparenConstruct = false;
 			return token;
 		}
 		
@@ -308,13 +362,18 @@ public class JavaScanner extends Scanner{
 				return valueLTSymbol;
 			}
 		}
-		else if(token.getId() == Terminals.LPAREN && !foundIntercast && castContext(lastSymbol)) {
-			if(isAndList()) {
+		else if(token.getId() == Terminals.LPAREN) {
+			if(isAndList() && castContext(lastSymbol)) {
 				if(isIntersectionCast()) {
 					tokenBuffer.addFirst(token);
-					foundIntercast = true;
+					foundLparenConstruct = true;
 					return new Symbol(Terminals.INTERCAST);
 				}
+			}
+			else if(isInferredLambda()) {
+				tokenBuffer.addFirst(token);
+				foundLparenConstruct = true;
+				return new Symbol(Terminals.INFERRED_LAMBDA);
 			}
 		}
 		

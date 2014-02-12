@@ -1,0 +1,36 @@
+aspect Java8TypeCheck {
+	inh TypeDecl LambdaParameters.unknownType();
+	eq LambdaExpr.getLambdaParameters().unknownType() = unknownType();
+	inh TypeDecl InferredParameterDeclaration.unknownType();
+
+	syn lazy TypeDecl LambdaExpr.type() = unknownType();
+	syn lazy TypeDecl MethodReference.type() = unknownType();
+	syn lazy TypeDecl ConstructorReference.type() = unknownType();
+	syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
+	
+	public void BlockLambdaBody.typeCheck() {
+		if(!voidCompatible() && !valueCompatible()) {
+			error("Block lambda bodies must be either void or value compatible");
+		}
+	}
+	
+	refine TypeCheck
+	public void ReturnStmt.typeCheck() {
+		if(enclosingLambda() != null && enclosingLambda().hostType() != hostType()) 
+			return;
+		if(enclosingLambda() == null) {
+			if(hasResult() && !returnType().isVoid()) {
+				if(!getResult().type().assignConversionTo(returnType(), getResult()))
+					error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
+			}
+			// 8.4.5 8.8.5
+			if(returnType().isVoid() && hasResult())
+				error("return stmt may not have an expression in void methods");
+			// 8.4.5
+			if(!returnType().isVoid() && !hasResult())
+				error("return stmt must have an expression in non void methods");
+			if(enclosingBodyDecl() instanceof InstanceInitializer || enclosingBodyDecl() instanceof StaticInitializer)
+				error("Initializers may not return");
+		}
+	}
+}

@@ -1,6 +1,24 @@
 import java.util.concurrent.Callable;
 
-public interface testInterface {
+public class Test {
+	
+
+	
+	public interface TestInterface {
+		public void functMethod(int a, int b, int[][] c); 
+	}
+	
+	public interface NestedTestInterface {
+		public TestInterface functMethod(int a, int b, int c); 
+	}
+	
+	public static void main(String[] args) {
+		int local = 3;
+		TestInterface t = (int b, int c, int[][]... a) -> {};
+    }
+}
+
+/*public interface testInterface {
 	public abstract int value();
 	public default double dValue() {
 		return 5.8;
@@ -117,6 +135,6 @@ public class Test {
 
 		f = (int x, int y) -> x+y;      // Multiple declared-type parameters
 		f = (x,y) -> x+y;               // Multiple inferred-type parameters
-		f = (final int x) -> x+1;       // Modified declared-type parameter */
+		f = (final int x) -> x+1;       // Modified declared-type parameter 
     }
-}
+}*/
