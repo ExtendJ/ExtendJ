@@ -44,15 +44,20 @@ aspect EnhancedForToBytecode {
       gen.addLabel(end_label());
     }
     else {
+      TypeDecl typeIterable = lookupType("java.lang", "Iterable");
+      TypeDecl typeIterator = lookupType("java.util", "Iterator");
+      MethodDecl iteratorMethod = getMethod(typeIterable, "iterator");
+      MethodDecl hasNextMethod = getMethod(typeIterator, "hasNext");
+      MethodDecl nextMethod = getMethod(typeIterator, "next");
       getExpr().createBCode(gen);
-      iteratorMethod().emitInvokeMethod(gen, lookupType("java.lang", "Iterable"));
+      iteratorMethod.emitInvokeMethod(gen, typeIterable);
       gen.emitStoreReference(extraLocalIndex());
       gen.addLabel(cond_label());
       gen.emitLoadReference(extraLocalIndex());
-      hasNextMethod().emitInvokeMethod(gen, lookupType("java.util", "Iterator"));
+      hasNextMethod.emitInvokeMethod(gen, typeIterator);
       gen.emitCompare(Bytecode.IFEQ, end_label());
       gen.emitLoadReference(extraLocalIndex());
-      nextMethod().emitInvokeMethod(gen, lookupType("java.util", "Iterator"));
+      nextMethod.emitInvokeMethod(gen, typeIterator);
       VariableDeclaration obj = getVariableDeclaration();
       if (!obj.type().boxed().isUnknown()) {
         gen.emitCheckCast(obj.type().boxed());
@@ -69,34 +74,21 @@ aspect EnhancedForToBytecode {
     }
   }
 
-  private MethodDecl EnhancedForStmt.iteratorMethod() {
-    TypeDecl typeDecl = lookupType("java.lang", "Iterable");
-    for (Iterator iter = typeDecl.memberMethods("iterator").iterator(); iter.hasNext();) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if (m.getNumParameter() == 0) {
-        return m;
+  /**
+   * Finds one method with the given name, and no parameters, in the specified
+   * type.
+   * @param type type to search for the method declaration
+   * @param name name of the method
+   * @return method declaration
+   */
+  protected static MethodDecl ASTNode.getMethod(TypeDecl type, String name) {
+    Collection<MethodDecl> methods = (Collection<MethodDecl>) type.memberMethods(name);
+    for (MethodDecl method: methods) {
+      if (method.getNumParameter() == 0) {
+        return method;
       }
     }
-    throw new Error("Could not find java.lang.Iterable.iterator()");
-  }
-  private MethodDecl EnhancedForStmt.hasNextMethod() {
-    TypeDecl typeDecl = lookupType("java.util", "Iterator");
-    for (Iterator iter = typeDecl.memberMethods("hasNext").iterator(); iter.hasNext();) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if (m.getNumParameter() == 0) {
-        return m;
-      }
-    }
-    throw new Error("Could not find java.util.Collection.hasNext()");
-  }
-  private MethodDecl EnhancedForStmt.nextMethod() {
-    TypeDecl typeDecl = lookupType("java.util", "Iterator");
-    for (Iterator iter = typeDecl.memberMethods("next").iterator(); iter.hasNext();) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if (m.getNumParameter() == 0) {
-        return m;
-      }
-    }
-    throw new Error("Could not find java.util.Collection.next()");
+    throw new Error("Could not find " + type.typeName() +
+        "." + name + "()");
   }
 }
