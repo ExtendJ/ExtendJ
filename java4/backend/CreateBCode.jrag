@@ -73,15 +73,15 @@ aspect CreateBCode {
     throw new Error("Could not generate code for initializers in " + hostType().typeName());
   }
   private void TypeDecl.generateBytecodes(CodeGeneration gen) {
-    for(int i = 0; i < getNumBodyDecl(); i++) {
+    for (int i = 0; i < getNumBodyDecl(); i++) {
       BodyDecl b = getBodyDecl(i);
-      if(b instanceof FieldDeclaration && b.isBytecodeField()) {
+      if (b instanceof FieldDeclaration && b.isBytecodeField()) {
         FieldDeclaration f = (FieldDeclaration)b;
-        if(f.isStatic() && f.hasInit()) {
-          f.emitInitializerBCode(gen, this);
+        if (f.isStatic() && f.hasInit()) {
+          f.emitInitializerBCode(gen);
+          f.emitStoreField(gen, this);
         }
-      }
-      else if(b instanceof StaticInitializer) {
+      } else if (b instanceof StaticInitializer) {
         b.createBCode(gen);
       }
     }
@@ -193,18 +193,18 @@ aspect CreateBCode {
         localIndex += v.type().variableSize();
     }
 
-    if(needsInit) {
+    if (needsInit) {
       TypeDecl typeDecl = hostType();
-      for(int i = 0; i < typeDecl.getNumBodyDecl(); i++) {
+      for (int i = 0; i < typeDecl.getNumBodyDecl(); i++) {
         BodyDecl b = typeDecl.getBodyDecl(i);
-        if(b instanceof FieldDeclaration && b.isBytecodeField()) {
+        if (b instanceof FieldDeclaration && b.isBytecodeField()) {
           FieldDeclaration f = (FieldDeclaration)b;
-          if(!f.isStatic() && f.hasInit()) {
+          if (!f.isStatic() && f.hasInit()) {
             gen.emit(Bytecode.ALOAD_0);
-            f.emitInitializerBCode(gen, hostType());
+            f.emitInitializerBCode(gen);
+            f.emitStoreField(gen, hostType());
           }
-        }
-        else if(b instanceof InstanceInitializer) {
+        } else if (b instanceof InstanceInitializer) {
           b.createBCode(gen);
         }
       }
@@ -265,6 +265,14 @@ aspect CreateBCode {
    * Generate variable initialization bytecode.
    */
   public void VariableDeclaration.emitInitializerBCode(CodeGeneration gen) {
+    getInit().createBCode(gen);
+    getInit().type().emitAssignConvTo(gen, type()); // AssignConversion
+  }
+
+  /**
+   * Generate field initialization bytecode.
+   */
+  public void FieldDeclaration.emitInitializerBCode(CodeGeneration gen) {
     getInit().createBCode(gen);
     getInit().type().emitAssignConvTo(gen, type()); // AssignConversion
   }
