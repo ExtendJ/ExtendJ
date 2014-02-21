@@ -78,9 +78,7 @@ aspect CreateBCode {
       if(b instanceof FieldDeclaration && b.isBytecodeField()) {
         FieldDeclaration f = (FieldDeclaration)b;
         if(f.isStatic() && f.hasInit()) {
-          f.getInit().createBCode(gen);
-          f.getInit().type().emitAssignConvTo(gen, f.type()); // AssignConversion
-          f.emitStoreField(gen, this);
+          f.emitInitializerBCode(gen, this);
         }
       }
       else if(b instanceof StaticInitializer) {
@@ -203,9 +201,7 @@ aspect CreateBCode {
           FieldDeclaration f = (FieldDeclaration)b;
           if(!f.isStatic() && f.hasInit()) {
             gen.emit(Bytecode.ALOAD_0);
-            f.getInit().createBCode(gen);
-            f.getInit().type().emitAssignConvTo(gen, f.type()); // AssignConversion
-            f.emitStoreField(gen, hostType());
+            f.emitInitializerBCode(gen, hostType());
           }
         }
         else if(b instanceof InstanceInitializer) {
@@ -258,12 +254,19 @@ aspect CreateBCode {
 
   public void VariableDeclaration.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    if(hasInit()) {
+    if (hasInit()) {
       gen.addLocalVariableEntryAtCurrentPC(name(), type().typeDescriptor(), localNum(), variableScopeEndLabel(gen));
-      getInit().createBCode(gen);
-      getInit().type().emitAssignConvTo(gen, type()); // AssignConversion
+      emitInitializerBCode(gen);
       type().emitStoreLocal(gen, localNum());
     }
+  }
+
+  /**
+   * Generate variable initialization bytecode.
+   */
+  public void VariableDeclaration.emitInitializerBCode(CodeGeneration gen) {
+    getInit().createBCode(gen);
+    getInit().type().emitAssignConvTo(gen, type()); // AssignConversion
   }
 
   // simple assign expression
