@@ -417,35 +417,32 @@ aspect CodeGeneration {
   // emitInvoke
 
   public void MethodDecl.emitInvokeMethod(CodeGeneration gen, TypeDecl hostType) {
-    if(hostType.isInterfaceDecl()) {
-      int size = type().variableSize() - 1;
-      for(int i = 0; i < getNumParameter(); i++)
-        size -= getParameter(i).type().variableSize();
+    if (hostType.isInterfaceDecl()) {
       String classname = hostType.constantPoolName();
       String      desc = descName();
       String      name = name();
       int index = gen.constantPool().addInterfaceMethodref(classname, name, desc);
       int numArg = 1; // instance
-      for(int i = 0; i < getNumParameter(); i++)
+      for (int i = 0; i < getNumParameter(); i++) {
         numArg += getParameter(i).type().variableSize();
-      gen.emit(Bytecode.INVOKEINTERFACE, size).add2(index).add(numArg).add(0);
-    }
-    else {
+      }
+      int stackChange = type().variableSize() - numArg;
+      gen.emit(Bytecode.INVOKEINTERFACE, stackChange)
+            .add2(index).add(numArg).add(0);
+    } else {
       String classname = hostType.constantPoolName();
       String      desc = descName();
       String      name = name();
       int index = gen.constantPool().addMethodref(classname, name, desc);
-      if(isStatic()) {
-        int size = type().variableSize();
-        for(int i = 0; i < getNumParameter(); i++)
-          size -= getParameter(i).type().variableSize();
-        gen.emit(Bytecode.INVOKESTATIC, size).add2(index);
+      int stackChange = type().variableSize();
+      for (int i = 0; i < getNumParameter(); i++) {
+          stackChange -= getParameter(i).type().variableSize();
       }
-      else {
-        int size = type().variableSize() - 1;
-        for(int i = 0; i < getNumParameter(); i++)
-          size -= getParameter(i).type().variableSize();
-        gen.emit(Bytecode.INVOKEVIRTUAL, size).add2(index);
+      if (isStatic()) {
+        gen.emit(Bytecode.INVOKESTATIC, stackChange).add2(index);
+      } else {
+        stackChange -= 1;
+        gen.emit(Bytecode.INVOKEVIRTUAL, stackChange).add2(index);
       }
     }
   }
@@ -455,26 +452,29 @@ aspect CodeGeneration {
     String      desc = descName();
     String      name = name();
     int index = gen.constantPool().addMethodref(classname, name, desc);
-    int size = type().variableSize() - 1;
-    for(int i = 0; i < getNumParameter(); i++)
-      size -= getParameter(i).type().variableSize();
-    gen.emit(Bytecode.INVOKESPECIAL, size).add2(index);
+    int stackChange = type().variableSize() - 1;
+    for (int i = 0; i < getNumParameter(); i++) {
+      stackChange -= getParameter(i).type().variableSize();
+    }
+    gen.emit(Bytecode.INVOKESPECIAL, stackChange).add2(index);
   }
 
   public void ConstructorDecl.emitInvokeConstructor(CodeGeneration gen) {
-    int size = -1;
-    for(int i = 0; i < getNumParameter(); i++)
-      size -= getParameter(i).type().variableSize();
-    if(hostType().needsEnclosing())
-      size--;
-    if(hostType().needsSuperEnclosing()) {
-      size--;
+    int stackChange = -1;
+    for (int i = 0; i < getNumParameter(); i++) {
+      stackChange -= getParameter(i).type().variableSize();
+    }
+    if (hostType().needsEnclosing()) {
+      stackChange -= 1;
+    }
+    if (hostType().needsSuperEnclosing()) {
+      stackChange -= 1;
     }
     String classname = hostType().constantPoolName();
     String      desc = descName();
     String      name = "<init>";
     int index = gen.constantPool().addMethodref(classname, name, desc);
-    gen.emit(Bytecode.INVOKESPECIAL, size).add2(index);
+    gen.emit(Bytecode.INVOKESPECIAL, stackChange).add2(index);
   }
 
   // emitNew
