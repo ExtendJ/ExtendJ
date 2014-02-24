@@ -137,17 +137,28 @@ aspect FrontendMain {
         return EXIT_SUCCESS;
       }
 
+      Collection<CompilationUnit> work = new LinkedList<CompilationUnit>();
+
       try {
         for (String file: files) {
           program.addSourceFile(file);
         }
 
+        int compileResult = EXIT_SUCCESS;
+
         // process source compilation units
         Iterator<CompilationUnit> iter = program.compilationUnitIterator();
         while (iter.hasNext()) {
-          int compileResult = processCompilationUnit(iter.next());
-          if (compileResult != 0) {
-            return compileResult;
+          CompilationUnit unit = iter.next();
+          work.add(unit);
+          int result = processCompilationUnit(unit);
+          switch (result) {
+            case EXIT_SUCCESS:
+              break;
+            case EXIT_UNHANDLED_ERROR:
+              return result;
+            default:
+              compileResult = result;
           }
         }
 
@@ -158,12 +169,32 @@ aspect FrontendMain {
         if (valueMap != null) {
           iter = valueMap.robustValueIterator();
           while (iter.hasNext()) {
-            int compileResult = processCompilationUnit(iter.next());
-            if (compileResult != 0) {
-              return compileResult;
+            CompilationUnit unit = iter.next();
+            work.add(unit);
+            int result = processCompilationUnit(unit);
+            switch (result) {
+              case EXIT_SUCCESS:
+                break;
+              case EXIT_UNHANDLED_ERROR:
+                return result;
+              default:
+                compileResult = result;
             }
           }
         }
+
+        if (compileResult != EXIT_SUCCESS) {
+          return compileResult;
+        }
+
+        for (CompilationUnit unit: work) {
+          if (unit != null && unit.fromSource()) {
+            long start = System.nanoTime();
+            processNoErrors(unit);
+            program.codeGenTime += System.nanoTime() - start;
+          }
+        }
+
       } catch (Throwable t) {
         System.err.println("Errors:");
         System.err.println("Fatal exception:");
@@ -183,9 +214,8 @@ aspect FrontendMain {
     }
 
     /**
-     * Processes from-source compilation units by error-checking them
-     * and then (if there were no errors) invoking the processNoErrors
-     * method on the compilation unit.
+     * Processes from-source compilation units by error-checking them.
+     * This method only report semantic errors and warnings.
      *
      * @return zero on success, non-zero on error
      */
@@ -211,9 +241,6 @@ aspect FrontendMain {
                 !program.options().hasOption("-nowarn")) {
               processWarnings(warnings, unit);
             }
-            start = System.nanoTime();
-            processNoErrors(unit);
-            program.codeGenTime += System.nanoTime() - start;
           }
         } catch (Throwable t) {
           System.err.println("Errors:");
