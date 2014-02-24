@@ -54,12 +54,11 @@ aspect PreciseRethrow {
 
   syn boolean Stmt.modifiedInScope(Variable var);
   eq VarDeclStmt.modifiedInScope(Variable var) = false;
-  eq VariableDeclaration.modifiedInScope(Variable var) = false;
+  eq VariableDeclaration.modifiedInScope(Variable var) =
+    hasInit() && getInit().modifiedInScope(var);
   eq EmptyStmt.modifiedInScope(Variable var) = false;
   eq LabeledStmt.modifiedInScope(Variable var) =
     getStmt().modifiedInScope(var);
-  eq ExprStmt.modifiedInScope(Variable var) =
-    getExpr().modifiedInScope(var);
   eq Block.modifiedInScope(Variable var) {
     for (Stmt stmt : getStmtList())
       if (stmt.modifiedInScope(var))
@@ -109,8 +108,59 @@ aspect PreciseRethrow {
   syn boolean CatchClause.modifiedInScope(Variable var) =
     getBlock().modifiedInScope(var);
   syn boolean Expr.modifiedInScope(Variable var) = false;
+  eq AbstractDot.modifiedInScope(Variable var) =
+    getLeft().modifiedInScope(var);
+  eq VarAccess.modifiedInScope(Variable var) = false;
   eq AssignExpr.modifiedInScope(Variable var) =
-    getDest().isVariable(var);
+    getDest().isVariable(var) || getSource().modifiedInScope(var);
+  eq ExprStmt.modifiedInScope(Variable var) =
+    getExpr().modifiedInScope(var);
+  eq Binary.modifiedInScope(Variable var) =
+    getLeftOperand().modifiedInScope(var) ||
+    getRightOperand().modifiedInScope(var);
+  eq Unary.modifiedInScope(Variable var) = getOperand().modifiedInScope(var);
+  eq ParExpr.modifiedInScope(Variable var) = getExpr().modifiedInScope(var);
+  eq CastExpr.modifiedInScope(Variable var) = getExpr().modifiedInScope(var);
+  eq InstanceOfExpr.modifiedInScope(Variable var) =
+    getExpr().modifiedInScope(var);
+  eq ClassInstanceExpr.modifiedInScope(Variable var) {
+    for (int i = 0; i < getNumArg(); ++i) {
+      if (getArg(i).modifiedInScope(var)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  eq MethodAccess.modifiedInScope(Variable var) {
+    for (int i = 0; i < getNumArg(); ++i) {
+      if (getArg(i).modifiedInScope(var)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  eq ConstructorAccess.modifiedInScope(Variable var) {
+    for (int i = 0; i < getNumArg(); ++i) {
+      if (getArg(i).modifiedInScope(var)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  eq ArrayInit.modifiedInScope(Variable var) {
+    for (int i = 0; i < getNumInit(); ++i) {
+      if (getInit(i).modifiedInScope(var)) {
+        return true;
+      }
+    }
+    return false;
+  }
+  eq ArrayCreationExpr.modifiedInScope(Variable var) =
+    hasArrayInit() && getArrayInit().modifiedInScope(var);
+  eq ConditionalExpr.modifiedInScope(Variable var) =
+    getCondition().modifiedInScope(var) ||
+    getTrueExpr().modifiedInScope(var) ||
+    getFalseExpr().modifiedInScope(var);
 
   syn boolean Expr.isVariable(Variable var) = false;
   eq VarAccess.isVariable(Variable var) = decl() == var;
