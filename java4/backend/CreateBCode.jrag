@@ -72,15 +72,13 @@ aspect CreateBCode {
       return gen;
     throw new Error("Could not generate code for initializers in " + hostType().typeName());
   }
+
   private void TypeDecl.generateBytecodes(CodeGeneration gen) {
     for (int i = 0; i < getNumBodyDecl(); i++) {
       BodyDecl b = getBodyDecl(i);
       if (b instanceof FieldDeclaration && b.isBytecodeField()) {
         FieldDeclaration f = (FieldDeclaration)b;
-        if (f.isStatic() && f.hasInit()) {
-          f.emitInitializerBCode(gen);
-          f.emitStoreField(gen, this);
-        }
+        f.emitStaticInitializer(gen, this);
       } else if (b instanceof StaticInitializer) {
         b.createBCode(gen);
       }
@@ -199,11 +197,7 @@ aspect CreateBCode {
         BodyDecl b = typeDecl.getBodyDecl(i);
         if (b instanceof FieldDeclaration && b.isBytecodeField()) {
           FieldDeclaration f = (FieldDeclaration)b;
-          if (!f.isStatic() && f.hasInit()) {
-            gen.emit(Bytecode.ALOAD_0);
-            f.emitInitializerBCode(gen);
-            f.emitStoreField(gen, hostType());
-          }
+          f.emitInstanceInitializer(gen, hostType());
         } else if (b instanceof InstanceInitializer) {
           b.createBCode(gen);
         }
@@ -264,20 +258,43 @@ aspect CreateBCode {
   /**
    * Generate variable initialization bytecode.
    */
-  public void VariableDeclaration.emitInitializerBCode(CodeGeneration gen) {
+  protected void VariableDeclaration.emitInitializerBCode(CodeGeneration gen) {
     getInit().createBCode(gen);
-    getInit().type().emitAssignConvTo(gen, type()); // AssignConversion
+    getInit().type().emitAssignConvTo(gen, type());
+  }
+
+  /**
+   * Generate static initialization code for the field.
+   */
+  public void FieldDeclaration.emitStaticInitializer(CodeGeneration gen, TypeDecl hostType) {
+    if (isStatic() && hasInit()) {
+      emitInitializerBCode(gen);
+      emitStoreField(gen, hostType);
+    }
+  }
+
+  /**
+   * Generate instance initialization code for the field.
+   */
+  public void FieldDeclaration.emitInstanceInitializer(CodeGeneration gen, TypeDecl hostType) {
+    if (!isStatic() && hasInit()) {
+      gen.emit(Bytecode.ALOAD_0);
+      emitInitializerBCode(gen);
+      emitStoreField(gen, hostType);
+    }
   }
 
   /**
    * Generate field initialization bytecode.
    */
-  public void FieldDeclaration.emitInitializerBCode(CodeGeneration gen) {
+  protected void FieldDeclaration.emitInitializerBCode(CodeGeneration gen) {
     getInit().createBCode(gen);
-    getInit().type().emitAssignConvTo(gen, type()); // AssignConversion
+    getInit().type().emitAssignConvTo(gen, type());
   }
 
-  // simple assign expression
+  /**
+   * Create bytecode for a simple assign expression.
+   */
   public void AssignSimpleExpr.createBCode(CodeGeneration gen) {
     getDest().createAssignSimpleLoadDest(gen);
     getSource().createBCode(gen);
@@ -288,7 +305,9 @@ aspect CreateBCode {
     getDest().emitStore(gen);
   }
 
-  // compund assign expression
+  /**
+   * Create bytecode for a compund assign expression.
+   */
   public void AssignExpr.createBCode(CodeGeneration gen) {
     TypeDecl dest = getDest().type();
     TypeDecl source = getSource().type();
