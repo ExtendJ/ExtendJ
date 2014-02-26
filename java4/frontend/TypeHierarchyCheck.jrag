@@ -95,15 +95,18 @@ aspect TypeHierarchyCheck {
   }
 
   public void SuperAccess.nameCheck() {
-    if(isQualified()) {
-      if(!hostType().isInnerTypeOf(decl()) && hostType() != decl())
+    if (isQualified()) {
+      if (!hostType().isInnerTypeOf(decl()) && hostType() != decl()) {
         error("qualified super must name an enclosing type");
-      if(inStaticContext()) {
+      }
+      if (inStaticContext()) {
         error("*** Qualified super may not occur in static context");
       }
     }
     // 8.8.5.1
-    if (inExplicitConstructorInvocation() && hostType().instanceOf(decl().hostType())) {
+    // JLSv7 8.8.7.1
+    TypeDecl constructorHostType = enclosingExplicitConstructorHostType();
+    if (constructorHostType != null && (constructorHostType == decl())) {
       error("super may not be accessed in an explicit constructor invocation");
     }
     // 8.4.3.2
@@ -114,7 +117,9 @@ aspect TypeHierarchyCheck {
 
   public void ThisAccess.nameCheck() {
     // 8.8.5.1
-    if (inExplicitConstructorInvocation() && hostType() == type()) {
+    // JLSv7 8.8.7.1
+    TypeDecl constructorHostType = enclosingExplicitConstructorHostType();
+    if (constructorHostType != null && (constructorHostType == decl())) {
       error("this may not be accessed in an explicit constructor invocation");
     } else if (isQualified()) {
       // 15.8.4
@@ -130,8 +135,6 @@ aspect TypeHierarchyCheck {
     }
   }
 
-
-
   // 8.8.5.1
   inh boolean VarAccess.inExplicitConstructorInvocation();
   inh boolean MethodAccess.inExplicitConstructorInvocation();
@@ -144,6 +147,14 @@ aspect TypeHierarchyCheck {
   eq ConstructorAccess.getArg().inExplicitConstructorInvocation() = true;
   eq SuperConstructorAccess.getArg().inExplicitConstructorInvocation() = true;
   eq ConstructorDecl.getConstructorInvocation().inExplicitConstructorInvocation() = true;
+
+  inh TypeDecl SuperAccess.enclosingExplicitConstructorHostType();
+  inh TypeDecl ThisAccess.enclosingExplicitConstructorHostType();
+
+  eq Program.getChild().enclosingExplicitConstructorHostType() = null;
+  eq ConstructorAccess.getArg().enclosingExplicitConstructorHostType() = hostType();
+  eq SuperConstructorAccess.getArg().enclosingExplicitConstructorHostType() = hostType();
+  eq ConstructorDecl.getConstructorInvocation().enclosingExplicitConstructorHostType() = hostType();
 
   inh boolean Expr.inStaticContext(); // SuperAccess, ThisAccess, ClassInstanceExpr, MethodAccess
   inh lazy boolean TypeDecl.inStaticContext();
