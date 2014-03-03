@@ -1,0 +1,438 @@
+aspect FunctionalInterface {
+
+	syn lazy boolean InterfaceDecl.isFunctional();
+	
+	//8.4.2
+	syn boolean GenericMethodDecl.sameSignature(MethodDecl m) {
+		if(!(m instanceof GenericMethodDecl))
+			return false;
+		GenericMethodDecl gm = (GenericMethodDecl)m;
+		if(!name().equals(gm.name()) || !sameTypeParameters(gm) || !sameFormalParameters(gm))
+			return false;
+		else
+			return true;
+	}
+	
+	refine MethodDecl
+	eq MethodDecl.fullSignature() {
+		StringBuilder sb = new StringBuilder();
+		sb.append(name() + "(");
+		for (int i = 0; i < getNumParameter(); i++) {
+			if (i != 0) {
+				sb.append(", ");
+			}
+			if(getParameter(i).type() instanceof PrimitiveType)
+				sb.append(getParameter(i).type().typeName());
+			else
+				sb.append(getParameter(i).type().fullName());
+		}
+		sb.append(")");
+		return sb.toString();
+	}
+	
+	syn lazy boolean MethodDecl.subsignatureTo(MethodDecl m) {
+		if(fullSignature().equals(m.fullSignature()))
+			return true;
+		else if(fullSignature().equals(m.signature()))
+			return true;
+		else
+			return false;
+	}	
+	
+	syn lazy boolean GenericMethodDecl.subsignatureTo(MethodDecl m) {
+		if(m instanceof GenericMethodDecl) {
+			GenericMethodDecl gm = (GenericMethodDecl)m;
+			if(this == gm)
+				return true;
+			if(!sameSignature(gm))
+				return false;
+			return true;
+		}
+		else {
+			//A generic method can never be subsignature to a non-generic method
+			return false;
+		}
+	}
+	
+
+	//8.4.5
+	syn lazy boolean MethodDecl.returnTypeSubstitutableFor(MethodDecl m) {
+		TypeDecl t1 = type();
+		TypeDecl t2 = m.type();
+		if(t1 instanceof VoidType && t2 instanceof VoidType) {
+			return true;
+		}
+		else if(t1 instanceof PrimitiveType && t2 instanceof PrimitiveType) {
+			PrimitiveType p1 = (PrimitiveType)t1;
+			PrimitiveType p2 = (PrimitiveType)t2;
+			return p1 == p2;
+		}
+		else if(t1 instanceof ReferenceType && t2 instanceof ReferenceType) {
+			ReferenceType r1 = (ReferenceType)t1;
+			ReferenceType r2 = (ReferenceType)t2;
+			if(r1.strictSubtype(r2))
+				return true;
+			else 
+				return t1 == r2.erasure();
+		}
+		else
+			return false;
+	}
+	
+	
+	//8.4.4
+	syn lazy boolean GenericMethodDecl.sameTypeParameters(GenericMethodDecl gm) {
+		if(getNumTypeParameter() != gm.getNumTypeParameter())
+			return false;
+		
+		
+		for(int i = 0; i < getNumTypeParameter(); i++) {
+			TypeVariable tv1 = getTypeParameter(i);
+			TypeVariable tv2 = gm.getTypeParameter(i);
+			if(tv1.getNumTypeBound() != tv2.getNumTypeBound())
+				return false;
+				
+			/* The bounds have to be the same in the way that a bound
+			that exists in type variable tv1 must exist exactly the same
+			number of times in tv2, but the order doesn't matter */
+			
+			boolean[] checkedBound = new boolean[tv1.getNumTypeBound()];
+			
+			for(int j = 0; j < tv1.getNumTypeBound(); j++) {
+				boolean found = false;
+				for(int k = 0; k < tv2.getNumTypeBound(); k++) {
+					if(checkedBound[k]) {
+						continue;
+					}
+					Access a1 = tv1.getTypeBound(j);
+					Access a2 = tv2.getTypeBound(k);
+					
+					/*
+					This check is for when a method in a generic interface with 
+					non-specified type parameters is compared with a method in another
+					generic interface with specified type parameters. The unspecified
+					will have a bound of unknown type. Javac still treats these 
+					methods as override-equivalent. 
+					*/
+					if(j == 0 && k == 0) {
+						if(a1.type() instanceof TypeVariable && a2.type() instanceof UnknownType 
+						|| a2.type() instanceof TypeVariable && a1.type() instanceof UnknownType) {
+							checkedBound[k] = true;
+							found = true;
+							break;
+						}		
+					}
+					
+					if(a1.sameType(a2)) {
+						checkedBound[k] = true;
+						found = true;
+						break;
+					}
+				}
+				if(!found) {
+					return false;
+				}
+			}
+		}	
+		return true;
+	}
+	
+	//8.4.2
+	syn lazy boolean GenericMethodDecl.sameFormalParameters(GenericMethodDecl gm) {
+		if(getNumParameter() != gm.getNumParameter())
+			return false;
+		if(getNumParameter() == 0)
+			return true;
+		
+		for(int i = 0; i < getNumParameter(); i++) {
+			ParameterDeclaration p1 = getParameter(i);
+			ParameterDeclaration p2 = gm.getParameter(i);
+			Access a1 = p1.getTypeAccess();
+			Access a2 = p2.getTypeAccess();
+			if(!a1.sameType(a2))
+				return false;
+		}
+		return true;
+	}
+	
+	/*
+	Checks that two type accesses are the same, while taking type variable substitution
+	into account.
+	*/
+	public boolean Access.sameType(Access a) {
+		if(this instanceof ArrayTypeAccess && a instanceof ArrayTypeAccess) {
+			ArrayTypeAccess at1 = (ArrayTypeAccess)this;
+			ArrayTypeAccess at2 = (ArrayTypeAccess)a;
+			return at1.sameType(at2);
+		}
+		else if(this instanceof AbstractWildcard && a instanceof AbstractWildcard) {
+			AbstractWildcard w1 = (AbstractWildcard)this;
+			AbstractWildcard w2 = (AbstractWildcard)a;
+			return w1.sameType(w2);
+		}
+		else if(this instanceof TypeAccess && a instanceof TypeAccess) {
+			TypeAccess t1 = (TypeAccess)this;
+			TypeAccess t2 = (TypeAccess)a;
+			return t1.sameType(t2);
+		}
+		else if(this instanceof ParTypeAccess && a instanceof ParTypeAccess) {
+			ParTypeAccess pta1 = (ParTypeAccess)this;
+			ParTypeAccess pta2 = (ParTypeAccess)a;
+			return pta1.sameType(pta2);
+		}
+		else
+			return false;
+	}
+	
+	public boolean TypeAccess.sameType(TypeAccess t) {
+		/*
+		First, two type variables that are to be compared are checked to see if they are 
+		both declared by methods and that one of the methods is not inside the scope of the other
+		method. If this is the case it is enough to simply check that the positions are equal. 
+		Otherwise the types has to equal. 
+		*/
+		
+		if(type() instanceof TypeVariable && t.type() instanceof TypeVariable) {
+			TypeVariable t1 = (TypeVariable)type();
+			TypeVariable t2 = (TypeVariable)t.type();
+			if(t1.typeVarInMethod() && t2.typeVarInMethod() && t1.genericMethodLevel() == t2.genericMethodLevel()) {
+				return t1.typeVarPosition() == t2.typeVarPosition();
+			}
+			else {
+				return t1 == t2;
+			}
+		}
+		else if(type() instanceof TypeVariable && !(t.type() instanceof TypeVariable) ||
+			t.type() instanceof TypeVariable && !(type() instanceof TypeVariable) ) {
+			return false;
+		}
+		else if(type() == t.type())
+			return true;
+		else
+			return false;
+	}
+	
+	public boolean ParTypeAccess.sameType(ParTypeAccess p) {
+		TypeAccess ta1 = (TypeAccess)getTypeAccess();
+		TypeAccess ta2 = (TypeAccess)p.getTypeAccess();
+		if(!ta1.sameType(ta2))
+			return false;
+		
+		if(getNumTypeArgument() != p.getNumTypeArgument())
+			return false;
+		
+		for(int i = 0; i < getNumTypeArgument(); i++) {
+			Access a1 = getTypeArgument(i);
+			Access a2 = p.getTypeArgument(i);
+			if(!a1.sameType(a2))
+				return false;
+		}
+		
+		return true;
+	}
+	
+	public boolean AbstractWildcard.sameType(AbstractWildcard w) {
+		if(this instanceof Wildcard && w instanceof Wildcard) {
+			return true;
+		}
+		else if(this instanceof WildcardExtends && w instanceof WildcardExtends) {
+			Access a1 = ((WildcardExtends)this).getAccess();
+			Access a2 = ((WildcardExtends)w).getAccess();
+			return a1.sameType(a2);
+		}
+		else if(this instanceof WildcardSuper && w instanceof WildcardSuper) {
+			Access a1 = ((WildcardSuper)this).getAccess();
+			Access a2 = ((WildcardSuper)w).getAccess();
+			return a1.sameType(a2);
+		}
+		else {
+			return false;
+		}
+	}
+	
+	public boolean ArrayTypeAccess.sameType(ArrayTypeAccess a) {
+		ArrayTypeAccess at1 = this;
+		ArrayTypeAccess at2 = a;
+		while(true) {
+			Access a1 = at1.getAccess();
+			Access a2 = at2.getAccess();
+			if(a1 instanceof ArrayTypeAccess && a2 instanceof ArrayTypeAccess) {
+				at1 = (ArrayTypeAccess)a1;
+				at2 = (ArrayTypeAccess)a2;
+				continue;
+			}
+			else {
+				return a1.sameType(a2);
+			}
+		}
+	}
+	
+	// 9.8
+	eq InterfaceDecl.isFunctional() {
+		LinkedList<MethodDecl> methods = collectAbstractMethods();
+		boolean foundMethod = false;
+		
+		if(methods.size() == 0)
+			return false;
+		else if(methods.size() == 1)
+			return true;
+		else  {
+			for(MethodDecl current : methods) {
+				foundMethod = true;
+				for(MethodDecl inner : methods) {
+					if(!current.subsignatureTo(inner) || !current.returnTypeSubstitutableFor(inner)) {
+						foundMethod = false;
+					}
+				}
+				if(foundMethod)
+					break;
+			}		
+		}
+		
+		return foundMethod;
+	}
+	
+	//9.8
+	syn lazy LinkedList<MethodDecl> InterfaceDecl.collectAbstractMethods() {
+		LinkedList<MethodDecl> methods = new LinkedList<MethodDecl>();
+		Map<String, SimpleSet> map = localMethodsSignatureMap();
+		Map<String, SimpleSet> objectMethods = typeObject().methodsSignatureMap();
+		MethodDecl inObject;
+		
+		for(Object o : map.entrySet()) {
+			Map.Entry<String, MethodDecl> entry = (Map.Entry<String, MethodDecl>)o;
+			MethodDecl m = entry.getValue();
+			
+			inObject = (MethodDecl)objectMethods.get(m.signature());
+			if(m.isAbstract() && inObject == null) {
+				methods.add(m);
+			}
+			else if(m.isAbstract() && !inObject.isPublic()) {
+				methods.add(m);
+			}
+		}
+		
+		for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext();) {
+			TypeDecl typeDecl = (TypeDecl)outerIter.next();
+			for(Iterator iter = typeDecl.methodsIterator(); iter.hasNext();) {
+				MethodDecl m = (MethodDecl)iter.next();
+				inObject = (MethodDecl)objectMethods.get(m.signature());
+				if(m.isAbstract() && !m.isPrivate() && m.accessibleFrom(this)) {
+					if(inObject == null)
+						methods.add(m);
+					else if(!inObject.isPublic())
+						methods.add(m);
+				}
+			}
+		}
+		
+		return methods;
+	}
+	
+	
+	refine TypeCheck 
+	protected void TypeDecl.checkAbstractMethodDecls(MethodDecl m1, MethodDecl m2) {
+		if(!m1.subsignatureTo(m2) && !m2.subsignatureTo(m1)) {
+			StringBuilder err = new StringBuilder();
+			TypeDecl host1 = m1.hostType();
+			TypeDecl host2 = m2.hostType();
+			String inh1 = "";
+			String inh2 = "";
+			if (host1 != this) {
+				inh1 = "inherited ";
+			}
+			if (host2 != this) {
+				inh2 = "inherited ";
+			}
+			
+			//8.4.8.3
+			err.append(inh1 + "method " + m1.fullSignature() + " and " + inh2 + "method " + m2.fullSignature() + " are multiply declared " +
+				"with same erasure but not override-equivalent signatures in " + fullName());
+			error(err.toString());
+		}
+		if (!m1.returnTypeSubstitutableFor(m2) && !m2.returnTypeSubstitutableFor(m1)) {
+			StringBuilder err = new StringBuilder();
+			TypeDecl host1 = m1.hostType();
+			TypeDecl host2 = m2.hostType();
+			if (host1 != this || host2 != this) {
+				err.append("inherited ");
+			}
+			err.append("method " + m1.fullSignature() + " is multiply declared " +
+						"with incompatible return types in " + fullName());
+			error(err.toString());
+		}
+	}
+	
+	
+	refine TypeHierarchyCheck  
+	public void InterfaceDecl.nameCheck() {
+		super.nameCheck();
+		
+		//9.6.3.8
+	    if(hasAnnotationFunctionalInterface() && !isFunctional())
+	    	error(name() + " is not a functional interface");
+		
+		if (isCircular()) {
+			error("circular inheritance dependency in " + typeName());
+		} else {
+			for(int i = 0; i < getNumSuperInterface(); i++) {
+				TypeDecl typeDecl = getSuperInterface(i).type();
+				if(typeDecl.isCircular())
+					error("circular inheritance dependency in " + typeName());
+			}
+		}
+		for (Iterator<SimpleSet> iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
+			SimpleSet set = iter.next();
+			if (set.size() > 1) {
+				Iterator i2 = set.iterator();
+				MethodDecl m = (MethodDecl) i2.next();
+				while (i2.hasNext()) {
+					MethodDecl n = (MethodDecl)i2.next();
+					checkAbstractMethodDecls(m, n);
+				}
+			}
+		}
+	}
+	
+	
+	
+	
+	
+	eq GenericMethodDecl.usesTypeVariable() { 
+		return	super.usesTypeVariable() || getTypeParameterList().usesTypeVariable();
+	}
+    
+    /*List<Access> GenericMethodDecl.substituteTypeParameters(List<Access> typeParameters, Parameterization parTypeDecl) {
+    	List l = new List<Access>();
+    	for(Access a : typeParameters) {
+    		l.add(a.type().substitute(parTypeDecl));
+    	}
+    	return l;
+    }
+    
+    refine LookupParTypeDecl
+	public BodyDecl GenericMethodDecl.substitutedBodyDecl(Parameterization parTypeDecl) {
+    //System.out.println("Begin substituting generic " + signature() + " in " + hostType().typeName() + " with " + parTypeDecl.typeSignature());
+    List tmpList = getTypeParameterList().fullCopy();
+    for(Object o : tmpList) {
+    	TypeVariable v = (TypeVariable)o;
+    	v.setTypeBoundList(substituteTypeParameters(v.getTypeBoundList(), parTypeDecl));
+    }
+    
+    GenericMethodDecl m = new GenericMethodDecl(
+      (Modifiers)getModifiers().fullCopy(),
+      getTypeAccess().type().substituteReturnType(parTypeDecl),
+      getID(),
+      getParameterList().substitute(parTypeDecl),
+      getExceptionList().substitute(parTypeDecl),
+      new Opt(),
+      tmpList
+    );
+    m.original = this;
+    //System.out.println("End substituting generic " + signature());
+    return m;
+  }*/
+	
+	
+	
+}
