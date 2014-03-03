@@ -196,7 +196,7 @@ aspect TypeHierarchyCheck {
 
           // regardless of overriding
           // 8.4.6.3
-          if (!m.mayOverrideReturn(decl)) {
+          if (!m.mayOverride(decl)) {
             target.error("the return type of method " + m.signature() +
                 " in " + m.hostType().typeName() +
                 " does not match the return type of method " +
@@ -241,7 +241,7 @@ aspect TypeHierarchyCheck {
           if(m.isStatic() && !decl.isStatic())
             target.error("a static method may not hide an instance method");
           // 8.4.6.3
-          if(!m.mayOverrideReturn(decl))
+          if(!m.mayOverride(decl))
             target.error("can not hide a method with a different return type");
           // 8.4.4
           for(int i = 0; i < m.getNumException(); i++) {
@@ -286,7 +286,7 @@ aspect TypeHierarchyCheck {
     }
   }
 
-  syn boolean MethodDecl.mayOverrideReturn(MethodDecl m) = type() == m.type();
+  syn boolean MethodDecl.mayOverride(MethodDecl m) = type() == m.type();
 
   public void ClassDecl.nameCheck() {
     super.nameCheck();
@@ -334,7 +334,7 @@ aspect TypeHierarchyCheck {
         if(s.isEmpty()) {
           for(Iterator i2 = interfacesMethodsSignature(m.signature()).iterator(); i2.hasNext(); ) {
             MethodDecl n = (MethodDecl)i2.next();
-            if(!n.mayOverrideReturn(m) && !m.mayOverrideReturn(n))
+            if(!n.mayOverride(m) && !m.mayOverride(n))
               error("Xthe return type of method " + m.signature() +
                   " in " + m.hostType().typeName() +
                   " does not match the return type of method " +
@@ -354,7 +354,7 @@ aspect TypeHierarchyCheck {
       error("Xoverriding access modifier error for " + m.signature() + " in " +
           m.hostType().typeName() + " and " + n.hostType().typeName());
     }
-    if (!n.mayOverrideReturn(m) && !m.mayOverrideReturn(m)) {
+    if (!n.mayOverride(m) && !m.mayOverride(m)) {
       error("Xthe return type of method " +
           m.signature() + " in " + m.hostType().typeName() +
           " does not match the return type of method " + n.signature() + " in "
@@ -391,15 +391,23 @@ aspect TypeHierarchyCheck {
           error("circular inheritance dependency in " + typeName());
       }
     }
-    for (Iterator iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
-      SimpleSet set = (SimpleSet)iter.next();
+    for (Iterator<SimpleSet> iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
+      SimpleSet set = iter.next();
       if (set.size() > 1) {
         Iterator i2 = set.iterator();
-        MethodDecl m = (MethodDecl)i2.next();
+        MethodDecl m = (MethodDecl) i2.next();
         while (i2.hasNext()) {
           MethodDecl n = (MethodDecl)i2.next();
-          if (!n.mayOverrideReturn(m) && !m.mayOverrideReturn(n)) {
-            error("multiply inherited methods with the same signature must have the same return type");
+          if (!n.mayOverride(m) && !m.mayOverride(n)) {
+            StringBuilder err = new StringBuilder();
+            TypeDecl host1 = m.hostType();
+            TypeDecl host2 = n.hostType();
+            if (host1 != this || host2 != this) {
+              err.append("inherited ");
+            }
+            err.append("method " + m.signature() + " is multiply declared " +
+                "with incompatible return types in interface " + fullName());
+            error(err.toString());
           }
         }
       }
