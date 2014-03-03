@@ -1,10 +1,30 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- *
- * Copyright (c) 2005-2008, Torbjorn Ekman
+/* Copyright (c) 2005-2008, Torbjorn Ekman
+ * Copyright (c) 2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 import java.util.*;
@@ -144,8 +164,31 @@ aspect MethodDecl {
     return sb.toString();
   }
 
-  // 8.4.2 Method Signature
-  syn boolean MethodDecl.sameSignature(MethodDecl m) = signature().equals(m.signature());
+  /**
+   * @return Method signature, including generic parameters.
+   */
+  syn String MethodDecl.fullSignature() {
+    StringBuilder sb = new StringBuilder();
+    sb.append(name() + "(");
+    for (int i = 0; i < getNumParameter(); i++) {
+      if (i != 0) {
+        sb.append(", ");
+      }
+      sb.append(getParameter(i).type().fullName());
+    }
+    sb.append(")");
+    return sb.toString();
+  }
+
+
+  /**
+   * 8.4.2 Method Signature
+   * @param other
+   * @return {@code true} if the signature of this method is same as the
+   * the signature of the argument method
+   */
+  syn boolean MethodDecl.sameSignature(MethodDecl other) =
+    signature().equals(other.signature());
 
   syn lazy boolean MethodDecl.moreSpecificThan(MethodDecl m) {
     if(getNumParameter() == 0)
@@ -278,7 +321,10 @@ aspect MemberMethods {
     return map;
   }
 
-  // iterator over all methods in implemented interfaces
+  /**
+   * @return iterator for iterating over all method declarations in implemented
+   * interfaces
+   */
   public Iterator<MethodDecl> ClassDecl.interfacesMethodsIterator() {
     return new Iterator<MethodDecl>() {
       private Iterator<SimpleSet> outer = interfacesMethodsSignatureMap().values().iterator();
@@ -295,6 +341,7 @@ aspect MemberMethods {
       public void remove() { throw new UnsupportedOperationException(); }
     };
   }
+
   syn SimpleSet ClassDecl.interfacesMethodsSignature(String signature) {
     SimpleSet set = interfacesMethodsSignatureMap().get(signature);
     if (set != null) {
@@ -303,11 +350,12 @@ aspect MemberMethods {
       return SimpleSet.emptySet;
     }
   }
+
   // signature -> set of method declarations
   syn lazy Map<String,SimpleSet> ClassDecl.interfacesMethodsSignatureMap() {
     Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
-    for (Iterator iter = interfacesIterator(); iter.hasNext(); ) {
-      TypeDecl typeDecl = (InterfaceDecl)iter.next();
+    for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = iter.next();
       for (Iterator<MethodDecl> i2 = typeDecl.methodsIterator(); i2.hasNext(); ) {
         MethodDecl m = (MethodDecl)i2.next();
         putSimpleSetElement(map, m.signature(), m);
@@ -356,8 +404,8 @@ aspect MemberMethods {
         }
       }
     }
-    for (Iterator outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+    for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = outerIter.next();
       for (Iterator<MethodDecl> iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = iter.next();
         if (!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
@@ -372,8 +420,8 @@ aspect MemberMethods {
 
   eq InterfaceDecl.methodsSignatureMap() {
     Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMethodsSignatureMap());
-    for (Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
+    for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = outerIter.next();
       for (Iterator<MethodDecl> iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         if (!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
@@ -422,51 +470,53 @@ aspect AncestorMethods {
 
   eq ClassDecl.ancestorMethods(String signature) {
     SimpleSet set = SimpleSet.emptySet;
-    if(hasSuperclass()) {
-      for(Iterator iter = superclass().localMethodsSignature(signature).iterator(); iter.hasNext(); ) {
+    if (hasSuperclass()) {
+      for (Iterator iter = superclass().localMethodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        if(!m.isPrivate())
+        if (!m.isPrivate())
           set = set.add(m);
       }
     }
-    if(set.size() != 1 || ((MethodDecl)set.iterator().next()).isAbstract()) {
-      for(Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); ) {
+    if (set.size() != 1 || ((MethodDecl)set.iterator().next()).isAbstract()) {
+      for (Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         set = set.add(m);
       }
     }
-    if(!hasSuperclass()) return set;
-    if(set.size() == 1) {
+    if (!hasSuperclass()) return set;
+    if (set.size() == 1) {
       MethodDecl m = (MethodDecl)set.iterator().next();
-      if(!m.isAbstract()) {
+      if (!m.isAbstract()) {
         boolean done = true;
-        for(Iterator iter = superclass().ancestorMethods(signature).iterator(); iter.hasNext(); ) {
+        for (Iterator iter = superclass().ancestorMethods(signature).iterator(); iter.hasNext(); ) {
           MethodDecl n = (MethodDecl)iter.next();
-          if(n.isPrivate() || !n.accessibleFrom(m.hostType()))
+          if (n.isPrivate() || !n.accessibleFrom(m.hostType())) {
             done = false;
+          }
         }
-        if(done) return set;
+        if (done) return set;
       }
     }
-    for(Iterator iter = superclass().ancestorMethods(signature).iterator(); iter.hasNext(); ) {
+    for (Iterator iter = superclass().ancestorMethods(signature).iterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl)iter.next();
       set = set.add(m);
     }
     return set;
   }
+
   eq InterfaceDecl.ancestorMethods(String signature) {
     SimpleSet set = SimpleSet.emptySet;
-    for(Iterator outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)outerIter.next();
-      for(Iterator iter = typeDecl.methodsSignature(signature).iterator(); iter.hasNext(); ) {
+    for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+      TypeDecl typeDecl = outerIter.next();
+      for (Iterator iter = typeDecl.methodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         set = set.add(m);
       }
     }
-    if(!superinterfacesIterator().hasNext()) {
-      for(Iterator iter = typeObject().methodsSignature(signature).iterator(); iter.hasNext(); ) {
+    if (!superinterfacesIterator().hasNext()) {
+      for (Iterator iter = typeObject().methodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        if(m.isPublic())
+        if (m.isPublic())
           set = set.add(m);
       }
     }
