@@ -73,81 +73,94 @@ public class Options {
     optionDescriptions.put(name, new Option(name, value, isCollection));
   }
 
+  /**
+   * Parse options from command-line arguments.
+   * Options starting with the at-sign are treated as argument files.
+   * The argument file is expanded in place before parsing other arguments.
+   *
+   * @param args command-line arguments
+   */
   public void addOptions(String[] args) {
-    for(int i = 0; i < args.length; i++) {
+    java.util.List<String> argList = new ArrayList<String>();
+
+    // expand argument files
+    for (int i = 0; i < args.length; i++) {
       String arg = args[i];
-      if(arg.startsWith("@")) {
-        try {
-          String fileName = arg.substring(1,arg.length());
-          java.io.StreamTokenizer tokenizer = new java.io.StreamTokenizer(new java.io.FileReader(fileName));
-          tokenizer.resetSyntax();
-          tokenizer.whitespaceChars(' ',' ');
-          tokenizer.whitespaceChars('\t','\t');
-          tokenizer.whitespaceChars('\f','\f');
-          tokenizer.whitespaceChars('\n','\n');
-          tokenizer.whitespaceChars('\r','\r');
-          tokenizer.wordChars(33,255);
-          ArrayList list = new ArrayList();
-          int next = tokenizer.nextToken();
-          while(next != java.io.StreamTokenizer.TT_EOF) {
-            if(next == java.io.StreamTokenizer.TT_WORD) {
-              list.add(tokenizer.sval);
+      if (arg.length() > 1 && arg.startsWith("@")) {
+        if (arg.startsWith("@@")) {
+          // escape the double at
+          argList.add(arg.substring(1));
+        } else {
+          String fileName = arg.substring(1);
+          try {
+            java.io.StreamTokenizer tokenizer = new java.io.StreamTokenizer(new java.io.FileReader(fileName));
+            tokenizer.resetSyntax();
+            tokenizer.whitespaceChars(' ',' ');
+            tokenizer.whitespaceChars('\t','\t');
+            tokenizer.whitespaceChars('\f','\f');
+            tokenizer.whitespaceChars('\n','\n');
+            tokenizer.whitespaceChars('\r','\r');
+            tokenizer.wordChars(33,255);
+            tokenizer.commentChar('#');
+            tokenizer.quoteChar('"');
+            tokenizer.quoteChar('\'');
+            while (tokenizer.nextToken() != tokenizer.TT_EOF) {
+              argList.add(tokenizer.sval);
             }
-            next = tokenizer.nextToken();
+          } catch (java.io.FileNotFoundException e) {
+            System.err.println("Argument file not found: " + fileName);
+          } catch (java.io.IOException e) {
+            System.err.println("Exception: "+e.getMessage());
           }
-          String[] newArgs = new String[list.size()];
-          int index = 0;
-          for(Iterator iter = list.iterator(); iter.hasNext(); index++) {
-            newArgs[index] = (String)iter.next();
-          }
-          addOptions(newArgs);
-        } catch (java.io.FileNotFoundException e) {
-          System.err.println("File not found: "+arg.substring(1));
-        } catch (java.io.IOException e) {
-          System.err.println("Exception: "+e.getMessage());
         }
+      } else {
+        argList.add(arg);
       }
-      else if(arg.startsWith("-")) {
-        if(!optionDescriptions.containsKey(arg))
+    }
+
+    Iterator<String> all = argList.iterator();
+    while (all.hasNext()) {
+      String arg = all.next();
+      if (arg.startsWith("-")) {
+        if (!optionDescriptions.containsKey(arg)) {
           throw new Error("Command line argument error: option " + arg + " is not defined");
-        Option o = (Option)optionDescriptions.get(arg);
+        }
+        Option o = (Option) optionDescriptions.get(arg);
 
-        if(!o.isCollection && options.containsKey(arg))
+        if (!o.isCollection && options.containsKey(arg)) {
           throw new Error("Command line argument error: option " + arg + " is multiply defined");
+        }
 
-        if(o.hasValue && !o.isCollection) {
+        if (o.hasValue) {
           String value = null;
-          if(i + 1 > args.length - 1)
+          if (!all.hasNext()) {
             throw new Error("Command line argument error: value missing for key " + arg);
-          value = args[i+1];
-          if(value.startsWith("-"))
-            throw new Error("Command line argument error: value missing for key " + arg);
-          i++;
-          options.put(arg, value);
-        }
-        else if(o.hasValue && o.isCollection) {
-          String value = null;
-          if(i + 1 > args.length - 1)
-            throw new Error("Command line argument error: value missing for key " + arg);
-          value = args[i+1];
-          if(value.startsWith("-"))
-            throw new Error("Command line argument error: value missing for key " + arg);
-          i++;
-          Collection c = (Collection)options.get(arg);
-          if(c == null)
-            c = new ArrayList();
-          c.add(value);
-          options.put(arg, c);
-        }
-        else {
+          }
+          value = all.next();
+          if (value.startsWith("-")) {
+            throw new Error("Command line argument error: expected value for key " + arg +
+                ", but found option " + value);
+          }
+
+          if (o.isCollection) {
+            Collection<String> c = (Collection<String>) options.get(arg);
+            if (c == null) {
+              c = new ArrayList<String>();
+            }
+            c.add(value);
+            options.put(arg, c);
+          } else {
+            options.put(arg, value);
+          }
+        } else {
           options.put(arg, null);
         }
-      }
-      else {
+      } else {
         files.add(arg);
       }
     }
   }
+
   public boolean hasOption(String name) {
     return options.containsKey(name);
   }
