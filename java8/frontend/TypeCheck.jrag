@@ -1,12 +1,101 @@
-aspect Java8TypeCheck {
+aspect TypeCheck {
 	inh TypeDecl LambdaParameters.unknownType();
-	eq LambdaExpr.getLambdaParameters().unknownType() = unknownType();
 	inh TypeDecl InferredParameterDeclaration.unknownType();
+	inh TypeDecl LambdaBody.unknownType();
+	eq LambdaExpr.getLambdaParameters().unknownType() = unknownType();
+	eq LambdaExpr.getLambdaBody().unknownType() = unknownType();
 
-	syn lazy TypeDecl LambdaExpr.type() = unknownType();
+	//syn lazy TypeDecl LambdaExpr.type() = unknownType();
 	syn lazy TypeDecl MethodReference.type() = unknownType();
 	syn lazy TypeDecl ConstructorReference.type() = unknownType();
 	syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
+	
+	
+	
+	// Lambdas should propagate target return type to returns in lambda body
+	eq BlockLambdaBody.getBlock().returnType() {
+		TypeDecl decl = enclosingLambda().targetType();
+		if(decl == null)
+			return unknownType();
+		else if(!(decl instanceof InterfaceDecl))
+			return unknownType();
+		else {
+			InterfaceDecl iDecl = (InterfaceDecl)decl;
+			if(!iDecl.isFunctional())
+				return unknownType();
+			else {
+				return iDecl.functionDescriptor().method.type();
+			}
+		}
+	}
+	
+	
+	// Does not handle invocation context
+	syn lazy TypeDecl LambdaExpr.type() {
+		if(!assignmentContext() && !castContext()) 
+			return unknownType();
+		if(targetType() == null)
+			return unknownType();
+		if(!(targetType() instanceof InterfaceDecl))
+			return unknownType();
+		
+		InterfaceDecl iDecl = (InterfaceDecl)targetType();
+		if(!iDecl.hasFunctionDescriptor()) {
+			return unknownType();
+		}
+		
+		return iDecl;
+	}
+	
+	
+	/* TODO: Type check that works for wildcard-parameterized interfaces */
+	public void LambdaExpr.typeCheck() {
+		if(!assignmentContext() && !castContext() && !invocationContext()) {
+			// 15.27
+			error("Lambda expressions must target a functional interface");
+			return;
+		}
+		
+		/* ONLY TEMPORARY BECAUSE TYPE CHECK FOR INVOCATIONS
+			NOT YET IMPLEMENTED */
+		if(!assignmentContext() && ! castContext())
+			return;
+
+		if(targetType() == null) {
+			// 15.27
+			error("Lambda expressions must target a functional interface");
+			return;
+		}	
+		else if(!(targetType() instanceof InterfaceDecl)) {
+			// 15.27
+			error("Lambda expressions must target a functional interface");
+			return;
+		}
+		InterfaceDecl iDecl = (InterfaceDecl)targetType();
+		if(!iDecl.hasFunctionDescriptor()) {
+			error("Lambda expressions must target a functional interface");
+			return;
+		}
+		if(!iDecl.isFunctional()) {
+			// 15.27
+			error("Interface " + iDecl.name() + " is not functional and cannot be targeted by lambda expression");
+			return;
+		}
+		
+		if(iDecl.functionDescriptor().isGeneric()) {
+			// 15.27
+			error("Illegal lambda expression: Method " + iDecl.functionDescriptor().method.name() + 
+				" in functional interface " + iDecl.name() + " is generic");
+			return;
+		}
+		
+		if(!congruentTo(iDecl.functionDescriptor())) {
+			// 15.27.3
+			error("Lambda expression incompatible with method " + iDecl.functionDescriptor().method.name()
+					+ " in functional interface " + iDecl.name());
+		}		
+	}
+	
 	
 	public void BlockLambdaBody.typeCheck() {
 		// 15.27.2
@@ -17,9 +106,7 @@ aspect Java8TypeCheck {
 	
 	refine TypeCheck
 	public void ReturnStmt.typeCheck() {
-		if(enclosingLambda() != null && enclosingLambda().hostType() != hostType()) 
-			return;
-		if(enclosingLambda() == null) {
+		if(enclosingLambda() == null || enclosingLambda().hostType() != hostType()) {
 			if(hasResult() && !returnType().isVoid()) {
 				if(!getResult().type().assignConversionTo(returnType(), getResult()))
 					error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
@@ -33,5 +120,26 @@ aspect Java8TypeCheck {
 			if(enclosingBodyDecl() instanceof InstanceInitializer || enclosingBodyDecl() instanceof StaticInitializer)
 				error("Initializers may not return");
 		}
+		else {
+			if(hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)) {
+				if(!getResult().type().assignConversionTo(returnType(), getResult()))
+					error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
+			}
+		}
+	}
+}
+
+aspect LambdaParametersInference {
+	inh lazy TypeDecl InferredParameterDeclaration.inferredType();
+	eq InferredLambdaParameters.getParameters(int i).inferredType() {
+		InterfaceDecl iDecl = enclosingLambda().targetInterface();
+		if(iDecl == null)
+			return unknownType();
+		else if(!iDecl.hasFunctionDescriptor())
+			return unknownType();
+		else if(iDecl.functionDescriptor().method.getNumParameter() < i + 1)
+			return unknownType();
+		else
+			return iDecl.functionDescriptor().method.getParameter(i).type();
 	}
 }
