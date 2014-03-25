@@ -1,0 +1,82 @@
+aspect Modifiers {
+	syn lazy boolean Modifiers.isDefault() = numModifier("default") != 0;
+	
+	syn lazy boolean MethodDecl.isDefault() = getModifiers().isDefault();
+	
+	refine Modifiers
+	eq MethodDecl.isAbstract() { 
+		return getModifiers().isAbstract() || (hostType().isInterfaceDecl() && !isStatic() && !isDefault());
+	}
+	
+	
+	// 8.4.3
+	refine Enums
+	public void MethodDecl.checkModifiers() {
+		super.checkModifiers();
+		if(hostType().isClassDecl()) {
+			// 8.4.3.1
+			if(!hostType().isEnumDecl() && isAbstract() && !hostType().isAbstract())
+				error("class must be abstract to include abstract methods");
+			// 8.4.3.1
+			if(isAbstract() && isPrivate())
+				error("method may not be abstract and private");
+			// 8.4.3.1
+			// 8.4.3.2
+			if(isAbstract() && isStatic())
+				error("method may not be abstract and static");
+			if(isAbstract() && isSynchronized())
+				error("method may not be abstract and synchronized");
+			// 8.4.3.4
+			if(isAbstract() && isNative())
+				error("method may not be abstract and native");
+			if(isAbstract() && isStrictfp())
+				error("method may not be abstract and strictfp");
+			if(isNative() && isStrictfp())
+				error("method may not be native and strictfp");
+		}
+		if(hostType().isInterfaceDecl()) {
+			// 9.4
+			if(isAbstract()) {
+				if(isStatic())
+					error("interface method " + signature() + " in " + 
+							hostType().typeName() + " can not be both abstract and static");
+				if(isDefault())
+					error("interface method " + signature() + " in " + 
+							hostType().typeName() + " can not be both abstract and default");
+				if(isStrictfp())
+					error("interface method " + signature() + " in " + 
+							hostType().typeName() + " can not be both abstract and strictfp");
+			}
+			if(isStatic() && isDefault())
+				error("interface method " + signature() + " in " + 
+							hostType().typeName() + " can not be both static and default");
+			if(isNative())
+				error("interface method " + signature() + " in " +
+						hostType().typeName() +  " may not be native");
+			if(isSynchronized())
+				error("interface method " + signature() + " in " +
+						hostType().typeName() +  " may not be synchronized");
+			if(isProtected())
+				error("interface method " + signature() + " in " +
+						hostType().typeName() +  " may not be protected");
+			if(isPrivate())
+				error("interface method " + signature() + " in " +
+						hostType().typeName() +  " may not be private");
+			else if(isFinal())
+				error("interface method " + signature() + " in " +
+						hostType().typeName() +  " may not be final");
+		}
+	}
+	
+	
+	
+	// 8.4.3
+	refine Modifiers
+	public void Modifiers.checkModifiers() {
+		refined();
+		if(numModifier("default") > 1)
+			error("only one default allowed");
+	}
+	
+	
+}

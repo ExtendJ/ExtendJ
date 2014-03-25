@@ -1,0 +1,89 @@
+aspect MethodSignature18 {
+
+	syn lazy boolean InterfaceDecl.hasOverridingMethodInSuper(MethodDecl m) {
+		for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+			TypeDecl typeDecl = outerIter.next();
+			for (Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+				MethodDecl superMethod = (MethodDecl)iter.next();
+				if(m != superMethod && superMethod.overrides(m))
+					return true;
+			}
+		}
+		return false;
+	}
+	
+	syn lazy boolean ClassDecl.hasOverridingMethodInSuper(MethodDecl m) {
+		for (Iterator<MethodDecl> outerIter = interfacesMethodsIterator(); outerIter.hasNext(); ) {
+			MethodDecl superMethod = outerIter.next();
+			if(m != superMethod && superMethod.overrides(m))
+				return true;
+			
+		}
+		if (hasSuperclass()) {
+			for (Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
+				MethodDecl superMethod = (MethodDecl)iter.next();
+				if(m != superMethod && superMethod.overrides(m))
+					return true;
+			}
+		}
+		
+		return false;
+	}
+	
+	refine MethodSignature15 
+	eq InterfaceDecl.methodsSignatureMap() {
+		HashMap map = new HashMap(localMethodsSignatureMap());
+		for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+			TypeDecl typeDecl = outerIter.next();
+			for (Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+				MethodDecl m = (MethodDecl)iter.next();
+				if (!m.isPrivate() && !m.isStatic() && m.accessibleFrom(this) && !hasOverridingMethodInSuper(m) &&
+					 !localMethodsSignatureMap().containsKey(m.signature()))
+					if (!(m instanceof MethodDeclSubstituted) || !localMethodsSignatureMap().containsKey(m.sourceMethodDecl().signature())) {
+						putSimpleSetElement(map, m.signature(), m);
+					}
+			}
+		}
+		for (Iterator iter = typeObject().methodsIterator(); iter.hasNext(); ) {
+			MethodDecl m = (MethodDecl)iter.next();
+			if (m.isPublic() && !map.containsKey(m.signature())) {
+				putSimpleSetElement(map, m.signature(), m);
+			}
+		}
+		return map;
+	}
+	
+	refine MethodSignature15 
+	eq ClassDecl.methodsSignatureMap() {
+		HashMap map = new HashMap(localMethodsSignatureMap());
+		HashMap fromSuperClass = new HashMap();
+		if (hasSuperclass()) {
+			for (Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
+				MethodDecl m = (MethodDecl)iter.next();
+				if (!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
+					if (!(m instanceof MethodDeclSubstituted) || !localMethodsSignatureMap().containsKey(m.sourceMethodDecl().signature())) {
+						putSimpleSetElement(map, m.signature(), m);
+						if(!m.isAbstract())
+							putSimpleSetElement(fromSuperClass, m.signature(), m);
+					}
+				}
+			}
+		}
+		for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+			TypeDecl typeDecl = outerIter.next();
+			for (Iterator iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
+				MethodDecl m = (MethodDecl)iter.next();
+				if (!m.isPrivate() && !m.isStatic() && m.accessibleFrom(this) && !hasOverridingMethodInSuper(m)
+						&& !localMethodsSignatureMap().containsKey(m.signature())) {
+					if (!(m instanceof MethodDeclSubstituted) || !localMethodsSignatureMap().containsKey(m.sourceMethodDecl().signature())) {
+						if (!fromSuperClass.containsKey(m.signature()) && (!(m instanceof MethodDeclSubstituted) ||
+								!fromSuperClass.containsKey(m.sourceMethodDecl().signature()))) {
+							putSimpleSetElement(map, m.signature(), m);
+						}
+					}
+				}
+			}
+		}
+		return map;
+	}
+}

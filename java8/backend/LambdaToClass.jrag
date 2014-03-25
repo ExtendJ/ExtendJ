@@ -37,14 +37,37 @@ aspect LambdaToClass {
 		/* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
 		of a normal AnonymousDecl in order for this and super keywords to get the type of the outer 
 		scope. */
-		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "Anonymous", bodyDecls);
+		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "Lambda", bodyDecls);
 		anonymousDecl.setImplementsList(implementsList);
 		
 		return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
 	}
 	
 	syn lazy Block LambdaBody.toBlock();
-	eq BlockLambdaBody.toBlock() = getBlock().fullCopy();
+	
+	eq BlockLambdaBody.toBlock() {
+		Block b = getBlock();
+		setChild(new Block(), 0);
+		b.flushCaches();
+		return b;
+	}
+	eq ExprLambdaBody.toBlock() {
+		List<Stmt> stmtList = new List<Stmt>();
+		// If expected return type is void, insert ExprStmt in list
+		Expr expr = getExpr();
+		setChild(new VarAccess("tmp"), 0);
+		expr.flushCaches();
+		if(enclosingLambda().targetInterface().functionDescriptor().method.type().isVoid()) {
+			stmtList.add(new ExprStmt(expr));
+		}
+		// Otherwise, insert return stmt
+		else {
+			stmtList.add(new ReturnStmt(expr));
+		}
+		return new Block(stmtList);
+	}
+	
+	/*eq BlockLambdaBody.toBlock() = getBlock().fullCopy();
 	eq ExprLambdaBody.toBlock() {
 		List<Stmt> stmtList = new List<Stmt>();
 		// If expected return type is void, insert ExprStmt in list
@@ -56,7 +79,7 @@ aspect LambdaToClass {
 			stmtList.add(new ReturnStmt((Expr)getExpr().fullCopy()));
 		}
 		return new Block(stmtList);
-	}	
+	}*/	
 	
 	syn lazy List<ParameterDeclaration> LambdaParameters.toParameterList();
 	eq EmptyLambdaParameters.toParameterList() = new List<ParameterDeclaration>();
