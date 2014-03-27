@@ -129,6 +129,7 @@ public class TokenCounter {
 							case Terminals.RPAREN:
 							case Terminals.LBRACE:
 							case Terminals.RBRACE:
+								// not counted!
 								break;
 							default:
 								numTokens += 1;
