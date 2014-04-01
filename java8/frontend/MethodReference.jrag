@@ -1,0 +1,188 @@
+aspect MethodReference {
+	syn lazy MethodDecl ExprMethodReference.targetMethod() {
+		InterfaceDecl iDecl = targetInterface();
+		
+		return syntheticMethodAccess().decl();
+	}
+	
+	syn nta lazy Access ExprMethodReference.syntheticAccess() {
+		List<Expr> arguments = new List<Expr>();
+		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			arguments.add(new SyntheticMethodArgument(i));
+		}
+		
+		if(!hasTypeArgument()) {
+			MethodAccess mAccess = new MethodAccess(name(), arguments);
+			return ((Expr)getExpr().fullCopy()).qualifiesAccess(mAccess);
+		}
+		else {
+			ParMethodAccess pmAccess = new ParMethodAccess(name(), arguments, (List<Access>)getTypeArgumentList().fullCopy());
+			return ((Expr)getExpr().fullCopy()).qualifiesAccess(pmAccess);
+		}
+	}
+	
+	syn lazy MethodAccess ExprMethodReference.syntheticMethodAccess() {
+		Access synAccess = syntheticAccess();
+		return (MethodAccess)synAccess.lastAccess();
+	}
+	
+	
+	/*
+	Type analysis for TypeMethodReferences are done below here.
+	The two different types of method accesses being used here,
+	called 'static' and 'instance', are the results of the two
+	different lookups that are to be done in the case of a type
+	being used in a method reference. The details can be found
+	in JLS version 8, section 15.28.1 
+	*/
+	
+	syn lazy MethodDecl TypeMethodReference.targetStaticMethod() {
+		InterfaceDecl iDecl = targetInterface();
+		MethodAccess synAcc = syntheticStaticMethodAccess();
+		SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
+		if(maxSpecific.size() == 1)
+			return (MethodDecl)maxSpecific.iterator().next();
+		else 
+			return iDecl.functionDescriptor().method.unknownMethod();
+	}
+	
+	/*
+	This attribute is used for method references when the reference type must be inferred.
+	The argument list declared in the parameter must be used, so in order to make the type lookup
+	work this attribute is an nta. It must be located here in order to not miss type variables declared
+	by the method where this parameter is located. 
+	*/
+	syn nta lazy ParTypeAccess ParameterDeclaration.inferredReferenceAccess(TypeAccess typeAccess) {
+		if(!(getTypeAccess() instanceof ParTypeAccess)) {
+			return new ParTypeAccess((TypeAccess)typeAccess.fullCopy(), new List<Access>());
+		}
+		ParTypeAccess parTypeAccess = (ParTypeAccess)getTypeAccess();
+		return new ParTypeAccess((TypeAccess)typeAccess.fullCopy(), (List<Access>)parTypeAccess.getTypeArgumentList().fullCopy());
+	}
+	
+	/*
+	When type method references are declared using a raw type, the type arguments
+	can sometimes be inferred by looking at the target function descriptor. This
+	attribute infers the type where the method lookup should be done. Returns null
+	if no inferred type should be used. 
+	*/
+	syn lazy TypeDecl TypeMethodReference.inferredReferenceType() {
+		InterfaceDecl iDecl = targetInterface();
+		if(iDecl.functionDescriptor().method.getNumParameter() == 0)
+			return null;
+		else if(!(iDecl.functionDescriptor().method.getParameter(0).getTypeAccess() instanceof ParTypeAccess))
+			return null;
+		
+		else if(!getTypeAccess().type().isRawType() || !(getTypeAccess() instanceof TypeAccess)) 
+			return null;
+		
+		ParameterDeclaration param = iDecl.functionDescriptor().method.getParameter(0);
+		if(!param.type().strictSubtype(param.inferredReferenceAccess((TypeAccess)getTypeAccess()).type())) 
+			return null;
+		return param.inferredReferenceAccess((TypeAccess)getTypeAccess()).type();
+	}
+	
+	syn lazy MethodDecl TypeMethodReference.targetInstanceMethod() {
+		InterfaceDecl iDecl = targetInterface();
+		if(iDecl.functionDescriptor().method.getNumParameter() == 0 ||
+			!iDecl.functionDescriptor().method.getParameter(0).type().strictSubtype(getTypeAccess().type())) {
+			return iDecl.functionDescriptor().method.unknownMethod();
+		}
+		
+		MethodAccess synAcc = syntheticInstanceMethodAccess();
+		SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
+		if(maxSpecific.size() == 1)
+			return (MethodDecl)maxSpecific.iterator().next();
+		else 
+			return iDecl.functionDescriptor().method.unknownMethod();
+	}
+	
+	syn nta lazy Access TypeMethodReference.syntheticStaticAccess() {
+		List<Expr> arguments = new List<Expr>();
+		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			arguments.add(new SyntheticMethodArgument(i));
+		}
+		
+		if(!hasTypeArgument()) {
+			MethodAccess mAccess = new MethodAccess(name(), arguments);
+			return ((Access)getTypeAccess().fullCopy()).qualifiesAccess(mAccess);
+		}
+		else {
+			ParMethodAccess pmAccess = new ParMethodAccess(name(), arguments, (List<Access>)getTypeArgumentList().fullCopy());
+			return ((Access)getTypeAccess().fullCopy()).qualifiesAccess(pmAccess);
+		}
+	}
+	
+	syn lazy MethodAccess TypeMethodReference.syntheticStaticMethodAccess() {
+		Access synAccess = syntheticStaticAccess();
+		return (MethodAccess)synAccess.lastAccess();
+	}
+	
+	syn nta lazy Access TypeMethodReference.syntheticInstanceAccess() {
+		List<Expr> arguments = new List<Expr>();
+		for(int i = 1; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			arguments.add(new SyntheticMethodArgument(i));
+		}
+		
+		Access qualifier = null;
+		
+		if(inferredReferenceType() != null) {
+			qualifier = new SyntheticMethodQualifier(inferredReferenceType());
+		}
+		else {
+			qualifier = (Access)getTypeAccess().fullCopy();
+		}
+		
+		if(!hasTypeArgument()) {
+			MethodAccess mAccess = new MethodAccess(name(), arguments);
+			return qualifier.qualifiesAccess(mAccess);
+		}
+		else {
+			ParMethodAccess pmAccess = new ParMethodAccess(name(), arguments, (List<Access>)getTypeArgumentList().fullCopy());
+			return qualifier.qualifiesAccess(pmAccess);
+		}
+	}
+	
+	syn lazy MethodAccess TypeMethodReference.syntheticInstanceMethodAccess() {
+		Access synAccess = syntheticInstanceAccess();
+		return (MethodAccess)synAccess.lastAccess();
+	}
+	
+	/*
+	Below is the code which rewrites ambiguous method references to the 
+	correct type. Also ParseNames in method references get their correct
+	NameType set below here. 
+	*/
+	
+	eq MethodReference.getTypeArgument().nameType() = NameType.TYPE_NAME;
+	eq TypeMethodReference.getTypeAccess().nameType() = NameType.TYPE_NAME;
+	eq AmbiguousMethodReference.getAmbiguousName().nameType() = NameType.AMBIGUOUS_NAME;
+	
+	rewrite AmbiguousMethodReference {
+		when (!getAmbiguousName().isTypeAccess()) 
+			to ExprMethodReference {
+				return new ExprMethodReference(getTypeArgumentList(), getID(), getAmbiguousName());
+			}
+	}
+	
+	rewrite AmbiguousMethodReference {
+		when (getAmbiguousName().isTypeAccess()) 
+			to TypeMethodReference {
+				return new TypeMethodReference(getTypeArgumentList(), getID(), getAmbiguousName());
+			}
+	}
+}
+
+aspect TypeAnalysis {
+	syn lazy TypeDecl SyntheticMethodArgument.type() {
+		ASTNode current = getParent();
+		while(!(current instanceof MethodReference)) {
+			current = current.getParent();
+		}
+		MethodReference methodRef = (MethodReference)current;
+		MethodDecl functionMethod = methodRef.targetInterface().functionDescriptor().method;
+		return functionMethod.getParameter(getPosition()).type();	
+	}
+	
+	syn lazy TypeDecl SyntheticMethodQualifier.type() = getType();
+}

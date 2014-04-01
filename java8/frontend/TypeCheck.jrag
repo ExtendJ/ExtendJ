@@ -6,7 +6,7 @@ aspect TypeCheck {
 	eq LambdaExpr.getLambdaBody().unknownType() = unknownType();
 
 	//syn lazy TypeDecl LambdaExpr.type() = unknownType();
-	syn lazy TypeDecl MethodReference.type() = unknownType();
+	//syn lazy TypeDecl MethodReference.type() = unknownType();
 	syn lazy TypeDecl ConstructorReference.type() = unknownType();
 	syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
 	
@@ -32,11 +32,28 @@ aspect TypeCheck {
 	
 	// Does not handle invocation context
 	syn lazy TypeDecl LambdaExpr.type() {
+		// 15.27.3
 		if(!assignmentContext() && !castContext()) 
 			return unknownType();
 		if(targetInterface() == null)
 			return unknownType();
 		
+		InterfaceDecl iDecl = targetInterface();
+		if(!iDecl.hasFunctionDescriptor()) {
+			return unknownType();
+		}
+		
+		return iDecl;
+	}
+	
+	// Does not handle invocation context
+	syn lazy TypeDecl MethodReference.type() {
+		// 15.28.1
+		if(!assignmentContext() && !castContext()) 
+			return unknownType();
+		if(targetInterface() == null)
+			return unknownType();
+			
 		InterfaceDecl iDecl = targetInterface();
 		if(!iDecl.hasFunctionDescriptor()) {
 			return unknownType();
@@ -76,7 +93,7 @@ aspect TypeCheck {
 		}
 		if(!iDecl.isFunctional()) {
 			// 15.27
-			error("Interface " + iDecl.name() + " is not functional and cannot be targeted by lambda expression");
+			error("Interface " + iDecl.name() + " is not functional and can therefore not be targeted by a lambda expression");
 			return;
 		}
 		
@@ -122,6 +139,113 @@ aspect TypeCheck {
 			if(hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)) {
 				if(!getResult().type().assignConversionTo(returnType(), getResult()))
 					error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
+			}
+		}
+	}
+	
+	public void MethodReference.typeCheck() {
+		// 15.28.1
+		if(!assignmentContext() && !castContext() && !invocationContext()) {
+			error("Method references must target a functional interface");
+			return;
+		}
+		
+		/* ONLY TEMPORARY BECAUSE TYPE CHECK FOR INVOCATIONS
+			NOT YET IMPLEMENTED */
+		if(!assignmentContext() && ! castContext())
+			return;
+
+		if(targetType() == null) {
+			error("Method references must target a functional interface");
+			return;
+		}	
+		else if(!(targetType() instanceof InterfaceDecl)) {
+			error("Method references must target a functional interface");
+			return;
+		}
+		InterfaceDecl iDecl = (InterfaceDecl)targetType();
+		if(!iDecl.hasFunctionDescriptor()) {
+			error("Method references must target a functional interface");
+			return;
+		}
+		if(!iDecl.isFunctional()) {
+			error("Interface " + iDecl.name() + " is not functional and can therefore not be targeted by a method reference");
+			return;
+		}
+		
+		MethodDecl found = null;
+		// Lookup method here and check that one most specific can be found	
+		if(this instanceof ExprMethodReference) {
+			ExprMethodReference ref = (ExprMethodReference)this;
+			found = ref.targetMethod();
+			if(found.unknownMethod() == found) {
+				// 15.28.1
+				error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
+				 " in the functional interface " + iDecl.typeName() + " was found");
+			}
+			else if(found.isStatic()) {
+				error("The method " + found.fullSignature() + " in type " + found.hostType().typeName() + 
+						" must be accessed in a static way");
+			}
+		}
+		else if(this instanceof TypeMethodReference) {
+			TypeMethodReference ref = (TypeMethodReference)this;
+			MethodDecl staticMethod = ref.targetStaticMethod();
+			MethodDecl instanceMethod = ref.targetInstanceMethod();
+			if(staticMethod.unknownMethod() != staticMethod && instanceMethod.unknownMethod() != instanceMethod) {
+				error("Ambiguity error: two possible methods " + staticMethod.name() + " was found");
+				return;
+			}
+			else if(staticMethod.unknownMethod() == staticMethod && instanceMethod.unknownMethod() == instanceMethod) {
+				error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
+				 " in the functional interface " + iDecl.typeName() + " was found");
+				 return;
+			}
+			else if(staticMethod.unknownMethod() != staticMethod && !staticMethod.isStatic()) {
+				error("Cannot make a static reference to the non-static method " + staticMethod.fullSignature() + " in type " 
+				 	 	+ staticMethod.hostType().typeName());
+				return;
+			}
+			else if(instanceMethod.isStatic()) {
+				error("The method " + instanceMethod.fullSignature() + " in type " + instanceMethod.hostType().typeName() + 
+						" must be accessed in a static way");
+				return;
+			}
+			else if(staticMethod.unknownMethod() != staticMethod) {
+				found = staticMethod;
+			}
+			else {
+				found = instanceMethod;
+			}
+		}
+		
+		if(found != null && found.unknownMethod() != found) {
+			// Check that found is compatible with the function descriptor
+			if(!iDecl.functionDescriptor().method.type().isVoid()) {
+				// 15.28.1
+				if(found.type().isVoid() || !found.type().assignConversionTo(iDecl.functionDescriptor().method.type(), null))
+					error("Return type of referenced method " + found.fullSignature() + " is not compatible with method " + 
+							iDecl.functionDescriptor().method.fullSignature() + " in functional interface " + iDecl.typeName());
+			}
+			
+			for(int i = 0; i < found.getNumException(); i++) {
+				TypeDecl exception = found.getException(i).type();
+				/* This is supposed to be unchecked exception, but the attribute name
+				   is currently inverted! */
+				if(exception.isCheckedException())
+					continue;
+				
+				boolean legalException = false;
+				for(TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
+					if(exception.strictSubtype(descriptorThrows)) {
+						legalException = true;
+						break;
+					}
+				}
+				if(!legalException) {
+					// 15.28.1
+					error("Referenced method " + found.name() + " throws unhandled exception type " + exception.typeName()); 
+				}
 			}
 		}
 	}
