@@ -1,0 +1,179 @@
+aspect MethodReferenceToClass {
+	// Name used when creating field declaration
+	private String ExprMethodReference.syntheticFieldName() { 
+		return "f";
+	}
+	
+	// Build an anonymous class which will be converted to byte code
+	// Since method access can target a generic method, type variables have to be taken into account
+	// by using an access that bypasses the normal type lookup
+	syn nta lazy ClassInstanceExpr ExprMethodReference.toClass() {
+		List<Access> implementsList = new List<Access>();
+		InterfaceDecl iDecl = targetInterface();
+		
+		// First compute the interface implemented by the anonymous class
+		Access implementsInterface = iDecl.createQualifiedAccess();
+		implementsList.add(implementsInterface);
+		
+		// Next compute the BodyDecls for the anonymous class
+		List<BodyDecl> bodyDecls = new List<BodyDecl>();
+		
+		FieldDeclaration fieldDecl = null;
+		// If this reference uses a primary or expression name, must evaluate that part first
+		if(!(getExpr() instanceof Access) || !(((Access)getExpr()).lastAccess() instanceof SuperAccess)) {
+			fieldDecl = new FieldDeclaration(new Modifiers(), 
+					getExpr().type().createQualifiedAccess(), syntheticFieldName(), (Expr)getExpr().fullCopy());
+			bodyDecls.add(fieldDecl);
+		}
+		
+		// Then we must build the method overriding the abstract methods
+		
+		Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
+		Access returnType = new SyntheticTypeAccess(iDecl.functionDescriptor().method.type());
+		List<ParameterDeclaration> methodParams = toParameterList();
+		List<Access> methodThrows = new List<Access>();
+		for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+			methodThrows.add(new SyntheticTypeAccess(throwsType));
+		}
+		Opt<Block> methodBlock = new Opt<Block>(toBlock(fieldDecl));
+		MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(), 
+											methodParams, methodThrows, methodBlock);
+		
+		bodyDecls.add(method);
+		
+		/* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
+		of a normal AnonymousDecl in order for this and super keywords to get the type of the outer 
+		scope. */
+		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "MethodReference", bodyDecls);
+		anonymousDecl.setImplementsList(implementsList);
+		
+		return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
+	}
+	
+	syn lazy List<ParameterDeclaration> MethodReference.toParameterList() {
+		List<ParameterDeclaration> list = new List<ParameterDeclaration>();
+		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			TypeDecl paramType = targetInterface().functionDescriptor().method.getParameter(i).type();
+			String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+			list.add(new ParameterDeclaration(new SyntheticTypeAccess(paramType), paramName));
+		}
+		return list;
+	}
+	
+	// The input variable is the field declaration that stores the evaluated expression
+	syn lazy Block ExprMethodReference.toBlock(Variable var) {
+		Expr qualifier = null;
+		if(getExpr() instanceof Access && ((Access)getExpr()).lastAccess() instanceof SuperAccess) {
+			qualifier = (Expr)getExpr().fullCopy();
+		}
+		else {
+			qualifier = new SyntheticVarAccess(var);
+		}
+		
+		List<Expr> arguments = new List<Expr>();
+		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+			arguments.add(new VarAccess(paramName));
+		}
+		
+		MethodAccess m = null;
+		if(!hasTypeArgument()) {
+			m = new MethodAccess(name(), arguments);
+		}	
+		else {
+			m = new ParMethodAccess(name(), arguments, (List<Access>)getTypeArgumentList().fullCopy());
+		}
+		Access qualifiedMethod = qualifier.qualifiesAccess(m);
+		Stmt blockStmt = null;
+		if(targetInterface().functionDescriptor().method.type().isVoid()) {
+			blockStmt = new ExprStmt(qualifiedMethod);
+		}
+		else {
+			blockStmt = new ReturnStmt(qualifiedMethod);
+		}
+		List<Stmt> stmtList = new List<Stmt>();
+		stmtList.add(blockStmt);
+		return new Block(stmtList);
+	}
+	
+	
+	
+	// Below is the code for TypeMethodReferences
+	
+	syn nta lazy ClassInstanceExpr TypeMethodReference.toClass() {
+		List<Access> implementsList = new List<Access>();
+		InterfaceDecl iDecl = targetInterface();
+		
+		// First compute the interface implemented by the anonymous class
+		Access implementsInterface = iDecl.createQualifiedAccess();
+		implementsList.add(implementsInterface);
+		
+		// Next compute the BodyDecl for the anonymous class
+		List<BodyDecl> bodyDecls = new List<BodyDecl>();
+		
+		// For TypeMethodReferenes, there is only one body decl, the method
+		
+		Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
+		Access returnType = new SyntheticTypeAccess(iDecl.functionDescriptor().method.type());
+		List<ParameterDeclaration> methodParams = toParameterList();
+		List<Access> methodThrows = new List<Access>();
+		for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+			methodThrows.add(new SyntheticTypeAccess(throwsType));
+		}
+		Opt<Block> methodBlock = new Opt<Block>(toBlock());
+		MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(), 
+											methodParams, methodThrows, methodBlock);
+		
+		bodyDecls.add(method);
+		
+		/* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
+		of a normal AnonymousDecl in order for this and super keywords to get the type of the outer 
+		scope. */
+		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "MethodReference", bodyDecls);
+		anonymousDecl.setImplementsList(implementsList);
+		
+		return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
+	}
+
+	syn lazy Block TypeMethodReference.toBlock() {
+		Expr qualifier = null;
+		List<Expr> arguments = new List<Expr>();
+		
+		// Should create access to instance method
+		if(targetStaticMethod().unknownMethod() == targetStaticMethod()) {
+			qualifier = new VarAccess(targetInterface().functionDescriptor().method.getParameter(0).name());
+			for(int i = 1; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+				String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+				arguments.add(new VarAccess(paramName));
+			}
+		}
+		// Should create access to static method
+		else {
+			//qualifier = new SyntheticTypeAccess(getTypeAccess().type());
+			qualifier = (Access)getTypeAccess().fullCopy();
+			for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+				String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+				arguments.add(new VarAccess(paramName));
+			}
+		}
+		
+		MethodAccess m = null;
+		if(!hasTypeArgument()) {
+			m = new MethodAccess(name(), arguments);
+		}
+		else {
+			m = new ParMethodAccess(name(), arguments, (List<Access>)getTypeArgumentList().fullCopy());
+		}
+		Access qualifiedMethod = qualifier.qualifiesAccess(m);
+		Stmt blockStmt = null;
+		if(targetInterface().functionDescriptor().method.type().isVoid()) {
+			blockStmt = new ExprStmt(qualifiedMethod);
+		}
+		else {
+			blockStmt = new ReturnStmt(qualifiedMethod);
+		}
+		List<Stmt> stmtList = new List<Stmt>();
+		stmtList.add(blockStmt);
+		return new Block(stmtList);		
+	}	
+}

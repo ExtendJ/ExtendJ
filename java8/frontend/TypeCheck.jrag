@@ -187,6 +187,29 @@ aspect TypeCheck {
 				error("The method " + found.fullSignature() + " in type " + found.hostType().typeName() + 
 						" must be accessed in a static way");
 			}
+			else if(ref.getExpr() instanceof Access && ((Access)ref.getExpr()).lastAccess() instanceof SuperAccess) {
+				if(found.isAbstract()) {
+					error("Cannot directly invoke the abstract method " + found.fullSignature() + 
+							" in type " + found.hostType().typeName());
+				}
+				
+				SuperAccess superAccess = (SuperAccess)((Access)ref.getExpr()).lastAccess();
+				if(superAccess.isQualified() && superAccess.decl() instanceof InterfaceDecl) {
+					if(hostType().isClassDecl()) {
+						ClassDecl classDecl = (ClassDecl)hostType();
+						if(classDecl.hasOverridingMethodInSuper(found)) 
+							error("Cannot make a super reference to method " + found.fullSignature() +
+									", there is a more specific override");
+					}	
+					else if(hostType().isInterfaceDecl()) {
+						InterfaceDecl interfaceDecl = (InterfaceDecl)hostType();
+						if(interfaceDecl.hasOverridingMethodInSuper(found)) 
+							error("Cannot make a super reference to method " + found.fullSignature() +
+									", there is a more specific override");
+					}
+				}
+				
+			}
 		}
 		else if(this instanceof TypeMethodReference) {
 			TypeMethodReference ref = (TypeMethodReference)this;
@@ -208,6 +231,11 @@ aspect TypeCheck {
 			}
 			else if(instanceMethod.isStatic()) {
 				error("The method " + instanceMethod.fullSignature() + " in type " + instanceMethod.hostType().typeName() + 
+						" must be accessed in a static way");
+				return;
+			}
+			else if(staticMethod.unknownMethod() != staticMethod && ref.getTypeAccess() instanceof ParTypeAccess) {
+				error("The method " + staticMethod.fullSignature() + " in type " + staticMethod.hostType().typeName() + 
 						" must be accessed in a static way");
 				return;
 			}

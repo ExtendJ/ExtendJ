@@ -1,20 +1,13 @@
 aspect LambdaToClass {
 	
 	// Build an anonymous class which will be converted to byte code
+	// Since a lambda can't target generic methods, eventual type variables don't have to be taken into accound
 	syn nta lazy ClassInstanceExpr LambdaExpr.toClass() {
 		List<Access> implementsList = new List<Access>();
 		InterfaceDecl iDecl = targetInterface();
 		
 		// First compute the interface implemented by the anonymous class
-		Access implementsInterface;
-		if(iDecl instanceof ParInterfaceDecl) {
-			ParInterfaceDecl parDecl = (ParInterfaceDecl)iDecl;
-			implementsInterface = new ParTypeAccess(new TypeAccess(parDecl.name()), parDecl.getArgumentList().fullCopy());
-		}
-		else {
-			implementsInterface = new TypeAccess(iDecl.name());
-		}
-		
+		Access implementsInterface = iDecl.createQualifiedAccess();		
 		implementsList.add(implementsInterface);
 		
 		// Next compute the BodyDecls for the anonymous class
@@ -26,7 +19,7 @@ aspect LambdaToClass {
 		List<ParameterDeclaration> methodParams = getLambdaParameters().toParameterList();
 		List<Access> methodThrows = new List<Access>();
 		for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
-			methodThrows.add(new TypeAccess(throwsType.name()));
+			methodThrows.add(throwsType.createQualifiedAccess());
 		}
 		Opt<Block> methodBlock = new Opt<Block>(getLambdaBody().toBlock());
 		MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(), 
@@ -40,7 +33,7 @@ aspect LambdaToClass {
 		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "Lambda", bodyDecls);
 		anonymousDecl.setImplementsList(implementsList);
 		
-		return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
+		return new ClassInstanceExpr(implementsInterface, new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
 	}
 	
 	syn lazy Block LambdaBody.toBlock();

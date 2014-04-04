@@ -8,7 +8,8 @@ aspect MethodReference {
 	syn nta lazy Access ExprMethodReference.syntheticAccess() {
 		List<Expr> arguments = new List<Expr>();
 		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-			arguments.add(new SyntheticMethodArgument(i));
+			TypeDecl argumentType = targetInterface().functionDescriptor().method.getParameter(i).type();
+			arguments.add(new SyntheticTypeAccess(argumentType));
 		}
 		
 		if(!hasTypeArgument()) {
@@ -39,6 +40,21 @@ aspect MethodReference {
 	syn lazy MethodDecl TypeMethodReference.targetStaticMethod() {
 		InterfaceDecl iDecl = targetInterface();
 		MethodAccess synAcc = syntheticStaticMethodAccess();
+		SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
+		if(maxSpecific.size() == 1)
+			return (MethodDecl)maxSpecific.iterator().next();
+		else 
+			return iDecl.functionDescriptor().method.unknownMethod();
+	}
+	
+	syn lazy MethodDecl TypeMethodReference.targetInstanceMethod() {
+		InterfaceDecl iDecl = targetInterface();
+		if(iDecl.functionDescriptor().method.getNumParameter() == 0 ||
+			!iDecl.functionDescriptor().method.getParameter(0).type().strictSubtype(getTypeAccess().type())) {
+			return iDecl.functionDescriptor().method.unknownMethod();
+		}
+		
+		MethodAccess synAcc = syntheticInstanceMethodAccess();
 		SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
 		if(maxSpecific.size() == 1)
 			return (MethodDecl)maxSpecific.iterator().next();
@@ -82,25 +98,11 @@ aspect MethodReference {
 		return param.inferredReferenceAccess((TypeAccess)getTypeAccess()).type();
 	}
 	
-	syn lazy MethodDecl TypeMethodReference.targetInstanceMethod() {
-		InterfaceDecl iDecl = targetInterface();
-		if(iDecl.functionDescriptor().method.getNumParameter() == 0 ||
-			!iDecl.functionDescriptor().method.getParameter(0).type().strictSubtype(getTypeAccess().type())) {
-			return iDecl.functionDescriptor().method.unknownMethod();
-		}
-		
-		MethodAccess synAcc = syntheticInstanceMethodAccess();
-		SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
-		if(maxSpecific.size() == 1)
-			return (MethodDecl)maxSpecific.iterator().next();
-		else 
-			return iDecl.functionDescriptor().method.unknownMethod();
-	}
-	
 	syn nta lazy Access TypeMethodReference.syntheticStaticAccess() {
 		List<Expr> arguments = new List<Expr>();
 		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-			arguments.add(new SyntheticMethodArgument(i));
+			TypeDecl argumentType = targetInterface().functionDescriptor().method.getParameter(i).type();
+			arguments.add(new SyntheticTypeAccess(argumentType));
 		}
 		
 		if(!hasTypeArgument()) {
@@ -121,13 +123,14 @@ aspect MethodReference {
 	syn nta lazy Access TypeMethodReference.syntheticInstanceAccess() {
 		List<Expr> arguments = new List<Expr>();
 		for(int i = 1; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-			arguments.add(new SyntheticMethodArgument(i));
+			TypeDecl argumentType = targetInterface().functionDescriptor().method.getParameter(i).type();
+			arguments.add(new SyntheticTypeAccess(argumentType));
 		}
 		
 		Access qualifier = null;
 		
 		if(inferredReferenceType() != null) {
-			qualifier = new SyntheticMethodQualifier(inferredReferenceType());
+			qualifier = new SyntheticTypeAccess(inferredReferenceType());
 		}
 		else {
 			qualifier = (Access)getTypeAccess().fullCopy();
@@ -173,16 +176,16 @@ aspect MethodReference {
 	}
 }
 
-aspect TypeAnalysis {
-	syn lazy TypeDecl SyntheticMethodArgument.type() {
-		ASTNode current = getParent();
-		while(!(current instanceof MethodReference)) {
-			current = current.getParent();
-		}
-		MethodReference methodRef = (MethodReference)current;
-		MethodDecl functionMethod = methodRef.targetInterface().functionDescriptor().method;
-		return functionMethod.getParameter(getPosition()).type();	
+aspect SyntheticAccess {
+	private TypeDecl SyntheticTypeAccess.type;
+	public SyntheticTypeAccess.SyntheticTypeAccess(TypeDecl type) {
+		this.type = type;
 	}
+	syn lazy TypeDecl SyntheticTypeAccess.type() = type;	
 	
-	syn lazy TypeDecl SyntheticMethodQualifier.type() = getType();
+	private Variable SyntheticVarAccess.var;
+	public SyntheticVarAccess.SyntheticVarAccess(Variable var) {
+		this.var = var;
+	}
+	syn lazy Variable SyntheticVarAccess.decl() = var;
 }
