@@ -5,9 +5,6 @@ aspect TypeCheck {
 	eq LambdaExpr.getLambdaParameters().unknownType() = unknownType();
 	eq LambdaExpr.getLambdaBody().unknownType() = unknownType();
 
-	//syn lazy TypeDecl LambdaExpr.type() = unknownType();
-	//syn lazy TypeDecl MethodReference.type() = unknownType();
-	syn lazy TypeDecl ConstructorReference.type() = unknownType();
 	syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
 	
 	
@@ -48,6 +45,22 @@ aspect TypeCheck {
 	
 	// Does not handle invocation context
 	syn lazy TypeDecl MethodReference.type() {
+		// 15.28.1
+		if(!assignmentContext() && !castContext()) 
+			return unknownType();
+		if(targetInterface() == null)
+			return unknownType();
+			
+		InterfaceDecl iDecl = targetInterface();
+		if(!iDecl.hasFunctionDescriptor()) {
+			return unknownType();
+		}
+		
+		return iDecl;
+	}
+	
+	// Does not handle invocation context
+	syn lazy TypeDecl ConstructorReference.type() {
 		// 15.28.1
 		if(!assignmentContext() && !castContext()) 
 			return unknownType();
@@ -273,6 +286,97 @@ aspect TypeCheck {
 				if(!legalException) {
 					// 15.28.1
 					error("Referenced method " + found.name() + " throws unhandled exception type " + exception.typeName()); 
+				}
+			}
+		}
+	}
+	
+	public void ConstructorReference.typeCheck() {
+		// 15.28.1
+		if(!assignmentContext() && !castContext() && !invocationContext()) {
+			error("Constructor references must target a functional interface");
+			return;
+		}
+		
+		/* ONLY TEMPORARY BECAUSE TYPE CHECK FOR INVOCATIONS
+			NOT YET IMPLEMENTED */
+		if(!assignmentContext() && ! castContext())
+			return;
+
+		if(targetType() == null) {
+			error("Constructor references must target a functional interface");
+			return;
+		}	
+		else if(!(targetType() instanceof InterfaceDecl)) {
+			error("Constructor references must target a functional interface");
+			return;
+		}
+		InterfaceDecl iDecl = (InterfaceDecl)targetType();
+		if(!iDecl.hasFunctionDescriptor()) {
+			error("Constructor references must target a functional interface");
+			return;
+		}
+		if(!iDecl.isFunctional()) {
+			error("Interface " + iDecl.name() + " is not functional and can therefore not be targeted by a constructor reference");
+			return;
+		}
+		
+		if(this instanceof ClassReference) {
+			ClassReference ref = (ClassReference)this;
+			ConstructorDecl decl = ref.targetConstructor();
+			if(ref.syntheticInstanceExpr().unknownConstructor() == decl) {
+				error("No constructor for the type " + getTypeAccess().type().typeName() 
+				     + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
+				     " in the functional interface " + iDecl.typeName() + " was found");
+			}
+			if(!iDecl.functionDescriptor().method.type().isVoid()) {
+				// 15.28.1
+				TypeDecl returnType = ref.syntheticInstanceExpr().type();
+				if(!returnType.assignConversionTo(iDecl.functionDescriptor().method.type(), null))
+					error("Return type of method " + iDecl.functionDescriptor().method.fullSignature()
+						+ " in functional interface " + iDecl.typeName() + " is not compatible with referenced constructor" 
+						+ " which has return type: " + returnType.typeName());
+			}
+			for(int i = 0; i < decl.getNumException(); i++) {
+				TypeDecl exception = decl.getException(i).type();
+				/* This is supposed to be unchecked exception, but the attribute name
+				   is currently inverted! */
+				if(exception.isCheckedException())
+					continue;
+				
+				boolean legalException = false;
+				for(TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
+					if(exception.strictSubtype(descriptorThrows)) {
+						legalException = true;
+						break;
+					}
+				}
+				if(!legalException) {
+					// 15.28.1
+					error("Referenced constructor " + decl.name() + " throws unhandled exception type " + exception.typeName()); 
+				}
+			}
+			ref.syntheticInstanceExpr().typeCheck();
+			
+		}
+		
+		else {
+			ArrayReference ref = (ArrayReference)this;
+			if(iDecl.functionDescriptor().method.getNumParameter() != 1) {
+				error("Array reference not compatible with method " + iDecl.functionDescriptor().method.fullSignature() 
+						+ " in functional interface " + iDecl.typeName() + ", should have a single parameter of type int");
+				return;
+			}
+			if(!iDecl.functionDescriptor().method.getParameter(0).type().assignConversionTo(iDecl.typeInt(), null)) {
+				error("Array reference not compatible with method " + iDecl.functionDescriptor().method.fullSignature() 
+						+ " in functional interface " + iDecl.typeName() + ", should have a single parameter of type int");
+				return;
+			}
+			if(!iDecl.functionDescriptor().method.type().isVoid()) {
+				if(!getTypeAccess().type().assignConversionTo(iDecl.functionDescriptor().method.type(), null)) {
+					error("Return type " + iDecl.functionDescriptor().method.type().typeName() + " of method " + 
+							iDecl.functionDescriptor().method.fullSignature() + " in functional interface " + iDecl.typeName() + 
+							" is not compatible with the array reference type " + getTypeAccess().type().typeName());
 				}
 			}
 		}

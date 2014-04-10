@@ -1,0 +1,39 @@
+aspect ConstructorReference {
+	syn lazy ConstructorDecl ClassReference.targetConstructor() {
+		return syntheticInstanceExpr().decl();
+	}
+	
+	syn nta lazy ClassInstanceExpr ClassReference.syntheticInstanceExpr() {
+		List<Expr> arguments = new List<Expr>();
+		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			TypeDecl argumentType = targetInterface().functionDescriptor().method.getParameter(i).type();
+			arguments.add(new SyntheticTypeAccess(argumentType));
+		}
+		
+		ClassInstanceExpr instanceExpr = null;
+		if(hasTypeArgument()) {
+			instanceExpr = new ParClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments,
+		 											new Opt(), (List<Access>)getTypeArgumentList().fullCopy());
+		}
+		else {
+			// Must check for raw reference type, and in that case infer using diamond (JLS 15.28.1)
+			if(getTypeAccess().type().isRawType()) {
+				DiamondAccess diamond = new DiamondAccess((Access)getTypeAccess().fullCopy());
+				instanceExpr = new ClassInstanceExpr(diamond, arguments);
+			}
+			else {
+				instanceExpr = new ClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments);
+			}
+		}
+		return instanceExpr;
+	}
+	
+	// Both array and class references always refer to types
+	eq ClassReference.getTypeArgument().nameType() = NameType.TYPE_NAME;
+	eq ConstructorReference.getTypeAccess().nameType() = NameType.TYPE_NAME;
+	
+	// Required for diamond type inference to work
+	eq ClassReference.syntheticInstanceExpr().assignConvertedType() {
+		return targetInterface().functionDescriptor().method.type();
+	}
+}
