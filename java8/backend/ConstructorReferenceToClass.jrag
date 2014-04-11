@@ -19,7 +19,7 @@ aspect ConstructorReferenceToClass {
 	}
 	
 	// Build an anonymous inner class for bytecode generation
-	syn nta lazy ClassInstanceExpr ArrayReference.toClass() {
+	syn nta lazy ClassInstanceExpr ConstructorReference.toClass() {
 		List<Access> implementsList = new List<Access>();
 		InterfaceDecl iDecl = targetInterface();
 		
@@ -48,11 +48,13 @@ aspect ConstructorReferenceToClass {
 		/* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
 		of a normal AnonymousDecl in order for this and super keywords to get the type of the outer 
 		scope. */
-		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "MethodReference", bodyDecls);
+		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "ConstructorReference", bodyDecls);
 		anonymousDecl.setImplementsList(implementsList);
 		
 		return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
 	}
+	
+	syn lazy Block ConstructorReference.toBlock();
 	
 	syn lazy List<ParameterDeclaration> ConstructorReference.toParameterList() {
 		List<ParameterDeclaration> list = new List<ParameterDeclaration>();
@@ -64,7 +66,7 @@ aspect ConstructorReferenceToClass {
 		return list;
 	}
 	
-	syn lazy Block ArrayReference.toBlock() {
+	eq ArrayReference.toBlock() {
 		// First, build an ArrayCreationExpr used in the block
 		String paramName = targetInterface().functionDescriptor().method.getParameter(0).name();
 		VarAccess paramAccess = new VarAccess(paramName);
@@ -82,4 +84,38 @@ aspect ConstructorReferenceToClass {
 		stmtList.add(blockStmt);
 		return new Block(stmtList);	
 	}	
+	
+	eq ClassReference.toBlock() {
+		List<Expr> arguments = new List<Expr>();
+		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+			String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+			arguments.add(new VarAccess(paramName));
+		}
+		
+		ClassInstanceExpr instanceExpr = null;
+		if(hasTypeArgument()) {
+			instanceExpr = new ParClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments,
+		 											new Opt(), (List<Access>)getTypeArgumentList().fullCopy());
+		}
+		else {
+			if(getTypeAccess().type().isRawType()) {
+				DiamondAccess diamond = new DiamondAccess((Access)getTypeAccess().fullCopy());
+				instanceExpr = new ClassInstanceExpr(diamond, arguments);
+			}
+			else {
+				instanceExpr = new ClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments);
+			}
+		}
+		Stmt blockStmt = null;
+		if(targetInterface().functionDescriptor().method.type().isVoid()) {
+			blockStmt = new ExprStmt(instanceExpr);
+		}
+		else {
+			blockStmt = new ReturnStmt(instanceExpr);
+		}
+		List<Stmt> stmtList = new List<Stmt>();
+		stmtList.add(blockStmt);
+		return new Block(stmtList);
+		
+	}
 }
