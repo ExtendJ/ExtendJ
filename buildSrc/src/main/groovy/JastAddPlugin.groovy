@@ -20,8 +20,13 @@ class JastAddPlugin implements Plugin<Project> {
 				ant.mkdir(dir: project.file(outdir))
 				ant.taskdef(name: "jastadd", classname: "org.jastadd.JastAddTask",
 					classpath: "${project.jastaddj.toolsDir}/jastadd2.jar") { }
-				ant.jastadd(package: project.jastaddj.astPackage,
-					rewrite:true, beaver: true, noCacheCycle: true, outdir: project.file(outdir),
+				ant.jastadd(
+					package: project.jastaddj.astPackage,
+					rewrite: true,
+					beaver: true,
+					noVisitCheck: true,
+					noCacheCycle: true,
+					outdir: project.file(outdir),
 					defaultMap: "new org.jastadd.util.RobustMap(new java.util.HashMap())") {
 					specFiles.addToAntBuilder(ant, "fileset", FileCollection.AntType.FileSet)
 				}
