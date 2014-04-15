@@ -1,5 +1,87 @@
 aspect MethodSignature18 {
 
+	syn lazy boolean Expr.potentiallyCompatible(TypeDecl type) {
+		return true;
+	}
+	
+	syn lazy boolean ParExpr.potentiallyCompatible(TypeDecl type) {
+		return getExpr().potentiallyCompatible(type);
+	}
+
+	refine MethodSignature15
+	eq MethodAccess.potentiallyApplicable(MethodDecl m) {
+		if(!m.name().equals(name()))
+			return false;
+		if(!m.accessibleFrom(hostType()))
+			return false;
+		if(!m.isVariableArity()) {
+			if(arity() != m.arity())
+				return false;
+			for(int i = 0; i < getNumArg(); i++) {
+				if(!getArg(i).potentiallyCompatible(m.getParameter(i).type()))
+					return false;
+			}
+		}
+		if(m.isVariableArity()) {
+			if(!(arity() >= m.arity()-1))
+				return false;
+			for(int i = 0; i < m.arity() - 2; i++) {
+				if(!getArg(i).potentiallyCompatible(m.getParameter(i).type()))
+					return false;
+			}
+			TypeDecl varArgType = m.getParameter(m.arity()-1).type();
+			if(arity() == m.arity()) {
+				if(!getArg(arity()-1).potentiallyCompatible(varArgType) &&
+						!getArg(arity()-1).potentiallyCompatible(varArgType.componentType()))
+					return false;
+			}
+			else if(arity() > m.arity()) {
+				for(int i = m.arity()-1; i < arity(); i++) {
+					if(!getArg(i).potentiallyCompatible(varArgType.componentType()))
+						return false;
+				}
+			}
+		}
+		
+		if(m instanceof GenericMethodDecl) {
+			GenericMethodDecl gm = (GenericMethodDecl)m;
+			ArrayList list = typeArguments(m);
+			if(list.size() != 0) {
+				if(gm.getNumTypeParameter() != list.size())
+					return false;
+				for(int i = 0; i < gm.getNumTypeParameter(); i++)
+					if(!((TypeDecl)list.get(i)).subtype(gm.original().getTypeParameter(i)))
+						return false;
+			}
+		}
+		return true;
+	}
+
+
+/*
+ A member method is potentially applicable to a method invocation if and only if all of the following are true:
+
+    The name of the member is identical to the name of the method in the method invocation.
+    The member is accessible (6.6) to the class or interface in which the method invocation appears.
+
+    Whether a member method is accessible at a method invocation depends on the access modifier (public, none, protected, or private) in the member's declaration and on where the method invocation appears.
+    If the member is a fixed arity method with arity n, the arity of the method invocation is equal to n, and for all i, 1 ≤ i ≤ n, the ith argument of the method invocation is potentially compatible, as defined below, with the type of the ith parameter of the method.
+    If the member is a variable arity method with arity n, then for all i, 1 ≤ i ≤ n-1, the ith argument of the method invocation is potentially compatible with the type of the ith parameter of the method; and, where the nth parameter of the method has type T[], one of the following is true:
+        The arity of the method invocation is equal to n-1.
+        The arity of the method invocation is equal to n, and the nth argument of the method invocation is potentially compatible with either T or T[].
+        The arity of the method invocation is m, where m > n, and for all i, n ≤ i ≤ m, the ith argument of the method invocation is potentially compatible with T. 
+    If the method invocation includes explicit type arguments, and the member is a generic method, then the number of type arguments is equal to the number of type parameters of the method.
+  }*/
+
+
+
+
+
+
+
+
+
+
 	syn lazy boolean InterfaceDecl.hasOverridingMethodInSuper(MethodDecl m) {
 		for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
 			TypeDecl typeDecl = outerIter.next();
