@@ -1,6 +1,13 @@
+import Module
+
+apply plugin: 'java'
+apply plugin: 'application'
 apply plugin: JastAddPlugin
 
+JastAddPlugin.modules(["java4", "java5", "java6", "java7"])
+
 jastaddj {
+	// JastAddJ build parameters
 	module = "java7 backend"
 	javaVersion = "Java SE 7"
 
@@ -12,25 +19,39 @@ jastaddj {
 	binDir = "ant-bin"
 	tmpDir = "${sourceDir}/tmp"
 	genDir = "${sourceDir}/gen"
+	genResDir = "${sourceDir}/gen-res"
 }
 
-JastAddPlugin.modules {
-	["java4", "java5", "java6", "java7"].each{ load it }
-}
+mainClassName = 'org.jastadd.jastaddj.JavaCompiler'
+jar.manifest.attributes 'Main-Class': "${mainClassName}"
 
-apply plugin: JastAddJPlugin
+// generate jastaddj.jar in this directory:
+jar.destinationDir = new File(".")
 
-task build(dependsOn: ['gen','resources']) << {
-	ant.mkdir(dir: file(project.jastaddj.binDir))
-	ant.javac(destdir: file(project.jastaddj.binDir), debug: true, nowarn: true,
-		source: '1.6', target: '1.6',
-		includeAntRuntime: false) {
-		classpath() {
-			pathelement(path: file("${project.jastaddj.toolsDir}/ant-1.9.1.jar"))
+sourceCompatibility = '1.6'
+targetCompatibility = '1.6'
+
+sourceSets {
+	main {
+		java {
+			srcDir "${project.jastaddj.sourceDir}/frontend"
+			srcDir "${project.jastaddj.sourceDir}/backend"
+			srcDir project.jastaddj.genDir
 		}
-		src(path: "${project.jastaddj.sourceDir}/frontend")
-		src(path: "${project.jastaddj.sourceDir}/backend")
-		src(path: file(project.jastaddj.genDir))
+		resources {
+			srcDir "${project.jastaddj.genResDir}"
+			srcDir "${project.jastaddj.resourceDir}"
+		}
 	}
+}
+
+dependencies {
+	compile files("${project.jastaddj.toolsDir}/ant-1.9.1.jar")
+}
+
+task javaFiles << {
+	// this task is for debugging the gradle build
+	println "files in java component:"
+	Module.get(project.jastaddj.module).files(project, "java").each{ println it }
 }
 

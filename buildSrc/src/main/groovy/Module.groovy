@@ -1,9 +1,13 @@
 class Module {
 
 	class Aspect {
+		String basedir = "."
 		List includes = []
 		List excludes = []
 		List excludeFroms = []
+		def basedir(path) {
+			basedir = path
+		}
 		def include(pattern) {
 			include pattern, [0]
 		}
@@ -21,7 +25,7 @@ class Module {
 	/** all defined modules */
 	static List modules = []
 
-	String base = ""
+	String basedir = "."
 	String name
 	Aspect javaAspect = new Aspect()
 	Aspect jastaddAspect = new Aspect()
@@ -32,11 +36,6 @@ class Module {
 	Module(name) {
 		this.name = name
 		modules << this
-		this.base = "."
-	}
-
-	def basedir(path) {
-		base = path
 	}
 
 	def imports(name) {
@@ -88,6 +87,10 @@ class Module {
 		this."${component}Aspect".excludeFroms
 	}
 
+	File componentBasedir(component) {
+		new File(basedir, this."${component}Aspect".basedir)
+	}
+
 	def gatherExcludes(component, visited) {
 		if (visited.contains(this)) {
 			return []
@@ -132,7 +135,9 @@ class Module {
 			def excludeFromsLocal = excludeFroms.findAll{ it[0] == name }
 			def localExcludes = excludes + excludeFromsLocal.collect{ it[1] }
 			for (include in includes) {
-				files << [ include[0], project.files(project.fileTree(dir: base,
+				File base = componentBasedir(component)
+				files << [ include[0], project.files(project.fileTree(
+					dir: base,
 					include: include[1],
 					excludes: localExcludes)) ]
 			}
