@@ -111,12 +111,6 @@ class CodeGeneration {
 		c.add(e);
 	}
 
-	// at each variable declaration and parameter declaration
-	// inh int VariableDeclaration.variableScopeEndLabel(CodeGeneration gen);
-	// addLocalVariableEntryAtCurrentPC(this, variableScopeEndLabel());
-	// syn lazy int Block.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
-	//	Block.createBCode() { ... gen.addLabel(variableScopeLabel());
-
 	static class LineNumberEntry {
 		int start_pc;
 		int line_number;
@@ -179,32 +173,12 @@ class CodeGeneration {
 
 	int maxLocals = 0;
 
-	/*
-	   public int label() {
-	   return labelCounter++;
-	   }
-	   private static int labelCounter = 1;
-	   */
 	private HashMap address = new HashMap();
+
 	private HashMap uses = new HashMap();
+
 	public void addLabel(int label) {
 		Integer label_object = new Integer(label);
-		/*
-		   if(pos() - 3 == bytes.lastGotoPos() && bytes.get(pos() - 3) == Bytecode.GOTO) {
-		   if(uses.containsKey(label_object)) {
-		   ArrayList array = (ArrayList)uses.get(label_object);
-		   for(int i = 0; i < array.size(); i++) {
-		   int p = ((Integer)array.get(i)).intValue();
-		   if(pos() - 3 == p) {
-		//System.out.println("Found direct branch");
-		array.remove(i);
-		i--;
-		   }
-		   }
-		   bytes.setPos(pos() - 3);
-		   }
-		   }
-		   */
 		address.put(label_object, new Integer(pos()));
 		// Update all reference to this label
 		if(uses.containsKey(label_object)) {
@@ -218,37 +192,43 @@ class CodeGeneration {
 			}
 		}
 	}
+
 	public int addressOf(int label) {
 		Integer label_object = new Integer(label);
-		if(!address.containsKey(label_object))
+		if (!address.containsKey(label_object)) {
 			throw new Error("Can not compute address of unplaced label (id: " +
 					label + ")");
-		return ((Integer)address.get(label_object)).intValue();
+		}
+		return ((Integer) address.get(label_object)).intValue();
 	}
+
 	private int jump(int label) {
 		Integer label_object = new Integer(label);
-		if(!uses.containsKey(label_object))
+		if (!uses.containsKey(label_object)) {
 			uses.put(label_object, new ArrayList());
+		}
 		ArrayList a = (ArrayList)uses.get(label_object);
 		a.add(new Integer(pos())); // position of the 16-bits reference
 		Integer val = (Integer)address.get(label_object);
-		if(val != null)
+		if (val != null) {
 			return val.intValue() - pos();
+		}
 		return 0; // a position of 0 means not calculated yet
 	}
+
 	private void setAddress(int position, int address) {
 		if(address > Short.MAX_VALUE || address < Short.MIN_VALUE)
 			numberFormatError = true;
 		bytes.set(position + 0, (byte)((address&0xff00)>>8));
 		bytes.set(position + 1, (byte)(address&0xff));
 	}
+
 	private void setAddress32(int position, int address) {
 		bytes.set(position + 0, (byte)(address >> 24 & 0xff));
 		bytes.set(position + 1, (byte)(address >> 16 & 0xff));
 		bytes.set(position + 2, (byte)(address >> 8 & 0xff));
 		bytes.set(position + 3, (byte)(address & 0xff));
 	}
-
 
 	public void emitStoreReference(int pos) {
 		maxLocals = Math.max(maxLocals, pos+1);
@@ -259,6 +239,7 @@ class CodeGeneration {
 		else if(pos < 256) emit(Bytecode.ASTORE).add(pos);
 		else emit(Bytecode.WIDE).emit(Bytecode.ASTORE).add2(pos);
 	}
+
 	public void emitLoadReference(int pos) {
 		maxLocals = Math.max(maxLocals, pos+1);
 		if(pos == 0) emit(Bytecode.ALOAD_0);
@@ -281,6 +262,7 @@ class CodeGeneration {
 		int p = constantPool().addClass(type.isArrayDecl() ? type.typeDescriptor() : type.constantPoolName());
 		bytes.emit(Bytecode.INSTANCEOF).add2(p);
 	}
+
 	public void emitCheckCast(TypeDecl type) {
 		int p = constantPool().addClass(type.isArrayDecl() ? type.typeDescriptor() : type.constantPoolName());
 		bytes.emit(Bytecode.CHECKCAST).add2(p);
@@ -289,6 +271,7 @@ class CodeGeneration {
 	public void emitDup() {
 		bytes.emit(Bytecode.DUP);
 	}
+
 	public void emitDup2() {
 		bytes.emit(Bytecode.DUP2);
 	}
@@ -343,31 +326,47 @@ class CodeGeneration {
 		bytes.skip(num);
 	}
 
-	public byte[] toArray() {return bytes.toArray();}
-	CodeGeneration add(int i) { return add((byte)i); }
-	CodeGeneration add(byte b) { bytes.add(b); return this; }
+	public byte[] toArray() {
+		return bytes.toArray();
+	}
+
+	CodeGeneration add(int i) {
+		return add((byte)i);
+	}
+
+	CodeGeneration add(byte b) {
+		bytes.add(b);
+		return this;
+	}
+
 	CodeGeneration add2(int index) {
 		bytes.add2(index);
 		return this;
 	}
+
 	CodeGeneration add4(int index) {
 		bytes.add4(index);
 		return this;
 	}
+
 	CodeGeneration emit(byte b) {
 		bytes.emit(b);
 		return this;
 	}
+
 	CodeGeneration emit(byte b, int stackChange) {
 		bytes.emit(b, stackChange);
 		return this;
 	}
+
 	public int maxStackDepth() {
 		return bytes.maxStackDepth();
 	}
+
 	public int stackDepth() {
 		return bytes.stackDepth();
 	}
+
 	public void changeStackDepth(int i) {
 		bytes.changeStackDepth(i);
 	}
