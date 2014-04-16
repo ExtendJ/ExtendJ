@@ -1,0 +1,46 @@
+aspect LambdaBody {
+	syn lazy boolean LambdaBody.isBlockBody();
+	syn lazy boolean LambdaBody.isExprBody();
+	
+	eq BlockLambdaBody.isBlockBody() = true;
+	eq BlockLambdaBody.isExprBody() = false;
+	
+	eq ExprLambdaBody.isBlockBody() = false;
+	eq ExprLambdaBody.isExprBody() = true;
+}
+
+aspect ReturnCompatible {
+	syn lazy boolean BlockLambdaBody.voidCompatible();
+	syn lazy boolean BlockLambdaBody.valueCompatible();
+	
+	//15.27.2
+	eq BlockLambdaBody.voidCompatible() = noReturnsHasResult();
+	eq BlockLambdaBody.valueCompatible() = allReturnsHasResult() && !getBlock().canCompleteNormally();
+	
+	
+	
+	coll ArrayList<ReturnStmt> BlockLambdaBody.lambdaReturns() [new ArrayList<ReturnStmt>()] with add root Program;
+	
+	ReturnStmt contributes this
+		when (enclosingLambda() != null) && (enclosingLambda().hostType() == hostType())
+		to BlockLambdaBody.lambdaReturns()
+		for (BlockLambdaBody)enclosingLambda().getLambdaBody();
+	
+	
+	public boolean BlockLambdaBody.noReturnsHasResult() {
+		ArrayList<ReturnStmt> returnList = lambdaReturns();
+		for(int i = 0; i < returnList.size(); i++) {
+			if(returnList.get(i).hasResult())
+				return false;
+		}
+		return true;	
+	}
+	public boolean BlockLambdaBody.allReturnsHasResult() {
+		ArrayList<ReturnStmt> returnList = lambdaReturns();
+		for(int i = 0; i < returnList.size(); i++) {
+			if(!returnList.get(i).hasResult())
+				return false;
+		}
+		return true;
+	}
+}

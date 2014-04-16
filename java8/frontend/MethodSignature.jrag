@@ -1,11 +1,126 @@
 aspect MethodSignature18 {
 
-	syn lazy boolean Expr.potentiallyCompatible(TypeDecl type) {
+	syn lazy int LambdaExpr.arity() {
+		return numParameters();
+	}
+
+	syn lazy boolean Expr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
 		return true;
 	}
 	
-	syn lazy boolean ParExpr.potentiallyCompatible(TypeDecl type) {
-		return getExpr().potentiallyCompatible(type);
+	eq LambdaExpr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+		if(type.isTypeVariable()) {
+			if(!(candidateMethod instanceof GenericMethodDecl))
+				return false;
+			GenericMethodDecl genericMethod = (GenericMethodDecl)candidateMethod;
+			boolean foundTypeVariable = false;
+			for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
+				if(type == genericMethod.getTypeParameter(i)) {
+					foundTypeVariable = true;
+					break;
+				}
+			}
+			if(!foundTypeVariable)
+				return false;
+			else
+				return true;
+		}
+		
+		if(!type.isInterfaceDecl())
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		if(!iDecl.isFunctional())
+			return false;
+		if(arity() != iDecl.functionDescriptor().method.arity())
+			return false;
+		if(iDecl.functionDescriptor().method.type().isVoid()) {
+			if(getLambdaBody().isExprBody()) {
+				ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
+				if(!exprBody.getExpr().stmtCompatible())
+					return false;
+			}
+			else {
+				BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+				if(!blockBody.voidCompatible())
+					return false;
+			}
+		}
+		else {
+			if(getLambdaBody().isBlockBody()) {
+				BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+				if(!blockBody.valueCompatible()) 
+					return false;
+			}
+		}
+		
+		return true;
+	}
+	
+	eq MethodReference.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+		if(type.isTypeVariable()) {
+			if(!(candidateMethod instanceof GenericMethodDecl))
+				return false;
+			GenericMethodDecl genericMethod = (GenericMethodDecl)candidateMethod;
+			boolean foundTypeVariable = false;
+			for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
+				if(type == genericMethod.getTypeParameter(i)) {
+					foundTypeVariable = true;
+					break;
+				}
+			}
+			if(!foundTypeVariable)
+				return false;
+			else
+				return true;
+		}
+		
+		if(!type.isInterfaceDecl())
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		if(!iDecl.isFunctional())
+			return false;
+		
+		return true;
+	}
+	
+	eq ConstructorReference.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+		if(type.isTypeVariable()) {
+			if(!(candidateMethod instanceof GenericMethodDecl))
+				return false;
+			GenericMethodDecl genericMethod = (GenericMethodDecl)candidateMethod;
+			boolean foundTypeVariable = false;
+			for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
+				if(type == genericMethod.getTypeParameter(i)) {
+					foundTypeVariable = true;
+					break;
+				}
+			}
+			if(!foundTypeVariable)
+				return false;
+			else
+				return true;
+		}
+		
+		if(!type.isInterfaceDecl())
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		if(!iDecl.isFunctional())
+			return false;
+		
+		return true;
+	}
+	
+	eq ParExpr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+		return getExpr().potentiallyCompatible(type, candidateMethod);
+	}
+	
+	eq ConditionalExpr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+		if(!isPolyExpression())
+			return true;
+		if(getTrueExpr().potentiallyCompatible(type, candidateMethod) && 
+				getFalseExpr().potentiallyCompatible(type, candidateMethod))
+			return true;
+		return false;
 	}
 
 	refine MethodSignature15
@@ -18,7 +133,7 @@ aspect MethodSignature18 {
 			if(arity() != m.arity())
 				return false;
 			for(int i = 0; i < getNumArg(); i++) {
-				if(!getArg(i).potentiallyCompatible(m.getParameter(i).type()))
+				if(!getArg(i).potentiallyCompatible(m.getParameter(i).type(), m))
 					return false;
 			}
 		}
@@ -26,18 +141,18 @@ aspect MethodSignature18 {
 			if(!(arity() >= m.arity()-1))
 				return false;
 			for(int i = 0; i < m.arity() - 2; i++) {
-				if(!getArg(i).potentiallyCompatible(m.getParameter(i).type()))
+				if(!getArg(i).potentiallyCompatible(m.getParameter(i).type(), m))
 					return false;
 			}
 			TypeDecl varArgType = m.getParameter(m.arity()-1).type();
 			if(arity() == m.arity()) {
-				if(!getArg(arity()-1).potentiallyCompatible(varArgType) &&
-						!getArg(arity()-1).potentiallyCompatible(varArgType.componentType()))
+				if(!getArg(arity()-1).potentiallyCompatible(varArgType, m) &&
+						!getArg(arity()-1).potentiallyCompatible(varArgType.componentType(), m))
 					return false;
 			}
 			else if(arity() > m.arity()) {
 				for(int i = m.arity()-1; i < arity(); i++) {
-					if(!getArg(i).potentiallyCompatible(varArgType.componentType()))
+					if(!getArg(i).potentiallyCompatible(varArgType.componentType(), m))
 						return false;
 				}
 			}

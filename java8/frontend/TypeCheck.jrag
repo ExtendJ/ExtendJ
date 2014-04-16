@@ -39,13 +39,15 @@ aspect TypeCheck {
 		if(!iDecl.hasFunctionDescriptor()) {
 			return unknownType();
 		}
-		
-		return iDecl;
+		if(congruentTo(iDecl.functionDescriptor()))
+			return iDecl;
+		else
+			return unknownType();
 	}
 	
 	// Does not handle invocation context
 	syn lazy TypeDecl MethodReference.type() {
-		// 15.28.1
+		// 15.13.1
 		if(!assignmentContext() && !castContext()) 
 			return unknownType();
 		if(targetInterface() == null)
@@ -56,12 +58,15 @@ aspect TypeCheck {
 			return unknownType();
 		}
 		
-		return iDecl;
+		if(congruentTo(iDecl.functionDescriptor()))
+			return iDecl;
+		else
+			return unknownType();
 	}
 	
 	// Does not handle invocation context
 	syn lazy TypeDecl ConstructorReference.type() {
-		// 15.28.1
+		// 15.13.1
 		if(!assignmentContext() && !castContext()) 
 			return unknownType();
 		if(targetInterface() == null)
@@ -157,7 +162,7 @@ aspect TypeCheck {
 	}
 	
 	public void MethodReference.typeCheck() {
-		// 15.28.1
+		// 15.13.1
 		if(!assignmentContext() && !castContext() && !invocationContext()) {
 			error("Method references must target a functional interface");
 			return;
@@ -187,12 +192,13 @@ aspect TypeCheck {
 		}
 		
 		MethodDecl found = null;
+		FunctionDescriptor f = iDecl.functionDescriptor();
 		// Lookup method here and check that one most specific can be found	
 		if(this instanceof ExprMethodReference) {
 			ExprMethodReference ref = (ExprMethodReference)this;
-			found = ref.targetMethod();
+			found = ref.targetMethod(f);
 			if(found.unknownMethod() == found) {
-				// 15.28.1
+				// 15.13.1
 				error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
 				 " in the functional interface " + iDecl.typeName() + " was found");
 			}
@@ -200,6 +206,8 @@ aspect TypeCheck {
 				error("The method " + found.fullSignature() + " in type " + found.hostType().typeName() + 
 						" must be accessed in a static way");
 			}
+			
+			// 15.13.2
 			else if(ref.getExpr() instanceof Access && ((Access)ref.getExpr()).lastAccess() instanceof SuperAccess) {
 				if(found.isAbstract()) {
 					error("Cannot directly invoke the abstract method " + found.fullSignature() + 
@@ -226,8 +234,8 @@ aspect TypeCheck {
 		}
 		else if(this instanceof TypeMethodReference) {
 			TypeMethodReference ref = (TypeMethodReference)this;
-			MethodDecl staticMethod = ref.targetStaticMethod();
-			MethodDecl instanceMethod = ref.targetInstanceMethod();
+			MethodDecl staticMethod = ref.targetStaticMethod(f);
+			MethodDecl instanceMethod = ref.targetInstanceMethod(f);
 			if(staticMethod.unknownMethod() != staticMethod && instanceMethod.unknownMethod() != instanceMethod) {
 				error("Ambiguity error: two possible methods " + staticMethod.name() + " was found");
 				return;
@@ -263,7 +271,7 @@ aspect TypeCheck {
 		if(found != null && found.unknownMethod() != found) {
 			// Check that found is compatible with the function descriptor
 			if(!iDecl.functionDescriptor().method.type().isVoid()) {
-				// 15.28.1
+				// 15.13.1
 				if(found.type().isVoid() || !found.type().assignConversionTo(iDecl.functionDescriptor().method.type(), null))
 					error("Return type of referenced method " + found.fullSignature() + " is not compatible with method " + 
 							iDecl.functionDescriptor().method.fullSignature() + " in functional interface " + iDecl.typeName());
@@ -284,7 +292,7 @@ aspect TypeCheck {
 					}
 				}
 				if(!legalException) {
-					// 15.28.1
+					// 15.13.1
 					error("Referenced method " + found.name() + " throws unhandled exception type " + exception.typeName()); 
 				}
 			}
@@ -292,7 +300,7 @@ aspect TypeCheck {
 	}
 	
 	public void ConstructorReference.typeCheck() {
-		// 15.28.1
+		// 15.13.1
 		if(!assignmentContext() && !castContext() && !invocationContext()) {
 			error("Constructor references must target a functional interface");
 			return;
@@ -321,19 +329,21 @@ aspect TypeCheck {
 			return;
 		}
 		
+		FunctionDescriptor f = iDecl.functionDescriptor();
+		
 		if(this instanceof ClassReference) {
 			ClassReference ref = (ClassReference)this;
-			ConstructorDecl decl = ref.targetConstructor();
-			if(ref.syntheticInstanceExpr().unknownConstructor() == decl) {
+			ConstructorDecl decl = ref.targetConstructor(f);
+			if(ref.syntheticInstanceExpr(f).unknownConstructor() == decl) {
 				error("No constructor for the type " + getTypeAccess().type().typeName() 
-				     + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
+				     + " that is compatible with the method " + f.method.fullSignature() + 
 				     " in the functional interface " + iDecl.typeName() + " was found");
 			}
-			if(!iDecl.functionDescriptor().method.type().isVoid()) {
-				// 15.28.1
-				TypeDecl returnType = ref.syntheticInstanceExpr().type();
-				if(!returnType.assignConversionTo(iDecl.functionDescriptor().method.type(), null))
-					error("Return type of method " + iDecl.functionDescriptor().method.fullSignature()
+			if(!f.method.type().isVoid()) {
+				// 15.13.1
+				TypeDecl returnType = ref.syntheticInstanceExpr(f).type();
+				if(!returnType.assignConversionTo(f.method.type(), null))
+					error("Return type of method " + f.method.fullSignature()
 						+ " in functional interface " + iDecl.typeName() + " is not compatible with referenced constructor" 
 						+ " which has return type: " + returnType.typeName());
 			}
@@ -352,30 +362,30 @@ aspect TypeCheck {
 					}
 				}
 				if(!legalException) {
-					// 15.28.1
+					// 15.13.1
 					error("Referenced constructor " + decl.name() + " throws unhandled exception type " + exception.typeName()); 
 				}
 			}
-			ref.syntheticInstanceExpr().typeCheck();
+			ref.syntheticInstanceExpr(f).typeCheck();
 			
 		}
 		
 		else {
 			ArrayReference ref = (ArrayReference)this;
-			if(iDecl.functionDescriptor().method.getNumParameter() != 1) {
-				error("Array reference not compatible with method " + iDecl.functionDescriptor().method.fullSignature() 
+			if(f.method.getNumParameter() != 1) {
+				error("Array reference not compatible with method " + f.method.fullSignature() 
 						+ " in functional interface " + iDecl.typeName() + ", should have a single parameter of type int");
 				return;
 			}
-			if(!iDecl.functionDescriptor().method.getParameter(0).type().assignConversionTo(iDecl.typeInt(), null)) {
-				error("Array reference not compatible with method " + iDecl.functionDescriptor().method.fullSignature() 
+			if(!f.method.getParameter(0).type().assignConversionTo(iDecl.typeInt(), null)) {
+				error("Array reference not compatible with method " + f.method.fullSignature() 
 						+ " in functional interface " + iDecl.typeName() + ", should have a single parameter of type int");
 				return;
 			}
-			if(!iDecl.functionDescriptor().method.type().isVoid()) {
-				if(!getTypeAccess().type().assignConversionTo(iDecl.functionDescriptor().method.type(), null)) {
-					error("Return type " + iDecl.functionDescriptor().method.type().typeName() + " of method " + 
-							iDecl.functionDescriptor().method.fullSignature() + " in functional interface " + iDecl.typeName() + 
+			if(!f.method.type().isVoid()) {
+				if(!getTypeAccess().type().assignConversionTo(f.method.type(), null)) {
+					error("Return type " + f.method.type().typeName() + " of method " + 
+							f.method.fullSignature() + " in functional interface " + iDecl.typeName() + 
 							" is not compatible with the array reference type " + getTypeAccess().type().typeName());
 				}
 			}
@@ -395,10 +405,10 @@ aspect TypeCheck {
 aspect LambdaParametersInference {
 	inh lazy TypeDecl InferredParameterDeclaration.inferredType();
 	eq InferredLambdaParameters.getParameters(int i).inferredType() {
-		if(!(enclosingLambda().type() instanceof InterfaceDecl)) {
+		if(enclosingLambda().targetInterface() == null) {
 			return unknownType();
 		}
-		InterfaceDecl iDecl = (InterfaceDecl)enclosingLambda().type();
+		InterfaceDecl iDecl = (InterfaceDecl)enclosingLambda().targetInterface();
 		if(!iDecl.hasFunctionDescriptor())
 			return unknownType();
 		else if(iDecl.functionDescriptor().method.getNumParameter() < i + 1)

@@ -1,0 +1,125 @@
+aspect LambdaExpr {	
+	syn lazy int LambdaParameters.numParameters();
+	syn lazy int LambdaExpr.numParameters() = getLambdaParameters().numParameters();
+	
+	eq EmptyLambdaParameters.numParameters() = 0;
+	eq InferredLambdaParameters.numParameters() = getNumParameters();
+	eq DeclaredLambdaParameters.numParameters() = getNumParameters();
+	
+	syn lazy boolean LambdaParameters.congruentTo(FunctionDescriptor f);
+	
+	// 15.27.3
+	eq EmptyLambdaParameters.congruentTo(FunctionDescriptor f) {
+		return f.method.getNumParameter() == 0;
+	}	
+	
+	// 15.27.3
+	eq InferredLambdaParameters.congruentTo(FunctionDescriptor f) {
+		return numParameters() == f.method.getNumParameter();
+	}
+	
+	// 15.27.3
+	eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor f) {
+		if(numParameters() != f.method.getNumParameter())
+			return false;
+		for(int i = 0; i < numParameters(); i++) {
+			//Lambdas can't declare type variables so that doesn't need to be taken into account
+			if(getParameters(i).type() != f.method.getParameter(i).type())
+				return false;
+		}
+		return true;
+	}
+
+	
+	
+	syn lazy boolean LambdaBody.congruentTo(FunctionDescriptor f);
+	
+	// 15.27.3
+	eq ExprLambdaBody.congruentTo(FunctionDescriptor f) {
+		if(f.method.type().isVoid()) {
+			return getExpr().stmtCompatible();
+		}
+
+		else {
+			if(!getExpr().type().assignConversionTo(f.method.type(), getExpr()))
+				return false;
+			else
+				return true;
+		}
+	}
+	
+	// 15.27.3
+	eq BlockLambdaBody.congruentTo(FunctionDescriptor f) {
+		if(f.method.type().isVoid()) {
+			return voidCompatible();
+		}
+		else {
+			/* That the return stmt returns a value of correct
+				type is checked in the type analysis for the
+				ReturnStmt-construct */
+			return valueCompatible();
+		}
+	}
+	
+	// 15.27.3
+	syn lazy boolean LambdaExpr.congruentTo(FunctionDescriptor f) {
+		if(!getLambdaParameters().congruentTo(f))
+			return false;
+		if(!getLambdaBody().congruentTo(f))
+			return false;
+		return true;
+	}
+	
+	refine LookupParTypeDecl
+	public Access ParTypeDecl.substitute(Parameterization parTypeDecl) {
+		// TODO: include nesting as well....
+		if(parTypeDecl.isRawType())
+			return ((GenericTypeDecl)genericDecl()).rawType().createBoundAccess();
+		/* These lines have been removed because they erase arguments from 
+			parameter types when they are not using type variables, for example
+			C<String> is substituted to only C, which I don't think is correct?
+			And if the ParTypeDecl doesn't use any type variables, why is there
+			even any need for further substitution? 
+			
+		if(!usesTypeVariable())
+			return super.substitute(parTypeDecl);*/
+		List list = new List();
+		for(int i = 0; i < getNumArgument(); i++)
+			list.add(getArgument(i).type().substitute(parTypeDecl));
+		return new ParTypeAccess(genericDecl().createQualifiedAccess(), list);
+		
+	}
+}
+
+aspect StmtCompatible {
+	syn lazy boolean Expr.stmtCompatible() = false;
+	syn lazy boolean ConstructorAccess.stmtCompatible() = true;
+	syn lazy boolean ClassInstanceExpr.stmtCompatible() = true;
+	syn lazy boolean AssignExpr.stmtCompatible() = true;
+	syn lazy boolean PostIncExpr.stmtCompatible() = true;
+	syn lazy boolean PostDecExpr.stmtCompatible() = true;
+	syn lazy boolean PreIncExpr.stmtCompatible() = true;
+	syn lazy boolean PreDecExpr.stmtCompatible() = true;
+	syn lazy boolean MethodAccess.stmtCompatible() = true;
+	syn lazy boolean AbstractDot.stmtCompatible() = getRight().stmtCompatible();
+}
+
+aspect ExceptionHandling {
+	eq LambdaExpr.getLambdaBody().handlesException(TypeDecl exceptionType) {
+		/* Supposed to be uncheckedexception, but apparently
+			the properties have been implemented in inverse in 
+			JastAddJ */
+		if(exceptionType.isCheckedException())
+			return true;
+		InterfaceDecl iDecl = targetInterface();
+		if(iDecl == null)
+			return false;
+		else if(!iDecl.hasFunctionDescriptor())
+			return false;
+		for(TypeDecl exception : iDecl.functionDescriptor().throwsList) {
+			if(exceptionType.strictSubtype(exception))
+				return true;
+		}
+		return false;
+	}
+}
