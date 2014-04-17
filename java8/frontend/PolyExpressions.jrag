@@ -1,5 +1,7 @@
 aspect PolyExpressions {
 	syn lazy boolean Expr.isBooleanExpression() {
+		if(isPolyExpression())
+			return false;
 		return type().isBoolean();
 	}
 	
@@ -34,6 +36,8 @@ aspect PolyExpressions {
 	
 	
 	syn lazy boolean Expr.isNumericExpression() {
+		if(isPolyExpression())
+			return false;
 		return type().isNumericType();
 	}
 	
@@ -58,11 +62,99 @@ aspect PolyExpressions {
 		return !isBooleanConditional() && !isNumericConditional();
 	}
 	
-	syn lazy boolean ConditionalExpr.isPolyExpression() {
+	syn lazy boolean Expr.isPolyExpression() = false;
+	
+	eq ConditionalExpr.isPolyExpression() {
 		return isReferenceConditional() && (assignmentContext() || invocationContext());
 	}
 	
-	syn lazy boolean ClassInstanceExpr.isPolyExpression() {
+	// 15.9
+	eq ClassInstanceExpr.isPolyExpression() {
 		return (getAccess() instanceof DiamondAccess) && (assignmentContext() || invocationContext());
 	}
+	
+	// 15.8.5
+	eq ParExpr.isPolyExpression() {
+		return getExpr().isPolyExpression();
+	}
+	
+	eq LambdaExpr.isPolyExpression() = true;
+	eq MethodReference.isPolyExpression() = true;
+	eq ConstructorReference.isPolyExpression() = true;
+	
+	// 15.12 
+	eq ParMethodAccess.isPolyExpression() = false;
+	eq MethodAccess.isPolyExpression() {
+		if(!assignmentContext() && !invocationContext())
+			return false;
+		if(!(decl() instanceof GenericMethodDecl))
+			return false;
+		GenericMethodDecl genericDecl = (GenericMethodDecl)decl();
+		return genericDecl.typeVariableInReturn();
+	}
+	
+	syn lazy boolean GenericMethodDecl.typeVariableInReturn() {
+		if(!getTypeAccess().usesTypeVariable())
+			return false;
+		ASTNode current = getTypeAccess();
+		LinkedList<ASTNode> list = new LinkedList<ASTNode>();
+		list.add(current);
+		boolean foundUse = false;
+		while(!list.isEmpty()) {
+			current = list.poll();
+			for(int i = 0; i < current.getNumChild(); i++) {
+				list.add(current.getChild(i));
+			}
+			if(current instanceof TypeAccess) {
+				TypeAccess typeAccess = (TypeAccess)current;
+				if(typeAccess.type().isTypeVariable()) {
+					for(int i = 0; i < getNumTypeParameter(); i++) {
+						if(typeAccess.type() == getTypeParameter(i)) {
+							foundUse = true;
+							break;
+						}
+					}
+					if(foundUse)
+						break;
+				}
+			}
+		}
+		return foundUse;
+	}
+	
+	// This can be used to check assignment compatibility without worrying about poly expressions type
+	syn lazy boolean Expr.assignConversionTo(TypeDecl type) = type().assignConversionTo(type, this);
+	
+	eq LambdaExpr.assignConversionTo(TypeDecl type) {
+		if(!type.isFunctionalInterface())
+			return false;
+		FunctionDescriptor f = ((InterfaceDecl)type).functionDescriptor();
+		return congruentTo(f);
+	}
+	
+	eq MethodReference.assignConversionTo(TypeDecl type) {
+		if(!type.isFunctionalInterface())
+			return false;
+		FunctionDescriptor f = ((InterfaceDecl)type).functionDescriptor();
+		return congruentTo(f);
+	}
+	
+	eq ConstructorReference.assignConversionTo(TypeDecl type) {
+		if(!type.isFunctionalInterface())
+			return false;
+		FunctionDescriptor f = ((InterfaceDecl)type).functionDescriptor();
+		return congruentTo(f);
+	}
+	
+	eq ParExpr.assignConversionTo(TypeDecl type) {
+		return getExpr().assignConversionTo(type);
+	}
+	
+	eq ConditionalExpr.assignConversionTo(TypeDecl type) {
+		if(!isPolyExpression())
+			return type().assignConversionTo(type, this);
+		else
+			return getTrueExpr().assignConversionTo(type) && getFalseExpr().assignConversionTo(type);
+	}
+	
 }

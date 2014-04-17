@@ -1,17 +1,27 @@
 aspect LambdaExpr {	
+
+	
+	eq LambdaAnonymousDecl.unqualifiedLookupMethod(String name) {
+		if(getParent().getParent().getParent() instanceof MethodReference) {
+			return ((MethodReference)getParent().getParent().getParent()).lookupMethod(name);
+		}
+		else if(getParent().getParent().getParent() instanceof ConstructorReference) {
+			return ((ConstructorReference)getParent().getParent().getParent()).lookupMethod(name);
+		}
+		else {
+			return enclosingLambda().lookupMethod(name);
+		}
+	}
+	
+	syn lazy int LambdaExpr.arity() = numParameters();
+	
 	syn lazy int LambdaParameters.numParameters();
 	syn lazy int LambdaExpr.numParameters() = getLambdaParameters().numParameters();
 	
-	eq EmptyLambdaParameters.numParameters() = 0;
-	eq InferredLambdaParameters.numParameters() = getNumParameters();
-	eq DeclaredLambdaParameters.numParameters() = getNumParameters();
+	eq InferredLambdaParameters.numParameters() = getNumParameter();
+	eq DeclaredLambdaParameters.numParameters() = getNumParameter();
 	
 	syn lazy boolean LambdaParameters.congruentTo(FunctionDescriptor f);
-	
-	// 15.27.3
-	eq EmptyLambdaParameters.congruentTo(FunctionDescriptor f) {
-		return f.method.getNumParameter() == 0;
-	}	
 	
 	// 15.27.3
 	eq InferredLambdaParameters.congruentTo(FunctionDescriptor f) {
@@ -24,13 +34,14 @@ aspect LambdaExpr {
 			return false;
 		for(int i = 0; i < numParameters(); i++) {
 			//Lambdas can't declare type variables so that doesn't need to be taken into account
-			if(getParameters(i).type() != f.method.getParameter(i).type())
+			if(getParameter(i).type() != f.method.getParameter(i).type())
 				return false;
 		}
 		return true;
 	}
 
-	
+	syn lazy boolean LambdaExpr.isImplicit() = getLambdaParameters() instanceof InferredLambdaParameters;
+	syn lazy boolean LambdaExpr.isExplicit() = !isImplicit();
 	
 	syn lazy boolean LambdaBody.congruentTo(FunctionDescriptor f);
 	
@@ -39,12 +50,8 @@ aspect LambdaExpr {
 		if(f.method.type().isVoid()) {
 			return getExpr().stmtCompatible();
 		}
-
 		else {
-			if(!getExpr().type().assignConversionTo(f.method.type(), getExpr()))
-				return false;
-			else
-				return true;
+			return getExpr().assignConversionTo(f.method.type());
 		}
 	}
 	
@@ -54,15 +61,28 @@ aspect LambdaExpr {
 			return voidCompatible();
 		}
 		else {
-			/* That the return stmt returns a value of correct
-				type is checked in the type analysis for the
-				ReturnStmt-construct */
-			return valueCompatible();
+			if(!valueCompatible())
+				return false;
+			for(ReturnStmt returnStmt : lambdaReturns()) {
+				if(!returnStmt.getResult().assignConversionTo(f.method.type()))
+					return false;
+			}
+			return true;
 		}
 	}
 	
+	/* BEWARE! READ THIS BEFORE USING THIS METHOD!
+	   The congruency check will currently not infer different types for eventual inferred parameters,
+	   but the target type function descriptor will always be used for inference. Thus this check will
+	   NOT work for arbitrary function descriptors if there are inferred parameters in the lambda. Currently,
+	   there is no use for this to work anyway because a lambda with inferred parameters will never be
+	   pertinent to applicability and thus not need to be congruency checked, but in case there is need
+	   for arbitary congruency checks that handle inferrence differently depending on the function descriptor
+	   input to this method, then this check must be altered! */
 	// 15.27.3
 	syn lazy boolean LambdaExpr.congruentTo(FunctionDescriptor f) {
+		if(f.isGeneric())
+			return false;
 		if(!getLambdaParameters().congruentTo(f))
 			return false;
 		if(!getLambdaBody().congruentTo(f))
@@ -114,7 +134,7 @@ aspect ExceptionHandling {
 		InterfaceDecl iDecl = targetInterface();
 		if(iDecl == null)
 			return false;
-		else if(!iDecl.hasFunctionDescriptor())
+		else if(!iDecl.isFunctional())
 			return false;
 		for(TypeDecl exception : iDecl.functionDescriptor().throwsList) {
 			if(exceptionType.strictSubtype(exception))

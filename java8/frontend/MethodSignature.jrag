@@ -1,36 +1,425 @@
 aspect MethodSignature18 {
 
-	syn lazy int LambdaExpr.arity() {
-		return numParameters();
-	}
+	/* Used to compute compatibility during phase 1 of overload resolution */
 
-	syn lazy boolean Expr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+	syn lazy boolean Expr.compatibleStrictContext(TypeDecl type) {
+		return type().instanceOf(type);
+	} 
+	
+	eq LambdaExpr.compatibleStrictContext(TypeDecl type) {
+		if(!type.isFunctionalInterface())
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+	
+		return congruentTo(iDecl.functionDescriptor());
+	}
+	
+	eq MethodReference.compatibleStrictContext(TypeDecl type) {
+		if(!type.isFunctionalInterface())
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		
+		return congruentTo(iDecl.functionDescriptor());
+	}
+	
+	eq ConstructorReference.compatibleStrictContext(TypeDecl type) {
+		if(!type.isFunctionalInterface())
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		
+		return congruentTo(iDecl.functionDescriptor());
+	}
+	
+	eq ParExpr.compatibleStrictContext(TypeDecl type) = getExpr().compatibleStrictContext(type);
+	
+	eq ConditionalExpr.compatibleStrictContext(TypeDecl type) {
+		if(!isPolyExpression())
+			return super.compatibleStrictContext(type);
+		else
+			return getTrueExpr().compatibleStrictContext(type) && getFalseExpr().compatibleStrictContext(type);
+	}
+	
+	
+	
+	/* Used to compute compatibility during phase 2 of overload resolution */
+	
+	syn lazy boolean Expr.compatibleLooseContext(TypeDecl type) {
+		return type().methodInvocationConversionTo(type);
+	} 
+	
+	eq LambdaExpr.compatibleLooseContext(TypeDecl type) {
+		return compatibleStrictContext(type);
+	}
+	
+	eq MethodReference.compatibleLooseContext(TypeDecl type) {
+		return compatibleStrictContext(type);
+	}
+	
+	eq ConstructorReference.compatibleLooseContext(TypeDecl type) {
+		return compatibleStrictContext(type);
+	}
+	
+	eq ParExpr.compatibleLooseContext(TypeDecl type) = getExpr().compatibleLooseContext(type);
+	
+	eq ConditionalExpr.compatibleLooseContext(TypeDecl type) {
+		if(!isPolyExpression())
+			return super.compatibleLooseContext(type);
+		else
+			return getTrueExpr().compatibleLooseContext(type) && getFalseExpr().compatibleLooseContext(type);
+	}
+	
+	/* Computes pertinent to applicability, defined in 15.12.2.2 */
+
+	syn lazy boolean Expr.pertinentToApplicability(Expr access, BodyDecl decl, int argIndex) = true;
+	
+	eq LambdaExpr.pertinentToApplicability(Expr access, BodyDecl decl, int argIndex) {
+		if(isImplicit())
+			return false;
+		if(decl instanceof GenericMethodDecl && !(access instanceof ParMethodAccess) 
+				&& ((GenericMethodDecl)decl).getParameter(argIndex).type().isTypeVariable()) {
+			GenericMethodDecl genericDecl = (GenericMethodDecl)decl;
+			TypeVariable typeVar = (TypeVariable)genericDecl.getParameter(argIndex).type();
+			for(int i = 0; i < genericDecl.getNumTypeParameter(); i++) {
+				if(typeVar == genericDecl.getTypeParameter(i))
+					return false;
+			}
+		}
+		else if(decl instanceof GenericConstructorDecl && !(access instanceof ParConstructorAccess) 
+				&& !(access instanceof ParSuperConstructorAccess) && !(access instanceof ParClassInstanceExpr) 
+				&& ((GenericConstructorDecl)decl).getParameter(argIndex).type().isTypeVariable()) {
+			GenericConstructorDecl genericDecl = (GenericConstructorDecl)decl;
+			TypeVariable typeVar = (TypeVariable)genericDecl.getParameter(argIndex).type();
+			for(int i = 0; i < genericDecl.getNumTypeParameter(); i++) {
+				if(typeVar == genericDecl.getTypeParameter(i))
+					return false;
+			}	
+		}
+		if(getLambdaBody() instanceof ExprLambdaBody) {
+			ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
+			if(!exprBody.getExpr().pertinentToApplicability(access, decl, argIndex))
+				return false;
+		}
+		else {
+			BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+			ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+			for(ReturnStmt returnStmt : returnList) {
+				if(returnStmt.hasResult() && !returnStmt.getResult().pertinentToApplicability(access, decl, argIndex))
+					return false;
+			}
+		}
+		
 		return true;
 	}
 	
-	eq LambdaExpr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
-		if(type.isTypeVariable()) {
-			if(!(candidateMethod instanceof GenericMethodDecl))
-				return false;
-			GenericMethodDecl genericMethod = (GenericMethodDecl)candidateMethod;
-			boolean foundTypeVariable = false;
-			for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
-				if(type == genericMethod.getTypeParameter(i)) {
-					foundTypeVariable = true;
-					break;
-				}
+	eq MethodReference.pertinentToApplicability(Expr access, BodyDecl decl, int argIndex) {
+		if(!isExact())
+			return false;
+		if(decl instanceof GenericMethodDecl && !(access instanceof ParMethodAccess) 
+				&& ((GenericMethodDecl)decl).getParameter(argIndex).type().isTypeVariable()) {
+			GenericMethodDecl genericDecl = (GenericMethodDecl)decl;
+			TypeVariable typeVar = (TypeVariable)genericDecl.getParameter(argIndex).type();
+			for(int i = 0; i < genericDecl.getNumTypeParameter(); i++) {
+				if(typeVar == genericDecl.getTypeParameter(i))
+					return false;
 			}
-			if(!foundTypeVariable)
-				return false;
-			else
-				return true;
+		} 
+		else if(decl instanceof GenericConstructorDecl && !(access instanceof ParConstructorAccess) 
+				&& !(access instanceof ParSuperConstructorAccess) && !(access instanceof ParClassInstanceExpr) 
+				&& ((GenericConstructorDecl)decl).getParameter(argIndex).type().isTypeVariable()) {
+			GenericConstructorDecl genericDecl = (GenericConstructorDecl)decl;
+			TypeVariable typeVar = (TypeVariable)genericDecl.getParameter(argIndex).type();
+			for(int i = 0; i < genericDecl.getNumTypeParameter(); i++) {
+				if(typeVar == genericDecl.getTypeParameter(i))
+					return false;
+			}	
+		}	
+		return true;
+	}
+	
+	eq ConstructorReference.pertinentToApplicability(Expr access, BodyDecl decl, int argIndex) {
+		if(!isExact())
+			return false;
+		if(decl instanceof GenericMethodDecl && !(access instanceof ParMethodAccess) 
+				&& ((GenericMethodDecl)decl).getParameter(argIndex).type().isTypeVariable()) {
+			GenericMethodDecl genericDecl = (GenericMethodDecl)decl;
+			TypeVariable typeVar = (TypeVariable)genericDecl.getParameter(argIndex).type();
+			for(int i = 0; i < genericDecl.getNumTypeParameter(); i++) {
+				if(typeVar == genericDecl.getTypeParameter(i))
+					return false;
+			}
+		} 
+		else if(decl instanceof GenericConstructorDecl && !(access instanceof ParConstructorAccess) 
+				&& !(access instanceof ParSuperConstructorAccess) && !(access instanceof ParClassInstanceExpr) 
+				&& ((GenericConstructorDecl)decl).getParameter(argIndex).type().isTypeVariable()) {
+			GenericConstructorDecl genericDecl = (GenericConstructorDecl)decl;
+			TypeVariable typeVar = (TypeVariable)genericDecl.getParameter(argIndex).type();
+			for(int i = 0; i < genericDecl.getNumTypeParameter(); i++) {
+				if(typeVar == genericDecl.getTypeParameter(i))
+					return false;
+			}	
+		}	
+		return true;
+	}
+	
+	eq ParExpr.pertinentToApplicability(Expr access, BodyDecl decl, int argIndex) {
+		return getExpr().pertinentToApplicability(access, decl, argIndex);
+	}
+
+	eq ConditionalExpr.pertinentToApplicability(Expr access, BodyDecl decl, int argIndex) {
+		return getFalseExpr().pertinentToApplicability(access, decl, argIndex) && getTrueExpr().pertinentToApplicability(access, decl, argIndex);
+	}
+	
+	/* Computes which type is more specific for a specific argument, as defined in 15.12.2.5 */
+	
+	syn lazy boolean Expr.moreSpecificThan(TypeDecl type1, TypeDecl type2) {
+		return type1.instanceOf(type2);
+	}
+	
+	// 15.12.2.5
+	eq LambdaExpr.moreSpecificThan(TypeDecl type1, TypeDecl type2) {
+		if(super.moreSpecificThan(type1, type2))
+			return true;
+		if(!type1.isFunctionalInterface() || !type2.isFunctionalInterface())
+			return false;
+		if(type2.instanceOf(type1))
+			return false;
+		InterfaceDecl iDecl1 = (InterfaceDecl)type1;
+		InterfaceDecl iDecl2 = (InterfaceDecl)type2;
+
+		if(isImplicit())
+			return false;
+		
+		FunctionDescriptor f1 = iDecl1.functionDescriptor();
+		FunctionDescriptor f2 = iDecl2.functionDescriptor();
+		
+		// First bullet
+		if(f2.method.type().isVoid())
+			return true;
+			
+		// Second bullet
+		if(f1.method.type().instanceOf(f2.method.type()))
+			return true;
+			
+		// Third bullet
+		if(f1.method.type().isFunctionalInterface() && f2.method.type().isFunctionalInterface()) {
+			if(getLambdaBody().isBlockBody()) {
+				BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+				boolean allMoreSpecific = true;
+				ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+				for(ReturnStmt returnStmt : returnList) {
+					if(returnStmt.hasResult() && !returnStmt.getResult().moreSpecificThan(f1.method.type(), f2.method.type())) {
+						allMoreSpecific = false;
+						break;
+					}
+				}
+				return allMoreSpecific;
+			}
+			else {
+				ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
+				return exprBody.getExpr().moreSpecificThan(f1.method.type(), f2.method.type());
+			}
 		}
 		
-		if(!type.isInterfaceDecl())
+		// Fourth bullet
+		if(f1.method.type().isPrimitiveType() && f2.method.type().isReferenceType()) {
+			if(getLambdaBody().isBlockBody()) {
+				BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+				boolean allPrimitive = true;
+				ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+				for(ReturnStmt returnStmt : returnList) {
+					if(returnStmt.hasResult() && returnStmt.getResult().isPolyExpression()) {
+						allPrimitive = false;
+						break;
+					}
+					else if(returnStmt.hasResult() && !returnStmt.getResult().type().isPrimitiveType()) {
+						allPrimitive = false;
+						break;
+					}
+				}
+				return allPrimitive;
+			}
+			else {
+				ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
+				if(exprBody.getExpr().isPolyExpression())
+					return false;
+				return exprBody.getExpr().type().isPrimitiveType();
+			}
+		}
+		
+		// Fifth bullet
+		if(f1.method.type().isReferenceType() && f2.method.type().isPrimitiveType()) {
+			if(getLambdaBody().isBlockBody()) {
+				BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+				boolean allReference = true;
+				ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+				for(ReturnStmt returnStmt : returnList) {
+					if(returnStmt.hasResult() && !returnStmt.getResult().isPolyExpression() 
+							&& !returnStmt.getResult().type().isReferenceType()) {
+						allReference = false;
+						break;
+					}
+				}
+				return allReference;
+			}
+			else {
+				ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
+				if(exprBody.getExpr().isPolyExpression())
+					return true;
+				return exprBody.getExpr().type().isReferenceType();
+			}
+		}
+		
+		return false;
+	}
+	
+	// 15.12.2.5
+	eq MethodReference.moreSpecificThan(TypeDecl type1, TypeDecl type2) {
+		if(super.moreSpecificThan(type1, type2))
+			return true;
+		if(!type1.isFunctionalInterface() || !type2.isFunctionalInterface())
+			return false;
+		if(type2.instanceOf(type1))
+			return false;
+		InterfaceDecl iDecl1 = (InterfaceDecl)type1;
+		InterfaceDecl iDecl2 = (InterfaceDecl)type2;
+
+		if(!isExact())
+			return false;
+		
+		FunctionDescriptor f1 = iDecl1.functionDescriptor();
+		FunctionDescriptor f2 = iDecl2.functionDescriptor();
+		
+		if(f1.method.arity() != f2.method.arity())
+			return false;
+		
+		for(int i = 0; i < f1.method.getNumParameter(); i++) {
+			if(f1.method.getParameter(i).type() != f2.method.getParameter(i).type())
+				return false;
+		}
+		
+		// First bullet
+		if(f2.method.type().isVoid())
+			return true;
+		
+		// Second bullet
+		if(f1.method.type().instanceOf(f2.method.type()))
+			return true;
+			
+		// Third bullet
+		if(f1.method.type().isPrimitiveType() && f2.method.type().isReferenceType()) {
+			return exactCompileTimeDeclaration().type().isPrimitiveType();
+		}
+		
+		// Fourth bullet
+		if(f1.method.type().isReferenceType() && f2.method.type().isPrimitiveType()) {
+			return exactCompileTimeDeclaration().type().isReferenceType();
+		}
+		
+		return false;
+	}
+	
+	// 15.12.2.5
+	eq ConstructorReference.moreSpecificThan(TypeDecl type1, TypeDecl type2) {
+		if(super.moreSpecificThan(type1, type2))
+			return true;
+		if(!type1.isFunctionalInterface() || !type2.isFunctionalInterface())
+			return false;
+		if(type2.instanceOf(type1))
+			return false;
+		InterfaceDecl iDecl1 = (InterfaceDecl)type1;
+		InterfaceDecl iDecl2 = (InterfaceDecl)type2;
+
+		if(!isExact())
+			return false;
+		
+		FunctionDescriptor f1 = iDecl1.functionDescriptor();
+		FunctionDescriptor f2 = iDecl2.functionDescriptor();
+		
+		if(f1.method.arity() != f2.method.arity())
+			return false;
+		
+		for(int i = 0; i < f1.method.getNumParameter(); i++) {
+			if(f1.method.getParameter(i).type() != f2.method.getParameter(i).type())
+				return false;
+		}
+		
+		// First bullet
+		if(f2.method.type().isVoid())
+			return true;
+		
+		// Second bullet
+		if(f1.method.type().instanceOf(f2.method.type()))
+			return true;
+			
+		// Third bullet
+		if(f1.method.type().isPrimitiveType() && f2.method.type().isReferenceType()) {
+			// A constructor can never have primitive return type
+			return false;
+		}
+		
+		// Fourth bullet
+		if(f1.method.type().isReferenceType() && f2.method.type().isPrimitiveType()) {
+			// A constructor always have reference return type
+			return true;
+		}
+		
+		return false;
+		
+	}
+	
+	eq ParExpr.moreSpecificThan(TypeDecl type1, TypeDecl type2) {
+		if(super.moreSpecificThan(type1, type2))
+			return true;
+		return getExpr().moreSpecificThan(type1, type2);
+	}
+	
+	eq ConditionalExpr.moreSpecificThan(TypeDecl type1, TypeDecl type2) {
+		if(super.moreSpecificThan(type1, type2))
+			return true;
+			
+		return getTrueExpr().moreSpecificThan(type1, type2) && getFalseExpr().moreSpecificThan(type1, type2);
+	}
+	
+	/* Computes whether a certain candidate method or constructor is potentially compatible
+	   as defined in 15.12.2.1 */
+	
+	syn lazy boolean Expr.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		return true;
+	} 
+	
+	
+	eq LambdaExpr.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		if(type.isTypeVariable()) {
+			if(candidateDecl instanceof GenericMethodDecl) {
+				GenericMethodDecl genericMethod = (GenericMethodDecl)candidateDecl;
+				boolean foundTypeVariable = false;
+				for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
+					if(type == genericMethod.getTypeParameter(i)) {
+						foundTypeVariable = true;
+						break;
+					}
+				}
+				return foundTypeVariable;
+			}
+			else if(candidateDecl instanceof GenericConstructorDecl) {
+				GenericConstructorDecl genericConstructor = (GenericConstructorDecl)candidateDecl;
+				boolean foundTypeVariable = false;
+				for(int i = 0; i < genericConstructor.getNumTypeParameter(); i++) {
+					if(type == genericConstructor.getTypeParameter(i)) {
+						foundTypeVariable = true;
+						break;
+					}
+				}
+				return foundTypeVariable;
+			}
+			else
+				return false;
+		}
+		
+		if(!type.isFunctionalInterface())
 			return false;
 		InterfaceDecl iDecl = (InterfaceDecl)type;
-		if(!iDecl.isFunctional())
-			return false;
+
 		if(arity() != iDecl.functionDescriptor().method.arity())
 			return false;
 		if(iDecl.functionDescriptor().method.type().isVoid()) {
@@ -52,77 +441,271 @@ aspect MethodSignature18 {
 					return false;
 			}
 		}
-		
 		return true;
 	}
 	
-	eq MethodReference.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+	eq MethodReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
 		if(type.isTypeVariable()) {
-			if(!(candidateMethod instanceof GenericMethodDecl))
-				return false;
-			GenericMethodDecl genericMethod = (GenericMethodDecl)candidateMethod;
-			boolean foundTypeVariable = false;
-			for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
-				if(type == genericMethod.getTypeParameter(i)) {
-					foundTypeVariable = true;
-					break;
+			if(candidateDecl instanceof GenericMethodDecl) {
+				GenericMethodDecl genericMethod = (GenericMethodDecl)candidateDecl;
+				boolean foundTypeVariable = false;
+				for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
+					if(type == genericMethod.getTypeParameter(i)) {
+						foundTypeVariable = true;
+						break;
+					}
 				}
+				return foundTypeVariable;
 			}
-			if(!foundTypeVariable)
-				return false;
+			else if(candidateDecl instanceof GenericConstructorDecl) {
+				GenericConstructorDecl genericConstructor = (GenericConstructorDecl)candidateDecl;
+				boolean foundTypeVariable = false;
+				for(int i = 0; i < genericConstructor.getNumTypeParameter(); i++) {
+					if(type == genericConstructor.getTypeParameter(i)) {
+						foundTypeVariable = true;
+						break;
+					}
+				}
+				return foundTypeVariable;
+			}
 			else
-				return true;
+				return false;
 		}
 		
-		if(!type.isInterfaceDecl())
-			return false;
-		InterfaceDecl iDecl = (InterfaceDecl)type;
-		if(!iDecl.isFunctional())
+		if(!type.isFunctionalInterface())
 			return false;
 		
 		return true;
 	}
 	
-	eq ConstructorReference.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
-		if(type.isTypeVariable()) {
-			if(!(candidateMethod instanceof GenericMethodDecl))
-				return false;
-			GenericMethodDecl genericMethod = (GenericMethodDecl)candidateMethod;
-			boolean foundTypeVariable = false;
-			for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
-				if(type == genericMethod.getTypeParameter(i)) {
-					foundTypeVariable = true;
-					break;
-				}
+	eq ExprMethodReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		if(super.potentiallyCompatible(type, candidateDecl) && type.isTypeVariable())
+			return true;
+		else if(!super.potentiallyCompatible(type, candidateDecl))
+			return false;
+		
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		FunctionDescriptor f = iDecl.functionDescriptor();
+		
+		boolean foundMethod = false;
+		for(MethodDecl decl : potentiallyApplicableMethods(f)) {
+			if(!decl.isStatic() && f.method.arity() == decl.arity()) {
+				foundMethod = true;
+				break;
 			}
-			if(!foundTypeVariable)
-				return false;
+		}
+		return foundMethod;
+	}
+	
+	eq TypeMethodReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		if(super.potentiallyCompatible(type, candidateDecl) && type.isTypeVariable())
+			return true;
+		else if(!super.potentiallyCompatible(type, candidateDecl))
+			return false;
+		
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		FunctionDescriptor f = iDecl.functionDescriptor();
+		
+		boolean foundMethod = false;
+		for(MethodDecl decl : potentiallyApplicableMethods(f)) {
+			if(decl.isStatic() && f.method.arity() == decl.arity()) {
+				foundMethod = true;
+				break;
+			}
+			else if(!decl.isStatic() && f.method.arity() - 1 == decl.arity()) {
+				foundMethod = true;
+				break;
+			}
+		}
+		return foundMethod;		
+	}
+	
+	eq ConstructorReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		if(type.isTypeVariable()) {
+			if(candidateDecl instanceof GenericMethodDecl) {
+				GenericMethodDecl genericMethod = (GenericMethodDecl)candidateDecl;
+				boolean foundTypeVariable = false;
+				for(int i = 0; i < genericMethod.getNumTypeParameter(); i++) {
+					if(type == genericMethod.getTypeParameter(i)) {
+						foundTypeVariable = true;
+						break;
+					}
+				}
+				return foundTypeVariable;
+			}
+			else if(candidateDecl instanceof GenericConstructorDecl) {
+				GenericConstructorDecl genericConstructor = (GenericConstructorDecl)candidateDecl;
+				boolean foundTypeVariable = false;
+				for(int i = 0; i < genericConstructor.getNumTypeParameter(); i++) {
+					if(type == genericConstructor.getTypeParameter(i)) {
+						foundTypeVariable = true;
+						break;
+					}
+				}
+				return foundTypeVariable;
+			}
 			else
-				return true;
+				return false;
 		}
 		
-		if(!type.isInterfaceDecl())
-			return false;
-		InterfaceDecl iDecl = (InterfaceDecl)type;
-		if(!iDecl.isFunctional())
+		if(!type.isFunctionalInterface())
 			return false;
 		
 		return true;
 	}
 	
-	eq ParExpr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
-		return getExpr().potentiallyCompatible(type, candidateMethod);
+	eq ClassReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		if(super.potentiallyCompatible(type, candidateDecl) && type.isTypeVariable())
+			return true;
+		else if(!super.potentiallyCompatible(type, candidateDecl))
+			return false;
+		
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		FunctionDescriptor f = iDecl.functionDescriptor();
+		
+		boolean foundMethod = false;
+		for(ConstructorDecl decl : potentiallyApplicableConstructors(f)) {
+			if(f.method.arity() == decl.arity()) {
+				foundMethod = true;
+				break;
+			}
+		}
+		return foundMethod;	
 	}
 	
-	eq ConditionalExpr.potentiallyCompatible(TypeDecl type, MethodDecl candidateMethod) {
+	eq ArrayReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		if(super.potentiallyCompatible(type, candidateDecl) && type.isTypeVariable())
+			return true;
+		else if(!super.potentiallyCompatible(type, candidateDecl))
+			return false;
+		InterfaceDecl iDecl = (InterfaceDecl)type;
+		FunctionDescriptor f = iDecl.functionDescriptor();
+		return f.method.arity() == 1;
+	}
+	
+	eq ParExpr.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
+		return getExpr().potentiallyCompatible(type, candidateDecl);
+	}
+	
+	eq ConditionalExpr.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
 		if(!isPolyExpression())
 			return true;
-		if(getTrueExpr().potentiallyCompatible(type, candidateMethod) && 
-				getFalseExpr().potentiallyCompatible(type, candidateMethod))
+		if(getTrueExpr().potentiallyCompatible(type, candidateDecl) && 
+				getFalseExpr().potentiallyCompatible(type, candidateDecl))
 			return true;
 		return false;
 	}
 
+
+
+	/* Below are the relevant overload resolution computations for choosing a method */
+
+	refine MethodSignature15
+	eq MethodAccess.applicableBySubtyping(MethodDecl m) {
+		if(m.getNumParameter() != getNumArg())
+			return false;
+		for(int i = 0; i < m.getNumParameter(); i++) {
+			if(!getArg(i).pertinentToApplicability(this, m, i)) {
+				continue;
+			}
+			else if(!getArg(i).compatibleStrictContext(m.getParameter(i).type()))
+				return false;
+		}
+		return true;
+	}
+	
+	refine MethodSignature15
+	eq MethodAccess.applicableByMethodInvocationConversion(MethodDecl m) {
+		if(m.getNumParameter() != getNumArg())
+			return false;
+		for(int i = 0; i < m.getNumParameter(); i++) {
+			if(!getArg(i).pertinentToApplicability(this, m, i)) {
+				continue;
+			}
+			else if(!getArg(i).compatibleLooseContext(m.getParameter(i).type()))
+				return false;
+		}
+		return true;
+	}
+	
+	refine MethodSignature15
+	eq MethodAccess.applicableVariableArity(MethodDecl m) {
+		for(int i = 0; i < m.getNumParameter() - 1; i++) {
+			if(!getArg(i).pertinentToApplicability(this, m, i))
+				continue;
+			if(!getArg(i).compatibleLooseContext(m.getParameter(i).type()))
+				return false;
+		}
+		for(int i = m.getNumParameter() - 1; i < getNumArg(); i++) {
+			if(!getArg(i).pertinentToApplicability(this, m, i))
+				continue;
+			if(!getArg(i).compatibleLooseContext(m.lastParameter().type().componentType()))
+				return false;
+		}
+		return true;
+	}
+	
+	protected boolean MethodAccess.moreSpecificThan(MethodDecl m1, MethodDecl m2) {
+		if(m1 instanceof ParMethodDecl) 
+			return m1.moreSpecificThan(m2);
+		if(m1.getNumParameter() == 0)
+			return false;
+		if(!m1.isVariableArity() && !m2.isVariableArity()) {
+			for(int i = 0; i < m1.getNumParameter(); i++) {
+				if(!getArg(i).moreSpecificThan(m1.getParameter(i).type(), m2.getParameter(i).type()))
+					return false;
+			}
+			return true;
+		}
+		
+		int num = getNumArg();
+		for(int i = 0; i < num; i++) {
+			TypeDecl t1 = i < m1.getNumParameter() - 1 ? m1.getParameter(i).type() : m1.getParameter(m1.getNumParameter()-1).type().componentType();
+			TypeDecl t2 = i < m2.getNumParameter() - 1 ? m2.getParameter(i).type() : m2.getParameter(m2.getNumParameter()-1).type().componentType();
+		
+			if(!getArg(i).moreSpecificThan(t1, t2))
+					return false;
+			
+		}
+		num++;
+		if(m2.getNumParameter() == num) {
+			TypeDecl t1 = num < m1.getNumParameter() - 1 ? m1.getParameter(num).type() : m1.getParameter(m1.getNumParameter()-1).type().componentType();
+			TypeDecl t2 = num < m2.getNumParameter() - 1 ? m2.getParameter(num).type() : m2.getParameter(m2.getNumParameter()-1).type().componentType();
+			if(!t1.instanceOf(t2))
+				return false;
+		}
+		return true;
+	}
+	
+	refine MethodSignature15
+	private SimpleSet MethodAccess.mostSpecific(SimpleSet maxSpecific, MethodDecl decl) {
+		SimpleSet newMax;
+		if(maxSpecific.isEmpty()) {
+			newMax = maxSpecific.add(decl);
+		}
+		else {
+			boolean foundStricter = false;
+			newMax = SimpleSet.emptySet;
+			Iterator<MethodDecl> iter = maxSpecific.iterator();
+			while(iter.hasNext()) {
+				MethodDecl toCompare = iter.next();
+				if(!(moreSpecificThan(decl, toCompare) && !moreSpecificThan(toCompare, decl))) {
+					newMax = newMax.add(toCompare);
+				}
+
+				if(!moreSpecificThan(decl, toCompare) && moreSpecificThan(toCompare, decl)) {
+					foundStricter = true;
+				}
+				
+			}
+			
+			if(!foundStricter) {
+				newMax = newMax.add(decl);
+			}
+		}
+		return newMax;
+	}
+	
 	refine MethodSignature15
 	eq MethodAccess.potentiallyApplicable(MethodDecl m) {
 		if(!m.name().equals(name()))
@@ -169,33 +752,199 @@ aspect MethodSignature18 {
 						return false;
 			}
 		}
+		
 		return true;
 	}
 
 
-/*
- A member method is potentially applicable to a method invocation if and only if all of the following are true:
+	/* Below are the relevant overload resolution computations for choosing a constructor */
+	
+	refine MethodSignature15
+	protected SimpleSet Expr.chooseConstructor(Collection constructors, List argList) {
+		SimpleSet potentiallyApplicable = SimpleSet.emptySet;
+		// select potentially applicable constructors
+		for(Iterator iter = constructors.iterator(); iter.hasNext(); ) {
+			ConstructorDecl decl = (ConstructorDecl)iter.next();
+			if(decl.potentiallyApplicable(argList) && decl.accessibleFrom(hostType()))
+				potentiallyApplicable = potentiallyApplicable.add(decl);
+		}
+		// first phase
+		SimpleSet maxSpecific = SimpleSet.emptySet;
+		for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+			ConstructorDecl decl = (ConstructorDecl)iter.next();
+			if(decl.applicableByStrictInvocation(this, argList))
+				maxSpecific = mostSpecific(maxSpecific, decl, argList);
+		}
 
-    The name of the member is identical to the name of the method in the method invocation.
-    The member is accessible (6.6) to the class or interface in which the method invocation appears.
+		// second phase
+		if(maxSpecific.isEmpty()) {
+			for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+				ConstructorDecl decl = (ConstructorDecl)iter.next();
+				if(decl.applicableByLooseInvocation(this, argList))
+					maxSpecific = mostSpecific(maxSpecific, decl, argList);
+			}
+		}
 
-    Whether a member method is accessible at a method invocation depends on the access modifier (public, none, protected, or private) in the member's declaration and on where the method invocation appears.
-    If the member is a fixed arity method with arity n, the arity of the method invocation is equal to n, and for all i, 1 ≤ i ≤ n, the ith argument of the method invocation is potentially compatible, as defined below, with the type of the ith parameter of the method.
-    If the member is a variable arity method with arity n, then for all i, 1 ≤ i ≤ n-1, the ith argument of the method invocation is potentially compatible with the type of the ith parameter of the method; and, where the nth parameter of the method has type T[], one of the following is true:
-        The arity of the method invocation is equal to n-1.
-        The arity of the method invocation is equal to n, and the nth argument of the method invocation is potentially compatible with either T or T[].
-        The arity of the method invocation is m, where m > n, and for all i, n ≤ i ≤ m, the ith argument of the method invocation is potentially compatible with T. 
-    If the method invocation includes explicit type arguments, and the member is a generic method, then the number of type arguments is equal to the number of type parameters of the method.
-  }*/
+		// third phase
+		if(maxSpecific.isEmpty()) {
+			for(Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
+				ConstructorDecl decl = (ConstructorDecl)iter.next();
+				if(decl.isVariableArity() && decl.applicableByVariableArityInvocation(this, argList))
+					maxSpecific = mostSpecific(maxSpecific, decl, argList);
+			}
+		}
+		return maxSpecific;
+	}
+	
+	refine MethodSignature15
+	eq ConstructorDecl.potentiallyApplicable(List argList) {
+		int argArity = argList.getNumChild();
+		if(!isVariableArity()) {
+			if(argArity != arity())
+				return false;
+			for(int i = 0; i < argArity; i++) {
+				Expr expr = (Expr)argList.getChild(i);
+				if(!expr.potentiallyCompatible(getParameter(i).type(), this))
+					return false;
+			}
+		}
+		if(isVariableArity()) {
+			if(!(argArity >= arity()-1))
+				return false;
+			for(int i = 0; i < arity() - 2; i++) {
+				Expr expr = (Expr)argList.getChild(i);
+				if(!expr.potentiallyCompatible(getParameter(i).type(), this))
+					return false;
+			}
+			TypeDecl varArgType = getParameter(arity()-1).type();
+			if(argArity == arity()) {
+				Expr expr = (Expr)argList.getChild(argArity - 1);
+				if(!expr.potentiallyCompatible(varArgType, this) &&
+						!expr.potentiallyCompatible(varArgType.componentType(), this))
+					return false;
+			}
+			else if(argArity > arity()) {
+				for(int i = arity()-1; i < argArity; i++) {
+					Expr expr = (Expr)argList.getChild(i);
+					if(!expr.potentiallyCompatible(varArgType.componentType(), this))
+						return false;
+				}
+			}
+		}
+		
+		return true;
+	}
+	
+	syn boolean ConstructorDecl.applicableByStrictInvocation(Expr expr, List argList) {
+		if(getNumParameter() != argList.getNumChild())
+			return false;
+		for(int i = 0; i < getNumParameter(); i++) {
+			Expr arg = (Expr)argList.getChild(i);
+			if(!arg.pertinentToApplicability(expr, this, i)) {
+				continue;
+			}
+			if(!arg.compatibleStrictContext(getParameter(i).type()))
+				return false;
+		}
+		return true;
+	}
+	
+	syn boolean ConstructorDecl.applicableByLooseInvocation(Expr expr, List argList) {
+		if(getNumParameter() != argList.getNumChild())
+			return false;
+		for(int i = 0; i < getNumParameter(); i++) {
+			Expr arg = (Expr)argList.getChild(i);
+			if(!arg.pertinentToApplicability(expr, this, i))
+				continue;
+			if(!arg.compatibleLooseContext(getParameter(i).type()))
+				return false;
+		}
+		return true;
+	}
+	
+	syn boolean ConstructorDecl.applicableByVariableArityInvocation(Expr expr, List argList) {
+		for(int i = 0; i < getNumParameter() - 1; i++) {
+			Expr arg = (Expr)argList.getChild(i);
+			if(!arg.pertinentToApplicability(expr, this, i))
+				continue;
+			if(!arg.compatibleLooseContext(getParameter(i).type()))
+				return false;
+		}
+		for(int i = getNumParameter() - 1; i < argList.getNumChild(); i++) {
+			Expr arg = (Expr)argList.getChild(i);
+			if(!arg.pertinentToApplicability(expr, this, i))
+				continue;
+			if(!arg.compatibleLooseContext(lastParameter().type().componentType()))
+				return false;
+		}
+		return true;
+	}
+	
+	protected static boolean Expr.moreSpecificThan(ConstructorDecl m1, ConstructorDecl m2, List argList) {
+		if(m1 instanceof ParConstructorDecl) 
+			return m1.moreSpecificThan(m2);
+		if(m1.getNumParameter() == 0)
+			return false;
+		if(!m1.isVariableArity() && !m2.isVariableArity()) {
+			for(int i = 0; i < m1.getNumParameter(); i++) {
+				Expr arg = (Expr)argList.getChild(i);
+				if(!arg.moreSpecificThan(m1.getParameter(i).type(), m2.getParameter(i).type()))
+					return false;
+			}
+			return true;
+		}
+		
+		int num = argList.getNumChild();
+		for(int i = 0; i < num; i++) {
+			TypeDecl t1 = i < m1.getNumParameter() - 1 ? m1.getParameter(i).type() : m1.getParameter(m1.getNumParameter()-1).type().componentType();
+			TypeDecl t2 = i < m2.getNumParameter() - 1 ? m2.getParameter(i).type() : m2.getParameter(m2.getNumParameter()-1).type().componentType();
+		
+			Expr arg = (Expr)argList.getChild(i);
+			if(!arg.moreSpecificThan(t1, t2))
+					return false;
+			
+		}
+		num++;
+		if(m2.getNumParameter() == num) {
+			TypeDecl t1 = num < m1.getNumParameter() - 1 ? m1.getParameter(num).type() : m1.getParameter(m1.getNumParameter()-1).type().componentType();
+			TypeDecl t2 = num < m2.getNumParameter() - 1 ? m2.getParameter(num).type() : m2.getParameter(m2.getNumParameter()-1).type().componentType();
+			if(!t1.instanceOf(t2))
+				return false;
+		}
+		return true;
+	}
+	
+	protected static SimpleSet Expr.mostSpecific(SimpleSet maxSpecific, ConstructorDecl decl, List argList) {
+		SimpleSet newMax;
+		if(maxSpecific.isEmpty()) {
+			newMax = maxSpecific.add(decl);
+		}
+		else {
+			boolean foundStricter = false;
+			newMax = SimpleSet.emptySet;
+			Iterator<ConstructorDecl> iter = maxSpecific.iterator();
+			while(iter.hasNext()) {
+				ConstructorDecl toCompare = iter.next();
+				if(!(moreSpecificThan(decl, toCompare, argList) && !moreSpecificThan(toCompare, decl, argList))) {
+					newMax = newMax.add(toCompare);
+				}
+
+				if(!moreSpecificThan(decl, toCompare, argList) && moreSpecificThan(toCompare, decl, argList)) {
+					foundStricter = true;
+				}
+				
+			}
+			
+			if(!foundStricter) {
+				newMax = newMax.add(decl);
+			}
+		}
+		return newMax;
+	}
 
 
 
-
-
-
-
-
-
+	/* Overload resolution ends here */
 
 	syn lazy boolean InterfaceDecl.hasOverridingMethodInSuper(MethodDecl m) {
 		for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
