@@ -9,7 +9,7 @@ class Module {
 			basedir = path
 		}
 		def include(pattern) {
-			include pattern, [0]
+			include pattern, []
 		}
 		def include(pattern, prio) {
 			includes << [ prio, pattern ]

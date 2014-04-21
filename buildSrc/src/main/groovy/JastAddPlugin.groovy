@@ -9,6 +9,14 @@ class JastAddPlugin implements Plugin<Project> {
 	}
 
 	void apply(Project project) {
+		project.task("jastaddTest") {
+			doLast {
+				def specFiles = project.files(
+					Module.get(project.jastaddj.module).files(project, "jastadd")
+				)
+				specFiles.each{ println "${it}" }
+			}
+		}
 		project.task("generateJava", dependsOn: [ "scanner", "parser" ]) {
 			inputs.files { Module.get(project.jastaddj.module).files(project, "jastadd") }
 			outputs.dir { project.file(project.jastaddj.genDir) }
