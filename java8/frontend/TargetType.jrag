@@ -2,9 +2,10 @@
 aspect TargetType {
 	inh lazy TypeDecl Expr.targetType();
 	
-	eq CompilationUnit.getImportDecl().targetType() = null;
-	eq CompilationUnit.getTypeDecl().targetType() = null;
-	eq AnnotatedCompilationUnit.getModifiers().targetType() = null;
+	/*eq CompilationUnit.getImportDecl().targetType() = typeNull();
+	eq CompilationUnit.getTypeDecl().targetType() = typeNull();
+	eq AnnotatedCompilationUnit.getModifiers().targetType() = typeNull();*/
+	eq Program.getChild().targetType() = typeNull();
 	
 	eq ConditionalExpr.getTrueExpr().targetType() = targetType();
 	eq ConditionalExpr.getFalseExpr().targetType() = targetType();
@@ -63,7 +64,7 @@ aspect TargetType {
 	
 	eq ExprLambdaBody.getExpr().targetType() {
 		TypeDecl decl = enclosingLambda().targetType();
-		if(decl == null)
+		if(decl.isNull())
 			return unknownType();
 		else if(!(decl instanceof InterfaceDecl))
 			return unknownType();
@@ -78,7 +79,7 @@ aspect TargetType {
 	}
 	
 	syn lazy InterfaceDecl LambdaExpr.targetInterface() {
-		if(targetType() == null)
+		if(targetType().isNull())
 			return null;
 		else if(!(targetType() instanceof InterfaceDecl))
 			return null;
@@ -87,7 +88,7 @@ aspect TargetType {
 	}
 	
 	syn lazy InterfaceDecl MethodReference.targetInterface() {
-		if(targetType() == null)
+		if(targetType().isNull())
 			return null;
 		else if(!(targetType() instanceof InterfaceDecl))
 			return null;
@@ -96,12 +97,49 @@ aspect TargetType {
 	}
 	
 	syn lazy InterfaceDecl ConstructorReference.targetInterface() {
-		if(targetType() == null)
+		if(targetType().isNull())
 			return null;
 		else if(!(targetType() instanceof InterfaceDecl))
 			return null;
 		else 
 			return (InterfaceDecl)targetType();
+	}
+	
+	
+	// This is required for type inference to work with method references
+	syn lazy TypeDecl MethodReferenceAccess.targetType() {
+		return targetDescriptor.method.type();
+	}
+	
+	syn lazy TypeDecl ParMethodReferenceAccess.targetType() {
+		return targetDescriptor.method.type();
+	}
+	
+	eq ExprMethodReference.toClass().targetType() {
+		return targetInterface().functionDescriptor().method.type();
+	}
+	
+	eq TypeMethodReference.toClass().targetType() {
+		return targetInterface().functionDescriptor().method.type();
+	}
+	
+	eq ClassInstanceExpr.getAccess().assignConvertedType() = targetType();
+	
+	// Required for diamond type inference to work
+	syn lazy TypeDecl ConstructorReferenceAccess.targetType() {
+		return targetDescriptor.method.type();
+	}
+	
+	syn lazy TypeDecl ParConstructorReferenceAccess.targetType() {
+		return targetDescriptor.method.type();
+	}
+	
+	eq ConstructorReferenceAccess.getAccess().targetType() {
+		return targetDescriptor.method.type();
+	}
+	
+	eq ClassReference.toClass().targetType() {
+		return targetInterface().functionDescriptor().method.type();
 	}
 }
 
