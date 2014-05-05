@@ -10,6 +10,7 @@
 package org.jastadd.jastaddj;
 
 import java.io.File;
+import java.util.Collection;
 
 import AST.*;
 
@@ -31,6 +32,8 @@ public class JavaCompiler extends Frontend {
 
 	private final JavaParser parser;
 	private final BytecodeParser bytecodeParser;
+
+	private boolean prettyPrintMode = false;
 
 	/**
 	 * Initialize the compiler.
@@ -67,10 +70,23 @@ public class JavaCompiler extends Frontend {
 		return run(args, bytecodeParser, parser);
 	}
 
+	@SuppressWarnings("rawtypes")
+	@Override
+	protected void processErrors(Collection errors, CompilationUnit unit) {
+		super.processErrors(errors, unit);
+		if (prettyPrintMode) {
+			System.out.println(unit.prettyPrint());
+		}
+	}
+
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
-		unit.transformation();
-		unit.generateClassfile();
+		if (prettyPrintMode) {
+			System.out.println(unit.prettyPrint());
+		} else {
+			unit.transformation();
+			unit.generateClassfile();
+		}
 	}
 
 	/**
@@ -90,6 +106,7 @@ public class JavaCompiler extends Frontend {
 				return EXIT_CONFIG_ERROR;
 			}
 		}
-		return 0;
+		prettyPrintMode = program.options().hasOption("-Xprint");
+		return EXIT_SUCCESS;
 	}
 }
