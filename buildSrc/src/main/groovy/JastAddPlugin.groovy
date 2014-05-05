@@ -12,18 +12,18 @@ class JastAddPlugin implements Plugin<Project> {
 		project.task("jastaddTest") {
 			doLast {
 				def specFiles = project.files(
-					Module.get(project.jastaddj.module).files(project, "jastadd")
+					JastAddModule.get(project.jastaddj.module).files(project, "jastadd")
 				)
 				specFiles.each{ println "${it}" }
 			}
 		}
 		project.task("generateJava", dependsOn: [ "scanner", "parser" ]) {
-			inputs.files { Module.get(project.jastaddj.module).files(project, "jastadd") }
+			inputs.files { JastAddModule.get(project.jastaddj.module).files(project, "jastadd") }
 			outputs.dir { project.file(project.jastaddj.genDir) }
 			doLast {
 				def outdir = project.jastaddj.genDir
 				def specFiles = project.files(
-					Module.get(project.jastaddj.module).files(project, "jastadd")
+					JastAddModule.get(project.jastaddj.module).files(project, "jastadd")
 				)
 				ant.mkdir(dir: project.file(outdir))
 				ant.taskdef(name: "jastadd", classname: "org.jastadd.JastAddTask",
@@ -41,12 +41,12 @@ class JastAddPlugin implements Plugin<Project> {
 			}
 		}
 		project.task("scanner") {
-			inputs.files { Module.get(project.jastaddj.module).files(project, "scanner") }
+			inputs.files { JastAddModule.get(project.jastaddj.module).files(project, "scanner") }
 			outputs.dir { project.file("${project.jastaddj.genDir}/scanner") }
 			doLast {
 				ant.mkdir(dir: "${project.jastaddj.tmpDir}/scanner")
 				def specFiles = project.files(
-					Module.get(project.jastaddj.module).files(project, "scanner")
+					JastAddModule.get(project.jastaddj.module).files(project, "scanner")
 				)
 				ant.concat(destfile: "${project.jastaddj.tmpDir}/scanner/JavaScanner.flex",
 					binary: true, force: false) {
@@ -62,12 +62,12 @@ class JastAddPlugin implements Plugin<Project> {
 		}
 
 		project.task("parser") {
-			inputs.files { Module.get(project.jastaddj.module).files(project, "parser") }
+			inputs.files { JastAddModule.get(project.jastaddj.module).files(project, "parser") }
 			outputs.dir { project.file("${project.jastaddj.genDir}/parser") }
 			doLast {
 				ant.mkdir(dir: project.file(project.jastaddj.tmpDir))
 				def specFiles = project.files(
-					Module.get(project.jastaddj.module).files(project, "parser")
+					JastAddModule.get(project.jastaddj.module).files(project, "parser")
 				)
 				ant.concat(destfile: "${project.jastaddj.tmpDir}/parser/JavaParser.all",
 					binary: true, force: false) {

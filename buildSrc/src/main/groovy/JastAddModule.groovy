@@ -1,4 +1,4 @@
-class Module {
+class JastAddModule {
 
 	class Aspect {
 		String basedir = "."
@@ -33,7 +33,7 @@ class Module {
 	Aspect parserAspect = new Aspect()
 	def imports = []
 
-	Module(name) {
+	JastAddModule(name) {
 		this.name = name
 		modules << this
 	}

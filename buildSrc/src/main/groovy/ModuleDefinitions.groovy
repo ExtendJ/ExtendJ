@@ -6,7 +6,7 @@ class ModuleDefinitions {
 	}
 
 	def module(name, closure) {
-		def module = new Module(name)
+		def module = new JastAddModule(name)
 		module.basedir = directory
 		closure.delegate = module
 		closure()
