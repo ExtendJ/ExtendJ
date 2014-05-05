@@ -106,7 +106,7 @@ public class JavaCompiler extends Frontend {
 				return EXIT_CONFIG_ERROR;
 			}
 		}
-		prettyPrintMode = program.options().hasOption("-Xprint");
+		prettyPrintMode = program.options().hasOption("-XprettyPrint");
 		return EXIT_SUCCESS;
 	}
 }
