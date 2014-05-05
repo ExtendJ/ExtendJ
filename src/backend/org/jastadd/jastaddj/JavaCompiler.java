@@ -19,6 +19,12 @@ import AST.*;
  */
 public class JavaCompiler extends Frontend {
 
+	private enum Mode {
+		COMPILE,
+		PRETTY_PRINT,
+		DUMP_TREE,
+	}
+
 	/**
 	 * Entry point for the compiler frontend.
 	 * @param args command-line arguments
@@ -33,7 +39,7 @@ public class JavaCompiler extends Frontend {
 	private final JavaParser parser;
 	private final BytecodeParser bytecodeParser;
 
-	private boolean prettyPrintMode = false;
+	private Mode mode = Mode.COMPILE;
 
 	/**
 	 * Initialize the compiler.
@@ -74,18 +80,29 @@ public class JavaCompiler extends Frontend {
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
 		super.processErrors(errors, unit);
-		if (prettyPrintMode) {
-			System.out.println(unit.prettyPrint());
+		switch (mode) {
+			case PRETTY_PRINT:
+				System.out.println(unit.prettyPrint());
+				return;
+			case DUMP_TREE:
+				System.out.println(unit.dumpTreeNoRewrite());
+				return;
 		}
 	}
 
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
-		if (prettyPrintMode) {
-			System.out.println(unit.prettyPrint());
-		} else {
-			unit.transformation();
-			unit.generateClassfile();
+		switch (mode) {
+			case COMPILE:
+				unit.transformation();
+				unit.generateClassfile();
+				return;
+			case PRETTY_PRINT:
+				System.out.println(unit.prettyPrint());
+				return;
+			case DUMP_TREE:
+				System.out.println(unit.dumpTreeNoRewrite());
+				return;
 		}
 	}
 
@@ -106,7 +123,12 @@ public class JavaCompiler extends Frontend {
 				return EXIT_CONFIG_ERROR;
 			}
 		}
-		prettyPrintMode = program.options().hasOption("-XprettyPrint");
+		if (program.options().hasOption("-XprettyPrint")) {
+			mode = Mode.PRETTY_PRINT;
+		}
+		if (program.options().hasOption("-XdumpTree")) {
+			mode = Mode.DUMP_TREE;
+		}
 		return EXIT_SUCCESS;
 	}
 }
