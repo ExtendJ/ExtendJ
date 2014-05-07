@@ -244,7 +244,7 @@ aspect TypeCheck {
 			TypeMethodReference ref = (TypeMethodReference)this;
 			MethodDecl staticMethod = ref.targetStaticMethod(f);
 			MethodDecl instanceMethod = ref.targetInstanceMethod(f);
-			if(unknownMethod() != staticMethod && unknownMethod() != instanceMethod) {
+			if(ref.validStaticMethod(f) && ref.validInstanceMethod(f)) {
 				error("Ambiguity error: two possible methods " + staticMethod.name() + " was found");
 				return;
 			}
@@ -252,6 +252,15 @@ aspect TypeCheck {
 				error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
 				 " in the interface " + iDecl.typeName() + " was found");
 				 return;
+			}
+			else if(ref.validStaticMethod(f)) {
+				if(ref.getTypeAccess() instanceof ParTypeAccess)
+					error("Parameterized qualifier is not allowed for static method references");
+				else
+					found = staticMethod;
+			}
+			else if(ref.validInstanceMethod(f)) {
+				found = instanceMethod;
 			}
 			else if(unknownMethod() != staticMethod && !staticMethod.isStatic()) {
 				error("Cannot make a static reference to the non-static method " + staticMethod.fullSignature() + " in type " 
@@ -262,17 +271,6 @@ aspect TypeCheck {
 				error("The method " + instanceMethod.fullSignature() + " in type " + instanceMethod.hostType().typeName() + 
 						" must be accessed in a static way");
 				return;
-			}
-			else if(unknownMethod() != staticMethod && ref.getTypeAccess() instanceof ParTypeAccess) {
-				error("The method " + staticMethod.fullSignature() + " in type " + staticMethod.hostType().typeName() + 
-						" must be accessed in a static way");
-				return;
-			}
-			else if(unknownMethod() != staticMethod) {
-				found = staticMethod;
-			}
-			else {
-				found = instanceMethod;
 			}
 		}
 		
