@@ -1067,9 +1067,10 @@ aspect CreateBCode {
   eq AbstractDot.canBeTrue() = lastAccess().canBeTrue();
   eq OrLogicalExpr.canBeTrue() = getLeftOperand().canBeTrue() || getRightOperand().canBeTrue();
   eq AndLogicalExpr.canBeTrue() = getLeftOperand().canBeTrue() && getRightOperand().canBeTrue();
-  eq ConditionalExpr.canBeTrue() = type().isBoolean() && (getTrueExpr().canBeTrue() && getFalseExpr().canBeTrue()
-    || getCondition().isTrue() && getTrueExpr().canBeTrue()
-    || getCondition().isFalse() && getFalseExpr().canBeTrue());
+  eq ConditionalExpr.canBeTrue() =
+    type().isBoolean() && (
+        getCondition().canBeTrue() && getTrueExpr().canBeTrue()
+        || getCondition().canBeFalse() && getFalseExpr().canBeTrue());
   eq LogNotExpr.canBeTrue() = getOperand().canBeFalse();
 
   syn boolean Expr.canBeFalse() = !isTrue();
@@ -1077,9 +1078,10 @@ aspect CreateBCode {
   eq AbstractDot.canBeFalse() = lastAccess().canBeFalse();
   eq OrLogicalExpr.canBeFalse() = getLeftOperand().canBeFalse() && getRightOperand().canBeFalse();
   eq AndLogicalExpr.canBeFalse() = getLeftOperand().canBeFalse() || getRightOperand().canBeFalse();
-  eq ConditionalExpr.canBeFalse() = type().isBoolean() && (getTrueExpr().canBeFalse() && getFalseExpr().canBeFalse()
-    || getCondition().isTrue() && getTrueExpr().canBeFalse()
-    || getCondition().isFalse() && getFalseExpr().canBeFalse());
+  eq ConditionalExpr.canBeFalse() =
+    type().isBoolean() && (
+        getCondition().canBeTrue() && getTrueExpr().canBeFalse()
+        || getCondition().canBeFalse() && getFalseExpr().canBeFalse());
   eq LogNotExpr.canBeFalse() = getOperand().canBeTrue();
 
   public void RelationalExpr.createBCode(CodeGeneration gen) { emitBooleanCondition(gen); }
@@ -1412,14 +1414,16 @@ aspect CreateBCode {
     int endBranch = end_label();
     getCondition().emitEvalBranch(gen);
     gen.addLabel(thenBranch);
-    //if(getCondition().canBeTrue()) {
+    if (getCondition().canBeTrue()) {
       getThen().createBCode(gen);
-      if(getThen().canCompleteNormally() && hasElse() /*&& getCondition().canBeFalse()*/)
+      if (getThen().canCompleteNormally() && hasElse() && getCondition().canBeFalse()) {
         gen.emitGoto(endBranch);
-    //}
+      }
+    }
     gen.addLabel(elseBranch);
-    if(hasElse() /*&& getCondition().canBeFalse()*/)
+    if (hasElse() && getCondition().canBeFalse()) {
       getElse().createBCode(gen);
+    }
     gen.addLabel(endBranch);
   }
 
