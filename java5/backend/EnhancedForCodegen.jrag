@@ -21,8 +21,13 @@ aspect EnhancedForToBytecode {
   eq EnhancedForStmt.break_label() = end_label();
   eq EnhancedForStmt.continue_label() = update_label();
 
+  syn lazy int EnhancedForStmt.variableScopeEndLabel(CodeGeneration gen) =
+    gen.variableScopeLabel();
+
   public void EnhancedForStmt.createBCode(CodeGeneration gen) {
-    if(getExpr().type().isArrayDecl()) {
+    VariableDeclaration decl = getVariableDeclaration();
+    gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type().typeDescriptor(), extraLocalIndex(), variableScopeEndLabel(gen));
+    if (getExpr().type().isArrayDecl()) {
       getExpr().createBCode(gen);
       gen.emitStoreReference(extraLocalIndex());
       IntegerLiteral.push(gen, 0);
@@ -42,8 +47,7 @@ aspect EnhancedForToBytecode {
       gen.emit(Bytecode.IINC).add(extraLocalIndex()+1).add(1);
       gen.emitGoto(cond_label());
       gen.addLabel(end_label());
-    }
-    else {
+    } else {
       TypeDecl typeIterable = lookupType("java.lang", "Iterable");
       TypeDecl typeIterator = lookupType("java.util", "Iterator");
       MethodDecl iteratorMethod = getMethod(typeIterable, "iterator");
@@ -72,6 +76,7 @@ aspect EnhancedForToBytecode {
       gen.emitGoto(cond_label());
       gen.addLabel(end_label());
     }
+    gen.addVariableScopeLabel(variableScopeEndLabel(gen));
   }
 
   /**
