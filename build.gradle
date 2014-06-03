@@ -3,7 +3,7 @@ buildscript {
 		url 'http://jastadd.org/mvn'
 	}
 	dependencies {
-		classpath group: 'org.jastadd', name: 'jastaddgradle', version: '1.0'
+		classpath group: 'org.jastadd', name: 'jastaddgradle', version: '1.2'
 	}
 }
 
@@ -11,12 +11,15 @@ apply plugin: 'java'
 apply plugin: 'application'
 apply plugin: 'jastadd'
 
-JastAddPlugin.modules(this, ["java4", "java5", "java6", "java7"])
+jastadd {
+	modules project, ["java4", "java5", "java6", "java7"]
 
-jastaddj {
 	// JastAddJ build parameters
-	module = "java7 backend"
-	javaVersion = "Java SE 7"
+	// use -Djastadd.module="..." to select module to build
+	if (System.hasProperty('jastadd.module'))
+		module = System.properties['jastadd.module']
+	else
+		module = "java7 backend"
 
 	astPackage = "AST"
 	sourceDir = "src"
@@ -38,27 +41,50 @@ jar.destinationDir = projectDir
 sourceCompatibility = '1.6'
 targetCompatibility = '1.6'
 
+processResources.dependsOn 'updateVersionString'
 sourceSets {
 	main {
 		java {
-			srcDir "${project.jastaddj.sourceDir}/frontend"
-			srcDir "${project.jastaddj.sourceDir}/backend"
-			srcDir project.jastaddj.genDir
+			srcDir "${project.jastadd.sourceDir}/frontend"
+			srcDir "${project.jastadd.sourceDir}/backend"
+			srcDir project.jastadd.genDir
 		}
 		resources {
-			srcDir "${project.jastaddj.genResDir}"
-			srcDir "${project.jastaddj.resourceDir}"
+			srcDir "${project.jastadd.genResDir}"
+			srcDir "${project.jastadd.resourceDir}"
 		}
 	}
 }
 
 dependencies {
-	compile files("${project.jastaddj.toolsDir}/ant-1.9.1.jar")
+	compile files("${project.jastadd.toolsDir}/ant-1.9.1.jar")
 }
 
-task javaFiles << {
-	// this task is for debugging the gradle build
-	println "files in java component:"
-	JastAddModule.get(project.jastaddj.module).files(project, "java").each{ println it }
+// use git describe to update the version string
+task updateVersionString << {
+	def out = new StringBuilder()
+	def err = new StringBuilder()
+	def command = ['git', 'describe']
+	def proc = command.execute()
+	proc.waitForProcessOutput(out, err)
+	if (proc.exitValue()) {
+		println "warning: failed to run git describe to update version name"
+		println "${err}"
+	} else {
+		if (err) println "${err}"
+		def outputFile = "${project.jastadd.resourceDir}/Version.properties"
+		ant.propertyfile(file: outputFile) {
+			entry(key: "version", value: "${out.toString().readLines()[0]}")
+		}
+		command = ['git', 'update-index', '--assume-unchanged', outputFile]
+		out.setLength(0)
+		err.setLength(0)
+		proc = command.execute()
+		proc.waitForProcessOutput(out, err)
+		if (proc.exitValue()) {
+			println "warning: git update-index failed"
+			println "${err}"
+		}
+	}
 }
 
