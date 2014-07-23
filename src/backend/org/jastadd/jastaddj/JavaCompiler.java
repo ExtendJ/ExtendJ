@@ -23,6 +23,7 @@ public class JavaCompiler extends Frontend {
 		COMPILE,
 		PRETTY_PRINT,
 		DUMP_TREE,
+		STRUCTURED_PRINT,
 	}
 
 	/**
@@ -76,6 +77,18 @@ public class JavaCompiler extends Frontend {
 		return run(args, bytecodeParser, parser);
 	}
 
+	@Override
+	protected int processCompilationUnit(CompilationUnit unit) {
+		if (mode != Mode.STRUCTURED_PRINT) {
+			return super.processCompilationUnit(unit);
+		} else {
+			if (unit != null && unit.fromSource()) {
+				System.out.println(unit.structuredPrettyPrint());
+			}
+			return EXIT_SUCCESS;
+		}
+	}
+
 	@SuppressWarnings("rawtypes")
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
@@ -106,6 +119,12 @@ public class JavaCompiler extends Frontend {
 		}
 	}
 
+	@Override
+	protected void initOptions() {
+		super.initOptions();
+		program.options().addKeyOption("-XstructuredPrint");
+	}
+
 	/**
 	 * Check that the output directory given in args exists.
 	 */
@@ -125,9 +144,10 @@ public class JavaCompiler extends Frontend {
 		}
 		if (program.options().hasOption("-XprettyPrint")) {
 			mode = Mode.PRETTY_PRINT;
-		}
-		if (program.options().hasOption("-XdumpTree")) {
+		} else if (program.options().hasOption("-XdumpTree")) {
 			mode = Mode.DUMP_TREE;
+		} else if (program.options().hasOption("-XstructuredPrint")) {
+			mode = Mode.STRUCTURED_PRINT;
 		}
 		return EXIT_SUCCESS;
 	}
