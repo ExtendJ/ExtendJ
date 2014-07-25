@@ -292,13 +292,13 @@ public class JavaScanner extends Scanner{
 	  
 	/**
 	 * This method checks if the last found LT token should be changed to a 
-	 * ValueLT token. This method performs an arbitrary length of lookahead into
+	 * TypeLT token. This method performs an arbitrary length of lookahead into
 	 * the token stream, and stores all of it in the token buffer. 
-	 * @return true if the last LT token should be changed to ValueLT
+	 * @return true if the last LT token should be changed to LTTYPE
 	 * @throws IOException
 	 * @throws Exception
 	 */
-	private boolean isValueLT() throws IOException, Exception{
+	private boolean isTypeLT() throws IOException, Exception{
 		int floatingLT = 1;
 		if(!tokenBuffer.isEmpty()) {
 			for(Symbol token : tokenBuffer) {
@@ -384,9 +384,9 @@ public class JavaScanner extends Scanner{
 		currentSymbol = token;
 	
 		if(token.getId() == Terminals.LT) {
-			if(isValueLT()) {
-				Symbol valueLTSymbol = new Symbol(Terminals.LTVALUE, token.getStart(), token.getEnd(), token.value);
-				return valueLTSymbol;
+			if(isTypeLT()) {
+				Symbol typeLTSymbol = new Symbol(Terminals.LTTYPE, token.getStart(), token.getEnd(), token.value);
+				return typeLTSymbol;
 			}
 		}
 		else if(token.getId() == Terminals.LPAREN) {
