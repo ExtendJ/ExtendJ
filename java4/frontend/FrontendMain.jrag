@@ -29,6 +29,8 @@
 
 import org.jastadd.util.*;
 
+import java.util.Collections;
+
 aspect FrontendMain {
   protected long Program.javaParseTime;
   protected long Program.bytecodeParseTime;
@@ -213,6 +215,8 @@ aspect FrontendMain {
       return EXIT_SUCCESS;
     }
 
+    private Collection<Problem> EMPTY_PROBLEM_LIST = Collections.emptyList();
+
     /**
      * Processes from-source compilation units by error-checking them.
      * This method only report semantic errors and warnings.
@@ -225,12 +229,14 @@ aspect FrontendMain {
       if (unit != null && unit.fromSource()) {
         try {
           Collection errors = unit.parseErrors();
-          Collection warnings = new LinkedList();
+          Collection warnings = EMPTY_PROBLEM_LIST;
           // compute static semantic errors when there are no parse errors
           // or the recover from parse errors option is specified
           if (errors.isEmpty() || program.options().hasOption("-recover")) {
             start = System.nanoTime();
-            unit.errorCheck(errors, warnings);
+            unit.collectErrors();
+            errors = unit.errors();
+            warnings = unit.warnings();
             program.errorCheckTime += System.nanoTime() - start;
           }
           if (!errors.isEmpty()) {
