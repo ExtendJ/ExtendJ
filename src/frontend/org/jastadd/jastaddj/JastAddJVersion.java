@@ -49,11 +49,11 @@ public class JastAddJVersion {
 		}
 		version = resources.getString("version");
 		try {
-			resources = ResourceBundle.getBundle("JavaSupportLevel");
+			resources = ResourceBundle.getBundle("ModuleName");
 		} catch (MissingResourceException e) {
-			throw new Error("Could not open JavaSupportLevel resource bundle");
+			throw new Error("Could not open ModuleName resource bundle");
 		}
-		versionString = version +  " " + resources.getString("javaVersion");
+		versionString = version +  " " + resources.getString("moduleName");
 	}
 
 	/**

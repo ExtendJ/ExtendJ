@@ -1,9 +1,10 @@
 buildscript {
+	repositories.mavenLocal()
 	repositories.maven {
-		url 'http://jastadd.org/mvn'
+		url 'http://jastadd.org/mvn/'
 	}
 	dependencies {
-		classpath group: 'org.jastadd', name: 'jastaddgradle', version: '1.2'
+		classpath group: 'org.jastadd', name: 'jastaddgradle', version: '1.6'
 	}
 }
 
@@ -12,51 +13,47 @@ apply plugin: 'application'
 apply plugin: 'jastadd'
 
 jastadd {
-	modules project, ["java4", "java5", "java6", "java7"]
+	modules "java4", "java5", "java6", "java7"
 
 	// JastAddJ build parameters
 	// use -Djastadd.module="..." to select module to build
-	if (System.hasProperty('jastadd.module'))
-		module = System.properties['jastadd.module']
-	else
-		module = "java7 backend"
+	// default is "java7 backend"
+	module = System.properties['jastadd.module'] ?: "java7 backend"
 
 	astPackage = "AST"
-	sourceDir = "src"
-	toolsDir = "tools"
-	resourceDir = "${sourceDir}/res"
-
-	tmpDir = "${sourceDir}/tmp"
-	genDir = "${sourceDir}/gen"
-	genResDir = "${sourceDir}/gen-res"
+	tmpDir = "src/tmp"
+	genDir = "src/gen"
+	genResDir = "src/gen-res"
+	parser.name = "JavaParser"
 }
 
 mainClassName = 'org.jastadd.jastaddj.JavaCompiler'
 jar.manifest.attributes 'Main-Class': "${mainClassName}"
 
-// generate jastaddj.jar in project root directory:
+// generate Jar in project root directory
 jar.destinationDir = projectDir
 
+// java -source and -target
 sourceCompatibility = '1.6'
 targetCompatibility = '1.6'
+
+dependencies {
+	compile group: 'org.apache.ant', name: 'ant', version: '1.9.4'
+}
 
 processResources.dependsOn 'updateVersionString'
 sourceSets {
 	main {
 		java {
-			srcDir "${project.jastadd.sourceDir}/frontend"
-			srcDir "${project.jastadd.sourceDir}/backend"
+			srcDir "src/frontend"
+			srcDir "src/backend"
 			srcDir project.jastadd.genDir
 		}
 		resources {
+			srcDir "src/res"
 			srcDir "${project.jastadd.genResDir}"
-			srcDir "${project.jastadd.resourceDir}"
 		}
 	}
-}
-
-dependencies {
-	compile files("${project.jastadd.toolsDir}/ant-1.9.1.jar")
 }
 
 // use git describe to update the version string
@@ -71,7 +68,7 @@ task updateVersionString << {
 		println "${err}"
 	} else {
 		if (err) println "${err}"
-		def outputFile = file("${project.jastadd.resourceDir}/Version.properties")
+		def outputFile = file("src/res/Version.properties")
 		ant.propertyfile(file: outputFile) {
 			entry(key: "version", value: "${out.toString().readLines()[0]}")
 		}
