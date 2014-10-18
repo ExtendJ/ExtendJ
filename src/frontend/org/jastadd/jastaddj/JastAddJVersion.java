@@ -49,9 +49,9 @@ public class JastAddJVersion {
 		}
 		version = resources.getString("version");
 		try {
-			resources = ResourceBundle.getBundle("ModuleName");
+			resources = ResourceBundle.getBundle("BuildInfo");
 		} catch (MissingResourceException e) {
-			throw new Error("Could not open ModuleName resource bundle");
+			throw new Error("Could not open BuildInfo resource bundle");
 		}
 		versionString = version +  " " + resources.getString("moduleName");
 	}

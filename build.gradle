@@ -4,7 +4,7 @@ buildscript {
 		url 'http://jastadd.org/mvn/'
 	}
 	dependencies {
-		classpath group: 'org.jastadd', name: 'jastaddgradle', version: '1.6'
+		classpath group: 'org.jastadd', name: 'jastaddgradle', version: '1.9'
 	}
 }
 
@@ -21,16 +21,16 @@ jastadd {
 	module = System.properties['jastadd.module'] ?: "java7 backend"
 
 	astPackage = "AST"
-	tmpDir = "src/tmp"
 	genDir = "src/gen"
-	genResDir = "src/gen-res"
+	buildInfoDir = "src/gen-res"
 	parser.name = "JavaParser"
 }
 
-mainClassName = 'org.jastadd.jastaddj.JavaCompiler'
-jar.manifest.attributes 'Main-Class': "${mainClassName}"
-
-// generate Jar in project root directory
+if (jastadd.module.name.endsWith('backend'))
+	mainClassName = 'org.jastadd.jastaddj.JavaCompiler'
+else
+	mainClassName = 'org.jastadd.jastaddj.JavaChecker'
+jar.manifest.attributes 'Main-Class': mainClassName
 jar.destinationDir = projectDir
 
 // java -source and -target
@@ -41,20 +41,16 @@ dependencies {
 	compile group: 'org.apache.ant', name: 'ant', version: '1.9.4'
 }
 
-processResources.dependsOn 'updateVersionString'
 sourceSets {
 	main {
-		java {
-			srcDir "src/frontend"
-			srcDir "src/backend"
-			srcDir project.jastadd.genDir
-		}
 		resources {
-			srcDir "src/res"
-			srcDir "${project.jastadd.genResDir}"
+			srcDir 'src/res'
+			srcDir jastadd.buildInfoDir
 		}
 	}
 }
+
+processResources.dependsOn 'updateVersionString'
 
 // use git describe to update the version string
 task updateVersionString << {
@@ -68,9 +64,9 @@ task updateVersionString << {
 		println "${err}"
 	} else {
 		if (err) println "${err}"
-		def outputFile = file("src/res/Version.properties")
+		def outputFile = file('src/res/Version.properties')
 		ant.propertyfile(file: outputFile) {
-			entry(key: "version", value: "${out.toString().readLines()[0]}")
+			entry(key: 'version', value: out.toString().readLines()[0])
 		}
 		command = ['git', 'update-index', '--assume-unchanged', outputFile.path]
 		out.setLength(0)
@@ -78,7 +74,7 @@ task updateVersionString << {
 		proc = command.execute()
 		proc.waitForProcessOutput(out, err)
 		if (proc.exitValue()) {
-			println "warning: git update-index failed"
+			println 'warning: git update-index failed'
 			println "${err}"
 		}
 	}
