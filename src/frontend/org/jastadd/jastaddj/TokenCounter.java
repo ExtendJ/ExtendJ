@@ -98,6 +98,7 @@ public class TokenCounter {
 			while (scanner.hasNextLine()) {
 				numTokens += process(scanner.nextLine());
 			}
+			scanner.close();
 		} catch (IOException e) {
 			System.err.println("Could not read file list: " + filename);
 		}
