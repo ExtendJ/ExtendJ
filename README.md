@@ -102,4 +102,11 @@ ASM by OW2 Consortium can be used for advanced instrumentation and analysis
 of bytecode. There is also a useful plugin for eclipse called
 "Bytecode Outline" from OW2.
 
+Development
+-----------
+
+Some useful scripts for JastAddJ development can be found at [the JJScripts
+repository][2].
+
 [1]: https://bitbucket.org/jastadd/jastaddj/src/HEAD/ExtensionMigrationGuide.md?at=master
+[2]: https://bitbucket.org/joqvist/jjscripts
