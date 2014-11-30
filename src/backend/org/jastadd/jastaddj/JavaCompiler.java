@@ -19,7 +19,7 @@ import AST.*;
  */
 public class JavaCompiler extends Frontend {
 
-	private enum Mode {
+	protected enum Mode {
 		COMPILE,
 		PRETTY_PRINT,
 		DUMP_TREE,
