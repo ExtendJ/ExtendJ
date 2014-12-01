@@ -46,7 +46,15 @@ public class JavaCompiler extends Frontend {
 	 * Initialize the compiler.
 	 */
 	public JavaCompiler() {
-		super("JastAddJ", JastAddJVersion.getVersion());
+		this("JastAddJ");
+	}
+
+	/**
+	 * Initialize the compiler.
+	 * @param toolName the name of the compiler
+	 */
+	protected JavaCompiler(String toolName) {
+		super(toolName, JastAddJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
 			public CompilationUnit parse(java.io.InputStream is,
