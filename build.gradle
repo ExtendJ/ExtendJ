@@ -11,6 +11,7 @@ buildscript {
 apply plugin: 'java'
 apply plugin: 'application'
 apply plugin: 'jastadd'
+apply plugin: 'eclipse'
 
 jastadd {
 	modules 'java4', 'java5', 'java6', 'java7', 'java8'
@@ -78,6 +79,21 @@ task updateVersionString << {
 			println 'warning: git update-index failed'
 			println "${err}"
 		}
+	}
+}
+
+// fix the generated .classpath
+eclipse.classpath.file {
+	beforeMerged { classpath ->
+		classpath.entries << new org.gradle.plugins.ide.eclipse.model.SourceFolder('src/frontend', null)
+		classpath.entries << new org.gradle.plugins.ide.eclipse.model.SourceFolder('src/backend', null)
+		if (jastadd.module.name.contains('java8'))
+			classpath.entries << new org.gradle.plugins.ide.eclipse.model.SourceFolder('java8/src', null)
+	}
+	withXml { node ->
+		def gen = node.asNode().find { it.@kind == 'src' && it.@path == 'src/gen/java' }
+		if (gen?.children()?.isEmpty())
+			gen.appendNode('attributes').appendNode('attribute', [ name: 'ignore_optional_problems', value: 'true' ])
 	}
 }
 
