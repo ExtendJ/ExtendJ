@@ -51,13 +51,16 @@ aspect Generics {
 
   refine TypeAnalysis eq MethodAccess.type() {
     if(getNumArg() == 0 && name().equals("getClass") && decl().hostType().isObject()) {
-      TypeDecl bound = isQualified() ? qualifier().type() : hostType();
-      ArrayList args = new ArrayList();
-      args.add(bound.erasure().asWildcardExtends());
-      return ((GenericClassDecl)lookupType("java.lang", "Class")).lookupParTypeDecl(args);
+      TypeDecl typeClass = lookupType("java.lang", "Class");
+      if (typeClass instanceof GenericClassDecl) {
+        TypeDecl bound = isQualified() ? qualifier().type() : hostType();
+        ArrayList args = new ArrayList();
+        args.add(bound.erasure().asWildcardExtends());
+        return ((GenericClassDecl) typeClass).lookupParTypeDecl(args);
+      }
     }
-    else
-      return refined();
+    // legacy getClass access using non-generic java.lang.Class
+    return refined();
   }
 
   // imported types are considered raw types by the name resolver
@@ -137,13 +140,18 @@ aspect Generics {
   }
 
   refine TypeAnalysis eq ClassAccess.type() {
-    GenericClassDecl d = (GenericClassDecl)refined();
-    TypeDecl type = qualifier().type();
-    if(type.isPrimitiveType())
-      type = type.boxed();
-    ArrayList list = new ArrayList();
-    list.add(type);
-    return d.lookupParTypeDecl(list);
+    TypeDecl decl = refined();
+    if (decl instanceof GenericClassDecl) {
+      GenericClassDecl d = (GenericClassDecl)refined();
+      TypeDecl type = qualifier().type();
+      if(type.isPrimitiveType())
+        type = type.boxed();
+      ArrayList list = new ArrayList();
+      list.add(type);
+      return d.lookupParTypeDecl(list);
+    }
+    // using non-generic java.lang.Class
+    return decl;
   }
 
   refine AutoBoxing eq ConditionalExpr.type() {
