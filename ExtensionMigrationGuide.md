@@ -40,6 +40,23 @@ and are better covered in the ChangeLog.
 If you encounter problems not listed here, please report them on the [JastAddJ
 issue tracker at bitbucket][1].
 
+2013-10-22: Remove variable declaration rewrites
+------------------------------------------------
+
+**JastAddJ commit [f24288f][30]**
+
+`VarDeclStmt` is no longer rewritten to a separate `VariableDeclaration`
+statements in the JastAddJ AST and `VariableDeclaration` no longer inherits
+from Stmt. This can cause problems for extensions that add code generation or
+attributes on VariableDeclaration, expecting to find it in the AST. Instead,
+code written for VariableDeclaration should in most cases be moved to
+`VarDeclStmt` since in most cases this node fills the role that
+`VariableDeclaration` previously had.
+
+If you need to iterate over single variable declarations, you can use the
+`SingleDecl` NTA list child of `VarDeclStmt`.
+
+
 Jan 14, 2014: Fail if output directory does not exist
 -----------------------------------------------------
 
@@ -370,3 +387,4 @@ Update your build file. See [example from JSR308][25]
 [27]: https://bitbucket.org/jastadd/jastaddj/commits/c5728657928539e49e9a45942a623ca7711a85f8
 [28]: https://bitbucket.org/jastadd/jastaddj-nonnullchecker/commits/1afb20532a52d9f596872a0acf34ac23524d81a8
 [29]: https://bitbucket.org/jastadd/jastaddj/commits/7e1d8efbb0e2091aea616e433451cf0e969be94e
+[30]: https://bitbucket.org/jastadd/jastaddj/commits/f24288ffa10d0aabdf89bc4a9ee891c56a65ce4b
