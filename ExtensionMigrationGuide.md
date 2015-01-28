@@ -146,7 +146,9 @@ from Stmt. This can cause problems for extensions that add code generation or
 attributes on VariableDeclaration, expecting to find it in the AST. Instead,
 code written for VariableDeclaration should in most cases be moved to
 `VarDeclStmt` since in most cases this node fills the role that
-`VariableDeclaration` previously had.
+`VariableDeclaration` previously had. The exception to the rule here is
+`EnhancedForStmt` where the variable declaration is still represented by
+`VariableDeclaration`.
 
 If you need to iterate over single variable declarations, you can use the
 `SingleDecl` NTA list child of `VarDeclStmt`.
