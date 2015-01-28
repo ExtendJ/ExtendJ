@@ -43,23 +43,6 @@ will work even if you followed this guide.
 If you encounter problems not listed here, please report them on the [JastAddJ
 issue tracker at bitbucket][1].
 
-2013-10-22: Remove variable declaration rewrites
-------------------------------------------------
-
-**JastAddJ commit [f24288f][30]**
-
-`VarDeclStmt` is no longer rewritten to a separate `VariableDeclaration`
-statements in the JastAddJ AST and `VariableDeclaration` no longer inherits
-from Stmt. This can cause problems for extensions that add code generation or
-attributes on VariableDeclaration, expecting to find it in the AST. Instead,
-code written for VariableDeclaration should in most cases be moved to
-`VarDeclStmt` since in most cases this node fills the role that
-`VariableDeclaration` previously had.
-
-If you need to iterate over single variable declarations, you can use the
-`SingleDecl` NTA list child of `VarDeclStmt`.
-
-
 Jan 14, 2014: Fail if output directory does not exist
 -----------------------------------------------------
 
@@ -151,6 +134,22 @@ to your extension that refines ASTNode.toString to again prettyprint.  See
 [this NonNullChecker commit][3] for an example.
 
 Alternatively (and better), go to the above step.
+
+2013-10-22: Remove variable declaration rewrites
+------------------------------------------------
+
+**JastAddJ commit [f24288f][30]**
+
+`VarDeclStmt` is no longer rewritten to a separate `VariableDeclaration`
+statements in the JastAddJ AST and `VariableDeclaration` no longer inherits
+from Stmt. This can cause problems for extensions that add code generation or
+attributes on VariableDeclaration, expecting to find it in the AST. Instead,
+code written for VariableDeclaration should in most cases be moved to
+`VarDeclStmt` since in most cases this node fills the role that
+`VariableDeclaration` previously had.
+
+If you need to iterate over single variable declarations, you can use the
+`SingleDecl` NTA list child of `VarDeclStmt`.
 
 Oct 17, 2013: Added utf-8 encoding in javac task
 ------------------------------------------------
