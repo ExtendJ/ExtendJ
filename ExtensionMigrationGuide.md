@@ -3,8 +3,9 @@ Migration Guide for JastAddJ Extensions
 
 * created by GH (jan 2014)
 * updated by JO (jan 2014)
+* updated by JO (jan 2015)
 
-The JastAddJ API up to version 7.1 was mostly much unchanged for several years.
+The JastAddJ API up to version 7.1 was mostly unchanged for several years.
 Since version 7.1 though many things have changed in JastAddJ in order to
 remove side effects, fix errors, and make the code more understandable. The
 next release should be much more stable, but right now JastAddJ is changing
@@ -12,13 +13,13 @@ very much.
 
 If you are maintaining a JastAddJ extension we understand that these API
 changes can be difficult or frustrating to keep up with, but we see the changes
-are seen as a necessary evil.
+as a necessary evil.
 
 This guide is meant to help with migrating an extension from an older version
 of JastAddJ to the current version.  Migrating to the latest version of
 JastAddJ means that your extensions will become more conformant with the Java
 specification, due to the bug fixes that have been added to JastAddJ since
-version 7.1. You should also see increased performance after updating.
+version 7.1. You should also see improved performance after updating.
 
 Please keep in mind that we are still changing JastAddJ rapidly at this moment,
 so if you want to continue with a more stable version you may want to wait for
@@ -35,7 +36,9 @@ currently checked out version of JastAddJ with the commands
 
 This guide should be used together with the ChangeLog. The ChangeLog has less
 detailed descriptions of some commits, but some changes may be omitted here
-and are better covered in the ChangeLog.
+and are better covered in the ChangeLog. This is an incomplete list of changes
+that _may_ affect your extension. We can not guarantee that your extension
+will work even if you followed this guide.
 
 If you encounter problems not listed here, please report them on the [JastAddJ
 issue tracker at bitbucket][1].
