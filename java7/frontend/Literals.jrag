@@ -21,9 +21,9 @@ aspect Java7Literals {
    */
   syn lazy boolean FloatingPointLiteral.isZero() {
     for(int i = 0; i < digits.length(); i++) {
-      char c = digits.charAt(i);
+      char c = Character.toLowerCase(digits.charAt(i));
       if (c == 'e' || c == 'p') break;
-      if (c != '0' && c != '.') {
+      if (c != '0' && c != '.' && c != 'x') {
         return false;
       }
     }
@@ -35,9 +35,9 @@ aspect Java7Literals {
    */
   syn lazy boolean DoubleLiteral.isZero() {
     for(int i = 0; i < digits.length(); i++) {
-      char c = digits.charAt(i);
+      char c = Character.toLowerCase(digits.charAt(i));
       if (c == 'e' || c == 'p') break;
-      if (c != '0' && c != '.') {
+      if (c != '0' && c != '.' && c != 'x') {
         return false;
       }
     }
@@ -490,6 +490,7 @@ aspect Java7Literals {
     private int idx = 0;
     private boolean whole;// have whole part?
     private boolean fraction;// have fraction part?
+    private boolean exponentSpecifier;// have exponent specifier?
     private boolean exponent;// have exponent part?
     private boolean floating;// is floating point?
     private boolean isFloat;
@@ -707,7 +708,10 @@ aspect Java7Literals {
           literal = new IntegerLiteral(getLITERAL());
       } else {
         if (kind == HEXADECIMAL && !exponent)
-          return syntaxError("exponent is required");
+          return syntaxError("exponent is missing");
+
+        if (exponentSpecifier && !exponent)
+          return syntaxError("expected exponent after exponent specifier");
 
         if (!(whole || fraction))
           return syntaxError("at least one digit is required in "+
@@ -881,6 +885,8 @@ aspect Java7Literals {
       // current char is the exponent specifier char
       pushChar();
 
+      exponentSpecifier = true;
+
       // exponent sign
       if (have(1) && (peek(0) == '+' || peek(0) == '-'))
         pushChar();
@@ -904,6 +910,8 @@ aspect Java7Literals {
             return syntaxError("multiple decimal periods are not allowed");
           case 'p':
           case 'P':
+          case 'e':
+          case 'E':
             return syntaxError("multiple exponent specifiers are not allowed");
           case 'f':
           case 'F':
