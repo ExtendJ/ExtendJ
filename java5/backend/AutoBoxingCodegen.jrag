@@ -103,25 +103,36 @@ aspect AutoBoxingCodegen {
     gen.emit(Bytecode.INVOKEVIRTUAL, unboxed().variableSize() - 1).add2(index);
   }
 
-  // Generate unboxing code for conditions
-  // 14.9 If, 14.12 While, 14.13 Do, 14.14 For
-  //
-  // emitEvalBranch is used to emit the condition from these constructs
-  // refine behavior to include unboxing of the value when needed
-  refine CreateBCode public void Expr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
+  /**
+   * Generate unboxing code for conditions
+   * 14.9 If, 14.12 While, 14.13 Do, 14.14 For
+   *
+   * branchTrue is used to emit the condition from these constructs
+   * refine behavior to include unboxing of the value when needed
+   */
+  refine CreateBCode public void Expr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
     if (type().isReferenceType()) {
       createBCode(gen);
       type().emitUnboxingOperation(gen);
-      if (!invert) {
-        gen.emitCompare(Bytecode.IFEQ, target);
-      } else {
-        gen.emitCompare(Bytecode.IFNE, target);
-      }
+      gen.emitCompare(Bytecode.IFNE, target);
+      //gen.IFNE(target);
     } else {
-      refined(gen, invert, target);
+      refined(gen, target);
     }
   }
 
+  refine CreateBCode public void Expr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    if (type().isReferenceType()) {
+      createBCode(gen);
+      type().emitUnboxingOperation(gen);
+      gen.emitCompare(Bytecode.IFEQ, target);
+      //gen.IFEQ(target);
+    } else {
+      refined(gen, target);
+    }
+  }
 
   // 14.11 Switch
   refine CreateBCode public void SwitchStmt.createBCode(CodeGeneration gen) {
@@ -329,47 +340,63 @@ aspect AutoBoxingCodegen {
     getDest().emitStore(gen);
   }
 
-  public void EqualityExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
+  public void EqualityExpr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    if (isConstant()) {
       if (isTrue()) {
-        // fallthrough
-        return;
-      } else if (isFalse()) {
         gen.emitGoto(target);
+        //gen.GOTO(target);
         return;
       }
     } else {
-      if (isTrue()) {
-        gen.emitGoto(target);
-        return;
-      } else if (isFalse()) {
-        // fallthrough
-        return;
+      TypeDecl type = getLeftOperand().type();
+      if (type.isNumericType() && !(type.isReferenceType() && getRightOperand().type().isReferenceType())) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      } else if (type.isBoolean() && type != getRightOperand().type()) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      } else {
+        getLeftOperand().createBCode(gen);
+        getRightOperand().createBCode(gen);
       }
-    }
-    TypeDecl type = getLeftOperand().type();
-    if (type.isNumericType() && !(type.isReferenceType() && getRightOperand().type().isReferenceType())) {
-      type = binaryNumericPromotedType();
-      getLeftOperand().createBCode(gen);
-      getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
-      getRightOperand().createBCode(gen);
-      getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
-    }
-    else if(type.isBoolean() && type != getRightOperand().type()) {
-      type = binaryNumericPromotedType();
-      getLeftOperand().createBCode(gen);
-      getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
-      getRightOperand().createBCode(gen);
-      getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
-    }
-    else {
-      getLeftOperand().createBCode(gen);
-      getRightOperand().createBCode(gen);
-    }
-    if (!invert) {
-      compareNotBranch(gen, target, type);
-    } else {
       compareBranch(gen, target, type);
+    }
+  }
+
+  public void EqualityExpr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    if (isConstant()) {
+      if (isFalse()) {
+        gen.emitGoto(target);
+        //gen.GOTO(target);
+        return;
+      }
+    } else {
+      TypeDecl type = getLeftOperand().type();
+      if (type.isNumericType() && !(type.isReferenceType() && getRightOperand().type().isReferenceType())) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      } else if (type.isBoolean() && type != getRightOperand().type()) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      } else {
+        getLeftOperand().createBCode(gen);
+        getRightOperand().createBCode(gen);
+      }
+      compareNotBranch(gen, target, type);
     }
   }
 

@@ -1036,7 +1036,7 @@ aspect CreateBCode {
     int false_label = -1;
     if (!isConstant()) {
       false_label = gen.constantPool().newLabel();
-      emitEvalBranch(gen, false, false_label);
+      branchFalse(gen, false_label);
     }
     if (canBeTrue()) {
       BooleanLiteral.push(gen, true);
@@ -1062,7 +1062,7 @@ aspect CreateBCode {
     int false_label = -1;
     if (!getCondition().isConstant()) {
       false_label = gen.constantPool().newLabel();
-      getCondition().emitEvalBranch(gen, false, false_label);
+      getCondition().branchFalse(gen, false_label);
     }
     if (getCondition().canBeTrue()) {
       getTrueExpr().createBCode(gen);
@@ -1086,186 +1086,232 @@ aspect CreateBCode {
   }
 
   /**
-   * Generate a branch statement. Potentially results in a conditional branch.
-   * If invert is true, then fallthrough is used when the expression is true,
-   * otherwise false falls through.
+   * Generate a conditional branch statement. The branch should be taken if the
+   * expression evaluates to true. May in some cases not result in an actual
+   * branch statement if the branch would never be taken.
    * @param gen code generator
-   * @param invert whether the condition should be inverted
-   * @param target target label to jump to if the condition was false (or true
-   * if inverted)
+   * @param target target label to jump to if the condition was true
    */
-  public void Expr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
-      if (isConstant()) {
-        if (isTrue()) {
-          // fallthrough
-        } else {
-          gen.emitGoto(target);
-        }
-      } else {
-        createBCode(gen);
-        gen.emitCompare(Bytecode.IFEQ, target);
-      }
+  public void Expr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    if (isConstant()) {
+      if (isTrue()) {
+        gen.emitGoto(target);
+        //gen.GOTO(target);
+      } // else { fallthrough }
     } else {
-      if (isConstant()) {
-        if (isTrue()) {
-          gen.emitGoto(target);
-        } else {
-          // fallthrough
-        }
-      } else {
-        createBCode(gen);
-        gen.emitCompare(Bytecode.IFNE, target);
-      }
+      createBCode(gen);
+      gen.emitCompare(Bytecode.IFNE, target);
+      //gen.IFNE(target);// branch if value != 0
     }
   }
 
-  public void ParExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    getExpr().emitEvalBranch(gen, invert, target);
+  public void ParExpr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    getExpr().branchTrue(gen, target);
   }
 
-  public void AbstractDot.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    lastAccess().emitEvalBranch(gen, invert, target);
+  public void AbstractDot.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    lastAccess().branchTrue(gen, target);
   }
 
-  public void LogNotExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target)  {
-    getOperand().emitEvalBranch(gen, !invert, target);
+  public void LogNotExpr.branchTrue(CodeGeneration gen, int target)  {
+    // branch when true
+    getOperand().branchFalse(gen, target);
   }
 
-  public void AndLogicalExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
-      emitAndLogical(gen, false, target);
-    } else {
-      emitOrLogical(gen, true, target);
+  public void AndLogicalExpr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    Expr left = getLeftOperand();
+    Expr right = getRightOperand();
+    int skip_lbl = -1;
+    if (!left.isConstant()) {
+      skip_lbl = gen.constantPool().newLabel();
+      left.branchFalse(gen, skip_lbl);
+    }
+    if (left.canBeTrue()) {
+      right.branchTrue(gen, target);
+    }
+    if (skip_lbl != -1) {
+      gen.addLabel(skip_lbl);
     }
   }
 
-  public void OrLogicalExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
-      emitOrLogical(gen, false, target);
-    } else {
-      emitAndLogical(gen, true, target);
+  public void OrLogicalExpr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    Expr left = getLeftOperand();
+    Expr right = getRightOperand();
+    if (!left.isFalse()) {
+      left.branchTrue(gen, target);
+    }
+    if (left.canBeFalse()) {
+      right.branchTrue(gen, target);
     }
   }
 
-
-  protected void Binary.emitOrLogical(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
-      if (getLeftOperand().canBeFalse()) {
-        int true_label = gen.constantPool().newLabel();
-        getLeftOperand().emitEvalBranch(gen, true, true_label);
-        getRightOperand().emitEvalBranch(gen, false, target);
-        gen.addLabel(true_label);
-      }
-    } else {
-      if (getLeftOperand().canBeTrue()) {
-        int false_label = gen.constantPool().newLabel();
-        getLeftOperand().emitEvalBranch(gen, false, false_label);
-        getRightOperand().emitEvalBranch(gen, true, target);
-        gen.addLabel(false_label);
-      }
-    }
-  }
-
-  protected void Binary.emitAndLogical(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
-      if (getLeftOperand().canBeFalse()) {
-        getLeftOperand().emitEvalBranch(gen, false, target);
-      }
-      if (!getLeftOperand().isFalse() && getRightOperand().canBeFalse()) {
-        getRightOperand().emitEvalBranch(gen, false, target);
-      }
-    } else {
-      if (getLeftOperand().canBeTrue()) {
-        getLeftOperand().emitEvalBranch(gen, true, target);
-      }
-      if (!getLeftOperand().isTrue() && getRightOperand().canBeTrue()) {
-        getRightOperand().emitEvalBranch(gen, true, target);
-      }
-    }
-  }
-
-  public void ConditionalExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    int end_label = -1;
+  public void ConditionalExpr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
     int else_label = -1;
-    if (!invert) {
-      if (!getCondition().isConstant()) {
-        else_label = gen.constantPool().newLabel();
-        getCondition().emitEvalBranch(gen, false, else_label);
+    int end_label = -1;
+    if (!getCondition().isConstant()) {
+      else_label = gen.constantPool().newLabel();
+      getCondition().branchFalse(gen, else_label);
+    }
+    if (getCondition().canBeTrue()) {
+      getTrueExpr().branchTrue(gen, target);
+      if (getCondition().canBeFalse() && getTrueExpr().canBeFalse()) {
+        end_label = gen.constantPool().newLabel();
+        gen.emitGoto(end_label);
+        //gen.GOTO(end_label);
       }
-      if (getCondition().canBeTrue()) {
-        getTrueExpr().emitEvalBranch(gen, false, target);
-        if (getCondition().canBeFalse()) {
-          end_label = gen.constantPool().newLabel();
-          gen.emitGoto(end_label);
-        }
-      }
-      if (else_label != -1) {
-        gen.addLabel(else_label);
-      }
-      if (getCondition().canBeFalse()) {
-        getFalseExpr().emitEvalBranch(gen, false, target);
-      }
-      if (end_label != -1) {
-        gen.addLabel(end_label);
-      }
-    } else {
-      if (!getCondition().isConstant()) {
-        else_label = gen.constantPool().newLabel();
-        getCondition().emitEvalBranch(gen, true, else_label);
-      }
-      if (getCondition().canBeFalse()) {
-        getFalseExpr().emitEvalBranch(gen, true, target);
-        if (getCondition().canBeTrue()) {
-          end_label = gen.constantPool().newLabel();
-          gen.emitGoto(end_label);
-        }
-      }
-      if (else_label != -1) {
-        gen.addLabel(else_label);
-      }
-      if (getCondition().canBeTrue()) {
-        getTrueExpr().emitEvalBranch(gen, true, target);
-      }
-      if (end_label != -1) {
-        gen.addLabel(end_label);
-      }
+    }
+    if (else_label != -1) {
+      gen.addLabel(else_label);
+    }
+    if (getCondition().canBeFalse()) {
+      getFalseExpr().branchTrue(gen, target);
+    }
+    if (end_label != -1) {
+      gen.addLabel(end_label);
     }
   }
 
-  public void RelationalExpr.emitEvalBranch(CodeGeneration gen, boolean invert, int target) {
-    if (!invert) {
-      if (isTrue()) {
-        // fallthrough
-        return;
-      } else if (isFalse()) {
-        gen.emitGoto(target);
-        return;
-      }
-    } else {
+  public void RelationalExpr.branchTrue(CodeGeneration gen, int target) {
+    // branch when true
+    if (isConstant()) {
       if (isTrue()) {
         gen.emitGoto(target);
-        return;
-      } else if (isFalse()) {
-        // fallthrough
-        return;
+        //gen.GOTO(target);
       }
-    }
-    TypeDecl type = getLeftOperand().type();
-    if (type.isNumericType()) {
-      type = binaryNumericPromotedType();
-      getLeftOperand().createBCode(gen);
-      getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
-      getRightOperand().createBCode(gen);
-      getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
     } else {
-      getLeftOperand().createBCode(gen);
-      getRightOperand().createBCode(gen);
-    }
-    if (!invert) {
-      compareNotBranch(gen, target, type);
-    } else {
+      TypeDecl type = getLeftOperand().type();
+      if (type.isNumericType()) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      } else {
+        getLeftOperand().createBCode(gen);
+        getRightOperand().createBCode(gen);
+      }
       compareBranch(gen, target, type);
+    }
+  }
+
+  /**
+   * Generate a conditional branch statement. The branch should be taken if the
+   * expression evaluates to false. May in some cases not result in an actual
+   * branch statement if the branch would never be taken.
+   * @param gen code generator
+   * @param target target label to jump to if the condition was false
+   */
+  public void Expr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    if (isConstant()) {
+      if (isFalse()) {
+        gen.emitGoto(target);
+        //gen.GOTO(target);
+      } // else { fallthrough }
+    } else {
+      createBCode(gen);
+      gen.emitCompare(Bytecode.IFEQ, target);
+      //gen.IFEQ(target);// branch if value == 0
+    }
+  }
+
+  public void ParExpr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    getExpr().branchFalse(gen, target);
+  }
+
+  public void AbstractDot.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    lastAccess().branchFalse(gen, target);
+  }
+
+  public void LogNotExpr.branchFalse(CodeGeneration gen, int target)  {
+    // branch when false
+    getOperand().branchTrue(gen, target);
+  }
+
+  public void AndLogicalExpr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    Expr left = getLeftOperand();
+    Expr right = getRightOperand();
+    if (!left.isTrue()) {
+      left.branchFalse(gen, target);
+    }
+    if (left.canBeTrue()) {
+      right.branchFalse(gen, target);
+    }
+  }
+
+  public void OrLogicalExpr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    Expr left = getLeftOperand();
+    Expr right = getRightOperand();
+    int skip_lbl = -1;
+    if (!left.isConstant()) {
+      skip_lbl = gen.constantPool().newLabel();
+      left.branchTrue(gen, skip_lbl);
+    }
+    if (left.canBeFalse()) {
+      right.branchFalse(gen, target);
+    }
+    if (skip_lbl != -1) {
+      gen.addLabel(skip_lbl);
+    }
+  }
+
+  public void ConditionalExpr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    int else_label = -1;
+    int end_label = -1;
+    if (!getCondition().isConstant()) {
+      else_label = gen.constantPool().newLabel();
+      getCondition().branchFalse(gen, else_label);
+    }
+    if (getCondition().canBeTrue()) {
+      getTrueExpr().branchFalse(gen, target);
+      if (getCondition().canBeFalse() && getTrueExpr().canBeTrue()) {
+        end_label = gen.constantPool().newLabel();
+        gen.emitGoto(end_label);
+        //gen.GOTO(end_label);
+      }
+    }
+    if (else_label != -1) {
+      gen.addLabel(else_label);
+    }
+    if (getCondition().canBeFalse()) {
+      getFalseExpr().branchFalse(gen, target);
+    }
+    if (end_label != -1) {
+      gen.addLabel(end_label);
+    }
+  }
+
+  public void RelationalExpr.branchFalse(CodeGeneration gen, int target) {
+    // branch when false
+    if (isConstant()) {
+      if (isFalse()) {
+        gen.emitGoto(target);
+        //gen.GOTO(target);
+      }
+    } else {
+      TypeDecl type = getLeftOperand().type();
+      if (type.isNumericType()) {
+        type = binaryNumericPromotedType();
+        getLeftOperand().createBCode(gen);
+        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+        getRightOperand().createBCode(gen);
+        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion
+      } else {
+        getLeftOperand().createBCode(gen);
+        getRightOperand().createBCode(gen);
+      }
+      compareNotBranch(gen, target, type);
     }
   }
 
@@ -1476,7 +1522,7 @@ aspect CreateBCode {
     int thenBranch = then_branch_label();
     int endBranch = end_label();
     if (!getCondition().isConstant()) {
-      getCondition().emitEvalBranch(gen, false, elseBranch);
+      getCondition().branchFalse(gen, elseBranch);
     }
     gen.addLabel(thenBranch);
     if (getCondition().canBeTrue()) {
@@ -1500,7 +1546,7 @@ aspect CreateBCode {
     super.createBCode(gen);
     gen.addLabel(cond_label());
     if (!getCondition().isConstant()) {
-      getCondition().emitEvalBranch(gen, false, end_label());
+      getCondition().branchFalse(gen, end_label());
     }
     gen.addLabel(stmt_label());
     if (getCondition().canBeTrue()) {
@@ -1521,7 +1567,7 @@ aspect CreateBCode {
     gen.addLabel(begin_label());
     getStmt().createBCode(gen);
     gen.addLabel(cond_label());
-    getCondition().emitEvalBranch(gen, true, begin_label());
+    getCondition().branchTrue(gen, begin_label());
     gen.addLabel(end_label());
   }
 
@@ -1537,7 +1583,7 @@ aspect CreateBCode {
     }
     gen.addLabel(cond_label());
     if (!getCondition().isConstant()) {
-      getCondition().emitEvalBranch(gen, false, end_label());
+      getCondition().branchFalse(gen, end_label());
     }
     if (getCondition().canBeTrue()) {
       gen.addLabel(begin_label());
@@ -1547,9 +1593,7 @@ aspect CreateBCode {
         getUpdateStmt(i).createBCode(gen);
       gen.emitGoto(cond_label());
     }
-    if (canCompleteNormally()) {
-      gen.addLabel(end_label());
-    }
+    gen.addLabel(end_label());
     gen.addVariableScopeLabel(variableScopeEndLabel(gen));
   }
 
