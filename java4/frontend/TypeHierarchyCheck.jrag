@@ -293,6 +293,47 @@ aspect TypeHierarchyCheck {
     }
   }
 
+  public void ClassDecl.typeCheck() {
+    super.typeCheck();
+
+    // check if methods from superclass are incompatible with interface methods
+    for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl decl = iter.next();
+      SimpleSet set = localMethodsSignature(decl.signature());
+      Iterator i2 = set.iterator();
+      boolean overridden = false;
+      while (i2.hasNext()) {
+        MethodDecl m = (MethodDecl) i2.next();
+        // regardless of overriding
+        // 8.4.6.3
+        if (m.overrideCandidate(decl)) {
+          overridden = true;
+          if (!m.mayOverride(decl)) {
+            error("the return type of method " + m.fullSignature() +
+                " in " + m.hostType().typeName() +
+                " does not match the return type of method " +
+                decl.fullSignature() + " in " + decl.hostType().typeName() +
+                " and may thus not be overridden");
+          }
+        }
+      }
+      if (!overridden) {
+        set = ancestorMethods(decl.signature());
+        for (i2 = set.iterator(); i2.hasNext(); ) {
+          MethodDecl m = (MethodDecl) i2.next();
+          if (!m.isAbstract() && m.overrideCandidate(decl) &&
+              !m.mayOverride(decl)) {
+            error("the return type of method " + m.fullSignature() +
+                " in " + m.hostType().typeName() +
+                " does not match the return type of method " +
+                decl.fullSignature() + " in " + decl.hostType().typeName() +
+                " and may thus not be overridden");
+          }
+        }
+      }
+    }
+  }
+
   syn boolean MethodDecl.mayOverride(MethodDecl m) = type() == m.type();
 
   public void ClassDecl.nameCheck() {
