@@ -138,16 +138,37 @@ aspect Enums {
         child.transformEnumConstructors();
     }
   }
-  protected void ConstructorDecl.transformEnumConstructors() {
-    // add implicit super constructor access since we are traversing
-    // without doing rewrites
-    if(!hasConstructorInvocation()) {
-      setConstructorInvocation(
-        new ExprStmt(
-          new SuperConstructorAccess("super", new List())
-        )
-      );
+
+  refine LookupConstructor
+  eq ConstructorDecl.getConstructorInvocation() {
+    if (!isSynthetic() && hostType().isEnumDecl()) {
+      return getImplicitConstructorInvocation();
     }
+    return refined();
+  }
+
+  refine LookupConstructor
+  eq ConstructorDecl.getImplicitConstructorInvocation() {
+    if (hostType().isEnumDecl()) {
+      ConstructorAccess newAccess;
+      if (hasParsedConstructorInvocation()) {
+        ExprStmt stmt = (ExprStmt) getParsedConstructorInvocation();
+        ConstructorAccess access = (ConstructorAccess) stmt.getExpr();
+        newAccess = (ConstructorAccess) access.fullCopy();
+      } else {
+        newAccess = new SuperConstructorAccess("super", new List());
+      }
+      if (!hostType().original().typeName().equals("java.lang.Enum")) {
+        // java.lang.Enum calls the java.lang.Object constructor, with no extra params
+        newAccess.getArgList().insertChild(new VarAccess("@p0"),0);
+        newAccess.getArgList().insertChild(new VarAccess("@p1"),1);
+      }
+      return new ExprStmt(newAccess);
+    }
+    return refined();
+  }
+
+  protected void ConstructorDecl.transformEnumConstructors() {
     super.transformEnumConstructors();
     getParameterList().insertChild(
       new ParameterDeclaration(new TypeAccess("java.lang", "String"), "@p0"),
@@ -157,12 +178,6 @@ aspect Enums {
       new ParameterDeclaration(new TypeAccess("int"), "@p1"),
       1
     );
-  }
-  // applied to both ConstructorAccess and SuperConstructorAccess
-  protected void ConstructorAccess.transformEnumConstructors() {
-    super.transformEnumConstructors();
-    getArgList().insertChild(new VarAccess("@p0"),0);
-    getArgList().insertChild(new VarAccess("@p1"),1);
   }
 
   /*

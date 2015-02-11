@@ -218,6 +218,11 @@ aspect ImplicitConstructor {
           new Opt(),
           new Block()
       );
+      constructor.setParsedConstructorInvocation(
+        new ExprStmt(
+          new SuperConstructorAccess("super", new List())
+        )
+      );
       constructor.setImplicitConstructor();
       return new Opt<ConstructorDecl>(constructor);
     } else {
@@ -241,7 +246,7 @@ aspect ImplicitConstructor {
         argList.add(new VarAccess(constructor.getParameter(i).name()));
       }
 
-      constructor.setConstructorInvocation(
+      constructor.setParsedConstructorInvocation(
         new ExprStmt(
           new SuperConstructorAccess("super", argList)
         )
@@ -291,17 +296,34 @@ aspect ImplicitConstructor {
     return false;
   }
 
-  // TODO make NTA
   // 8.8.5
-  rewrite ConstructorDecl {
-    when(!hasConstructorInvocation() && !hostType().isObject())
-    to ConstructorDecl {
-      setConstructorInvocation(
-        new ExprStmt(
-          new SuperConstructorAccess("super", new List())
-          )
-        );
-      return this;
+
+  /**
+   * Nonterminal attribute for implicit constructor invocation.
+   * This is used when an explicit constructor invocation is missing
+   * in a constructor declaration.
+   *
+   * The implicit constructor invocation used to be inserted in the
+   * same node where the parsed constructor declaration was stored.
+   * This meant that it was impossible to distinguish a parsed constructor
+   * from an implicit one.
+   */
+  syn Stmt ConstructorDecl.getImplicitConstructorInvocation() =
+    new ExprStmt(new SuperConstructorAccess("super", new List()));
+
+  /**
+   * Test if there is an explicit or implicit constructor invocation available.
+   * This should be false only if the host type is java.lang.Object.
+   * @return {@code true} if there is a constructor invocation.
+   */
+  syn boolean ConstructorDecl.hasConstructorInvocation() =
+    hasParsedConstructorInvocation() || !hostType().isObject();
+
+  syn Stmt ConstructorDecl.getConstructorInvocation() {
+    if (hasParsedConstructorInvocation()) {
+      return getParsedConstructorInvocation();
+    } else {
+      return getImplicitConstructorInvocation();
     }
   }
 }
