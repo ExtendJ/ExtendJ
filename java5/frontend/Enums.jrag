@@ -139,18 +139,6 @@ aspect Enums {
     }
   }
   protected void ConstructorDecl.transformEnumConstructors() {
-    // make sure constructor is private
-    Modifiers newModifiers = new Modifiers(new List());
-    for (int i = 0; i < getModifiers().getNumModifier(); ++i) {
-      String modifier = getModifiers().getModifier(i).getID();
-      if (modifier.equals("public") || modifier.equals("private") ||
-        modifier.equals("protected"))
-          continue;
-      newModifiers.addModifier(new Modifier(modifier));
-    }
-    newModifiers.addModifier(new Modifier("private"));
-    setModifiers(newModifiers);
-
     // add implicit super constructor access since we are traversing
     // without doing rewrites
     if(!hasConstructorInvocation()) {
@@ -448,6 +436,7 @@ aspect Enums {
     for(int i = 0; i < getNumChild(); i++)
       getChild(i).checkEnum(enumDecl);
   }
+
   protected void EnumDecl.checkEnum(EnumDecl enumDecl) {
     for(int i = 0; i < getNumBodyDecl(); i++) {
       if(getBodyDecl(i) instanceof ConstructorDecl)
@@ -461,10 +450,24 @@ aspect Enums {
       }
     }
   }
+
   protected void VarAccess.checkEnum(EnumDecl enumDecl) {
     super.checkEnum(enumDecl);
     if(decl().isStatic() && decl().hostType() == enumDecl && !isConstant())
       error("may not reference a static field of an enum type from here");
+  }
+
+  /**
+   * Check if the enum constructor has an incorrect access modifier
+   */
+  protected void ConstructorDecl.checkEnum(EnumDecl enumDecl) {
+    super.checkEnum(enumDecl);
+
+    if (isPublic()) {
+      error("enum constructors can not be declared public");
+    } else if (isProtected()) {
+      error("enum constructors can not be declared public");
+    }
   }
 
   /*
