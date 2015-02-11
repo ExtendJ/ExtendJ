@@ -485,8 +485,14 @@ aspect TypeCheck {
         }
         else {
           TypeDecl nest = hostType();
-          while(nest != null && !nest.instanceOf(C.enclosingType()))
+          while (nest != null && !nest.instanceOf(C.enclosingType())) {
+            if (nest.isStatic()) {
+              error("No enclosing instance to initialize " + C.typeName() + " with");
+              nest = unknownType();
+              break;
+            }
             nest = nest.enclosingType();
+          }
           enclosing = nest == null ? unknownType() : nest;
         }
       }
@@ -520,7 +526,8 @@ aspect TypeCheck {
   eq AbstractDot.getRight().enclosingInstance() = getLeft().type();
   eq ConstructorDecl.getConstructorInvocation().enclosingInstance() = unknownType();
 
-  syn boolean ClassInstanceExpr.noEnclosingInstance() = isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
+  syn boolean ClassInstanceExpr.noEnclosingInstance() =
+    isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
 
   public void ClassInstanceExpr.typeCheckAnonymousSuperclassEnclosingInstance() {
     if(type().isAnonymous() && ((ClassDecl)type()).superclass().isInnerType()) {
