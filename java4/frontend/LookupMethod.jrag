@@ -372,28 +372,12 @@ aspect MemberMethods {
     }
   }
 
-  // signature -> set of method declarations
-  syn lazy Map<String,SimpleSet> ClassDecl.interfacesMethodsSignatureMap() {
+  /**
+   * Map signature to set of method declarations.
+   */
+  syn lazy Map<String,SimpleSet> TypeDecl.interfacesMethodsSignatureMap() {
     Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
     for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
-      InterfaceDecl iface = (InterfaceDecl) iter.next();
-      for (Iterator<MethodDecl> i2 = iface.localMethodsIterator(); i2.hasNext(); ) {
-        MethodDecl m = i2.next();
-        putSimpleSetElement(map, m.signature(), m);
-      }
-      for (SimpleSet entry: iface.interfacesMethodsSignatureMap().values()) {
-        for (Iterator i2 = entry.iterator(); i2.hasNext(); ) {
-          MethodDecl m = (MethodDecl) i2.next();
-          putSimpleSetElement(map, m.signature(), m);
-        }
-      }
-    }
-    return map;
-  }
-
-  syn lazy Map<String,SimpleSet> InterfaceDecl.interfacesMethodsSignatureMap() {
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
-    for (Iterator<TypeDecl> iter = superinterfacesIterator(); iter.hasNext(); ) {
       InterfaceDecl iface = (InterfaceDecl) iter.next();
       for (Iterator<MethodDecl> i2 = iface.localMethodsIterator(); i2.hasNext(); ) {
         MethodDecl m = i2.next();
@@ -440,11 +424,12 @@ aspect MemberMethods {
     localMethodsSignatureMap();
 
   eq ClassDecl.methodsSignatureMap() {
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMethodsSignatureMap());
+    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
+    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
     if (hasSuperclass()) {
       for (Iterator<MethodDecl> iter = superclass().methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = iter.next();
-        if (!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
+        if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
           putSimpleSetElement(map, m.signature(), m);
         }
       }
@@ -453,7 +438,7 @@ aspect MemberMethods {
       TypeDecl typeDecl = outerIter.next();
       for (Iterator<MethodDecl> iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = iter.next();
-        if (!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
+        if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
           if (allMethodsAbstract((SimpleSet)map.get(m.signature()))) {
             putSimpleSetElement(map, m.signature(), m);
           }
@@ -464,12 +449,13 @@ aspect MemberMethods {
   }
 
   eq InterfaceDecl.methodsSignatureMap() {
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMethodsSignatureMap());
-    for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
+    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
+    for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = outerIter.next();
       for (Iterator<MethodDecl> iter = typeDecl.methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
-        if (!m.isPrivate() && m.accessibleFrom(this) && !localMethodsSignatureMap().containsKey(m.signature())) {
+        if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
           putSimpleSetElement(map, m.signature(), m);
         }
       }
@@ -551,14 +537,14 @@ aspect AncestorMethods {
 
   eq InterfaceDecl.ancestorMethods(String signature) {
     SimpleSet set = SimpleSet.emptySet;
-    for (Iterator<TypeDecl> outerIter = superinterfacesIterator(); outerIter.hasNext(); ) {
+    for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = outerIter.next();
       for (Iterator iter = typeDecl.methodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         set = set.add(m);
       }
     }
-    if (!superinterfacesIterator().hasNext()) {
+    if (!interfacesIterator().hasNext()) {
       for (Iterator iter = typeObject().methodsSignature(signature).iterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl)iter.next();
         if (m.isPublic())
