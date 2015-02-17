@@ -407,6 +407,34 @@ aspect GenericsTypeCheck {
     }
   }
 
+  refine TypeHierarchyCheck
+  public void ClassDecl.typeCheck() {
+    refined();
+
+    if (hasSuperclass()) {
+      // JLS SE7 8.4.8.4
+      // check for duplicate methods inherited from parameterized supertype
+      if (superclass().isParameterizedType()) {
+        Map<String,SimpleSet> localMap = localMethodsSignatureMap();
+        Map<String,SimpleSet> methodMap = superclass().localMethodsSignatureMap();
+        for (Map.Entry<String,SimpleSet> entry: methodMap.entrySet()) {
+          String signature = entry.getKey();
+          if (!localMap.containsKey(signature)) {
+            // not locally overridden
+            SimpleSet set = entry.getValue();
+            Iterator iter = set.iterator();
+            iter.next();
+            while (iter.hasNext()) {
+              MethodDecl m = (MethodDecl) iter.next();
+              error("method with signature " + signature +
+                  " is multiply declared when inherited from " + superclass().typeName());
+            }
+          }
+        }
+      }
+    }
+  }
+
   syn boolean ParTypeDecl.sameArgument(ParTypeDecl decl) {
     if(this == decl) return true;
     if(genericDecl() != decl.genericDecl())
@@ -976,7 +1004,7 @@ aspect LookupParTypeDecl {
         BodyDecl copyDecl = ((BodyDeclList)getBodyDeclList()).localMethodSignatureCopy(decl, this);
         decl = (MethodDecl) copyDecl;
       }
-      map.put(decl.signature(), decl);
+      putSimpleSetElement(map, decl.signature(), decl);
 
     }
     return map;

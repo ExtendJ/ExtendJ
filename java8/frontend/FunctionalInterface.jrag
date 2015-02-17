@@ -316,16 +316,20 @@ aspect FunctionalInterface {
 		Map<String, SimpleSet> objectMethods = typeObject().methodsSignatureMap();
 		MethodDecl inObject;
 		
-		for(Object o : map.entrySet()) {
-			Map.Entry<String, MethodDecl> entry = (Map.Entry<String, MethodDecl>)o;
-			MethodDecl m = entry.getValue();
+		for (Map.Entry<String,SimpleSet> entry: map.entrySet()) {
+			SimpleSet set = entry.getValue();
+			MethodDecl m = (MethodDecl) set.iterator().next();
 			
-			inObject = (MethodDecl)objectMethods.get(m.signature());
-			if(m.isAbstract() && inObject == null) {
-				methods.add(m);
-			}
-			else if(m.isAbstract() && !inObject.isPublic()) {
-				methods.add(m);
+			SimpleSet objectSet = objectMethods.get(m.signature());
+			if (m.isAbstract()) {
+        if (objectSet == null || objectSet.isEmpty()) {
+				  methods.add(m);
+			  } else {
+				  inObject = (MethodDecl) objectSet.iterator().next();
+				  if (!inObject.isPublic()) {
+					  methods.add(m);
+				  }
+        }
 			}
 		}
 		
@@ -333,12 +337,17 @@ aspect FunctionalInterface {
 			TypeDecl typeDecl = (TypeDecl)outerIter.next();
 			for(Iterator iter = typeDecl.methodsIterator(); iter.hasNext();) {
 				MethodDecl m = (MethodDecl)iter.next();
-				inObject = (MethodDecl)objectMethods.get(m.signature());
-				if(m.isAbstract() && !m.isPrivate() && m.accessibleFrom(this)) {
-					if(inObject == null)
+
+				if (m.isAbstract() && !m.isPrivate() && m.accessibleFrom(this)) {
+					SimpleSet objectSet = objectMethods.get(m.signature());
+					if (objectSet == null || objectSet.isEmpty()) {
 						methods.add(m);
-					else if(!inObject.isPublic())
-						methods.add(m);
+					} else {
+						inObject = (MethodDecl) objectSet.iterator().next();
+						if (!inObject.isPublic()) {
+							methods.add(m);
+						}
+					}
 				}
 			}
 		}
