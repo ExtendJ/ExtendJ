@@ -26,216 +26,216 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect FunctionDescriptor {
-	class FunctionDescriptor {
-		ArrayList<TypeDecl> throwsList = null;
-		MethodDecl method = null;
-		InterfaceDecl fromInterface = null;
-		
-		public FunctionDescriptor(InterfaceDecl fromInterface) {
-			this.fromInterface = fromInterface;
-		}
-		
-		public boolean isGeneric() {
-			if(method == null)
-				return false;
-			else
-				return method instanceof GenericMethodDecl;
-		}
-		
-		public InterfaceDecl fromInterface() {
-			return this.fromInterface;
-		}
-		
-		public String toString() {
-			StringBuilder str = new StringBuilder();
-			if(method != null) {
-				if(method instanceof GenericMethodDecl) {
-					GenericMethodDecl genericMethod = (GenericMethodDecl)method;
-					str.append("<" + genericMethod.getTypeParameter(0).prettyPrint());
-					for(int i = 1; i < genericMethod.getNumTypeParameter(); i++) {
-						str.append(", " + genericMethod.getTypeParameter(i).prettyPrint());
-					}
-					str.append("> ");
-				}
-				str.append("(");
-				if(method.getNumParameter() > 0) {
-					str.append(method.getParameter(0).type().typeName());
-					for(int i = 1; i < method.getNumParameter(); i++) {
-						str.append(", " + method.getParameter(i).type().typeName());
-					}
-				}
-				str.append(")->");
-				str.append(method.type().typeName());
-				
-				str.append(" throws ");
-				if(throwsList.size() > 0) {
-					str.append(throwsList.get(0).typeName());
-					for(int i = 1; i < throwsList.size(); i++) {
-						str.append(", " + throwsList.get(i).typeName());
-					}
-				}
-			}
-			
-			return str.toString();
-		}
-	}
-	
-	syn lazy boolean InterfaceDecl.hasFunctionDescriptor() {
-		return functionDescriptor() != null;
-	}
-	
-	syn lazy FunctionDescriptor ParInterfaceDecl.functionDescriptor() {
-		if(getNumArgument() != ((GenericInterfaceDecl)original()).getNumTypeParameter())
-			return null;
-		else
-			return super.functionDescriptor();
-	}
-	
-	// 9.8
-	syn lazy FunctionDescriptor InterfaceDecl.functionDescriptor() {
-		LinkedList<MethodDecl> methods = collectAbstractMethods();
-		
-		if(methods.size() == 0)
-			return null;
-		else if(methods.size() == 1) {
-			MethodDecl m = methods.getFirst();
-			FunctionDescriptor f = new FunctionDescriptor(this);
-			f.method = m;
-			ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
-			for(Access exception : m.getExceptionList()) {
-				throwsList.add(exception.type());
-			}
-			f.throwsList = throwsList;
-			return f;
-		}
-		else {
-			FunctionDescriptor f = null;
-			MethodDecl foundMethod = null;
-			
-			for(MethodDecl current : methods) {
-				foundMethod = current;
-				for(MethodDecl inner : methods) {
-					if(!current.subsignatureTo(inner) || !current.returnTypeSubstitutableFor(inner)) {
-						foundMethod = null;
-					}
-				}
-				if(foundMethod != null) {
-					break;
-				}
-			}
-			
-			ArrayList<Access> descriptorThrows = new ArrayList<Access>();
-			if(foundMethod != null) {
-				// Now the throws-list needs to be computed as stated in 9.8
-				for(MethodDecl current : methods) {
-					for(Access exception : current.getExceptionList()) {
-						boolean alreadyInserted = false;
-						for(Access found : descriptorThrows) {
-							if(found.sameType(exception)) {
-								alreadyInserted = true;
-								break;
-							}
-						}
-						if(alreadyInserted) {
-							continue;
-						}
-						
-						boolean foundIncompatibleClause = false;
-						// Has to be the subtype to at least one exception in each clause
-						if(foundMethod instanceof GenericMethodDecl) {
-							for(MethodDecl inner : methods) {
-								if(!inner.subtypeThrowsClause(exception)) {
-									foundIncompatibleClause = true;
-									break;	
-								}
-							}
-						}
-						else {
-							for(MethodDecl inner : methods) {
-								if(!inner.subtypeThrowsClauseErased(exception)) {
-									foundIncompatibleClause = true;
-									break;	
-								}
-							}
-						}
-						
-						
-						if(!foundIncompatibleClause) {
-							// Was subtype to one exception in every clause
-							descriptorThrows.add(exception);	
-						}
-					}
-				}
-				
-				/* Found a suitable method and finished building throws-list,
-				now the descriptor just needs to be put together */
-				f = new FunctionDescriptor(this);
-				f.method = foundMethod;
-				if(descriptorThrows.size() == 0) {
-					f.throwsList = new ArrayList<TypeDecl>();
-				}
-				else {
-					ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
-					
-					/* All type variables must be replaced with foundMethods
-							type variables if the descriptor is generic */
-					if(foundMethod instanceof GenericMethodDecl) {
-						GenericMethodDecl foundGeneric = (GenericMethodDecl)foundMethod;
-						for(Access exception : descriptorThrows) {
-							if(exception.type() instanceof TypeVariable) {
-								TypeVariable foundVar = (TypeVariable)exception.type();
-								TypeVariable original = foundGeneric.getTypeParameter(foundVar.typeVarPosition());
-								throwsList.add(original);
-							}
-							else {
-								throwsList.add(exception.type());
-							}
-						}
-					}
-					
-					/* All throwed types must be erased if the descriptor
-						is not generic. */
-					else {
-						for(Access exception : descriptorThrows) 
-							throwsList.add(exception.type().erasure());	
-					}
-					f.throwsList = throwsList;
-				} 
-			}
-			return f;		
-		}
-	}
-	
-	/* 
-	Checks that the argument exception is a subtype to all exceptions
-	in the methods throws-clause. This takes the position of the type
-	parameters into account. 
-	*/
-	public boolean MethodDecl.subtypeThrowsClause(Access exception) {
-		boolean foundCompatible = false;
-		for(Access throwsException : getExceptionList()) {
-			if(exception.type().strictSubtype(throwsException.type())) {
-				foundCompatible = true;
-				break;
-			}
-		}
-		return foundCompatible;
-	}
-	
-	/* 
-	Checks that the argument exception is a subtype to all exceptions
-	in the methods throws-clause. Performs erasure on all types before
-	comparing them. 
-	*/
-	public boolean MethodDecl.subtypeThrowsClauseErased(Access exception) {
-		boolean foundCompatible = false;
-		for(Access throwsException : getExceptionList()) {
-			if(exception.type().erasure().strictSubtype(throwsException.type().erasure())) {
-				foundCompatible = true;
-				break;
-			}
-		}
-		return foundCompatible;
-	}
-	
+  class FunctionDescriptor {
+    ArrayList<TypeDecl> throwsList = null;
+    MethodDecl method = null;
+    InterfaceDecl fromInterface = null;
+
+    public FunctionDescriptor(InterfaceDecl fromInterface) {
+      this.fromInterface = fromInterface;
+    }
+
+    public boolean isGeneric() {
+      if(method == null)
+        return false;
+      else
+        return method instanceof GenericMethodDecl;
+    }
+
+    public InterfaceDecl fromInterface() {
+      return this.fromInterface;
+    }
+
+    public String toString() {
+      StringBuilder str = new StringBuilder();
+      if(method != null) {
+        if(method instanceof GenericMethodDecl) {
+          GenericMethodDecl genericMethod = (GenericMethodDecl)method;
+          str.append("<" + genericMethod.getTypeParameter(0).prettyPrint());
+          for(int i = 1; i < genericMethod.getNumTypeParameter(); i++) {
+            str.append(", " + genericMethod.getTypeParameter(i).prettyPrint());
+          }
+          str.append("> ");
+        }
+        str.append("(");
+        if(method.getNumParameter() > 0) {
+          str.append(method.getParameter(0).type().typeName());
+          for(int i = 1; i < method.getNumParameter(); i++) {
+            str.append(", " + method.getParameter(i).type().typeName());
+          }
+        }
+        str.append(")->");
+        str.append(method.type().typeName());
+
+        str.append(" throws ");
+        if(throwsList.size() > 0) {
+          str.append(throwsList.get(0).typeName());
+          for(int i = 1; i < throwsList.size(); i++) {
+            str.append(", " + throwsList.get(i).typeName());
+          }
+        }
+      }
+
+      return str.toString();
+    }
+  }
+
+  syn lazy boolean InterfaceDecl.hasFunctionDescriptor() {
+    return functionDescriptor() != null;
+  }
+
+  syn lazy FunctionDescriptor ParInterfaceDecl.functionDescriptor() {
+    if(getNumArgument() != ((GenericInterfaceDecl)original()).getNumTypeParameter())
+      return null;
+    else
+      return super.functionDescriptor();
+  }
+
+  // 9.8
+  syn lazy FunctionDescriptor InterfaceDecl.functionDescriptor() {
+    LinkedList<MethodDecl> methods = collectAbstractMethods();
+
+    if(methods.size() == 0)
+      return null;
+    else if(methods.size() == 1) {
+      MethodDecl m = methods.getFirst();
+      FunctionDescriptor f = new FunctionDescriptor(this);
+      f.method = m;
+      ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
+      for(Access exception : m.getExceptionList()) {
+        throwsList.add(exception.type());
+      }
+      f.throwsList = throwsList;
+      return f;
+    }
+    else {
+      FunctionDescriptor f = null;
+      MethodDecl foundMethod = null;
+
+      for(MethodDecl current : methods) {
+        foundMethod = current;
+        for(MethodDecl inner : methods) {
+          if(!current.subsignatureTo(inner) || !current.returnTypeSubstitutableFor(inner)) {
+            foundMethod = null;
+          }
+        }
+        if(foundMethod != null) {
+          break;
+        }
+      }
+
+      ArrayList<Access> descriptorThrows = new ArrayList<Access>();
+      if(foundMethod != null) {
+        // Now the throws-list needs to be computed as stated in 9.8
+        for(MethodDecl current : methods) {
+          for(Access exception : current.getExceptionList()) {
+            boolean alreadyInserted = false;
+            for(Access found : descriptorThrows) {
+              if(found.sameType(exception)) {
+                alreadyInserted = true;
+                break;
+              }
+            }
+            if(alreadyInserted) {
+              continue;
+            }
+
+            boolean foundIncompatibleClause = false;
+            // Has to be the subtype to at least one exception in each clause
+            if(foundMethod instanceof GenericMethodDecl) {
+              for(MethodDecl inner : methods) {
+                if(!inner.subtypeThrowsClause(exception)) {
+                  foundIncompatibleClause = true;
+                  break;
+                }
+              }
+            }
+            else {
+              for(MethodDecl inner : methods) {
+                if(!inner.subtypeThrowsClauseErased(exception)) {
+                  foundIncompatibleClause = true;
+                  break;
+                }
+              }
+            }
+
+
+            if(!foundIncompatibleClause) {
+              // Was subtype to one exception in every clause
+              descriptorThrows.add(exception);
+            }
+          }
+        }
+
+        /* Found a suitable method and finished building throws-list,
+        now the descriptor just needs to be put together */
+        f = new FunctionDescriptor(this);
+        f.method = foundMethod;
+        if(descriptorThrows.size() == 0) {
+          f.throwsList = new ArrayList<TypeDecl>();
+        }
+        else {
+          ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
+
+          /* All type variables must be replaced with foundMethods
+              type variables if the descriptor is generic */
+          if(foundMethod instanceof GenericMethodDecl) {
+            GenericMethodDecl foundGeneric = (GenericMethodDecl)foundMethod;
+            for(Access exception : descriptorThrows) {
+              if(exception.type() instanceof TypeVariable) {
+                TypeVariable foundVar = (TypeVariable)exception.type();
+                TypeVariable original = foundGeneric.getTypeParameter(foundVar.typeVarPosition());
+                throwsList.add(original);
+              }
+              else {
+                throwsList.add(exception.type());
+              }
+            }
+          }
+
+          /* All throwed types must be erased if the descriptor
+            is not generic. */
+          else {
+            for(Access exception : descriptorThrows)
+              throwsList.add(exception.type().erasure());
+          }
+          f.throwsList = throwsList;
+        }
+      }
+      return f;
+    }
+  }
+
+  /*
+  Checks that the argument exception is a subtype to all exceptions
+  in the methods throws-clause. This takes the position of the type
+  parameters into account.
+  */
+  public boolean MethodDecl.subtypeThrowsClause(Access exception) {
+    boolean foundCompatible = false;
+    for(Access throwsException : getExceptionList()) {
+      if(exception.type().strictSubtype(throwsException.type())) {
+        foundCompatible = true;
+        break;
+      }
+    }
+    return foundCompatible;
+  }
+
+  /*
+  Checks that the argument exception is a subtype to all exceptions
+  in the methods throws-clause. Performs erasure on all types before
+  comparing them.
+  */
+  public boolean MethodDecl.subtypeThrowsClauseErased(Access exception) {
+    boolean foundCompatible = false;
+    for(Access throwsException : getExceptionList()) {
+      if(exception.type().erasure().strictSubtype(throwsException.type().erasure())) {
+        foundCompatible = true;
+        break;
+      }
+    }
+    return foundCompatible;
+  }
+
 }

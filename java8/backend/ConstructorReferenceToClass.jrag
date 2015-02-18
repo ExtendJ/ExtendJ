@@ -26,125 +26,125 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect ConstructorReferenceToClass {
-	
-	/* Build a nested ArrayTypeWithSizeAccess from the normal
-	   ArrayTypeAccess. This is to be used when generating
-	   the anonymous inner class which must instantiate a new
-	   array according to the array reference */
-	syn ArrayTypeAccess ArrayReference.getArrayTypeWithSizeAccess(Expr expr) {
-		ArrayTypeAccess startAccess = (ArrayTypeAccess)getTypeAccess().fullCopy();
-		return recursiveArrayTypeWithSizeAccess(startAccess, (Expr)expr.fullCopy());
-	}
-	
-	syn ArrayTypeAccess ArrayReference.recursiveArrayTypeWithSizeAccess(ArrayTypeAccess access, Expr expr) {
-		if(!(access.getAccess() instanceof ArrayTypeAccess)) {
-			return new ArrayTypeWithSizeAccess(access.getAccess(), expr);
-		}
-		else {
-			return new ArrayTypeAccess(recursiveArrayTypeWithSizeAccess((ArrayTypeAccess)access.getAccess(), expr));
-		}
-	}
-	
-	// Build an anonymous inner class for bytecode generation
-	syn nta lazy ClassInstanceExpr ConstructorReference.toClass() {
-		List<Access> implementsList = new List<Access>();
-		InterfaceDecl iDecl = targetInterface();
-		
-		// First compute the interface implemented by the anonymous class
-		Access implementsInterface = iDecl.createQualifiedAccess();
-		implementsList.add(implementsInterface);
-		
-		// Next compute the BodyDecls for the anonymous class
-		List<BodyDecl> bodyDecls = new List<BodyDecl>();
-		
-		// Which means we must build the method overriding the abstract methods
-		
-		Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-		Access returnType = new SyntheticTypeAccess(iDecl.functionDescriptor().method.type());
-		List<ParameterDeclaration> methodParams = toParameterList();
-		List<Access> methodThrows = new List<Access>();
-		for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
-			methodThrows.add(new SyntheticTypeAccess(throwsType));
-		}
-		Opt<Block> methodBlock = new Opt<Block>(toBlock());
-		MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(), 
-											methodParams, methodThrows, methodBlock);
-		
-		bodyDecls.add(method);
-		
-		/* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
-		of a normal AnonymousDecl in order for this and super keywords to get the type of the outer 
-		scope. */
-		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "ConstructorReference", bodyDecls);
-		for (Access impl: implementsList) {
-			anonymousDecl.addImplements(impl);
-		}
-		
-		return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
-	}
-	
-	syn lazy Block ConstructorReference.toBlock();
-	
-	syn lazy List<ParameterDeclaration> ConstructorReference.toParameterList() {
-		List<ParameterDeclaration> list = new List<ParameterDeclaration>();
-		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-			TypeDecl paramType = targetInterface().functionDescriptor().method.getParameter(i).type();
-			String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
-			list.add(new ParameterDeclaration(new SyntheticTypeAccess(paramType), paramName));
-		}
-		return list;
-	}
-	
-	eq ArrayReference.toBlock() {
-		// First, build an ArrayCreationExpr used in the block
-		String paramName = targetInterface().functionDescriptor().method.getParameter(0).name();
-		VarAccess paramAccess = new VarAccess(paramName);
-		ArrayCreationExpr arrayExpr = new ArrayCreationExpr(getArrayTypeWithSizeAccess(paramAccess), new Opt());
-		
-		// Next build actual block
-		Stmt blockStmt = null;
-		if(targetInterface().functionDescriptor().method.type().isVoid()) {
-			blockStmt = new ExprStmt(arrayExpr);
-		}
-		else {
-			blockStmt = new ReturnStmt(arrayExpr);
-		}
-		List<Stmt> stmtList = new List<Stmt>();
-		stmtList.add(blockStmt);
-		return new Block(stmtList);	
-	}	
-	
-	eq ClassReference.toBlock() {
-		List<Expr> arguments = new List<Expr>();
-		for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-			String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
-			arguments.add(new VarAccess(paramName));
-		}
-		
-		ClassInstanceExpr instanceExpr = null;
-		if(hasTypeArgument()) {
-			instanceExpr = new ParClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments,
-		 											new Opt(), (List<Access>)getTypeArgumentList().fullCopy());
-		}
-		else {
-			if(getTypeAccess().type().isRawType()) {
-				DiamondAccess diamond = new DiamondAccess((Access)getTypeAccess().fullCopy());
-				instanceExpr = new ClassInstanceExpr(diamond, arguments);
-			}
-			else {
-				instanceExpr = new ClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments);
-			}
-		}
-		Stmt blockStmt = null;
-		if(targetInterface().functionDescriptor().method.type().isVoid()) {
-			blockStmt = new ExprStmt(instanceExpr);
-		}
-		else {
-			blockStmt = new ReturnStmt(instanceExpr);
-		}
-		List<Stmt> stmtList = new List<Stmt>();
-		stmtList.add(blockStmt);
-		return new Block(stmtList);
-		
-	}
+
+  /* Build a nested ArrayTypeWithSizeAccess from the normal
+     ArrayTypeAccess. This is to be used when generating
+     the anonymous inner class which must instantiate a new
+     array according to the array reference */
+  syn ArrayTypeAccess ArrayReference.getArrayTypeWithSizeAccess(Expr expr) {
+    ArrayTypeAccess startAccess = (ArrayTypeAccess)getTypeAccess().fullCopy();
+    return recursiveArrayTypeWithSizeAccess(startAccess, (Expr)expr.fullCopy());
+  }
+
+  syn ArrayTypeAccess ArrayReference.recursiveArrayTypeWithSizeAccess(ArrayTypeAccess access, Expr expr) {
+    if(!(access.getAccess() instanceof ArrayTypeAccess)) {
+      return new ArrayTypeWithSizeAccess(access.getAccess(), expr);
+    }
+    else {
+      return new ArrayTypeAccess(recursiveArrayTypeWithSizeAccess((ArrayTypeAccess)access.getAccess(), expr));
+    }
+  }
+
+  // Build an anonymous inner class for bytecode generation
+  syn nta lazy ClassInstanceExpr ConstructorReference.toClass() {
+    List<Access> implementsList = new List<Access>();
+    InterfaceDecl iDecl = targetInterface();
+
+    // First compute the interface implemented by the anonymous class
+    Access implementsInterface = iDecl.createQualifiedAccess();
+    implementsList.add(implementsInterface);
+
+    // Next compute the BodyDecls for the anonymous class
+    List<BodyDecl> bodyDecls = new List<BodyDecl>();
+
+    // Which means we must build the method overriding the abstract methods
+
+    Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
+    Access returnType = new SyntheticTypeAccess(iDecl.functionDescriptor().method.type());
+    List<ParameterDeclaration> methodParams = toParameterList();
+    List<Access> methodThrows = new List<Access>();
+    for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+      methodThrows.add(new SyntheticTypeAccess(throwsType));
+    }
+    Opt<Block> methodBlock = new Opt<Block>(toBlock());
+    MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(),
+                      methodParams, methodThrows, methodBlock);
+
+    bodyDecls.add(method);
+
+    /* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
+    of a normal AnonymousDecl in order for this and super keywords to get the type of the outer
+    scope. */
+    LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "ConstructorReference", bodyDecls);
+    for (Access impl: implementsList) {
+      anonymousDecl.addImplements(impl);
+    }
+
+    return new ClassInstanceExpr((Access)implementsInterface.fullCopy(), new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
+  }
+
+  syn lazy Block ConstructorReference.toBlock();
+
+  syn lazy List<ParameterDeclaration> ConstructorReference.toParameterList() {
+    List<ParameterDeclaration> list = new List<ParameterDeclaration>();
+    for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+      TypeDecl paramType = targetInterface().functionDescriptor().method.getParameter(i).type();
+      String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+      list.add(new ParameterDeclaration(new SyntheticTypeAccess(paramType), paramName));
+    }
+    return list;
+  }
+
+  eq ArrayReference.toBlock() {
+    // First, build an ArrayCreationExpr used in the block
+    String paramName = targetInterface().functionDescriptor().method.getParameter(0).name();
+    VarAccess paramAccess = new VarAccess(paramName);
+    ArrayCreationExpr arrayExpr = new ArrayCreationExpr(getArrayTypeWithSizeAccess(paramAccess), new Opt());
+
+    // Next build actual block
+    Stmt blockStmt = null;
+    if(targetInterface().functionDescriptor().method.type().isVoid()) {
+      blockStmt = new ExprStmt(arrayExpr);
+    }
+    else {
+      blockStmt = new ReturnStmt(arrayExpr);
+    }
+    List<Stmt> stmtList = new List<Stmt>();
+    stmtList.add(blockStmt);
+    return new Block(stmtList);
+  }
+
+  eq ClassReference.toBlock() {
+    List<Expr> arguments = new List<Expr>();
+    for(int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
+      String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+      arguments.add(new VarAccess(paramName));
+    }
+
+    ClassInstanceExpr instanceExpr = null;
+    if(hasTypeArgument()) {
+      instanceExpr = new ParClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments,
+                          new Opt(), (List<Access>)getTypeArgumentList().fullCopy());
+    }
+    else {
+      if(getTypeAccess().type().isRawType()) {
+        DiamondAccess diamond = new DiamondAccess((Access)getTypeAccess().fullCopy());
+        instanceExpr = new ClassInstanceExpr(diamond, arguments);
+      }
+      else {
+        instanceExpr = new ClassInstanceExpr((Access)getTypeAccess().fullCopy(), arguments);
+      }
+    }
+    Stmt blockStmt = null;
+    if(targetInterface().functionDescriptor().method.type().isVoid()) {
+      blockStmt = new ExprStmt(instanceExpr);
+    }
+    else {
+      blockStmt = new ReturnStmt(instanceExpr);
+    }
+    List<Stmt> stmtList = new List<Stmt>();
+    stmtList.add(blockStmt);
+    return new Block(stmtList);
+
+  }
 }

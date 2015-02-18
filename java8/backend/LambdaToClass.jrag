@@ -26,93 +26,93 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect LambdaToClass {
-	
-	// Build an anonymous class which will be converted to byte code
-	// Since a lambda can't target generic methods, eventual type variables don't have to be taken into accound
-	syn nta lazy ClassInstanceExpr LambdaExpr.toClass() {
-		List<Access> implementsList = new List<Access>();
-		InterfaceDecl iDecl = targetInterface();
-		
-		// First compute the interface implemented by the anonymous class
-		Access implementsInterface = iDecl.createQualifiedAccess();		
-		implementsList.add(implementsInterface);
-		
-		// Next compute the BodyDecls for the anonymous class
-		List<BodyDecl> bodyDecls = new List<BodyDecl>();
-		
-		// To do that we must build the method which is the only BodyDecl
-		Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-		Access returnType = (Access)iDecl.functionDescriptor().method.getTypeAccess().fullCopy();
-		List<ParameterDeclaration> methodParams = getLambdaParameters().toParameterList();
-		List<Access> methodThrows = new List<Access>();
-		for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
-			methodThrows.add(throwsType.createQualifiedAccess());
-		}
-		Opt<Block> methodBlock = new Opt<Block>(getLambdaBody().toBlock());
-		MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(), 
-											methodParams, methodThrows, methodBlock);
-		
-		bodyDecls.add(method);
-		
-		/* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
-		of a normal AnonymousDecl in order for this and super keywords to get the type of the outer 
-		scope. */
-		LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "Lambda", bodyDecls);
-		for (Access impl: implementsList) {
-			anonymousDecl.addImplements(impl);
-		}
-		
-		return new ClassInstanceExpr(implementsInterface, new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
-	}
-	
-	syn lazy Block LambdaBody.toBlock();
-	
-	eq BlockLambdaBody.toBlock() {
-		Block b = getBlock();
-		setChild(new Block(), 0);
-		b.flushCaches();
-		return b;
-	}
-	eq ExprLambdaBody.toBlock() {
-		List<Stmt> stmtList = new List<Stmt>();
-		// If expected return type is void, insert ExprStmt in list
-		Expr expr = getExpr();
-		setChild(new VarAccess("tmp"), 0);
-		expr.flushCaches();
-		if(enclosingLambda().targetInterface().functionDescriptor().method.type().isVoid()) {
-			stmtList.add(new ExprStmt(expr));
-		}
-		// Otherwise, insert return stmt
-		else {
-			stmtList.add(new ReturnStmt(expr));
-		}
-		return new Block(stmtList);
-	}
-	
-	/*eq BlockLambdaBody.toBlock() = getBlock().fullCopy();
-	eq ExprLambdaBody.toBlock() {
-		List<Stmt> stmtList = new List<Stmt>();
-		// If expected return type is void, insert ExprStmt in list
-		if(enclosingLambda().targetInterface().functionDescriptor().method.type().isVoid()) {
-			stmtList.add(new ExprStmt((Expr)getExpr().fullCopy()));
-		}
-		// Otherwise, insert return stmt
-		else {
-			stmtList.add(new ReturnStmt((Expr)getExpr().fullCopy()));
-		}
-		return new Block(stmtList);
-	}*/	
-	
-	syn lazy List<ParameterDeclaration> LambdaParameters.toParameterList();
-	eq DeclaredLambdaParameters.toParameterList() = getParameterList().fullCopy();
-	eq InferredLambdaParameters.toParameterList() {
-		List<ParameterDeclaration> paramList = new List<ParameterDeclaration>();
-		int i = 0;
-		for(InferredParameterDeclaration infDecl : getParameterList()) {
-			ParameterDeclaration funcDecl = enclosingLambda().targetInterface().functionDescriptor().method.getParameter(i);
-			paramList.add(new ParameterDeclaration(funcDecl.getTypeAccess(), infDecl.name()));
-			i++;
-		}
-		return paramList;
-	}
+
+  // Build an anonymous class which will be converted to byte code
+  // Since a lambda can't target generic methods, eventual type variables don't have to be taken into accound
+  syn nta lazy ClassInstanceExpr LambdaExpr.toClass() {
+    List<Access> implementsList = new List<Access>();
+    InterfaceDecl iDecl = targetInterface();
+
+    // First compute the interface implemented by the anonymous class
+    Access implementsInterface = iDecl.createQualifiedAccess();
+    implementsList.add(implementsInterface);
+
+    // Next compute the BodyDecls for the anonymous class
+    List<BodyDecl> bodyDecls = new List<BodyDecl>();
+
+    // To do that we must build the method which is the only BodyDecl
+    Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
+    Access returnType = (Access)iDecl.functionDescriptor().method.getTypeAccess().fullCopy();
+    List<ParameterDeclaration> methodParams = getLambdaParameters().toParameterList();
+    List<Access> methodThrows = new List<Access>();
+    for(TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+      methodThrows.add(throwsType.createQualifiedAccess());
+    }
+    Opt<Block> methodBlock = new Opt<Block>(getLambdaBody().toBlock());
+    MethodDecl method = new MethodDecl(methodModifiers, returnType, iDecl.functionDescriptor().method.name(),
+                      methodParams, methodThrows, methodBlock);
+
+    bodyDecls.add(method);
+
+    /* Now the anonymous class can be built. Must use the type LambdaAnonymousDecl instead
+    of a normal AnonymousDecl in order for this and super keywords to get the type of the outer
+    scope. */
+    LambdaAnonymousDecl anonymousDecl = new LambdaAnonymousDecl(new Modifiers(), "Lambda", bodyDecls);
+    for (Access impl: implementsList) {
+      anonymousDecl.addImplements(impl);
+    }
+
+    return new ClassInstanceExpr(implementsInterface, new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
+  }
+
+  syn lazy Block LambdaBody.toBlock();
+
+  eq BlockLambdaBody.toBlock() {
+    Block b = getBlock();
+    setChild(new Block(), 0);
+    b.flushCaches();
+    return b;
+  }
+  eq ExprLambdaBody.toBlock() {
+    List<Stmt> stmtList = new List<Stmt>();
+    // If expected return type is void, insert ExprStmt in list
+    Expr expr = getExpr();
+    setChild(new VarAccess("tmp"), 0);
+    expr.flushCaches();
+    if(enclosingLambda().targetInterface().functionDescriptor().method.type().isVoid()) {
+      stmtList.add(new ExprStmt(expr));
+    }
+    // Otherwise, insert return stmt
+    else {
+      stmtList.add(new ReturnStmt(expr));
+    }
+    return new Block(stmtList);
+  }
+
+  /*eq BlockLambdaBody.toBlock() = getBlock().fullCopy();
+  eq ExprLambdaBody.toBlock() {
+    List<Stmt> stmtList = new List<Stmt>();
+    // If expected return type is void, insert ExprStmt in list
+    if(enclosingLambda().targetInterface().functionDescriptor().method.type().isVoid()) {
+      stmtList.add(new ExprStmt((Expr)getExpr().fullCopy()));
+    }
+    // Otherwise, insert return stmt
+    else {
+      stmtList.add(new ReturnStmt((Expr)getExpr().fullCopy()));
+    }
+    return new Block(stmtList);
+  }*/
+
+  syn lazy List<ParameterDeclaration> LambdaParameters.toParameterList();
+  eq DeclaredLambdaParameters.toParameterList() = getParameterList().fullCopy();
+  eq InferredLambdaParameters.toParameterList() {
+    List<ParameterDeclaration> paramList = new List<ParameterDeclaration>();
+    int i = 0;
+    for(InferredParameterDeclaration infDecl : getParameterList()) {
+      ParameterDeclaration funcDecl = enclosingLambda().targetInterface().functionDescriptor().method.getParameter(i);
+      paramList.add(new ParameterDeclaration(funcDecl.getTypeAccess(), infDecl.name()));
+      i++;
+    }
+    return paramList;
+  }
 }

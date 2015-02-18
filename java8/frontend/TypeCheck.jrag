@@ -26,419 +26,419 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect TypeCheck {
-	inh TypeDecl LambdaParameters.unknownType();
-	inh TypeDecl InferredParameterDeclaration.unknownType();
-	inh TypeDecl LambdaBody.unknownType();
-	eq LambdaExpr.getLambdaParameters().unknownType() = unknownType();
-	eq LambdaExpr.getLambdaBody().unknownType() = unknownType();
+  inh TypeDecl LambdaParameters.unknownType();
+  inh TypeDecl InferredParameterDeclaration.unknownType();
+  inh TypeDecl LambdaBody.unknownType();
+  eq LambdaExpr.getLambdaParameters().unknownType() = unknownType();
+  eq LambdaExpr.getLambdaBody().unknownType() = unknownType();
 
-	syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
-	
-	
-	
-	// Lambdas should propagate target return type to returns in lambda body
-	eq BlockLambdaBody.getBlock().returnType() {
-		TypeDecl decl = enclosingLambda().targetType();
-		if(decl == null)
-			return unknownType();
-		else if(!(decl instanceof InterfaceDecl))
-			return unknownType();
-		else {
-			InterfaceDecl iDecl = (InterfaceDecl)decl;
-			if(!iDecl.isFunctional())
-				return unknownType();
-			else {
-				return iDecl.functionDescriptor().method.type();
-			}
-		}
-	}
-	
-	
-	syn lazy TypeDecl LambdaExpr.type() {
-		// 15.27.3
-		if(!assignmentContext() && !castContext() && !invocationContext()) 
-			return unknownType();
-		if(targetInterface() == null)
-			return unknownType();
-		
-		InterfaceDecl iDecl = targetInterface();
-		if(!iDecl.isFunctional()) {
-			return unknownType();
-		}
-		if(congruentTo(iDecl.functionDescriptor()))
-			return iDecl;
-		else
-			return unknownType();
-	}
-	
-	syn lazy TypeDecl MethodReference.type() {
-		// 15.13.1
-		if(!assignmentContext() && !castContext() && !invocationContext()) 
-			return unknownType();
-		if(targetInterface() == null)
-			return unknownType();
-			
-		InterfaceDecl iDecl = targetInterface();
-		if(!iDecl.isFunctional()) {
-			return unknownType();
-		}
-		
-		if(congruentTo(iDecl.functionDescriptor()))
-			return iDecl;
-		else
-			return unknownType();
-	}
-	
-	syn lazy TypeDecl ConstructorReference.type() {
-		// 15.13.1
-		if(!assignmentContext() && !castContext() && !invocationContext()) 
-			return unknownType();
-		if(targetInterface() == null)
-			return unknownType();
-			
-		InterfaceDecl iDecl = targetInterface();
-		if(!iDecl.isFunctional()) {
-			return unknownType();
-		}
-		
-		return iDecl;
-	}
-	
-	
-	/* TODO: Type check that works for wildcard-parameterized interfaces */
-	public void LambdaExpr.typeCheck() {
-		if(!assignmentContext() && !castContext() && !invocationContext()) {
-			// 15.27
-			error("Lambda expressions must target a functional interface");
-			return;
-		}
+  syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
 
-		// This means there was an error in the overload resolution, will be reported elsewhere
-		if(invocationContext() && targetType() == unknownType())
-			return;
 
-		if(!targetType().isFunctionalInterface()) {
-			// 15.27
-			error("Lambda expressions must target a functional interface");
-			return;
-		}	
-		
-		InterfaceDecl iDecl = targetInterface();
 
-		if(!iDecl.isFunctional()) {
-			// 15.27
-			error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a lambda expression");
-			return;
-		}
-		
-		FunctionDescriptor f = iDecl.functionDescriptor();
-		
-		if(f.isGeneric()) {
-			// 15.27
-			error("Illegal lambda expression: Method " + iDecl.functionDescriptor().method.name() + 
-				" in interface " + iDecl.typeName() + " is generic");
-			return;
-		}
-		
-		if(!getLambdaParameters().congruentTo(f))
-			error("Lambda expression parameters incompatible with parameters in method " + f.method.name()
-					+ " in interface " + iDecl.typeName());
-		
-		if(getLambdaBody() instanceof ExprLambdaBody) {
-			ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
-			if(f.method.type().isVoid()) {
-				if(!exprBody.getExpr().stmtCompatible())
-					error("Lambda expression body must be a statement expression, because the method "
-					      + f.method.name() + " in interface " + iDecl.typeName() + " has return type void");
-			}
-			else {
-				if(!exprBody.getExpr().type().assignConversionTo(f.method.type(), exprBody.getExpr())) 
-					error("Lambda expression body is not compatible with the return type " + f.method.type().typeName() +
-							" in method " + f.method.name() + " in interface " + iDecl.typeName());
-			}
-		}
-		
-		else {
-			BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
-			if(f.method.type().isVoid()) {
-				if(!blockBody.voidCompatible())
-					error("Lambda expression body is not allowed to return a value, because the method "
-					      + f.method.name() + " in interface " + iDecl.typeName() + " has return type void");
-			}
-			else if(!blockBody.valueCompatible()) {
-				error("Lambda expression body must not complete normally or contain empty return statments, because the method "
-				       + f.method.name() + " in interface " + iDecl.typeName() + " has a return type which is non-void");
-			}
-		}	
-	}	
-	
-	public void BlockLambdaBody.typeCheck() {
-		// 15.27.2
-		if(!voidCompatible() && !valueCompatible()) {
-			error("Block lambda bodies must be either void or value compatible");
-		}
-	}
-	
-	refine TypeCheck
-	public void ReturnStmt.typeCheck() {
-		if(enclosingLambda() == null || enclosingLambda().hostType() != hostType()) {
-			if(hasResult() && !returnType().isVoid()) {
-				if(!getResult().type().assignConversionTo(returnType(), getResult()))
-					error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
-			}
-			// 8.4.5 8.8.5
-			if(returnType().isVoid() && hasResult())
-				error("return stmt may not have an expression in void methods");
-			// 8.4.5
-			if(!returnType().isVoid() && !hasResult())
-				error("return stmt must have an expression in non void methods");
-			if(enclosingBodyDecl() instanceof InstanceInitializer || enclosingBodyDecl() instanceof StaticInitializer)
-				error("Initializers may not return");
-		}
-		else {
-			if(hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)) {
-				if(!getResult().type().assignConversionTo(returnType(), getResult()))
-					error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
-			}
-		}
-	}
-	
-	public void MethodReference.typeCheck() {
-		// 15.13.1
-		if(!assignmentContext() && !castContext() && !invocationContext()) {
-			error("Method references must target a functional interface");
-			return;
-		}
-		
-		// This means there was an error in the overload resolution, will be reported elsewhere
-		if(invocationContext() && targetType() == unknownType())
-			return;
+  // Lambdas should propagate target return type to returns in lambda body
+  eq BlockLambdaBody.getBlock().returnType() {
+    TypeDecl decl = enclosingLambda().targetType();
+    if(decl == null)
+      return unknownType();
+    else if(!(decl instanceof InterfaceDecl))
+      return unknownType();
+    else {
+      InterfaceDecl iDecl = (InterfaceDecl)decl;
+      if(!iDecl.isFunctional())
+        return unknownType();
+      else {
+        return iDecl.functionDescriptor().method.type();
+      }
+    }
+  }
 
-		if(!targetType().isFunctionalInterface()) {
-			error("Method references must target a functional interface");
-			return;
-		}	
-		
-		InterfaceDecl iDecl = targetInterface();
-		
-		if(!iDecl.isFunctional()) {
-			error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a method reference");
-			return;
-		}
-		
-		MethodDecl found = null;
-		FunctionDescriptor f = iDecl.functionDescriptor();
-		// Lookup method here and check that one most specific can be found	
-		if(this instanceof ExprMethodReference) {
-			ExprMethodReference ref = (ExprMethodReference)this;
-			found = ref.targetMethod(f);
-			if(unknownMethod() == found) {
-				// 15.13.1
-				error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
-				 " in the interface " + iDecl.typeName() + " was found");
-			}
-			else if(found.isStatic()) {
-				error("The method " + found.fullSignature() + " in type " + found.hostType().typeName() + 
-						" must be accessed in a static way");
-			}
-			
-			// 15.13.2
-			else if(ref.getExpr() instanceof Access && ((Access)ref.getExpr()).lastAccess() instanceof SuperAccess) {
-				if(found.isAbstract()) {
-					error("Cannot directly invoke the abstract method " + found.fullSignature() + 
-							" in type " + found.hostType().typeName());
-				}
-				
-				SuperAccess superAccess = (SuperAccess)((Access)ref.getExpr()).lastAccess();
-				if(superAccess.isQualified() && superAccess.decl() instanceof InterfaceDecl) {
-					if(hostType().isClassDecl()) {
-						ClassDecl classDecl = (ClassDecl)hostType();
-						if(classDecl.hasOverridingMethodInSuper(found)) 
-							error("Cannot make a super reference to method " + found.fullSignature() +
-									", there is a more specific override");
-					}	
-					else if(hostType().isInterfaceDecl()) {
-						InterfaceDecl interfaceDecl = (InterfaceDecl)hostType();
-						if(interfaceDecl.hasOverridingMethodInSuper(found)) 
-							error("Cannot make a super reference to method " + found.fullSignature() +
-									", there is a more specific override");
-					}
-				}
-				
-			}
-		}
-		else if(this instanceof TypeMethodReference) {
-			TypeMethodReference ref = (TypeMethodReference)this;
-			MethodDecl staticMethod = ref.targetStaticMethod(f);
-			MethodDecl instanceMethod = ref.targetInstanceMethod(f);
-			if(ref.validStaticMethod(f) && ref.validInstanceMethod(f)) {
-				error("Ambiguity error: two possible methods " + staticMethod.name() + " was found");
-				return;
-			}
-			else if(unknownMethod() == staticMethod && unknownMethod() == instanceMethod) {
-				error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() + 
-				 " in the interface " + iDecl.typeName() + " was found");
-				 return;
-			}
-			else if(ref.validStaticMethod(f)) {
-				if(ref.getTypeAccess() instanceof ParTypeAccess)
-					error("Parameterized qualifier is not allowed for static method references");
-				else
-					found = staticMethod;
-			}
-			else if(ref.validInstanceMethod(f)) {
-				found = instanceMethod;
-			}
-			else if(unknownMethod() != staticMethod && !staticMethod.isStatic()) {
-				error("Cannot make a static reference to the non-static method " + staticMethod.fullSignature() + " in type " 
-				 	 	+ staticMethod.hostType().typeName());
-				return;
-			}
-			else if(instanceMethod.isStatic()) {
-				error("The method " + instanceMethod.fullSignature() + " in type " + instanceMethod.hostType().typeName() + 
-						" must be accessed in a static way");
-				return;
-			}
-		}
-		
-		if(found != null && unknownMethod() != found) {
-			// Check that found is compatible with the function descriptor
-			if(!iDecl.functionDescriptor().method.type().isVoid()) {
-				// 15.13.1
-				if(found.type().isVoid() || !found.type().assignConversionTo(iDecl.functionDescriptor().method.type(), null))
-					error("Return type of referenced method " + found.fullSignature() + " is not compatible with method " + 
-							iDecl.functionDescriptor().method.fullSignature() + " in interface " + iDecl.typeName());
-			}
-			
-			for(int i = 0; i < found.getNumException(); i++) {
-				TypeDecl exception = found.getException(i).type();
-				/* This is supposed to be unchecked exception, but the attribute name
-				   is currently inverted! */
-				if(exception.isCheckedException())
-					continue;
-				
-				boolean legalException = false;
-				for(TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
-					if(exception.strictSubtype(descriptorThrows)) {
-						legalException = true;
-						break;
-					}
-				}
-				if(!legalException) {
-					// 15.13.1
-					error("Referenced method " + found.name() + " throws unhandled exception type " + exception.typeName()); 
-				}
-			}
-		}
-	}
-	
-	public void ConstructorReference.typeCheck() {
-		// 15.13.1
-		if(!assignmentContext() && !castContext() && !invocationContext()) {
-			error("Constructor references must target a functional interface");
-			return;
-		}
-		
-		// This means there was an error in the overload resolution, will be reported elsewhere
-		if(invocationContext() && targetType() == unknownType())
-			return;
 
-		if(!targetType().isFunctionalInterface()) {
-			error("Constructor references must target a functional interface");
-			return;
-		}	
-		InterfaceDecl iDecl = targetInterface();
-		
-		if(!iDecl.isFunctional()) {
-			error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a constructor reference");
-			return;
-		}
-		
-		FunctionDescriptor f = iDecl.functionDescriptor();
-		
-		if(this instanceof ClassReference) {
-			ClassReference ref = (ClassReference)this;
-			ConstructorDecl decl = ref.targetConstructor(f);
-			if(unknownConstructor() == decl) {
-				error("No constructor for the type " + getTypeAccess().type().typeName() 
-				     + " that is compatible with the method " + f.method.fullSignature() + 
-				     " in the interface " + iDecl.typeName() + " was found");
-			}
-			if(!f.method.type().isVoid()) {
-				// 15.13.1
-				TypeDecl returnType = ref.syntheticInstanceExpr(f).type();
-				if(!returnType.assignConversionTo(f.method.type(), null))
-					error("Return type of method " + f.method.fullSignature()
-						+ " in interface " + iDecl.typeName() + " is not compatible with referenced constructor" 
-						+ " which has return type: " + returnType.typeName());
-			}
-			for(int i = 0; i < decl.getNumException(); i++) {
-				TypeDecl exception = decl.getException(i).type();
-				/* This is supposed to be unchecked exception, but the attribute name
-				   is currently inverted! */
-				if(exception.isCheckedException())
-					continue;
-				
-				boolean legalException = false;
-				for(TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
-					if(exception.strictSubtype(descriptorThrows)) {
-						legalException = true;
-						break;
-					}
-				}
-				if(!legalException) {
-					// 15.13.1
-					error("Referenced constructor " + decl.name() + " throws unhandled exception type " + exception.typeName()); 
-				}
-			}
-			ref.syntheticInstanceExpr(f).typeCheck();
-			
-		}
-		
-		else {
-			ArrayReference ref = (ArrayReference)this;
-			if(f.method.getNumParameter() != 1) {
-				error("Array reference not compatible with method " + f.method.fullSignature() 
-						+ " in interface " + iDecl.typeName() + ", should have a single parameter of type int");
-				return;
-			}
-			if(!f.method.getParameter(0).type().assignConversionTo(iDecl.typeInt(), null)) {
-				error("Array reference not compatible with method " + f.method.fullSignature() 
-						+ " in interface " + iDecl.typeName() + ", should have a single parameter of type int");
-				return;
-			}
-			if(!f.method.type().isVoid()) {
-				if(!getTypeAccess().type().assignConversionTo(f.method.type(), null)) {
-					error("Return type " + f.method.type().typeName() + " of method " + 
-							f.method.fullSignature() + " in interface " + iDecl.typeName() + 
-							" is not compatible with the array reference type " + getTypeAccess().type().typeName());
-				}
-			}
-		}
-	}
-	
-	refine TypeCheck 
-	eq MethodDecl.mayOverride(MethodDecl m) {
-		// 9.4.3
-		if(isDefault() && m.hostType() == type().typeObject() && !m.isPrivate()) 
-			return false;
-		else
-			return returnTypeSubstitutableFor(m);
-	}
+  syn lazy TypeDecl LambdaExpr.type() {
+    // 15.27.3
+    if(!assignmentContext() && !castContext() && !invocationContext())
+      return unknownType();
+    if(targetInterface() == null)
+      return unknownType();
+
+    InterfaceDecl iDecl = targetInterface();
+    if(!iDecl.isFunctional()) {
+      return unknownType();
+    }
+    if(congruentTo(iDecl.functionDescriptor()))
+      return iDecl;
+    else
+      return unknownType();
+  }
+
+  syn lazy TypeDecl MethodReference.type() {
+    // 15.13.1
+    if(!assignmentContext() && !castContext() && !invocationContext())
+      return unknownType();
+    if(targetInterface() == null)
+      return unknownType();
+
+    InterfaceDecl iDecl = targetInterface();
+    if(!iDecl.isFunctional()) {
+      return unknownType();
+    }
+
+    if(congruentTo(iDecl.functionDescriptor()))
+      return iDecl;
+    else
+      return unknownType();
+  }
+
+  syn lazy TypeDecl ConstructorReference.type() {
+    // 15.13.1
+    if(!assignmentContext() && !castContext() && !invocationContext())
+      return unknownType();
+    if(targetInterface() == null)
+      return unknownType();
+
+    InterfaceDecl iDecl = targetInterface();
+    if(!iDecl.isFunctional()) {
+      return unknownType();
+    }
+
+    return iDecl;
+  }
+
+
+  /* TODO: Type check that works for wildcard-parameterized interfaces */
+  public void LambdaExpr.typeCheck() {
+    if(!assignmentContext() && !castContext() && !invocationContext()) {
+      // 15.27
+      error("Lambda expressions must target a functional interface");
+      return;
+    }
+
+    // This means there was an error in the overload resolution, will be reported elsewhere
+    if(invocationContext() && targetType() == unknownType())
+      return;
+
+    if(!targetType().isFunctionalInterface()) {
+      // 15.27
+      error("Lambda expressions must target a functional interface");
+      return;
+    }
+
+    InterfaceDecl iDecl = targetInterface();
+
+    if(!iDecl.isFunctional()) {
+      // 15.27
+      error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a lambda expression");
+      return;
+    }
+
+    FunctionDescriptor f = iDecl.functionDescriptor();
+
+    if(f.isGeneric()) {
+      // 15.27
+      error("Illegal lambda expression: Method " + iDecl.functionDescriptor().method.name() +
+        " in interface " + iDecl.typeName() + " is generic");
+      return;
+    }
+
+    if(!getLambdaParameters().congruentTo(f))
+      error("Lambda expression parameters incompatible with parameters in method " + f.method.name()
+          + " in interface " + iDecl.typeName());
+
+    if(getLambdaBody() instanceof ExprLambdaBody) {
+      ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
+      if(f.method.type().isVoid()) {
+        if(!exprBody.getExpr().stmtCompatible())
+          error("Lambda expression body must be a statement expression, because the method "
+                + f.method.name() + " in interface " + iDecl.typeName() + " has return type void");
+      }
+      else {
+        if(!exprBody.getExpr().type().assignConversionTo(f.method.type(), exprBody.getExpr()))
+          error("Lambda expression body is not compatible with the return type " + f.method.type().typeName() +
+              " in method " + f.method.name() + " in interface " + iDecl.typeName());
+      }
+    }
+
+    else {
+      BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
+      if(f.method.type().isVoid()) {
+        if(!blockBody.voidCompatible())
+          error("Lambda expression body is not allowed to return a value, because the method "
+                + f.method.name() + " in interface " + iDecl.typeName() + " has return type void");
+      }
+      else if(!blockBody.valueCompatible()) {
+        error("Lambda expression body must not complete normally or contain empty return statments, because the method "
+               + f.method.name() + " in interface " + iDecl.typeName() + " has a return type which is non-void");
+      }
+    }
+  }
+
+  public void BlockLambdaBody.typeCheck() {
+    // 15.27.2
+    if(!voidCompatible() && !valueCompatible()) {
+      error("Block lambda bodies must be either void or value compatible");
+    }
+  }
+
+  refine TypeCheck
+  public void ReturnStmt.typeCheck() {
+    if(enclosingLambda() == null || enclosingLambda().hostType() != hostType()) {
+      if(hasResult() && !returnType().isVoid()) {
+        if(!getResult().type().assignConversionTo(returnType(), getResult()))
+          error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
+      }
+      // 8.4.5 8.8.5
+      if(returnType().isVoid() && hasResult())
+        error("return stmt may not have an expression in void methods");
+      // 8.4.5
+      if(!returnType().isVoid() && !hasResult())
+        error("return stmt must have an expression in non void methods");
+      if(enclosingBodyDecl() instanceof InstanceInitializer || enclosingBodyDecl() instanceof StaticInitializer)
+        error("Initializers may not return");
+    }
+    else {
+      if(hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)) {
+        if(!getResult().type().assignConversionTo(returnType(), getResult()))
+          error("return value must be an instance of " + returnType().typeName() + " which " + getResult().type().typeName() + " is not");
+      }
+    }
+  }
+
+  public void MethodReference.typeCheck() {
+    // 15.13.1
+    if(!assignmentContext() && !castContext() && !invocationContext()) {
+      error("Method references must target a functional interface");
+      return;
+    }
+
+    // This means there was an error in the overload resolution, will be reported elsewhere
+    if(invocationContext() && targetType() == unknownType())
+      return;
+
+    if(!targetType().isFunctionalInterface()) {
+      error("Method references must target a functional interface");
+      return;
+    }
+
+    InterfaceDecl iDecl = targetInterface();
+
+    if(!iDecl.isFunctional()) {
+      error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a method reference");
+      return;
+    }
+
+    MethodDecl found = null;
+    FunctionDescriptor f = iDecl.functionDescriptor();
+    // Lookup method here and check that one most specific can be found
+    if(this instanceof ExprMethodReference) {
+      ExprMethodReference ref = (ExprMethodReference)this;
+      found = ref.targetMethod(f);
+      if(unknownMethod() == found) {
+        // 15.13.1
+        error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() +
+         " in the interface " + iDecl.typeName() + " was found");
+      }
+      else if(found.isStatic()) {
+        error("The method " + found.fullSignature() + " in type " + found.hostType().typeName() +
+            " must be accessed in a static way");
+      }
+
+      // 15.13.2
+      else if(ref.getExpr() instanceof Access && ((Access)ref.getExpr()).lastAccess() instanceof SuperAccess) {
+        if(found.isAbstract()) {
+          error("Cannot directly invoke the abstract method " + found.fullSignature() +
+              " in type " + found.hostType().typeName());
+        }
+
+        SuperAccess superAccess = (SuperAccess)((Access)ref.getExpr()).lastAccess();
+        if(superAccess.isQualified() && superAccess.decl() instanceof InterfaceDecl) {
+          if(hostType().isClassDecl()) {
+            ClassDecl classDecl = (ClassDecl)hostType();
+            if(classDecl.hasOverridingMethodInSuper(found))
+              error("Cannot make a super reference to method " + found.fullSignature() +
+                  ", there is a more specific override");
+          }
+          else if(hostType().isInterfaceDecl()) {
+            InterfaceDecl interfaceDecl = (InterfaceDecl)hostType();
+            if(interfaceDecl.hasOverridingMethodInSuper(found))
+              error("Cannot make a super reference to method " + found.fullSignature() +
+                  ", there is a more specific override");
+          }
+        }
+
+      }
+    }
+    else if(this instanceof TypeMethodReference) {
+      TypeMethodReference ref = (TypeMethodReference)this;
+      MethodDecl staticMethod = ref.targetStaticMethod(f);
+      MethodDecl instanceMethod = ref.targetInstanceMethod(f);
+      if(ref.validStaticMethod(f) && ref.validInstanceMethod(f)) {
+        error("Ambiguity error: two possible methods " + staticMethod.name() + " was found");
+        return;
+      }
+      else if(unknownMethod() == staticMethod && unknownMethod() == instanceMethod) {
+        error("No method " + name() + " that is compatible with the method " + iDecl.functionDescriptor().method.fullSignature() +
+         " in the interface " + iDecl.typeName() + " was found");
+         return;
+      }
+      else if(ref.validStaticMethod(f)) {
+        if(ref.getTypeAccess() instanceof ParTypeAccess)
+          error("Parameterized qualifier is not allowed for static method references");
+        else
+          found = staticMethod;
+      }
+      else if(ref.validInstanceMethod(f)) {
+        found = instanceMethod;
+      }
+      else if(unknownMethod() != staticMethod && !staticMethod.isStatic()) {
+        error("Cannot make a static reference to the non-static method " + staticMethod.fullSignature() + " in type "
+            + staticMethod.hostType().typeName());
+        return;
+      }
+      else if(instanceMethod.isStatic()) {
+        error("The method " + instanceMethod.fullSignature() + " in type " + instanceMethod.hostType().typeName() +
+            " must be accessed in a static way");
+        return;
+      }
+    }
+
+    if(found != null && unknownMethod() != found) {
+      // Check that found is compatible with the function descriptor
+      if(!iDecl.functionDescriptor().method.type().isVoid()) {
+        // 15.13.1
+        if(found.type().isVoid() || !found.type().assignConversionTo(iDecl.functionDescriptor().method.type(), null))
+          error("Return type of referenced method " + found.fullSignature() + " is not compatible with method " +
+              iDecl.functionDescriptor().method.fullSignature() + " in interface " + iDecl.typeName());
+      }
+
+      for(int i = 0; i < found.getNumException(); i++) {
+        TypeDecl exception = found.getException(i).type();
+        /* This is supposed to be unchecked exception, but the attribute name
+           is currently inverted! */
+        if(exception.isCheckedException())
+          continue;
+
+        boolean legalException = false;
+        for(TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
+          if(exception.strictSubtype(descriptorThrows)) {
+            legalException = true;
+            break;
+          }
+        }
+        if(!legalException) {
+          // 15.13.1
+          error("Referenced method " + found.name() + " throws unhandled exception type " + exception.typeName());
+        }
+      }
+    }
+  }
+
+  public void ConstructorReference.typeCheck() {
+    // 15.13.1
+    if(!assignmentContext() && !castContext() && !invocationContext()) {
+      error("Constructor references must target a functional interface");
+      return;
+    }
+
+    // This means there was an error in the overload resolution, will be reported elsewhere
+    if(invocationContext() && targetType() == unknownType())
+      return;
+
+    if(!targetType().isFunctionalInterface()) {
+      error("Constructor references must target a functional interface");
+      return;
+    }
+    InterfaceDecl iDecl = targetInterface();
+
+    if(!iDecl.isFunctional()) {
+      error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a constructor reference");
+      return;
+    }
+
+    FunctionDescriptor f = iDecl.functionDescriptor();
+
+    if(this instanceof ClassReference) {
+      ClassReference ref = (ClassReference)this;
+      ConstructorDecl decl = ref.targetConstructor(f);
+      if(unknownConstructor() == decl) {
+        error("No constructor for the type " + getTypeAccess().type().typeName()
+             + " that is compatible with the method " + f.method.fullSignature() +
+             " in the interface " + iDecl.typeName() + " was found");
+      }
+      if(!f.method.type().isVoid()) {
+        // 15.13.1
+        TypeDecl returnType = ref.syntheticInstanceExpr(f).type();
+        if(!returnType.assignConversionTo(f.method.type(), null))
+          error("Return type of method " + f.method.fullSignature()
+            + " in interface " + iDecl.typeName() + " is not compatible with referenced constructor"
+            + " which has return type: " + returnType.typeName());
+      }
+      for(int i = 0; i < decl.getNumException(); i++) {
+        TypeDecl exception = decl.getException(i).type();
+        /* This is supposed to be unchecked exception, but the attribute name
+           is currently inverted! */
+        if(exception.isCheckedException())
+          continue;
+
+        boolean legalException = false;
+        for(TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
+          if(exception.strictSubtype(descriptorThrows)) {
+            legalException = true;
+            break;
+          }
+        }
+        if(!legalException) {
+          // 15.13.1
+          error("Referenced constructor " + decl.name() + " throws unhandled exception type " + exception.typeName());
+        }
+      }
+      ref.syntheticInstanceExpr(f).typeCheck();
+
+    }
+
+    else {
+      ArrayReference ref = (ArrayReference)this;
+      if(f.method.getNumParameter() != 1) {
+        error("Array reference not compatible with method " + f.method.fullSignature()
+            + " in interface " + iDecl.typeName() + ", should have a single parameter of type int");
+        return;
+      }
+      if(!f.method.getParameter(0).type().assignConversionTo(iDecl.typeInt(), null)) {
+        error("Array reference not compatible with method " + f.method.fullSignature()
+            + " in interface " + iDecl.typeName() + ", should have a single parameter of type int");
+        return;
+      }
+      if(!f.method.type().isVoid()) {
+        if(!getTypeAccess().type().assignConversionTo(f.method.type(), null)) {
+          error("Return type " + f.method.type().typeName() + " of method " +
+              f.method.fullSignature() + " in interface " + iDecl.typeName() +
+              " is not compatible with the array reference type " + getTypeAccess().type().typeName());
+        }
+      }
+    }
+  }
+
+  refine TypeCheck
+  eq MethodDecl.mayOverride(MethodDecl m) {
+    // 9.4.3
+    if(isDefault() && m.hostType() == type().typeObject() && !m.isPrivate())
+      return false;
+    else
+      return returnTypeSubstitutableFor(m);
+  }
 }
 
 aspect LambdaParametersInference {
-	inh lazy TypeDecl InferredParameterDeclaration.inferredType();
-	eq InferredLambdaParameters.getParameter(int i).inferredType() {
-		if(enclosingLambda().targetInterface() == null) {
-			return unknownType();
-		}
-		InterfaceDecl iDecl = (InterfaceDecl)enclosingLambda().targetInterface();
-		if(!iDecl.isFunctional())
-			return unknownType();
-		else if(iDecl.functionDescriptor().method.getNumParameter() < i + 1)
-			return unknownType();
-		else
-			return iDecl.functionDescriptor().method.getParameter(i).type();
-	}
+  inh lazy TypeDecl InferredParameterDeclaration.inferredType();
+  eq InferredLambdaParameters.getParameter(int i).inferredType() {
+    if(enclosingLambda().targetInterface() == null) {
+      return unknownType();
+    }
+    InterfaceDecl iDecl = (InterfaceDecl)enclosingLambda().targetInterface();
+    if(!iDecl.isFunctional())
+      return unknownType();
+    else if(iDecl.functionDescriptor().method.getNumParameter() < i + 1)
+      return unknownType();
+    else
+      return iDecl.functionDescriptor().method.getParameter(i).type();
+  }
 }
