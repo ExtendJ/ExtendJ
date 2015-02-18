@@ -405,6 +405,94 @@ aspect GenericsTypeCheck {
         }
       }
     }
+
+    // check if a method has same signature as another in a supertype but does not override it
+    Map<String,SimpleSet> map = erasedAncestorMethodsMap();
+    for (Iterator iter1 = localMethodsIterator(); iter1.hasNext(); ) {
+      MethodDecl localMethod = (MethodDecl) iter1.next();
+
+      String signature = localMethod.signature();
+
+      SimpleSet set = map.get(signature);
+      if (set != null) {
+        for (Iterator i2 = set.iterator(); i2.hasNext(); ) {
+          MethodDecl decl = (MethodDecl) i2.next();
+          if (!decl.signature().equals(signature)) {
+            localMethod.error("method " + signature + " in " + typeName() +
+                " has the same erased signature as " + decl.signature() +
+                " declared in " + decl.hostType().typeName() +
+                " but does not override it");
+          }
+        }
+      }
+    }
+  }
+
+  syn lazy Map<String,SimpleSet> TypeDecl.erasedAncestorMethodsMap() =
+    original().localMethodsSignatureMap();
+
+  eq ClassDecl.erasedAncestorMethodsMap() {
+    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
+    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
+    if (hasSuperclass()) {
+      for (Iterator<MethodDecl> iter = superclass().localMethodsIterator(); iter.hasNext(); ) {
+        MethodDecl m = iter.next();
+        if (!m.isPrivate() && m.accessibleFrom(this) && m.erasedMethod() != m) {
+          // map erased signature to substituted method
+          putSimpleSetElement(map, m.erasedMethod().signature(), m);
+        }
+      }
+      mergeMap(map, superclass().erasedAncestorMethodsMap());
+    }
+    for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = iter.next();
+      if (m.accessibleFrom(this) && m.erasedMethod() != m) {
+        String erasedSignature = m.erasedMethod().signature();
+        // map erased signature to substituted method
+        putSimpleSetElement(map, erasedSignature, m);
+      }
+    }
+    return map;
+  }
+
+  eq InterfaceDecl.erasedAncestorMethodsMap() {
+    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
+    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
+    for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if (m.accessibleFrom(this) && m.erasedMethod() != m) {
+        String erasedSignature = m.erasedMethod().signature();
+        if (!localMap.containsKey(erasedSignature)) {
+          // map erased signature to substituted method
+          putSimpleSetElement(map, m.erasedMethod().signature(), m);
+        }
+      }
+    }
+    for (Iterator<MethodDecl> iter = typeObject().methodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl)iter.next();
+      if (m.isPublic() && m.erasedMethod() != m) {
+        String erasedSignature = m.erasedMethod().signature();
+        if (!localMap.containsKey(erasedSignature)) {
+          // map erased signature to substituted method
+          putSimpleSetElement(map, m.erasedMethod().signature(), m);
+        }
+      }
+    }
+    return map;
+  }
+
+  /**
+   * Merge the source map into the destination map.
+   * @param dest destination map
+   * @param src source map
+   */
+  protected void TypeDecl.mergeMap(Map<String,SimpleSet> dest, Map<String,SimpleSet> src) {
+    for (Map.Entry<String,SimpleSet> entry: src.entrySet()) {
+      String signature = entry.getKey();
+      for (Iterator iter = entry.getValue().iterator(); iter.hasNext(); ) {
+        putSimpleSetElement(dest, signature, (SimpleSet) iter.next());
+      }
+    }
   }
 
   refine TypeHierarchyCheck
