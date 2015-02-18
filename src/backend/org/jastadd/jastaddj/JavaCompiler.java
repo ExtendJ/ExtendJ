@@ -80,6 +80,7 @@ public class JavaCompiler extends Frontend {
 	 * Run the compiler.
 	 * @param args command-line arguments
 	 * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
+	 * error
 	 */
 	public int run(String args[]) {
 		return run(args, bytecodeParser, parser);
