@@ -68,6 +68,26 @@ class JavaDumpTree extends Frontend {
 		return run(args, bytecodeParser, parser);
 	}
 
+	@Override
+	protected int processCompilationUnit(CompilationUnit unit) {
+		if (unit != null && unit.fromSource()) {
+			try {
+				Collection<Problem> errors = unit.parseErrors();
+				if (!errors.isEmpty()) {
+					processErrors(errors, unit);
+					return EXIT_ERROR;
+				}
+			} catch (Throwable t) {
+				System.err.println("Errors:");
+				System.err.println("Fatal exception while processing " +
+						unit.pathName() + ":");
+				t.printStackTrace(System.err);
+				return EXIT_UNHANDLED_ERROR;
+			}
+		}
+		return EXIT_SUCCESS;
+	}
+
 	@SuppressWarnings("rawtypes")
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
