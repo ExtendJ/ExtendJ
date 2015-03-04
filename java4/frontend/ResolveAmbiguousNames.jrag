@@ -1,10 +1,30 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- *
- * Copyright (c) 2005-2008, Torbjorn Ekman
+/* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 import java.util.*;
@@ -61,12 +81,14 @@ aspect QualifiedNames {
   syn Expr Access.qualifier() = prevExpr();
 
   syn Expr AbstractDot.leftSide() = getLeft();
-  syn Access AbstractDot.rightSide() = getRight/*NoTransform*/() instanceof AbstractDot ? (Access)((AbstractDot)getRight/*NoTransform*/()).getLeft() : (Access)getRight();
+  syn Access AbstractDot.rightSide() = getRight() instanceof AbstractDot ?
+    (Access)((AbstractDot)getRight()).getLeft() : (Access)getRight();
 
   syn Access Access.lastAccess() = this;
   eq AbstractDot.lastAccess() = getRight().lastAccess();
 
-  syn AbstractDot Expr.parentDot() = getParent() instanceof AbstractDot ? (AbstractDot)getParent() : null;
+  syn AbstractDot Expr.parentDot() = getParent() instanceof AbstractDot ?
+    (AbstractDot)getParent() : null;
   syn boolean Expr.hasParentDot() = parentDot() != null;
 
   syn Access Expr.nextAccess() = parentDot().nextAccess();
@@ -103,6 +125,9 @@ aspect QualifiedNames {
     return node;
   }
 
+  /**
+   * Creates a qualified expression. This will not be subject to rewriting.
+   */
   public Dot Expr.qualifiesAccess(Access access) {
     Dot dot = new Dot(this, access);
     dot.setStart(this.getStart());
@@ -134,13 +159,16 @@ aspect QualifiedNames {
   // will be replaced by a method name
   public Access AbstractDot.extractLast() {
     return getRightNoTransform();
- }
+  }
+
   public void AbstractDot.replaceLast(Access access) {
     setRight(access);
   }
+
   public Access Dot.extractLast() {
     return lastDot().getRightNoTransform();
   }
+
   public void Dot.replaceLast(Access access) {
     lastDot().setRight(access);
   }
@@ -164,68 +192,67 @@ aspect QualifiedNames {
 
 aspect NameResolution {
 
-  // Resolve Package or Type name
-  rewrite PackageOrTypeAccess {
-    /*
-    when(!lookupType(name()).isEmpty())
-    to Access new TypeAccess(name());
-    when(hasPackage(name()))
-    to Access new PackageAccess(name());
-    */
-    when(!duringSyntacticClassification())
-    to Access{
-      if(!lookupType(name()).isEmpty())
-        return new TypeAccess(name(), start(), end());
-      else
-        return new PackageAccess(name(), start(), end());
-    }
-  }
+  // Replace the parsed name with a name reclassified according to context
+  // This is done upon first access to a name node
 
-  // Resolve Ambiguous name
-  rewrite AmbiguousAccess {
-    /*
-    when(!lookupVariable(name()).isEmpty())
-    to Access new VarAccess(name());
-    when(!lookupType(name()).isEmpty())
-    to Access new TypeAccess(name());
-    when(hasPackage(name()))
-    to Access new PackageAccess(name());
-    */
-    when(!duringSyntacticClassification())
+  rewrite ParseName {
     to Access {
-      if(!lookupVariable(name()).isEmpty()) {
-        return new VarAccess(name(), start(), end());
-      }
-      else if(!lookupType(name()).isEmpty()) {
-        return new TypeAccess(name(), start(), end());
-      }
-      else {
-        return new PackageAccess(name(), start(), end());
+      switch (nameType()) {
+        case PACKAGE_NAME:
+          return new PackageAccess(name(), start, end);
+        case TYPE_NAME:
+          return new TypeAccess(name(), start, end);
+        case PACKAGE_OR_TYPE_NAME:
+          if (lookupType(name()).isEmpty()) {
+            return new PackageAccess(name(), start, end);
+          } else {
+            return new TypeAccess(name(), start, end);
+          }
+        case AMBIGUOUS_NAME:
+          if (!lookupVariable(name()).isEmpty()) {
+            return new VarAccess(name(), start(), end());
+          } else {
+            if (lookupType(name()).isEmpty()) {
+              return new PackageAccess(name(), start(), end());
+            } else {
+              return new TypeAccess(name(), start(), end());
+            }
+          }
+        case EXPRESSION_NAME:
+          return new VarAccess(name(), start, end);
+        case NOT_CLASSIFIED:
+        default:
+          throw new Error("Failure in name classification: unknown name type encountered");
       }
     }
   }
 
-  // combine two package access into one node
   rewrite Dot {
-    when(!duringSyntacticClassification() && leftSide().isPackageAccess() && rightSide().isPackageAccess())
+    // NB: leftSide() and rightSide() are allowed to trigger rewrites, and in
+    // fact it is necessary in order to trigger rewrites on parse name leafs of
+    // this qualified expression.
+    // - Jesper 2015
+
+    // collapse package accesses
+    when (leftSide().isPackageAccess() && rightSide().isPackageAccess())
     to Access {
-      PackageAccess left = (PackageAccess)leftSide();
-      PackageAccess right = (PackageAccess)rightSide();
+      PackageAccess left = (PackageAccess) leftSide();
+      PackageAccess right = (PackageAccess) rightSide();
       left.setPackage(left.getPackage() + "." + right.getPackage());
       left.setEnd(right.end());
       return qualifyTailWith(left);
     }
-  }
 
-  // combine PackageAccess + TypeAccess into one qualified TypeAccess
-  rewrite Dot {
-    when(!duringSyntacticClassification() && leftSide().isPackageAccess() && !((Access)leftSide()).hasPrevExpr() && rightSide() instanceof TypeAccess)
+    // collapse package with type access
+    when (leftSide().isPackageAccess() && !((Access) leftSide()).hasPrevExpr() && rightSide() instanceof TypeAccess)
     to Access {
-      PackageAccess left = (PackageAccess)leftSide();
-      TypeAccess right = (TypeAccess)rightSide();
+      PackageAccess left = (PackageAccess) leftSide();
+      TypeAccess right = (TypeAccess) rightSide();
       right.setPackage(left.getPackage());
       right.setStart(left.start());
       return qualifyTailWith(right);
     }
   }
+
 }
+
