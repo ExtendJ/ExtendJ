@@ -92,11 +92,26 @@ class JavaDumpTree extends Frontend {
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
 		super.processErrors(errors, unit);
-		System.out.println(unit.dumpTreeNoRewrite());
+		if (program.options().hasOption("-transform")) {
+			System.out.println(unit.dumpTree());
+		} else {
+			System.out.println(unit.dumpTreeNoRewrite());
+		}
 	}
 
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
-		System.out.println(unit.dumpTreeNoRewrite());
+		if (program.options().hasOption("-transform")) {
+			System.out.println(unit.dumpTree());
+		} else {
+			System.out.println(unit.dumpTreeNoRewrite());
+		}
 	}
+
+	@Override
+	protected void initOptions() {
+		super.initOptions();
+		program.options().addKeyOption("-transform");
+	}
+
 }
