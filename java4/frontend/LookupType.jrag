@@ -124,6 +124,12 @@ aspect LookupFullyQualifiedTypes {
    */
   syn lazy TypeDecl Program.lookupType(String packageName, String typeName) {
     String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
+
+    // Check for type in source
+    if (sourceTypeMap.containsKey(fullName)) {
+      return sourceTypeMap.get(fullName);
+    }
+
     if (!sourceTypeMapInitialized) {
       // initialize source type map
       for (int i = 0; i < getNumCompilationUnit(); i++) {
@@ -134,25 +140,33 @@ aspect LookupFullyQualifiedTypes {
         }
       }
       sourceTypeMapInitialized = true;
+      if (sourceTypeMap.containsKey(fullName)) {
+        return sourceTypeMap.get(fullName);
+      }
     }
-    // Check for type in source
-    if (sourceTypeMap.containsKey(fullName)) {
-      return sourceTypeMap.get(fullName);
-    }
+
     // Check for type in library
     return lookupLibType(packageName, typeName);
   }
 
+  /**
+   * Extra cache for library type lookups. This cache does not have a big
+   * effect on performance due to the caching of the parameterized
+   * lookupLibType attribute.
+   */
   private Map<String, TypeDecl> Program.libraryTypeMap = new HashMap<String, TypeDecl>();
   private boolean Program.primitiveTypeMapInitialized = false;
 
   /**
    * Lookup types in the library
    */
-  syn lazy TypeDecl Program.lookupLibType(String packageName, String typeName) {
+  syn TypeDecl Program.lookupLibType(String packageName, String typeName) {
     String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
 
-    // Check the primitive types
+    if (libraryTypeMap.containsKey(fullName)) {
+      return libraryTypeMap.get(fullName);
+    }
+
     if (!primitiveTypeMapInitialized) {
       // initialize primitive type map
       PrimitiveCompilationUnit unit = getPrimitiveCompilationUnit();
@@ -191,8 +205,9 @@ aspect LookupFullyQualifiedTypes {
         return libraryTypeMap.get(fullName);
       }
     }
+
     // No type found in the library
-    return null;
+    return unknownType();
   }
 
   // Store library units (including primitive unit) in a parameterized nta
@@ -206,15 +221,19 @@ aspect TypeScopePropagation {
   inh TypeDecl Access.unknownType();
 
   syn lazy SimpleSet TypeAccess.decls() {
-    if(packageName().equals(""))
+    if (packageName().equals("")) {
       return lookupType(name());
-    else {
-      TypeDecl typeDecl = lookupType(packageName(), name());
-      if(typeDecl != null)
-        return SimpleSet.emptySet.add(typeDecl);
-      return SimpleSet.emptySet;
+    } else {
+      return lookupType(packageName(), name()).asSet();
     }
   }
+
+  /**
+   * @return a set containing this type, unless this is the unknown type in
+   * which case an empty set is returned
+   */
+  syn SimpleSet TypeDecl.asSet() = this;
+  eq UnknownType.asSet() = SimpleSet.emptySet;
 
   syn lazy SimpleSet PrimitiveTypeAccess.decls() = lookupType(PRIMITIVE_PACKAGE_NAME, name());
   syn lazy String PrimitiveTypeAccess.getPackage() = PRIMITIVE_PACKAGE_NAME;
@@ -263,29 +282,39 @@ aspect TypeScopePropagation {
   eq CompilationUnit.getChild().lookupType(String name) {
     // locally declared types in compilation unit
     SimpleSet set = localLookupType(name);
-    if(!set.isEmpty()) return set;
+    if (!set.isEmpty()) {
+      return set;
+    }
 
     // imported types
     set = importedTypes(name);
-    if(!set.isEmpty()) return set;
+    if (!set.isEmpty()) {
+      return set;
+    }
 
     // types in the same package
     TypeDecl result = lookupType(packageName(), name);
-    if(result != null && result.accessibleFromPackage(packageName()))
-      return SimpleSet.emptySet.add(result);
+    if (result.accessibleFromPackage(packageName())) {
+      return result;
+    }
 
     // types imported on demand
     set = importedTypesOnDemand(name);
-    if(!set.isEmpty()) return set;
+    if (!set.isEmpty()) {
+      return set;
+    }
 
     // include primitive types
     result = lookupType(PRIMITIVE_PACKAGE_NAME, name);
-    if(result != null) return SimpleSet.emptySet.add(result);
+    if (!result.isUnknown()) {
+      return result;
+    }
 
     // 7.5.5 Automatic Imports
     result = lookupType("java.lang", name);
-    if(result != null && result.accessibleFromPackage(packageName()))
-      return SimpleSet.emptySet.add(result);
+    if (result.accessibleFromPackage(packageName())) {
+      return result;
+    }
     return lookupType(name);
   }
 
@@ -315,8 +344,10 @@ aspect TypeScopePropagation {
   syn lazy SimpleSet ImportDecl.importedTypes(String name) = SimpleSet.emptySet;
   eq SingleTypeImportDecl.importedTypes(String name) {
     SimpleSet set = SimpleSet.emptySet;
-    if(getAccess().type().name().equals(name))
-      set = set.add(getAccess().type());
+    TypeDecl type = getAccess().type();
+    if (type.name().equals(name)) {
+      set = set.add(type);
+    }
     return set;
   }
   eq TypeImportOnDemandDecl.importedTypes(String name) {
@@ -324,9 +355,11 @@ aspect TypeScopePropagation {
     if(getAccess() instanceof PackageAccess) {
       String packageName = ((PackageAccess)getAccess()).getPackage();
       TypeDecl typeDecl = lookupType(packageName, name);
-      if(typeDecl != null && typeDecl.accessibleFromPackage(packageName()) &&
-         typeDecl.typeName().equals(packageName + "." + name)) // canonical names match
+      if (typeDecl.accessibleFromPackage(packageName()) &&
+         typeDecl.typeName().equals(packageName + "." + name)) {
+        // canonical names match
         set = set.add(typeDecl);
+     }
     }
     else {
       for(Iterator iter = getAccess().type().memberTypes(name).iterator(); iter.hasNext(); ) {
@@ -439,7 +472,7 @@ aspect TypeScopePropagation {
   eq PackageAccess.qualifiedLookupType(String name) {
     SimpleSet c = SimpleSet.emptySet;
     TypeDecl typeDecl = lookupType(packageName(), name);
-    if (typeDecl != null) {
+    if (!typeDecl.isUnknown()) {
       if (hostType() != null && typeDecl.accessibleFrom(hostType())) {
         c = c.add(typeDecl);
       } else if (hostType() == null && typeDecl.accessibleFromPackage(hostPackage())) {
