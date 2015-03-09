@@ -109,6 +109,11 @@ aspect LookupFullyQualifiedTypes {
    */
   eq Program.getChild().lookupType(String packageName, String typeName) = lookupType(packageName, typeName);
 
+  /**
+   * Extra cache for sourcel type lookups. This cache is important in order to
+   * make all source types shadow library types with matching names, even when
+   * the source type lives in a compilation unit with a different simple name.
+   */
   private Map<String, TypeDecl> Program.sourceTypeMap = new HashMap<String, TypeDecl>();
   private boolean Program.sourceTypeMapInitialized = false;
 
@@ -165,20 +170,17 @@ aspect LookupFullyQualifiedTypes {
       primitiveTypeMapInitialized = true;
     }
 
-    // Check the library:
-    //  A type may not be in the library but an NTA cannot map to null.
-    //  We need to do some double work to step around this.
-    //  We check the classpath directly (the same thing the library NTA does)
-    //  to prevent that we call the nta for a name that gives null back
-    //else if (getCompilationUnit(fullName) != null) {
-
     if (libraryTypeMap.containsKey(fullName)) {
       return libraryTypeMap.get(fullName);
     }
 
-    // Found a library unit, check it for type
-    CompilationUnit libUnit = getLibCompilationUnit(fullName);
-    if (libUnit != null) {
+    // Check the library:
+    //  We avoid creating a null NTA value here by first using the
+    //  getCompilationUnit reference attribute to check for an existing
+    //  CompilationUnit. If one is found, then we can safely call
+    //  getLibCompilationUnit which creates the NTA:
+    if (getCompilationUnit(fullName) != null) {
+      CompilationUnit libUnit = getLibCompilationUnit(fullName);
       for (int j = 0; j < libUnit.getNumTypeDecl(); j++) {
         TypeDecl type = libUnit.getTypeDecl(j);
         if (!libraryTypeMap.containsKey(type.fullName())) {
