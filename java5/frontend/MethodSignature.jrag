@@ -1,10 +1,30 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- *
- * Copyright (c) 2005-2008, Torbjorn Ekman
+/* Copyright (c) 2005-2008, Torbjorn Ekman
+ * Copyright (c) 2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 aspect MethodSignature15 {
@@ -71,9 +91,11 @@ aspect MethodSignature15 {
     TypeDecl typeDecl = hasTypeDecl() ? getTypeDecl() : getAccess().type();
     return chooseConstructor(typeDecl.constructors(), getArgList());
   }
+
   refine ConstructScope eq ConstructorAccess.decls() {
     return chooseConstructor(lookupConstructor(), getArgList());
   }
+
   refine ConstructScope eq SuperConstructorAccess.decls() {
     Collection c = hasPrevExpr() && !prevExpr().isTypeAccess() ?
       hostType().lookupSuperConstructor() : lookupSuperConstructor();
@@ -88,7 +110,7 @@ aspect MethodSignature15 {
     return unknownConstructor();
   }
 
-  protected SimpleSet Expr.chooseConstructor(Collection constructors, List argList) {
+  protected SimpleSet Expr.chooseConstructor(Collection constructors, List<Expr> argList) {
     SimpleSet potentiallyApplicable = SimpleSet.emptySet;
     // select potentially applicable constructors
     for(Iterator iter = constructors.iterator(); iter.hasNext(); ) {
@@ -126,25 +148,27 @@ aspect MethodSignature15 {
 
 
   protected static SimpleSet Expr.mostSpecific(SimpleSet maxSpecific, ConstructorDecl decl) {
-    if(maxSpecific.isEmpty())
+    if (maxSpecific.isEmpty()) {
       maxSpecific = maxSpecific.add(decl);
-    else {
-      if(decl.moreSpecificThan((ConstructorDecl)maxSpecific.iterator().next()))
+    } else {
+      if (decl.moreSpecificThan((ConstructorDecl)maxSpecific.iterator().next())) {
         maxSpecific = SimpleSet.emptySet.add(decl);
-      else if(!((ConstructorDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+      } else if (!((ConstructorDecl)maxSpecific.iterator().next()).moreSpecificThan(decl)) {
         maxSpecific = maxSpecific.add(decl);
+      }
     }
     return maxSpecific;
   }
 
   private static SimpleSet MethodAccess.mostSpecific(SimpleSet maxSpecific, MethodDecl decl) {
-    if(maxSpecific.isEmpty())
+    if (maxSpecific.isEmpty()) {
       maxSpecific = maxSpecific.add(decl);
-    else {
-      if(decl.moreSpecificThan((MethodDecl)maxSpecific.iterator().next()))
-        maxSpecific = SimpleSet.emptySet.add(decl);
-      else if(!((MethodDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+    } else {
+      if (decl.moreSpecificThan((MethodDecl)maxSpecific.iterator().next())) {
+        maxSpecific = decl;
+      } else if (!((MethodDecl)maxSpecific.iterator().next()).moreSpecificThan(decl)) {
         maxSpecific = maxSpecific.add(decl);
+      }
     }
     return maxSpecific;
   }
@@ -153,47 +177,89 @@ aspect MethodSignature15 {
     genericMethodDecl().moreSpecificThan(m instanceof ParMethodDecl ? ((ParMethodDecl)m).genericMethodDecl() : m );
 
   refine MethodDecl eq MethodDecl.moreSpecificThan(MethodDecl m) {
-    if(!isVariableArity() && !m.isVariableArity())
-      return refined(m);
-    int num = Math.max(getNumParameter(), m.getNumParameter());
-    for(int i = 0; i < num; i++) {
-      TypeDecl t1 = i < getNumParameter() - 1 ? getParameter(i).type() : getParameter(getNumParameter()-1).type().componentType();
-      TypeDecl t2 = i < m.getNumParameter() - 1 ? m.getParameter(i).type() : m.getParameter(m.getNumParameter()-1).type().componentType();
-      if(!t1.instanceOf(t2))
+    if (getNumParameter() == 0) {
+      return false;
+    }
+    int numA = getNumParameter();
+    int numB = m.getNumParameter();
+    int num = Math.max(numA, numB);
+    for (int i = 0; i < num; i++) {
+      TypeDecl t1 = getParameter(Math.min(i, numA-1)).type();
+      TypeDecl t2 = m.getParameter(Math.min(i, numB-1)).type();
+      if (!t1.instanceOf(t2) && !t1.withinBounds(t2, Parameterization.RAW)) {
         return false;
+      }
     }
     return true;
   }
 
   refine ConstructorDecl eq ConstructorDecl.moreSpecificThan(ConstructorDecl m) {
-    if(!isVariableArity() && !m.isVariableArity())
-      return refined(m);
-    int num = Math.max(getNumParameter(), m.getNumParameter());
-    for(int i = 0; i < num; i++) {
-      TypeDecl t1 = i < getNumParameter() - 1 ? getParameter(i).type() : getParameter(getNumParameter()-1).type().componentType();
-      TypeDecl t2 = i < m.getNumParameter() - 1 ? m.getParameter(i).type() : m.getParameter(m.getNumParameter()-1).type().componentType();
-      if(!t1.instanceOf(t2))
+    if (getNumParameter() == 0) {
+      return false;
+    }
+    int numA = getNumParameter();
+    int numB = m.getNumParameter();
+    int num = Math.max(numA, numB);
+    for (int i = 0; i < num; i++) {
+      TypeDecl t1 = getParameter(Math.min(i, numA-1)).type();
+      TypeDecl t2 = m.getParameter(Math.min(i, numB-1)).type();
+      if (!t1.instanceOf(t2) && !t1.withinBounds(t2, Parameterization.RAW)) {
         return false;
+      }
     }
     return true;
   }
 
+  /**
+   * A raw type parameterization. Performs no substitutions.
+   */
+  public static final Parameterization Parameterization.RAW = new Parameterization() {
+    @Override
+    public boolean isRawType() {
+      return true;
+    }
+    @Override
+    public TypeDecl substitute(TypeVariable typeVariable) {
+      return typeVariable;
+    }
+  };
+
   syn boolean MethodAccess.applicableBySubtyping(MethodDecl m) {
-    if(m.getNumParameter() != getNumArg())
+    if (m.getNumParameter() != getNumArg()) {
       return false;
-    for(int i = 0; i < m.getNumParameter(); i++)
-      if(!getArg(i).type().instanceOf(m.getParameter(i).type()))
-        return false;
+    }
+    for (int i = 0; i < m.getNumParameter(); i++) {
+      TypeDecl arg = getArg(i).type();
+      TypeDecl param = m.getParameter(i).type();
+      if (!param.isTypeVariable()) {
+        if (!arg.instanceOf(param)) {
+          return false;
+        }
+      } else {
+        if (!arg.withinBounds(param, Parameterization.RAW)) {
+          return false;
+        }
+      }
+    }
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableBySubtyping(List argList) {
-    if(getNumParameter() != argList.getNumChild())
+  syn boolean ConstructorDecl.applicableBySubtyping(List<Expr> argList) {
+    if (getNumParameter() != argList.getNumChild()) {
       return false;
-    for(int i = 0; i < getNumParameter(); i++) {
-      TypeDecl arg = ((Expr)argList.getChild(i)).type();
-      if(!arg.instanceOf(getParameter(i).type()))
-        return false;
+    }
+    for (int i = 0; i < getNumParameter(); i++) {
+      TypeDecl arg = argList.getChild(i).type();
+      TypeDecl param = getParameter(i).type();
+      if (!param.isTypeVariable()) {
+        if (!arg.instanceOf(param)) {
+          return false;
+        }
+      } else {
+        if (!arg.withinBounds(param, Parameterization.RAW)) {
+          return false;
+        }
+      }
     }
     return true;
   }
@@ -207,11 +273,11 @@ aspect MethodSignature15 {
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableByMethodInvocationConversion(List argList) {
+  syn boolean ConstructorDecl.applicableByMethodInvocationConversion(List<Expr> argList) {
     if(getNumParameter() != argList.getNumChild())
       return false;
     for(int i = 0; i < getNumParameter(); i++) {
-      TypeDecl arg = ((Expr)argList.getChild(i)).type();
+      TypeDecl arg = argList.getChild(i).type();
       if(!arg.methodInvocationConversionTo(getParameter(i).type()))
         return false;
     }
@@ -244,84 +310,97 @@ aspect MethodSignature15 {
 
   // 15.12.2.1
 
-  /* A member method is potentially applicable to a method invocation if and only if
-     all of the following are true:
-    * The name of the member is identical to the name of the method in the method
-      invocation.
-    * The member is accessible (§6.6) to the class or interface in which the
-      method invocation appears.
-    * The arity of the member is lesser or equal to the arity of the method
-      invocation.
-    * If the member is a variable arity method with arity n, the arity of the
-      method invocation is greater or equal to n-1.
-    * If the member is a fixed arity method with arity n, the arity of the method
-      invocation is equal to n.
-    * If the method invocation includes explicit type parameters, and the member
-      is a generic method, then the number of actual type parameters is equal to
-      the number of formal type parameters.*/
+  /**
+   * A member method is potentially applicable to a method invocation if and
+   * only if all of the following are true:
+   * <ul>
+   *   <li>The name of the member is identical to the name of the method in the
+   *   method invocation.
+   *   <li>The member is accessible (§6.6) to the class or interface in which
+   *   the method invocation appears.
+   *   <li>The arity of the member is lesser or equal to the arity of the
+   *   method invocation.
+   *   <li>If the member is a variable arity method with arity n, the arity of
+   *   the method invocation is greater or equal to n-1.
+   *   <li>If the member is a fixed arity method with arity n, the arity of the
+   *   method invocation is equal to n.
+   *   <li>If the method invocation includes explicit type parameters, and the
+   *   member is a generic method, then the number of actual type parameters is
+   *   equal to the number of formal type parameters.
+   * </ul>
+   */
   syn boolean MethodAccess.potentiallyApplicable(MethodDecl m) {
-    if(!m.name().equals(name()))
+    if (!m.name().equals(name()))
       return false;
-    if(!m.accessibleFrom(hostType()))
+    if (!m.accessibleFrom(hostType()))
       return false;
-    if(m.isVariableArity() && !(arity() >= m.arity()-1))
+    if (m.isVariableArity() && !(arity() >= m.arity()-1))
       return false;
-    if(!m.isVariableArity() && !(m.arity() == arity()))
+    if (!m.isVariableArity() && !(m.arity() == arity()))
       return false;
-    if(m instanceof GenericMethodDecl) {
-      GenericMethodDecl gm = (GenericMethodDecl)m;
-      ArrayList list = typeArguments(m);
-      if(list.size() != 0) {
-        if(gm.getNumTypeParameter() != list.size())
+    if (m instanceof GenericMethodDecl) {
+      GenericMethodDecl gm = (GenericMethodDecl) m;
+      ArrayList<TypeDecl> list = typeArguments(m);
+      Parameterization par = new SimpleParameterization(gm.getTypeParameterList(), list);
+      if (!list.isEmpty()) {
+        if (gm.getNumTypeParameter() != list.size())
           return false;
-        for(int i = 0; i < gm.getNumTypeParameter(); i++)
-          if(!((TypeDecl)list.get(i)).subtype(gm.original().getTypeParameter(i)))
+        for (int i = 0; i < gm.getNumTypeParameter(); i++) {
+          if (!list.get(i).withinBounds(gm.original().getTypeParameter(i), par)) {
             return false;
+          }
+        }
       }
     }
     return true;
   }
+
   syn int MethodDecl.arity() = getNumParameter();
   syn int MethodAccess.arity() = getNumArg();
 
-  syn lazy ArrayList MethodAccess.typeArguments(MethodDecl m) {
-    ArrayList typeArguments = new ArrayList();
-    if(m instanceof GenericMethodDecl) {
+  syn lazy ArrayList<TypeDecl> MethodAccess.typeArguments(MethodDecl m) {
+    ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
+    if (m instanceof GenericMethodDecl) {
       GenericMethodDecl g = (GenericMethodDecl)m;
       Collection arguments = computeConstraints(g);
-      if(arguments.isEmpty())
+      if (arguments.isEmpty()) {
         return typeArguments;
+      }
       int i = 0;
-      for(Iterator iter = arguments.iterator(); iter.hasNext(); i++) {
+      for (Iterator iter = arguments.iterator(); iter.hasNext(); i++) {
         TypeDecl typeDecl = (TypeDecl)iter.next();
-        if(typeDecl == null) {
+        if (typeDecl == null) {
           TypeVariable v = g.original().getTypeParameter(i);
-          if(v.getNumTypeBound() == 0)
+          if (v.getNumTypeBound() == 0) {
             typeDecl = typeObject();
-          else if(v.getNumTypeBound() == 1)
+          } else if (v.getNumTypeBound() == 1) {
             typeDecl = v.getTypeBound(0).type();
-          else
+          } else {
             typeDecl = v.lubType();
+          }
         }
         typeArguments.add(typeDecl);
       }
     }
     return typeArguments;
   }
+
   eq ParMethodAccess.typeArguments(MethodDecl m) {
-    ArrayList typeArguments = new ArrayList();
-    for(int i = 0; i < getNumTypeArgument(); i++)
-      typeArguments.add(getTypeArgument(i).type());
+    ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
+    for (Access typeArgument: getTypeArgumentList()) {
+      typeArguments.add(typeArgument.type());
+    }
     return typeArguments;
   }
 
-  syn boolean ConstructorDecl.potentiallyApplicable(List argList) {
+  syn boolean ConstructorDecl.potentiallyApplicable(List<Expr> argList) {
     if(isVariableArity() && !(argList.getNumChild() >= arity()-1))
       return false;
     if(!isVariableArity() && !(arity() == argList.getNumChild()))
       return false;
     return true;
   }
+
   syn int ConstructorDecl.arity() = getNumParameter();
   syn int ConstructorAccess.arity() = getNumArg();
   syn int ClassInstanceExpr.arity() = getNumArg();
