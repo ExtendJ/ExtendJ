@@ -30,21 +30,27 @@ aspect ExceptionHandling {
   syn lazy boolean TypeDecl.isException() = instanceOf(typeException());
 
   /**
-   * Unfortunately the concept of checked vs. unchecked exceptions
-   * has been inverted in JastAddJ compared to the Java specification.
-   * This is a slightly unfortunate design flaw which we cannot change
-   * at this time.
+   * Checked exceptions must be declared thrown or caught in
+   * an enclosing try-statement.
+   *
+   * Note that this attribute is the opposite of isUncheckedException, i.e.
+   * the type is not tested for being a subclass of java.lang.Exception.
+   *
+   * @return {@code true} if this type is not a subtype of java.lang.RuntimException
+   * or java.lang.Error
    */
-  syn lazy boolean TypeDecl.isCheckedException() = isException() &&
-    (instanceOf(typeRuntimeException()) || instanceOf(typeError()));
+  syn lazy boolean TypeDecl.isCheckedException() =
+    !(instanceOf(typeRuntimeException()) || instanceOf(typeError()));
 
   /**
-   * Unfortunately the concept of checked vs. unchecked exceptions
-   * has been inverted in JastAddJ compared to the Java specification.
-   * This is a slightly unfortunate design flaw which we cannot change
-   * at this time.
+   * Unchecked exceptions need not be declared thrown or caught in
+   * an enclosing try-statement.
+   *
+   * @return {@code true} if this type is a subtype of java.lang.RuntimException
+   * or java.lang.Error
    */
-  syn lazy boolean TypeDecl.isUncheckedException() = isException() && !isCheckedException();
+  syn lazy boolean TypeDecl.isUncheckedException() =
+    instanceOf(typeRuntimeException()) || instanceOf(typeError());
 
   inh boolean MethodAccess.handlesException(TypeDecl exceptionType);
   inh boolean ConstructorAccess.handlesException(TypeDecl exceptionType);
@@ -63,7 +69,7 @@ aspect ExceptionHandling {
   public void MethodAccess.exceptionHandling() {
     for(Iterator iter = exceptionCollection().iterator(); iter.hasNext(); ) {
       TypeDecl exceptionType = (TypeDecl)iter.next();
-      if (!handlesException(exceptionType)) {
+      if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
         error("" + decl().hostType().fullName() + "." + this.name() +
             " invoked in " + hostType().fullName() +
             " may throw uncaught exception " + exceptionType.fullName());
@@ -115,7 +121,7 @@ aspect ExceptionHandling {
   public void ConstructorAccess.exceptionHandling() {
     for(int i = 0; i < decl().getNumException(); i++) {
       TypeDecl exceptionType = decl().getException(i).type();
-      if (!handlesException(exceptionType)) {
+      if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
         error("" + this.prettyPrint() + " may throw uncaught exception " + exceptionType.fullName());
       }
     }
@@ -124,7 +130,7 @@ aspect ExceptionHandling {
   public void ClassInstanceExpr.exceptionHandling() {
     for (Access exception : decl().getExceptionList()) {
       TypeDecl exceptionType = exception.type();
-      if (!handlesException(exceptionType)) {
+      if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
         error("" + this.prettyPrint() + " may throw uncaught exception " +
             exceptionType.fullName() + "; it must be caught or declared as being thrown");
       }
@@ -137,7 +143,7 @@ aspect ExceptionHandling {
       exceptionType = typeNullPointerException();
     }
     // 8.4.4
-    if (!handlesException(exceptionType)) {
+    if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
       error("" + this.prettyPrint() + " throws uncaught exception " + exceptionType.fullName());
     }
   }
@@ -145,11 +151,11 @@ aspect ExceptionHandling {
   eq Program.getChild().handlesException(TypeDecl exceptionType) {
     throw new Error("Operation handlesException not supported");
   }
-  eq CompilationUnit.getTypeDecl().handlesException(TypeDecl exceptionType) =
-    !exceptionType.isUncheckedException();
+
+  eq CompilationUnit.getTypeDecl().handlesException(TypeDecl exceptionType) = false;
 
   eq MethodDecl.getBlock().handlesException(TypeDecl exceptionType) =
-    throwsException(exceptionType) || handlesException(exceptionType);
+    throwsException(exceptionType);
 
   syn lazy boolean MethodDecl.throwsException(TypeDecl exceptionType) {
     for(int i = 0; i < getNumException(); i++)
@@ -159,13 +165,13 @@ aspect ExceptionHandling {
   }
 
   eq ConstructorDecl.getBlock().handlesException(TypeDecl exceptionType) =
-    throwsException(exceptionType) || handlesException(exceptionType);
+    throwsException(exceptionType);
 
   eq ConstructorDecl.getParsedConstructorInvocation().handlesException(TypeDecl exceptionType) =
-    throwsException(exceptionType) || handlesException(exceptionType);
+    throwsException(exceptionType);
 
   eq ConstructorDecl.getImplicitConstructorInvocation().handlesException(TypeDecl exceptionType) =
-    throwsException(exceptionType) || handlesException(exceptionType);
+    throwsException(exceptionType);
 
   syn lazy boolean ConstructorDecl.throwsException(TypeDecl exceptionType) {
     for(int i = 0; i < getNumException(); i++)
@@ -176,8 +182,6 @@ aspect ExceptionHandling {
 
   eq FieldDeclaration.getInit().handlesException(TypeDecl exceptionType) {
     if(hostType().isAnonymous())
-      return true;
-    if(!exceptionType.isUncheckedException())
       return true;
     for(Iterator iter = hostType().constructors().iterator(); iter.hasNext(); ) {
       ConstructorDecl decl = (ConstructorDecl)iter.next();
@@ -191,8 +195,6 @@ aspect ExceptionHandling {
   eq InstanceInitializer.getBlock().handlesException(TypeDecl exceptionType) {
     if(hostType().isAnonymous())
       return true;
-    if(!exceptionType.isUncheckedException())
-      return true;
     for(Iterator iter = hostType().constructors().iterator(); iter.hasNext(); ) {
       ConstructorDecl decl = (ConstructorDecl)iter.next();
       if(!decl.throwsException(exceptionType))
@@ -202,7 +204,7 @@ aspect ExceptionHandling {
   }
 
   eq StaticInitializer.getBlock().handlesException(TypeDecl exceptionType) =
-    hostType().isAnonymous() ? handlesException(exceptionType) : !exceptionType.isUncheckedException();
+    hostType().isAnonymous() && handlesException(exceptionType);
 
   eq TryStmt.getCatchClause().handlesException(TypeDecl exceptionType) {
     if(hasNonEmptyFinally() && !getFinally().canCompleteNormally())
