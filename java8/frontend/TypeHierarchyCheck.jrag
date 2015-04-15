@@ -58,20 +58,23 @@ aspect Java8TypeHierarchyCheck {
 
           // regardless of overriding
           // 8.4.4
-          for (int i = 0; i < m.getNumException(); i++) {
-            Access e = m.getException(i);
-            boolean found = false;
-            for (int j = 0; !found && j < decl.getNumException(); j++) {
-              if (e.type().instanceOf(decl.getException(j).type())) {
-                found = true;
+          for (Access e: m.getExceptionList()) {
+            if (e.type().isCheckedException()) {
+              boolean found = false;
+              for (Access declException: decl.getExceptionList()) {
+                if (e.type().instanceOf(declException.type())) {
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                target.error(m.fullSignature() + " in " + m.hostType().typeName() +
+                      " may not throw more checked exceptions than overridden method " +
+                      decl.fullSignature() + " in " + decl.hostType().typeName());
               }
             }
-            if (!found && e.type().isUncheckedException()) {
-              target.error(m.fullSignature() + " in " + m.hostType().typeName() +
-                    " may not throw more checked exceptions than overridden method " +
-                    decl.fullSignature() + " in " + decl.hostType().typeName());
-            }
           }
+
           // 8.4.6.3
           if (decl.isPublic() && !m.isPublic()) {
             target.error("overriding access modifier error");
