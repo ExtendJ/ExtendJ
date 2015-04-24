@@ -33,16 +33,18 @@ aspect ConstructScope {
    */
   syn SimpleSet Expr.mostSpecificConstructor(Collection constructors) {
     SimpleSet maxSpecific = SimpleSet.emptySet;
-    for(Iterator iter = constructors.iterator(); iter.hasNext(); ) {
+    for (Iterator iter = constructors.iterator(); iter.hasNext(); ) {
       ConstructorDecl decl = (ConstructorDecl)iter.next();
-      if(applicableAndAccessible(decl)) {
-        if(maxSpecific.isEmpty())
+      if (applicableAndAccessible(decl)) {
+        if (maxSpecific.isEmpty()) {
           maxSpecific = maxSpecific.add(decl);
-        else {
-          if(decl.moreSpecificThan((ConstructorDecl)maxSpecific.iterator().next()))
+        } else {
+          ConstructorDecl other = (ConstructorDecl) maxSpecific.iterator().next();
+          if (decl.moreSpecificThan(other)) {
             maxSpecific = SimpleSet.emptySet.add(decl);
-          else if(!((ConstructorDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+          } else if (!other.moreSpecificThan(decl)) {
             maxSpecific = maxSpecific.add(decl);
+          }
         }
       }
     }
@@ -147,12 +149,16 @@ aspect ConstructorDecl {
     return true;
   }
 
-  syn lazy boolean ConstructorDecl.moreSpecificThan(ConstructorDecl m) {
+  syn boolean ConstructorDecl.moreSpecificThan(ConstructorDecl m) =
+    m.lessSpecificThan(this) && !this.lessSpecificThan(m);
+
+  syn lazy boolean ConstructorDecl.lessSpecificThan(ConstructorDecl m) {
     for (int i = 0; i < getNumParameter(); i++) {
-      if(!getParameter(i).type().instanceOf(m.getParameter(i).type()))
-        return false;
+      if (!getParameter(i).type().instanceOf(m.getParameter(i).type())) {
+        return true;
+      }
     }
-    return true;
+    return false;
   }
 
   public boolean ConstructorDecl.applicable(List<Expr> argList) {

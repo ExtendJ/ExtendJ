@@ -111,13 +111,15 @@ aspect LookupMethod {
     for(Iterator iter = candidates.iterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl)iter.next();
       if(applicable(decl) && accessible(decl)) {
-        if(maxSpecific.isEmpty())
+        if (maxSpecific.isEmpty()) {
           maxSpecific = maxSpecific.add(decl);
-        else {
-          if(decl.moreSpecificThan((MethodDecl)maxSpecific.iterator().next()))
-            maxSpecific = SimpleSet.emptySet.add(decl);
-          else if(!((MethodDecl)maxSpecific.iterator().next()).moreSpecificThan(decl))
+        } else {
+          MethodDecl other = (MethodDecl) maxSpecific.iterator().next();
+          if (decl.moreSpecificThan(other)) {
+            maxSpecific = decl;
+          } else if (!other.moreSpecificThan(decl)) {
             maxSpecific = maxSpecific.add(decl);
+          }
         }
       }
     }
@@ -201,14 +203,31 @@ aspect MethodDecl {
   syn boolean MethodDecl.sameSignature(MethodDecl other) =
     signature().equals(other.signature());
 
-  syn lazy boolean MethodDecl.moreSpecificThan(MethodDecl m) {
-    if(getNumParameter() == 0)
+  /**
+   * @param m argument method to compare to
+   * @return {@code true} if this the argument method is less specific than this
+   * and this is not less specific than the argument
+   */
+  syn boolean MethodDecl.moreSpecificThan(MethodDecl m) =
+    m.lessSpecificThan(this) && !this.lessSpecificThan(m);
+
+  /**
+   * Caution: a less specific than b does not mean b is not less specific than a!
+   * @param m argument method to compare to
+   * @return {@code true} if any parameter of this method decl is not a
+   * subtype (non-proper subtype) of the corresponding parameter of the
+   * argument method
+   */
+  syn lazy boolean MethodDecl.lessSpecificThan(MethodDecl m) {
+    if (getNumParameter() == 0) {
       return false;
-    for(int i = 0; i < getNumParameter(); i++) {
-      if(!getParameter(i).type().instanceOf(m.getParameter(i).type()))
-        return false;
     }
-    return true;
+    for (int i = 0; i < getNumParameter(); i++) {
+      if (!getParameter(i).type().instanceOf(m.getParameter(i).type())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   public boolean MethodAccess.applicable(MethodDecl decl) {
