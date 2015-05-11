@@ -32,7 +32,7 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 /**
- * JastAddJ version string provider.
+ * ExtendJ version string provider.
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class JastAddJVersion {

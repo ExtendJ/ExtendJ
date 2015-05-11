@@ -46,7 +46,7 @@ public class JavaCompiler extends Frontend {
 	 * Initialize the compiler.
 	 */
 	public JavaCompiler() {
-		this("JastAddJ");
+		this("ExtendJ");
 	}
 
 	/**
