@@ -6,7 +6,7 @@
 }
 
 /* fall through errors */
-.|\n {
+[^] {
   error("illegal character \""+str()+ "\"");
 }
 

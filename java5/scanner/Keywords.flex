@@ -1,1 +1,1 @@
-<YYINITIAL> { "enum" { return sym(Terminals.ENUM); } }
+<YYINITIAL> "enum" { return sym(Terminals.ENUM); }

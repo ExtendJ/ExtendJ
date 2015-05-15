@@ -48,27 +48,17 @@ public class JavaScanner extends Scanner{
  	private boolean foundLparenConstruct = false;
  	private Symbol currentSymbol = null;
  	private Symbol lastSymbol = null;
-	
+
 	/**
-	   * Creates a new scanner
-	   * There is also a java.io.InputStream version of this constructor.
-	   *
-	   * @param   in  the java.io.Reader to read input from.
-	   */
+	 * Creates a new scanner
+	 * There is also a java.io.InputStream version of this constructor.
+	 *
+	 * @param	in	the java.io.Reader to read input from.
+	 */
 	public JavaScanner(java.io.Reader in) {
 		scanner = new OriginalScanner(in);
 	}
 
-	  /**
-	   * Creates a new scanner.
-	   * There is also java.io.Reader version of this constructor.
-	   *
-	   * @param   in  the java.io.Inputstream to read input from.
-	   */
-	public JavaScanner(java.io.InputStream in) {
-		scanner = new OriginalScanner(in);
-	}
-	
 	/* More illegal terminals can be added anytime.
 	 * Not covering all of them will not give any erronous behavior,
 	 * but make the parsing less efficient.
