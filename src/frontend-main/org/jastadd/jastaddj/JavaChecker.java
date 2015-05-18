@@ -34,7 +34,7 @@ public class JavaChecker extends Frontend {
 	 * Initialize the Java checker.
 	 */
 	public JavaChecker() {
-		super("Java Checker", JastAddJVersion.getVersion());
+		super("Java Checker", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
 			public CompilationUnit parse(java.io.InputStream is, String

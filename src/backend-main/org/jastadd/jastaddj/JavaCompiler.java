@@ -54,7 +54,7 @@ public class JavaCompiler extends Frontend {
 	 * @param toolName the name of the compiler
 	 */
 	protected JavaCompiler(String toolName) {
-		super(toolName, JastAddJVersion.getVersion());
+		super(toolName, ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
 			public CompilationUnit parse(java.io.InputStream is,

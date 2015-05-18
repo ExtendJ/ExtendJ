@@ -37,7 +37,7 @@ class JavaDumpTree extends Frontend {
 	 * Initialize the compiler.
 	 */
 	public JavaDumpTree() {
-		super("Java AST Dumper", JastAddJVersion.getVersion());
+		super("Java AST Dumper", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
 			public CompilationUnit parse(java.io.InputStream is,

@@ -35,7 +35,7 @@ import java.util.ResourceBundle;
  * ExtendJ version string provider.
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
-public class JastAddJVersion {
+public class ExtendJVersion {
 
 	private static final String versionString;
 

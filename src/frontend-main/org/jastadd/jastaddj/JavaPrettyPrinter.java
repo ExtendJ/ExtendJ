@@ -36,7 +36,7 @@ class JavaPrettyPrinter extends Frontend {
 	 * Initialize the compiler.
 	 */
 	public JavaPrettyPrinter() {
-		super("ExtendJ Java Pretty Printer", JastAddJVersion.getVersion());
+		super("ExtendJ Java Pretty Printer", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
 			public CompilationUnit parse(java.io.InputStream is,
