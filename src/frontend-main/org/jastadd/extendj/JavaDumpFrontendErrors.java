@@ -7,7 +7,7 @@
  *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
-package org.jastadd.jastaddj;
+package org.jastadd.extendj;
 
 import AST.*;
 
@@ -16,14 +16,14 @@ import java.util.*;
 /**
  * Dump the parsed AST for some Java source files.
  */
-class JavaDumpTree extends Frontend {
+class JavaDumpFrontendErrors extends Frontend {
 
 	/**
 	 * Entry point.
 	 * @param args command-line arguments
 	 */
 	public static void main(String args[]) {
-		int exitCode = new JavaDumpTree().run(args);
+		int exitCode = new JavaDumpFrontendErrors().run(args);
 		if (exitCode != 0) {
 			System.exit(exitCode);
 		}
@@ -36,7 +36,7 @@ class JavaDumpTree extends Frontend {
 	/**
 	 * Initialize the compiler.
 	 */
-	public JavaDumpTree() {
+	public JavaDumpFrontendErrors() {
 		super("Java AST Dumper", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
@@ -56,7 +56,7 @@ class JavaDumpTree extends Frontend {
 	 */
 	@Deprecated
 	public static boolean compile(String args[]) {
-		return 0 == new JavaDumpTree().run(args);
+		return 0 == new JavaDumpFrontendErrors().run(args);
 	}
 
 	/**
@@ -68,50 +68,17 @@ class JavaDumpTree extends Frontend {
 		return run(args, bytecodeParser, parser);
 	}
 
-	@Override
-	protected int processCompilationUnit(CompilationUnit unit) {
-		if (unit != null && unit.fromSource()) {
-			try {
-				Collection<Problem> errors = unit.parseErrors();
-				if (!errors.isEmpty()) {
-					processErrors(errors, unit);
-					return EXIT_ERROR;
-				}
-			} catch (Throwable t) {
-				System.err.println("Errors:");
-				System.err.println("Fatal exception while processing " +
-						unit.pathName() + ":");
-				t.printStackTrace(System.err);
-				return EXIT_UNHANDLED_ERROR;
-			}
-		}
-		return EXIT_SUCCESS;
-	}
-
 	@SuppressWarnings("rawtypes")
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
-		super.processErrors(errors, unit);
-		if (program.options().hasOption("-transform")) {
-			System.out.println(unit.dumpTree());
-		} else {
-			System.out.println(unit.dumpTreeNoRewrite());
-		}
+		System.out.println("Errors:");
+		for (Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
+			System.out.println(iter2.next());
+	    }
 	}
 
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
-		if (program.options().hasOption("-transform")) {
-			System.out.println(unit.dumpTree());
-		} else {
-			System.out.println(unit.dumpTreeNoRewrite());
-		}
+		
 	}
-
-	@Override
-	protected void initOptions() {
-		super.initOptions();
-		program.options().addKeyOption("-transform");
-	}
-
 }

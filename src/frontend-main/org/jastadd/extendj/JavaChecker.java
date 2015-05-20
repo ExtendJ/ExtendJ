@@ -7,7 +7,7 @@
  *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
-package org.jastadd.jastaddj;
+package org.jastadd.extendj;
 
 import AST.*;
 

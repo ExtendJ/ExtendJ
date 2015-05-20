@@ -7,8 +7,7 @@
  *                    2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
-
-package org.jastadd.jastaddj;
+package org.jastadd.extendj;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -19,11 +18,15 @@ import org.apache.tools.ant.Task;
 import org.apache.tools.ant.types.Path;
 import org.apache.tools.ant.types.Reference;
 
+/**
+ * Apache Ant Task for Java7 pretty printer. Works similarly to the compiler
+ * Task.
+ */
 @SuppressWarnings("javadoc")
-public class JastAddJTask extends Task {
-	private Path	cp;
-	private Path	srcdir;
-	private Path	destdir;
+public class PrettyPrintTask extends Task {
+	private Path cp;
+	private Path srcdir;
+	private Path destdir;
 
 	@Override
 	public void execute() {
@@ -33,11 +36,10 @@ public class JastAddJTask extends Task {
 			args.add(cp.toString());
 		}
 		if (srcdir != null) {
-			//args.add("-sourcepath");
 			File fsrcdir = new File(srcdir.toString());
 			if (!fsrcdir.exists()) {
-				System.err.println("could not open directory "+
-						srcdir.toString());
+				System.err.println("could not open directory "
+					+ srcdir.toString());
 			} else {
 				addSrcFiles(args, fsrcdir);
 			}
@@ -47,13 +49,13 @@ public class JastAddJTask extends Task {
 			args.add(destdir.toString());
 		}
 		String[] argv = new String[args.size()];
-		for (int i = 0; i < args.size(); ++i) {
+		for (int i = 0; i < args.size(); ++i)
 			argv[i] = args.get(i);
-		}
-		JavaCompiler.main(argv);
+		JavaPrettyPrinter.main(argv);
 	}
 
 	private static Pattern srcPattern = Pattern.compile(".+\\.java");
+
 	private void addSrcFiles(ArrayList<String> args, File srcdir) {
 		for (String child : srcdir.list()) {
 			File childFile = new File(srcdir, child);
@@ -89,5 +91,4 @@ public class JastAddJTask extends Task {
 	public void setDestdir(Path destdir) {
 		this.destdir = destdir;
 	}
-
 }

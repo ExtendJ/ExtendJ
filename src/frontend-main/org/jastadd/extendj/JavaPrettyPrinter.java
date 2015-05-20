@@ -4,40 +4,39 @@
  * modified BSD license with this compiler.
  *
  * Copyright (c) 2005-2008, Torbjorn Ekman
- *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *                    2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  */
-package org.jastadd.jastaddj;
+package org.jastadd.extendj;
 
 import AST.*;
 
 import java.util.*;
 
 /**
- * Dump the parsed AST for some Java source files.
+ * Pretty-print some Java source files.
  */
-class JavaDumpFrontendErrors extends Frontend {
+class JavaPrettyPrinter extends Frontend {
 
 	/**
-	 * Entry point.
+	 * Entry point for the compiler frontend.
 	 * @param args command-line arguments
 	 */
 	public static void main(String args[]) {
-		int exitCode = new JavaDumpFrontendErrors().run(args);
+		int exitCode = new JavaPrettyPrinter().run(args);
 		if (exitCode != 0) {
 			System.exit(exitCode);
 		}
 	}
 
-	
 	private final JavaParser parser;
 	private final BytecodeParser bytecodeParser;
 
 	/**
 	 * Initialize the compiler.
 	 */
-	public JavaDumpFrontendErrors() {
-		super("Java AST Dumper", ExtendJVersion.getVersion());
+	public JavaPrettyPrinter() {
+		super("ExtendJ Java Pretty Printer", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
 			public CompilationUnit parse(java.io.InputStream is,
@@ -56,11 +55,11 @@ class JavaDumpFrontendErrors extends Frontend {
 	 */
 	@Deprecated
 	public static boolean compile(String args[]) {
-		return 0 == new JavaDumpFrontendErrors().run(args);
+		return 0 == new JavaPrettyPrinter().run(args);
 	}
 
 	/**
-	 * Dump source file abstract syntax trees.
+	 * Pretty print the source files.
 	 * @param args command-line arguments
 	 * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
 	 */
@@ -71,14 +70,11 @@ class JavaDumpFrontendErrors extends Frontend {
 	@SuppressWarnings("rawtypes")
 	@Override
 	protected void processErrors(Collection errors, CompilationUnit unit) {
-		System.out.println("Errors:");
-		for (Iterator iter2 = errors.iterator(); iter2.hasNext(); ) {
-			System.out.println(iter2.next());
-	    }
+		super.processErrors(errors, unit);
+		System.out.println(unit.prettyPrint());
 	}
-
 	@Override
 	protected void processNoErrors(CompilationUnit unit) {
-		
+		System.out.println(unit.prettyPrint());
 	}
 }
