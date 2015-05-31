@@ -234,23 +234,22 @@ aspect ClassPath {
      * result of this method being cached because it will return a newly parsed
      * compilation unit each time it is called.
      *
-     * @param name Qualified name of class to load.
      * @return the loaded compilation unit, or {@code null} if no compilation
      * unit was found
      */
-    public synchronized CompilationUnit getCompilationUnit(String name) {
+    public synchronized CompilationUnit getCompilationUnit(String typeName) {
       try {
         initPaths();
         ClassSource sourcePart = ClassSource.NONE;
         ClassSource classPart = ClassSource.NONE;
         for (PathPart part: sourcePath) {
-          sourcePart = part.findSource(name);
+          sourcePart = part.findSource(typeName);
           if (sourcePart != ClassSource.NONE) {
             break;
           }
         }
         for (PathPart part: classPath) {
-          classPart = part.findSource(name);
+          classPart = part.findSource(typeName);
           if (classPart != ClassSource.NONE) {
             break;
           }
@@ -259,22 +258,22 @@ aspect ClassPath {
         if (sourcePart != ClassSource.NONE && (classPart == ClassSource.NONE ||
               classPart.lastModified() < sourcePart.lastModified())) {
           CompilationUnit unit = sourcePart.parseCompilationUnit(program);
-          int index = name.lastIndexOf('.');
+          int index = typeName.lastIndexOf('.');
           if (index == -1) {
             return unit;
           }
-          String pkgName = name.substring(0, index);
+          String pkgName = typeName.substring(0, index);
           if (pkgName.equals(unit.getPackageDecl())) {
             return unit;
           }
         }
         if (classPart != ClassSource.NONE) {
           CompilationUnit unit = classPart.parseCompilationUnit(program);
-          int index = name.lastIndexOf('.');
+          int index = typeName.lastIndexOf('.');
           if (index == -1) {
             return unit;
           }
-          String pkgName = name.substring(0, index);
+          String pkgName = typeName.substring(0, index);
           if (pkgName.equals(unit.getPackageDecl())) {
             return unit;
           }
@@ -287,12 +286,11 @@ aspect ClassPath {
 
     /**
      * Add a package name to available package set.
-     * @param name The qualified package name.
      */
-    public synchronized void addPackage(String name) {
-      int end = name.length();
-      while (end > 0 && packages.add(name.substring(0, end))) {
-        end = name.lastIndexOf('.', end-1);
+    public synchronized void addPackage(String packageName) {
+      int end = packageName.length();
+      while (end > 0 && packages.add(packageName.substring(0, end))) {
+        end = packageName.lastIndexOf('.', end-1);
       }
     }
 
@@ -315,20 +313,20 @@ aspect ClassPath {
      * @return <code>true</code> if there is a package with the given name on
      * the classpath
      */
-    public synchronized boolean isPackage(String name) {
+    public synchronized boolean isPackage(String packageName) {
       initPaths();
-      if (packages.contains(name)) {
+      if (packages.contains(packageName)) {
         return true;
       }
       for (PathPart part: classPath) {
-        if (part.hasPackage(name)) {
-          addPackage(name);
+        if (part.hasPackage(packageName)) {
+          addPackage(packageName);
           return true;
         }
       }
       for (PathPart part: sourcePath) {
-        if (part.hasPackage(name)) {
-          addPackage(name);
+        if (part.hasPackage(packageName)) {
+          addPackage(packageName);
           return true;
         }
       }
@@ -359,20 +357,19 @@ aspect ClassPath {
    * result of this method being cached because it will return a newly parsed
    * compilation unit each time it is called.
    *
-   * @param name Qualified name of class to load.
    * @return the loaded compilation unit, or {@code null} if no compilation
    * unit was found
    */
-  syn lazy CompilationUnit Program.getCompilationUnit(String name) {
-    return classPath.getCompilationUnit(name);
+  syn lazy CompilationUnit Program.getCompilationUnit(String typeName) {
+    return classPath.getCompilationUnit(typeName);
   }
 
   /**
    * @return <code>true</code> if there is a package with the given name on
    * the classpath
    */
-  public boolean Program.isPackage(String name) {
-    return classPath.isPackage(name);
+  public boolean Program.isPackage(String packageName) {
+    return classPath.isPackage(packageName);
   }
 
   private ClassSource CompilationUnit.classSource = ClassSource.NONE;
