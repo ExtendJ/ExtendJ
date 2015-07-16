@@ -9,7 +9,7 @@
  */
 package org.jastadd.extendj;
 
-import AST.*;
+import org.jastadd.extendj.ast.*;
 
 import java.util.*;
 
@@ -42,7 +42,7 @@ class JavaPrettyPrinter extends Frontend {
 			public CompilationUnit parse(java.io.InputStream is,
 					String fileName) throws java.io.IOException,
 					beaver.Parser.Exception {
-				return new parser.JavaParser().parse(is, fileName);
+				return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
 			}
 		};
 		bytecodeParser = new BytecodeParser();

@@ -7,7 +7,7 @@
  * All rights reserved.
  */
 
-package scanner;
+package org.jastadd.extendj.scanner;
 
 import java.io.*;
 

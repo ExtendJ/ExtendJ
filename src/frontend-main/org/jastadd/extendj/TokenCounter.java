@@ -27,18 +27,16 @@
  */
 package org.jastadd.extendj;
 
-import scanner.JavaScanner;
-import scanner.Unicode;
+import beaver.Symbol;
+
+import org.jastadd.extendj.parser.JavaParser.Terminals;
+import org.jastadd.extendj.scanner.JavaScanner;
+import org.jastadd.extendj.scanner.Unicode;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-
 import java.util.Scanner;
-
-import beaver.Symbol;
-
-import parser.JavaParser.Terminals;
 
 /**
  * Counts Java tokens in the files listed on the command line.  Excludes

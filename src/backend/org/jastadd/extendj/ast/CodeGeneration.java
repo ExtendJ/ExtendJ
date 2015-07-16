@@ -26,7 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package AST;
+package org.jastadd.extendj.ast;
 
 import java.util.ArrayList;
 import java.util.Collection;

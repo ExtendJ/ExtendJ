@@ -12,7 +12,7 @@ package org.jastadd.extendj;
 import java.io.File;
 import java.util.Collection;
 
-import AST.*;
+import org.jastadd.extendj.ast.*;
 
 /**
  * Compile Java programs.
@@ -60,7 +60,7 @@ public class JavaCompiler extends Frontend {
 			public CompilationUnit parse(java.io.InputStream is,
 					String fileName) throws java.io.IOException,
 					beaver.Parser.Exception {
-				return new parser.JavaParser().parse(is, fileName);
+				return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
 			}
 		};
 		bytecodeParser = new BytecodeParser();
