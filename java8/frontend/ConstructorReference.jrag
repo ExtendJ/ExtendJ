@@ -28,33 +28,34 @@
 aspect ConstructorReference {
   inh ConstructorDecl ConstructorReference.unknownConstructor();
 
-  syn lazy ConstructorDecl ClassReference.targetConstructor(FunctionDescriptor f) {
-    return syntheticInstanceExpr(f).decl();
-  }
+  syn lazy ConstructorDecl ClassReference.targetConstructor(FunctionDescriptor f) =
+      syntheticInstanceExpr(f).decl();
 
   syn nta lazy ClassInstanceExpr ClassReference.syntheticInstanceExpr(FunctionDescriptor f) {
     List<Expr> arguments = new List<Expr>();
-    for(int i = 0; i < f.method.getNumParameter(); i++) {
+    for (int i = 0; i < f.method.getNumParameter(); i++) {
       TypeDecl argumentType = f.method.getParameter(i).type();
       arguments.add(new SyntheticTypeAccess(argumentType));
     }
 
     ClassInstanceExpr instanceExpr = null;
-    if(hasTypeArgument()) {
-      instanceExpr = new ParConstructorReferenceAccess((Access)getTypeAccess().treeCopyNoTransform(), arguments,
-                          new Opt(), (List<Access>)getTypeArgumentList().treeCopyNoTransform(), f);
-    }
-    else {
+    if (hasTypeArgument()) {
+      instanceExpr = new ParConstructorReferenceAccess(
+          (Access) getTypeAccess().treeCopyNoTransform(), arguments,
+          new Opt(), (List<Access>)getTypeArgumentList().treeCopyNoTransform(), f);
+    } else {
       // Must check for raw reference type, and in that case infer using diamond (JLS 15.13.1)
       boolean checkDiamond = true;
-      if(getTypeAccess().type().hostType() != null && !getTypeAccess().type().isStatic() && getTypeAccess().type().hostType().isRawType())
+      if (getTypeAccess().type().hostType() != null && !getTypeAccess().type().isStatic()
+          && getTypeAccess().type().hostType().isRawType()) {
         checkDiamond = false;
-      if(getTypeAccess().type().isRawType() && checkDiamond) {
+      }
+      if (getTypeAccess().type().isRawType() && checkDiamond) {
         DiamondAccess diamond = new DiamondAccess((Access)getTypeAccess().treeCopyNoTransform());
         instanceExpr = new ConstructorReferenceAccess(diamond, arguments, f);
-      }
-      else {
-        instanceExpr = new ConstructorReferenceAccess((Access)getTypeAccess().treeCopyNoTransform(), arguments, f);
+      } else {
+        instanceExpr = new ConstructorReferenceAccess(
+            (Access) getTypeAccess().treeCopyNoTransform(), arguments, f);
       }
     }
     return instanceExpr;
@@ -68,24 +69,29 @@ aspect ConstructorReference {
 
   eq ClassReference.congruentTo(FunctionDescriptor f) {
     ConstructorDecl decl = targetConstructor(f);
-    if(unknownConstructor() == decl)
+    if (unknownConstructor() == decl) {
       return false;
-    if(!f.method.type().isVoid()) {
+    }
+    if (!f.method.type().isVoid()) {
       TypeDecl returnType = syntheticInstanceExpr(f).type();
-      if(!returnType.assignConversionTo(f.method.type(), null))
+      if (!returnType.assignConversionTo(f.method.type(), null)) {
         return false;
+      }
     }
     return true;
   }
 
   eq ArrayReference.congruentTo(FunctionDescriptor f) {
-    if(f.method.getNumParameter() != 1)
+    if (f.method.getNumParameter() != 1) {
       return false;
-    if(!f.method.getParameter(0).type().assignConversionTo(f.fromInterface().typeInt(), null))
+    }
+    if (!f.method.getParameter(0).type().assignConversionTo(f.fromInterface().typeInt(), null)) {
       return false;
-    if(!f.method.type().isVoid()) {
-      if(!getTypeAccess().type().assignConversionTo(f.method.type(), null))
+    }
+    if (!f.method.type().isVoid()) {
+      if (!getTypeAccess().type().assignConversionTo(f.method.type(), null)) {
         return false;
+      }
     }
     return true;
   }
@@ -95,17 +101,21 @@ aspect ConstructorReference {
     TypeDecl classType = syntheticInstanceExpr(f).type();
     Collection<ConstructorDecl> col = classType.constructors();
     ArrayList<ConstructorDecl> applicable = new ArrayList<ConstructorDecl>();
-    for(ConstructorDecl decl : col) {
-      if(!decl.accessibleFrom(hostType()))
+    for (ConstructorDecl decl : col) {
+      if (!decl.accessibleFrom(hostType())) {
         continue;
-      if(!(decl.arity() == f.method.arity()))
+      }
+      if (!(decl.arity() == f.method.arity())) {
         continue;
-      if(hasTypeArgument()) {
-        if(!(decl instanceof GenericConstructorDecl))
+      }
+      if (hasTypeArgument()) {
+        if (!(decl instanceof GenericConstructorDecl)) {
           continue;
+        }
         GenericConstructorDecl genDecl = (GenericConstructorDecl)decl;
-        if(!(getNumTypeArgument() == genDecl.getNumTypeParameter()))
+        if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
           continue;
+        }
       }
       applicable.add(decl);
     }
@@ -116,10 +126,11 @@ aspect ConstructorReference {
   syn lazy boolean ConstructorReference.isExact();
 
   syn lazy ConstructorDecl ClassReference.exactCompileTimeDeclaration() {
-    if(getTypeAccess().type().isRawType()) {
-      if(getTypeAccess().type().hostType() == null || getTypeAccess().type().isStatic()
-            || getTypeAccess().type().hostType().isRawType())
+    if (getTypeAccess().type().isRawType()) {
+      if (getTypeAccess().type().hostType() == null || getTypeAccess().type().isStatic()
+          || getTypeAccess().type().hostType().isRawType()) {
         return unknownConstructor();
+      }
     }
     TypeDecl classType = getTypeAccess().type();
     Collection<ConstructorDecl> col = classType.constructors();
@@ -127,31 +138,31 @@ aspect ConstructorReference {
     int foundCompatible = 0;
     ConstructorDecl latestDecl = null;
 
-    for(ConstructorDecl decl : col) {
-      if(decl.accessibleFrom(hostType())) {
+    for (ConstructorDecl decl : col) {
+      if (decl.accessibleFrom(hostType())) {
         foundCompatible++;
         latestDecl = decl;
       }
     }
-    if(foundCompatible != 1)
+    if (foundCompatible != 1) {
       return unknownConstructor();
-    if(latestDecl.isVariableArity())
+    }
+    if (latestDecl.isVariableArity()) {
       return unknownConstructor();
-    if(latestDecl instanceof GenericConstructorDecl) {
+    }
+    if (latestDecl instanceof GenericConstructorDecl) {
       GenericConstructorDecl genericDecl = (GenericConstructorDecl)latestDecl;
-      if(getNumTypeArgument() == genericDecl.getNumTypeParameter()) {
+      if (getNumTypeArgument() == genericDecl.getNumTypeParameter()) {
         return latestDecl;
-      }
-      else {
+      } else {
         return unknownConstructor();
       }
     }
     return latestDecl;
   }
 
-  eq ClassReference.isExact() {
-    return exactCompileTimeDeclaration() != unknownConstructor();
-  }
+  eq ClassReference.isExact() =
+    exactCompileTimeDeclaration() != unknownConstructor();
 
   eq ArrayReference.isExact() = true;
 }

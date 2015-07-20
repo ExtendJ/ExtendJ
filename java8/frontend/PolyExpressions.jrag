@@ -26,19 +26,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect PolyExpressions {
-  syn lazy boolean Expr.isBooleanExpression() {
-    if(isPolyExpression())
-      return false;
-    return type().isBoolean();
-  }
+  syn lazy boolean Expr.isBooleanExpression() =
+      !isPolyExpression() && type().isBoolean();
 
-  eq ParExpr.isBooleanExpression() {
-    return getExpr().isBooleanExpression();
-  }
+  eq ParExpr.isBooleanExpression() =
+      getExpr().isBooleanExpression();
 
   eq ClassInstanceExpr.isBooleanExpression() {
-    if(getAccess() instanceof TypeAccess) {
-      TypeAccess typeAccess = (TypeAccess)getAccess();
+    if (getAccess() instanceof TypeAccess) {
+      TypeAccess typeAccess = (TypeAccess) getAccess();
       return typeAccess.name().equals("Boolean");
     }
     return false;
@@ -46,64 +42,53 @@ aspect PolyExpressions {
 
   eq MethodAccess.isBooleanExpression() {
     MethodDecl decl = decl();
-    if(decl instanceof ParMethodDecl) {
-      return ((ParMethodDecl)decl).genericMethodDecl().type().isBoolean();
-    }
-    else
+    if (decl instanceof ParMethodDecl) {
+      return ((ParMethodDecl) decl).genericMethodDecl().type().isBoolean();
+    } else {
       return decl.type().isBoolean();
+    }
   }
 
-  eq ConditionalExpr.isBooleanExpression() {
-    return isBooleanConditional();
-  }
+  eq ConditionalExpr.isBooleanExpression() =
+      isBooleanConditional();
 
-  syn lazy boolean ConditionalExpr.isBooleanConditional() {
-    return getTrueExpr().isBooleanExpression() && getFalseExpr().isBooleanExpression();
-  }
+  syn lazy boolean ConditionalExpr.isBooleanConditional() =
+      getTrueExpr().isBooleanExpression() && getFalseExpr().isBooleanExpression();
 
 
-  syn lazy boolean Expr.isNumericExpression() {
-    if(isPolyExpression())
-      return false;
-    return type().isNumericType();
-  }
+  syn lazy boolean Expr.isNumericExpression() =
+      !isPolyExpression() && type().isNumericType();
 
   eq MethodAccess.isNumericExpression() {
     MethodDecl decl = decl();
-    if(decl instanceof ParMethodDecl) {
-      return ((ParMethodDecl)decl).genericMethodDecl().type().isNumericType();
-    }
-    else
+    if (decl instanceof ParMethodDecl) {
+      return ((ParMethodDecl) decl).genericMethodDecl().type().isNumericType();
+    } else {
       return decl.type().isNumericType();
+    }
   }
 
-  eq ConditionalExpr.isNumericExpression() {
-    return isNumericConditional();
-  }
+  eq ConditionalExpr.isNumericExpression() =
+      isNumericConditional();
 
-  syn lazy boolean ConditionalExpr.isNumericConditional() {
-    return getTrueExpr().isNumericExpression() && getFalseExpr().isNumericExpression();
-  }
+  syn lazy boolean ConditionalExpr.isNumericConditional() =
+      getTrueExpr().isNumericExpression() && getFalseExpr().isNumericExpression();
 
-  syn lazy boolean ConditionalExpr.isReferenceConditional() {
-    return !isBooleanConditional() && !isNumericConditional();
-  }
+  syn lazy boolean ConditionalExpr.isReferenceConditional() =
+      !isBooleanConditional() && !isNumericConditional();
 
   syn lazy boolean Expr.isPolyExpression() = false;
 
-  eq ConditionalExpr.isPolyExpression() {
-    return isReferenceConditional() && (assignmentContext() || invocationContext());
-  }
+  eq ConditionalExpr.isPolyExpression() =
+      isReferenceConditional() && (assignmentContext() || invocationContext());
 
   // 15.9
-  eq ClassInstanceExpr.isPolyExpression() {
-    return (getAccess() instanceof DiamondAccess) && (assignmentContext() || invocationContext());
-  }
+  eq ClassInstanceExpr.isPolyExpression() =
+      (getAccess() instanceof DiamondAccess) && (assignmentContext() || invocationContext());
 
   // 15.8.5
-  eq ParExpr.isPolyExpression() {
-    return getExpr().isPolyExpression();
-  }
+  eq ParExpr.isPolyExpression() =
+      getExpr().isPolyExpression();
 
   eq LambdaExpr.isPolyExpression() = true;
   eq MethodReference.isPolyExpression() = true;
@@ -112,37 +97,41 @@ aspect PolyExpressions {
   // 15.12
   eq ParMethodAccess.isPolyExpression() = false;
   eq MethodAccess.isPolyExpression() {
-    if(!assignmentContext() && !invocationContext())
+    if (!assignmentContext() && !invocationContext()) {
       return false;
-    if(!(decl() instanceof GenericMethodDecl))
+    }
+    if (!(decl() instanceof GenericMethodDecl)) {
       return false;
+    }
     GenericMethodDecl genericDecl = (GenericMethodDecl)decl();
     return genericDecl.typeVariableInReturn();
   }
 
   syn lazy boolean GenericMethodDecl.typeVariableInReturn() {
-    if(!getTypeAccess().usesTypeVariable())
+    if (!getTypeAccess().usesTypeVariable()) {
       return false;
+    }
     ASTNode current = getTypeAccess();
     LinkedList<ASTNode> list = new LinkedList<ASTNode>();
     list.add(current);
     boolean foundUse = false;
-    while(!list.isEmpty()) {
+    while (!list.isEmpty()) {
       current = list.poll();
-      for(int i = 0; i < current.getNumChild(); i++) {
+      for (int i = 0; i < current.getNumChild(); i++) {
         list.add(current.getChild(i));
       }
-      if(current instanceof TypeAccess) {
+      if (current instanceof TypeAccess) {
         TypeAccess typeAccess = (TypeAccess)current;
-        if(typeAccess.type().isTypeVariable()) {
-          for(int i = 0; i < getNumTypeParameter(); i++) {
-            if(typeAccess.type() == getTypeParameter(i)) {
+        if (typeAccess.type().isTypeVariable()) {
+          for (int i = 0; i < getNumTypeParameter(); i++) {
+            if (typeAccess.type() == getTypeParameter(i)) {
               foundUse = true;
               break;
             }
           }
-          if(foundUse)
+          if (foundUse) {
             break;
+          }
         }
       }
     }
@@ -153,42 +142,46 @@ aspect PolyExpressions {
   syn lazy boolean Expr.assignConversionTo(TypeDecl type) = type().assignConversionTo(type, this);
 
   eq LambdaExpr.assignConversionTo(TypeDecl type) {
-    if(!type.isFunctionalInterface())
+    if (!type.isFunctionalInterface()) {
       return false;
-    FunctionDescriptor f = ((InterfaceDecl)type).functionDescriptor();
+    }
+    FunctionDescriptor f = ((InterfaceDecl) type).functionDescriptor();
     return congruentTo(f);
   }
 
   eq MethodReference.assignConversionTo(TypeDecl type) {
-    if(!type.isFunctionalInterface())
+    if (!type.isFunctionalInterface()) {
       return false;
-    FunctionDescriptor f = ((InterfaceDecl)type).functionDescriptor();
+    }
+    FunctionDescriptor f = ((InterfaceDecl) type).functionDescriptor();
     return congruentTo(f);
   }
 
   eq ConstructorReference.assignConversionTo(TypeDecl type) {
-    if(!type.isFunctionalInterface())
+    if (!type.isFunctionalInterface()) {
       return false;
-    FunctionDescriptor f = ((InterfaceDecl)type).functionDescriptor();
+    }
+    FunctionDescriptor f = ((InterfaceDecl) type).functionDescriptor();
     return congruentTo(f);
   }
 
-  eq ParExpr.assignConversionTo(TypeDecl type) {
-    return getExpr().assignConversionTo(type);
-  }
+  eq ParExpr.assignConversionTo(TypeDecl type) =
+      getExpr().assignConversionTo(type);
 
   eq ConditionalExpr.assignConversionTo(TypeDecl type) {
-    if(!isPolyExpression())
+    if (!isPolyExpression()) {
       return type().assignConversionTo(type, this);
-    else
+    } else {
       return getTrueExpr().assignConversionTo(type) && getFalseExpr().assignConversionTo(type);
+    }
   }
 
   eq ClassInstanceExpr.assignConversionTo(TypeDecl type) {
-    if(!isPolyExpression())
+    if (!isPolyExpression()) {
       return super.assignConversionTo(type);
-    else {
-      return ((DiamondAccess)getAccess()).getTypeAccess().type().assignConversionTo(type, ((DiamondAccess)getAccess()).getTypeAccess());
+    } else {
+      return ((DiamondAccess) getAccess()).getTypeAccess().type().assignConversionTo(
+          type, ((DiamondAccess)getAccess()).getTypeAccess());
     }
   }
 
