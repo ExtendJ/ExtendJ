@@ -45,7 +45,7 @@ aspect PreciseRethrow {
   eq BlockLambdaBody.modifiedInScope(Variable var) = getBlock().modifiedInScope(var);
   eq ExprLambdaBody.modifiedInScope(Variable var) = getExpr().modifiedInScope(var);
 
-  //MAYBE REMOVE THIS LATER
+  // TODO: See if this should be removed.
   inh boolean CatchParameterDeclaration.inhModifiedInScope(Variable var);
   eq MultiCatch.getParameter().inhModifiedInScope(Variable var) =
       getBlock().modifiedInScope(var);
@@ -64,19 +64,6 @@ aspect PreciseRethrow {
 
   eq ConstructorDecl.getParsedConstructorInvocation().inhModifiedInScope(Variable var) = false;
   eq ConstructorDecl.getImplicitConstructorInvocation().inhModifiedInScope(Variable var) = false;
-
-  refine PreciseRethrow
-  eq ParameterDeclaration.throwTypes() {
-    if (isCatchParam() && (isFinal() || isEffectivelyFinal())) {
-      // the catch parameter must be final or implicitly
-      // final (multi-catch)
-      return catchClause().caughtExceptions();
-    } else {
-      Collection<TypeDecl> tts = new LinkedList<TypeDecl>();
-      tts.add(type());
-      return tts;
-    }
-  }
 
   eq BodyDecl.modifiedInScope(Variable var) = false;
   eq ConstructorDecl.modifiedInScope(Variable var) = getBlock().modifiedInScope(var);
@@ -135,7 +122,7 @@ aspect PreciseRethrow {
     if (isLeft && var instanceof VariableDeclaration) {
       VariableDeclaration decl = (VariableDeclaration) var;
       if (!decl.hasInit()) {
-        //Variable is being written to in an inner class
+        // Variable is being written to in an inner class.
         if (decl.hostType() != hostType()) {
           return true;
         }
@@ -152,17 +139,20 @@ aspect PreciseRethrow {
 aspect EffectivelyFinal {
   //4.12.4
   syn lazy boolean InferredParameterDeclaration.isEffectivelyFinal() =
-      !isFinal() && !inhModifiedInScope(this);
-  syn lazy boolean FieldDeclaration.isEffectivelyFinal() = false;
+      isFinal() || !inhModifiedInScope(this);
+  syn lazy boolean FieldDeclaration.isEffectivelyFinal() = isFinal();
 
   //14.20
-  syn lazy boolean CatchParameterDeclaration.isEffectivelyFinal() = false;
+  // CatchParameterDeclaration is only used in a multi-catch, and multi-catch parameters are
+  // always implicitly final.
+  syn lazy boolean CatchParameterDeclaration.isEffectivelyFinal() = true;
 
-  //4.12.4
+  /**
+   * Note: this attribute deviates from what the JLS says about effectively finalness,
+   * simply because the attribute name would be confusing if it did not return true
+   * when the variable was explicitly declared final. The JLS considers declared final
+   * and effectively final to be mutually exclusive, we don't.
+   */
   syn lazy boolean VariableDeclaration.isEffectivelyFinal() =
-    !isFinal() && !inhModifiedInScope(this);
-
-  //4.12.4
-  refine PreciseRethrow
-  eq ParameterDeclaration.isEffectivelyFinal() = !isFinal() && !inhModifiedInScope(this);
+      isFinal() || !inhModifiedInScope(this);
 }
