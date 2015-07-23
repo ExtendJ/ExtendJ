@@ -35,161 +35,154 @@ aspect MethodReference {
 
   syn nta lazy Access ExprMethodReference.syntheticAccess(FunctionDescriptor f) {
     List<Expr> arguments = new List<Expr>();
-    for(int i = 0; i < f.method.getNumParameter(); i++) {
+    for (int i = 0; i < f.method.getNumParameter(); i++) {
       TypeDecl argumentType = f.method.getParameter(i).type();
       arguments.add(new SyntheticTypeAccess(argumentType));
     }
 
-    if(!hasTypeArgument()) {
+    if (!hasTypeArgument()) {
       MethodReferenceAccess mAccess = new MethodReferenceAccess(name(), arguments, f);
-      return ((Expr)getExpr().treeCopyNoTransform()).qualifiesAccess(mAccess);
-    }
-    else {
+      return ((Expr) getExpr().treeCopyNoTransform()).qualifiesAccess(mAccess);
+    } else {
       ParMethodReferenceAccess pmAccess = new ParMethodReferenceAccess(name(), arguments,
-                              (List<Access>)getTypeArgumentList().treeCopyNoTransform(), f);
-      return ((Expr)getExpr().treeCopyNoTransform()).qualifiesAccess(pmAccess);
+          (List<Access>) getTypeArgumentList().treeCopyNoTransform(), f);
+      return ((Expr) getExpr().treeCopyNoTransform()).qualifiesAccess(pmAccess);
     }
   }
 
   syn lazy MethodAccess ExprMethodReference.syntheticMethodAccess(FunctionDescriptor f) {
     Access synAccess = syntheticAccess(f);
-    return (MethodAccess)synAccess.lastAccess();
+    return (MethodAccess) synAccess.lastAccess();
   }
 
-
-  /*
-  Type analysis for TypeMethodReferences are done below here.
-  The two different types of method accesses being used here,
-  called 'static' and 'instance', are the results of the two
-  different lookups that are to be done in the case of a type
-  being used in a method reference. The details can be found
-  in JLS version 8, section 15.13.1
-  */
+  /* Type analysis for TypeMethodReferences are done below here.
+   * The two different types of method accesses being used here,
+   * called 'static' and 'instance', are the results of the two
+   * different lookups that are to be done in the case of a type
+   * being used in a method reference. The details can be found
+   * in JLS version 8, section 15.13.1
+   */
 
   syn lazy MethodDecl TypeMethodReference.targetStaticMethod(FunctionDescriptor f) {
     MethodAccess synAcc = syntheticStaticMethodAccess(f);
     SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
-    if(maxSpecific.size() == 1)
-      return (MethodDecl)maxSpecific.iterator().next();
-    else
+    if (maxSpecific.size() == 1) {
+      return (MethodDecl) maxSpecific.iterator().next();
+    } else {
       return unknownMethod();
+    }
   }
 
   syn lazy MethodDecl TypeMethodReference.targetInstanceMethod(FunctionDescriptor f) {
-    if(f.method.getNumParameter() == 0 || !f.method.getParameter(0).type().strictSubtype(getTypeAccess().type())) {
+    if (f.method.getNumParameter() == 0
+        || !f.method.getParameter(0).type().strictSubtype(getTypeAccess().type())) {
       return unknownMethod();
     }
 
     MethodAccess synAcc = syntheticInstanceMethodAccess(f);
     SimpleSet maxSpecific = synAcc.maxSpecific(synAcc.lookupMethod(synAcc.name()));
-    if(maxSpecific.size() == 1)
-      return (MethodDecl)maxSpecific.iterator().next();
-    else
+    if (maxSpecific.size() == 1) {
+      return (MethodDecl) maxSpecific.iterator().next();
+    } else {
       return unknownMethod();
+    }
   }
 
   syn lazy boolean TypeMethodReference.validStaticMethod(FunctionDescriptor f) {
     MethodDecl decl = targetStaticMethod(f);
-    if(decl == unknownMethod() || !decl.isStatic())
-      return false;
-    return true;
+    return !(decl == unknownMethod() || !decl.isStatic());
   }
 
   syn lazy boolean TypeMethodReference.validInstanceMethod(FunctionDescriptor f) {
     MethodDecl decl = targetInstanceMethod(f);
-    if(decl == unknownMethod() || decl.isStatic())
-      return false;
-    return true;
+    return !(decl == unknownMethod() || decl.isStatic());
   }
 
-  /*
-  This attribute is used for method references when the reference type must be inferred.
-  The argument list declared in the parameter must be used, so in order to make the type lookup
-  work this attribute is an nta. It must be located here in order to not miss type variables declared
-  by the method where this parameter is located.
-  */
+  /* This attribute is used for method references when the reference type must be inferred.  The
+   * argument list declared in the parameter must be used, so in order to make the type lookup work
+   * this attribute is an nta. It must be located here in order to not miss type variables declared
+   * by the method where this parameter is located.
+   */
   syn nta lazy ParTypeAccess ParameterDeclaration.inferredReferenceAccess(TypeAccess typeAccess) {
-    if(!(getTypeAccess() instanceof ParTypeAccess)) {
-      return new ParTypeAccess((TypeAccess)typeAccess.treeCopyNoTransform(), new List<Access>());
+    if (!(getTypeAccess() instanceof ParTypeAccess)) {
+      return new ParTypeAccess((TypeAccess) typeAccess.treeCopyNoTransform(), new List<Access>());
     }
     ParTypeAccess parTypeAccess = (ParTypeAccess)getTypeAccess();
     return new ParTypeAccess((TypeAccess) typeAccess.treeCopyNoTransform(),
         (List<Access>) parTypeAccess.getTypeArgumentList().treeCopyNoTransform());
   }
 
-  /*
-  When type method references are declared using a raw type, the type arguments
-  can sometimes be inferred by looking at the target function descriptor. This
-  attribute infers the type where the method lookup should be done. Returns null
-  if no inferred type should be used.
-  */
+  /* When type method references are declared using a raw type, the type arguments can sometimes be
+   * inferred by looking at the target function descriptor. This attribute infers the type where the
+   * method lookup should be done. Returns null if no inferred type should be used.
+   */
   syn lazy TypeDecl TypeMethodReference.inferredReferenceType(FunctionDescriptor f) {
-    if(f.method.getNumParameter() == 0)
+    if (f.method.getNumParameter() == 0) {
       return null;
-    else if(!(f.method.getParameter(0).getTypeAccess() instanceof ParTypeAccess))
+    } else if (!(f.method.getParameter(0).getTypeAccess() instanceof ParTypeAccess)) {
       return null;
-
-    else if(!getTypeAccess().type().isRawType() || !(getTypeAccess() instanceof TypeAccess))
+    } else if (!getTypeAccess().type().isRawType() || !(getTypeAccess() instanceof TypeAccess)) {
       return null;
+    }
 
     ParameterDeclaration param = f.method.getParameter(0);
-    if(!param.type().strictSubtype(param.inferredReferenceAccess((TypeAccess)getTypeAccess()).type()))
+    if (!param.type().strictSubtype(param
+          .inferredReferenceAccess((TypeAccess) getTypeAccess()).type())) {
       return null;
-    return param.inferredReferenceAccess((TypeAccess)getTypeAccess()).type();
+    }
+    return param.inferredReferenceAccess((TypeAccess) getTypeAccess()).type();
   }
 
   syn nta lazy Access TypeMethodReference.syntheticStaticAccess(FunctionDescriptor f) {
     List<Expr> arguments = new List<Expr>();
-    for(int i = 0; i < f.method.getNumParameter(); i++) {
+    for (int i = 0; i < f.method.getNumParameter(); i++) {
       TypeDecl argumentType = f.method.getParameter(i).type();
       arguments.add(new SyntheticTypeAccess(argumentType));
     }
 
-    if(!hasTypeArgument()) {
+    if (!hasTypeArgument()) {
       MethodReferenceAccess mAccess = new MethodReferenceAccess(name(), arguments, f);
-      return ((Access)getTypeAccess().treeCopyNoTransform()).qualifiesAccess(mAccess);
-    }
-    else {
-      ParMethodReferenceAccess pmAccess = new ParMethodReferenceAccess(name(), arguments, (List<Access>)getTypeArgumentList().treeCopyNoTransform(), f);
-      return ((Access)getTypeAccess().treeCopyNoTransform()).qualifiesAccess(pmAccess);
+      return ((Access) getTypeAccess().treeCopyNoTransform()).qualifiesAccess(mAccess);
+    } else {
+      ParMethodReferenceAccess pmAccess = new ParMethodReferenceAccess(name(), arguments,
+          (List<Access>) getTypeArgumentList().treeCopyNoTransform(), f);
+      return ((Access) getTypeAccess().treeCopyNoTransform()).qualifiesAccess(pmAccess);
     }
   }
 
   syn lazy MethodAccess TypeMethodReference.syntheticStaticMethodAccess(FunctionDescriptor f) {
     Access synAccess = syntheticStaticAccess(f);
-    return (MethodAccess)synAccess.lastAccess();
+    return (MethodAccess) synAccess.lastAccess();
   }
 
   syn nta lazy Access TypeMethodReference.syntheticInstanceAccess(FunctionDescriptor f) {
     List<Expr> arguments = new List<Expr>();
-    for(int i = 1; i < f.method.getNumParameter(); i++) {
+    for (int i = 1; i < f.method.getNumParameter(); i++) {
       TypeDecl argumentType = f.method.getParameter(i).type();
       arguments.add(new SyntheticTypeAccess(argumentType));
     }
 
     Access qualifier = null;
 
-    if(inferredReferenceType(f) != null) {
+    if (inferredReferenceType(f) != null) {
       qualifier = new SyntheticTypeAccess(inferredReferenceType(f));
-    }
-    else {
-      qualifier = (Access)getTypeAccess().treeCopyNoTransform();
+    } else {
+      qualifier = (Access) getTypeAccess().treeCopyNoTransform();
     }
 
-    if(!hasTypeArgument()) {
+    if (!hasTypeArgument()) {
       MethodReferenceAccess mAccess = new MethodReferenceAccess(name(), arguments, f);
       return qualifier.qualifiesAccess(mAccess);
-    }
-    else {
+    } else {
       ParMethodReferenceAccess pmAccess = new ParMethodReferenceAccess(name(), arguments,
-                  (List<Access>)getTypeArgumentList().treeCopyNoTransform(), f);
+          (List<Access>) getTypeArgumentList().treeCopyNoTransform(), f);
       return qualifier.qualifiesAccess(pmAccess);
     }
   }
 
   syn lazy MethodAccess TypeMethodReference.syntheticInstanceMethodAccess(FunctionDescriptor f) {
     Access synAccess = syntheticInstanceAccess(f);
-    return (MethodAccess)synAccess.lastAccess();
+    return (MethodAccess) synAccess.lastAccess();
   }
 
   /*
@@ -216,60 +209,66 @@ aspect MethodReference {
       }
   }
 
-
   syn lazy boolean MethodReference.congruentTo(FunctionDescriptor f);
 
   eq ExprMethodReference.congruentTo(FunctionDescriptor f) {
     MethodDecl decl = targetMethod(f);
-    if(unknownMethod() == decl)
+    if (unknownMethod() == decl) {
       return false;
-    if(f.method.type().isVoid())
+    }
+    if (f.method.type().isVoid()) {
       return true;
-    if(decl.type().isVoid())
+    }
+    if (decl.type().isVoid()) {
       return false;
+    }
     return decl.type().assignConversionTo(f.method.type(), null);
   }
 
   eq TypeMethodReference.congruentTo(FunctionDescriptor f) {
     MethodDecl staticMethod = targetStaticMethod(f);
     MethodDecl instanceMethod = targetInstanceMethod(f);
-    if(unknownMethod() != staticMethod && unknownMethod() != instanceMethod) {
+    if (unknownMethod() != staticMethod && unknownMethod() != instanceMethod) {
       return false;
-    }
-    else if(unknownMethod() == staticMethod && unknownMethod() == instanceMethod) {
+    } else if (unknownMethod() == staticMethod && unknownMethod() == instanceMethod) {
       return false;
     }
     MethodDecl found;
-    if(unknownMethod() != staticMethod)
+    if (unknownMethod() != staticMethod) {
       found = staticMethod;
-    else
+    } else {
       found = instanceMethod;
-    if(f.method.type().isVoid())
+    }
+    if (f.method.type().isVoid()) {
       return true;
-    if(found.type().isVoid())
+    }
+    if (found.type().isVoid()) {
       return false;
+    }
     return found.type().assignConversionTo(f.method.type(), null);
   }
 
-  eq AmbiguousMethodReference.congruentTo(FunctionDescriptor f) {
-    return false;
-  }
+  eq AmbiguousMethodReference.congruentTo(FunctionDescriptor f) = false;
 
   syn lazy ArrayList<MethodDecl> MethodReference.potentiallyApplicableMethods(FunctionDescriptor f);
 
   eq ExprMethodReference.potentiallyApplicableMethods(FunctionDescriptor f) {
     Collection<MethodDecl> col = getExpr().type().memberMethods(name());
     ArrayList<MethodDecl> applicable = new ArrayList<MethodDecl>();
-    for(MethodDecl decl : col) {
-      if(!decl.accessibleFrom(hostType()))
+    for (MethodDecl decl : col) {
+      if (!decl.accessibleFrom(hostType())) {
         continue;
-      if(!(decl.arity() == f.method.arity()))
+      }
+      if (!(decl.arity() == f.method.arity())) {
         continue;
-      if(hasTypeArgument()) {
-        if(!(decl instanceof GenericMethodDecl))
+      }
+      if (hasTypeArgument()) {
+        if (!(decl instanceof GenericMethodDecl)) {
           continue;
+        }
         GenericMethodDecl genDecl = (GenericMethodDecl)decl;
-        if(!(getNumTypeArgument() == genDecl.getNumTypeParameter()))
+        if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
+        }
           continue;
       }
       applicable.add(decl);
@@ -280,86 +279,92 @@ aspect MethodReference {
   eq TypeMethodReference.potentiallyApplicableMethods(FunctionDescriptor f) {
     Collection<MethodDecl> col = getTypeAccess().type().memberMethods(name());
     ArrayList<MethodDecl> applicable = new ArrayList<MethodDecl>();
-    for(MethodDecl decl : col) {
-      if(!decl.accessibleFrom(hostType()))
+    for (MethodDecl decl : col) {
+      if (!decl.accessibleFrom(hostType())) {
         continue;
-      if(!(decl.arity() == f.method.arity()) && !(decl.arity() == f.method.arity() - 1))
+      }
+      if (!(decl.arity() == f.method.arity()) && !(decl.arity() == f.method.arity() - 1)) {
         continue;
-      if(hasTypeArgument()) {
-        if(!(decl instanceof GenericMethodDecl))
+      }
+      if (hasTypeArgument()) {
+        if (!(decl instanceof GenericMethodDecl)) {
           continue;
+        }
         GenericMethodDecl genDecl = (GenericMethodDecl)decl;
-        if(!(getNumTypeArgument() == genDecl.getNumTypeParameter()))
+        if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
           continue;
+        }
       }
       applicable.add(decl);
     }
     return applicable;
   }
 
-  eq AmbiguousMethodReference.potentiallyApplicableMethods(FunctionDescriptor f) = new ArrayList<MethodDecl>();
+  eq AmbiguousMethodReference.potentiallyApplicableMethods(FunctionDescriptor f) =
+      new ArrayList<MethodDecl>(); // TODO(jesper): use Collections.emptyList()
 
   // 15.13.1
   syn lazy boolean MethodReference.isExact();
   syn lazy MethodDecl MethodReference.exactCompileTimeDeclaration();
 
-  eq MethodReference.isExact() {
-    return exactCompileTimeDeclaration() != unknownMethod();
-  }
+  eq MethodReference.isExact() = exactCompileTimeDeclaration() != unknownMethod();
 
   eq ExprMethodReference.exactCompileTimeDeclaration() {
     Collection<MethodDecl> col = getExpr().type().memberMethods(name());
     int foundCompatible = 0;
     MethodDecl latestDecl = null;
-    for(MethodDecl decl  : col) {
-      if(decl.accessibleFrom(hostType())) {
+    for (MethodDecl decl  : col) {
+      if (decl.accessibleFrom(hostType())) {
         foundCompatible++;
         latestDecl = decl;
       }
     }
-    if(foundCompatible != 1)
+    if (foundCompatible != 1) {
       return unknownMethod();
-    if(latestDecl.isVariableArity())
-      return unknownMethod();
-    if(latestDecl instanceof GenericMethodDecl) {
-      GenericMethodDecl genericDecl = (GenericMethodDecl)latestDecl;
-      if(getNumTypeArgument() == genericDecl.getNumTypeParameter())
-        return latestDecl;
-      else
-        return unknownMethod();
     }
-
+    if (latestDecl.isVariableArity()) {
+      return unknownMethod();
+    }
+    if (latestDecl instanceof GenericMethodDecl) {
+      GenericMethodDecl genericDecl = (GenericMethodDecl)latestDecl;
+      if (getNumTypeArgument() == genericDecl.getNumTypeParameter()) {
+        return latestDecl;
+      } else {
+        return unknownMethod();
+      }
+    }
     return latestDecl;
   }
 
   eq TypeMethodReference.exactCompileTimeDeclaration() {
-    if(getTypeAccess().type().isRawType())
+    if (getTypeAccess().type().isRawType()) {
       return unknownMethod();
+    }
     Collection<MethodDecl> col = getTypeAccess().type().memberMethods(name());
     int foundCompatible = 0;
     MethodDecl latestDecl = null;
-    for(MethodDecl decl  : col) {
-      if(decl.accessibleFrom(hostType())) {
+    for (MethodDecl decl  : col) {
+      if (decl.accessibleFrom(hostType())) {
         foundCompatible++;
         latestDecl = decl;
       }
     }
-    if(foundCompatible != 1)
+    if (foundCompatible != 1) {
       return unknownMethod();
-    if(latestDecl.isVariableArity())
+    }
+    if (latestDecl.isVariableArity()) {
       return unknownMethod();
-    if(latestDecl instanceof GenericMethodDecl) {
-      GenericMethodDecl genericDecl = (GenericMethodDecl)latestDecl;
-      if(getNumTypeArgument() == genericDecl.getNumTypeParameter()) {
+    }
+    if (latestDecl instanceof GenericMethodDecl) {
+      GenericMethodDecl genericDecl = (GenericMethodDecl) latestDecl;
+      if (getNumTypeArgument() == genericDecl.getNumTypeParameter()) {
         return latestDecl;
-      }
-      else {
+      } else {
         return unknownMethod();
       }
     }
     return latestDecl;
   }
-
 
   eq AmbiguousMethodReference.exactCompileTimeDeclaration() = unknownMethod();
 }
@@ -372,25 +377,29 @@ aspect Synthetics {
   syn lazy TypeDecl SyntheticTypeAccess.type() = type;
 
   private FunctionDescriptor MethodReferenceAccess.targetDescriptor;
-  public MethodReferenceAccess.MethodReferenceAccess(String name, List<Expr> args, FunctionDescriptor f) {
+  public MethodReferenceAccess.MethodReferenceAccess(String name,
+      List<Expr> args, FunctionDescriptor f) {
     super(name, args);
     this.targetDescriptor = f;
   }
 
   private FunctionDescriptor ParMethodReferenceAccess.targetDescriptor;
-  public ParMethodReferenceAccess.ParMethodReferenceAccess(String name, List<Expr> args, List<Access> typeArgs, FunctionDescriptor f) {
+  public ParMethodReferenceAccess.ParMethodReferenceAccess(String name,
+      List<Expr> args, List<Access> typeArgs, FunctionDescriptor f) {
     super(name, args, typeArgs);
     this.targetDescriptor = f;
   }
 
   private FunctionDescriptor ConstructorReferenceAccess.targetDescriptor;
-  public ConstructorReferenceAccess.ConstructorReferenceAccess(Access access, List<Expr> args, FunctionDescriptor f) {
+  public ConstructorReferenceAccess.ConstructorReferenceAccess(Access access,
+      List<Expr> args, FunctionDescriptor f) {
     super(access, args);
     this.targetDescriptor = f;
   }
 
   private FunctionDescriptor ParConstructorReferenceAccess.targetDescriptor;
-  public ParConstructorReferenceAccess.ParConstructorReferenceAccess(Access access, List<Expr> args, Opt<TypeDecl> optDecl, List<Access> typeArgs, FunctionDescriptor f) {
+  public ParConstructorReferenceAccess.ParConstructorReferenceAccess(Access access,
+      List<Expr> args, Opt<TypeDecl> optDecl, List<Access> typeArgs, FunctionDescriptor f) {
     super(access, args, optDecl, typeArgs);
     this.targetDescriptor = f;
   }

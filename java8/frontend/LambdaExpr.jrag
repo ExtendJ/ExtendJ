@@ -27,15 +27,12 @@
  */
 aspect LambdaExpr {
 
-
   eq LambdaAnonymousDecl.unqualifiedLookupMethod(String name) {
-    if(getParent().getParent().getParent() instanceof MethodReference) {
-      return ((MethodReference)getParent().getParent().getParent()).lookupMethod(name);
-    }
-    else if(getParent().getParent().getParent() instanceof ConstructorReference) {
-      return ((ConstructorReference)getParent().getParent().getParent()).lookupMethod(name);
-    }
-    else {
+    if (getParent().getParent().getParent() instanceof MethodReference) {
+      return ((MethodReference) getParent().getParent().getParent()).lookupMethod(name);
+    } else if (getParent().getParent().getParent() instanceof ConstructorReference) {
+      return ((ConstructorReference) getParent().getParent().getParent()).lookupMethod(name);
+    } else {
       return enclosingLambda().lookupMethod(name);
     }
   }
@@ -51,18 +48,19 @@ aspect LambdaExpr {
   syn lazy boolean LambdaParameters.congruentTo(FunctionDescriptor f);
 
   // 15.27.3
-  eq InferredLambdaParameters.congruentTo(FunctionDescriptor f) {
-    return numParameters() == f.method.getNumParameter();
-  }
+  eq InferredLambdaParameters.congruentTo(FunctionDescriptor f) =
+      numParameters() == f.method.getNumParameter();
 
   // 15.27.3
   eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor f) {
-    if(numParameters() != f.method.getNumParameter())
+    if (numParameters() != f.method.getNumParameter()) {
       return false;
-    for(int i = 0; i < numParameters(); i++) {
+    }
+    for (int i = 0; i < numParameters(); i++) {
       //Lambdas can't declare type variables so that doesn't need to be taken into account
-      if(getParameter(i).type() != f.method.getParameter(i).type())
+      if (getParameter(i).type() != f.method.getParameter(i).type()) {
         return false;
+      }
     }
     return true;
   }
@@ -74,25 +72,25 @@ aspect LambdaExpr {
 
   // 15.27.3
   eq ExprLambdaBody.congruentTo(FunctionDescriptor f) {
-    if(f.method.type().isVoid()) {
+    if (f.method.type().isVoid()) {
       return getExpr().stmtCompatible();
-    }
-    else {
+    } else {
       return getExpr().assignConversionTo(f.method.type());
     }
   }
 
   // 15.27.3
   eq BlockLambdaBody.congruentTo(FunctionDescriptor f) {
-    if(f.method.type().isVoid()) {
+    if (f.method.type().isVoid()) {
       return voidCompatible();
-    }
-    else {
-      if(!valueCompatible())
+    } else {
+      if (!valueCompatible()) {
         return false;
-      for(ReturnStmt returnStmt : lambdaReturns()) {
-        if(!returnStmt.getResult().assignConversionTo(f.method.type()))
+      }
+      for (ReturnStmt returnStmt : lambdaReturns()) {
+        if (!returnStmt.getResult().assignConversionTo(f.method.type())) {
           return false;
+        }
       }
       return true;
     }
@@ -107,34 +105,31 @@ aspect LambdaExpr {
      for arbitary congruency checks that handle inferrence differently depending on the function descriptor
      input to this method, then this check must be altered! */
   // 15.27.3
-  syn lazy boolean LambdaExpr.congruentTo(FunctionDescriptor f) {
-    if(f.isGeneric())
-      return false;
-    if(!getLambdaParameters().congruentTo(f))
-      return false;
-    if(!getLambdaBody().congruentTo(f))
-      return false;
-    return true;
-  }
+  syn lazy boolean LambdaExpr.congruentTo(FunctionDescriptor f) =
+      !f.isGeneric() && getLambdaParameters().congruentTo(f) && getLambdaBody().congruentTo(f);
 
   refine LookupParTypeDecl
   public Access ParTypeDecl.substitute(Parameterization parTypeDecl) {
     // TODO: include nesting as well....
-    if(parTypeDecl.isRawType())
-      return ((GenericTypeDecl)genericDecl()).rawType().createBoundAccess();
+    if (parTypeDecl.isRawType()) {
+      return ((GenericTypeDecl) genericDecl()).rawType().createBoundAccess();
+    }
+
     /* These lines have been removed because they erase arguments from
       parameter types when they are not using type variables, for example
       C<String> is substituted to only C, which I don't think is correct?
       And if the ParTypeDecl doesn't use any type variables, why is there
       even any need for further substitution?
 
-    if(!usesTypeVariable())
-      return super.substitute(parTypeDecl);*/
+    if (!usesTypeVariable()) {
+      return super.substitute(parTypeDecl);
+    }
+    */
     List list = new List();
-    for(int i = 0; i < getNumArgument(); i++)
+    for (int i = 0; i < getNumArgument(); i++) {
       list.add(getArgument(i).type().substitute(parTypeDecl));
+    }
     return new ParTypeAccess(genericDecl().createQualifiedAccess(), list);
-
   }
 }
 
@@ -154,13 +149,15 @@ aspect StmtCompatible {
 aspect ExceptionHandling {
   eq LambdaExpr.getLambdaBody().handlesException(TypeDecl exceptionType) {
     InterfaceDecl iDecl = targetInterface();
-    if(iDecl == null)
+    if (iDecl == null) {
       return false;
-    else if(!iDecl.isFunctional())
+    } else if (!iDecl.isFunctional()) {
       return false;
-    for(TypeDecl exception : iDecl.functionDescriptor().throwsList) {
-      if(exceptionType.strictSubtype(exception))
+    }
+    for (TypeDecl exception : iDecl.functionDescriptor().throwsList) {
+      if (exceptionType.strictSubtype(exception)) {
         return true;
+      }
     }
     return false;
   }
