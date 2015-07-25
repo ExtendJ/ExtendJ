@@ -17,8 +17,9 @@ aspect BytecodeDescriptor {
       p = parser;
       int descriptor_index = p.u2();
       typeDescriptor = ((CONSTANT_Utf8_Info) p.constantPool[descriptor_index]).string();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         p.println("  Field: " + name + ", " + typeDescriptor);
+      }
     }
 
     public Access type() {
@@ -42,8 +43,9 @@ aspect BytecodeDescriptor {
     public FieldInfo(BytecodeParser parser) {
       p = parser;
       flags = p.u2();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         p.print("Flags: " + flags);
+      }
       int name_index = p.u2();
       name = ((CONSTANT_Utf8_Info) p.constantPool[name_index]).string();
 
@@ -53,7 +55,7 @@ aspect BytecodeDescriptor {
 
     public BodyDecl bodyDecl() {
       FieldDeclaration f;
-      if((flags & Flags.ACC_ENUM) != 0)
+      if ((flags & Flags.ACC_ENUM) != 0) {
         //EnumConstant : FieldDeclaration ::= Modifiers <ID:String> Arg:Expr* BodyDecl* /TypeAccess:Access/ /[Init:Expr]/;
         f = new EnumConstant(
             BytecodeParser.modifiers(flags),
@@ -61,7 +63,7 @@ aspect BytecodeDescriptor {
             new List(),
             new List()
             );
-      else {
+      } else {
         Signatures.FieldSignature s = attributes.fieldSignature;
         Access type = s != null ? s.fieldTypeAccess() : fieldDescriptor.type();
         f = new FieldDeclaration(
@@ -71,17 +73,19 @@ aspect BytecodeDescriptor {
             new Opt()
             );
       }
-      if(attributes.constantValue() != null)
-        if(fieldDescriptor.isBoolean()) {
+      if (attributes.constantValue() != null) {
+        if (fieldDescriptor.isBoolean()) {
           f.setInit(attributes.constantValue().exprAsBoolean());
-        }
-        else {
+        } else {
           f.setInit(attributes.constantValue().expr());
         }
+      }
 
-      if(attributes.annotations != null)
-        for(Iterator iter = attributes.annotations.iterator(); iter.hasNext(); )
-          f.getModifiersNoTransform().addModifier((Modifier)iter.next());
+      if (attributes.annotations != null) {
+        for (Iterator iter = attributes.annotations.iterator(); iter.hasNext(); ) {
+          f.getModifiersNoTransform().addModifier((Modifier) iter.next());
+        }
+      }
 
       return f;
     }
@@ -102,8 +106,9 @@ aspect BytecodeDescriptor {
       p = parser;
       int descriptor_index = p.u2();
       String descriptor = ((CONSTANT_Utf8_Info) p.constantPool[descriptor_index]).string();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         p.println("  Method: " + name + ", " + descriptor);
+      }
       //String[] strings = descriptor.substring(1).split("\\)");
       //parameterDescriptors = strings[0];
       //typeDescriptor = strings[1];
@@ -137,18 +142,19 @@ aspect BytecodeDescriptor {
     public MethodInfo(BytecodeParser parser) {
       p = parser;
       flags = p.u2();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         p.print("  Flags: " + Integer.toBinaryString(flags));
+      }
       int name_index = p.u2();
       CONSTANT_Info info = p.constantPool[name_index];
-      if(info == null || !(info instanceof CONSTANT_Utf8_Info)) {
+      if (info == null || !(info instanceof CONSTANT_Utf8_Info)) {
         System.err.println("Expected CONSTANT_Utf8_Info but found: " + info.getClass().getName());
-        //if(info instanceof CONSTANT_Class_Info) {
-        //  System.err.println(" found CONSTANT_Class_Info: " + ((CONSTANT_Class_Info)info).name());
-        //  name = ((CONSTANT_Class_Info)info).name();
+        //if (info instanceof CONSTANT_Class_Info) {
+        //  System.err.println(" found CONSTANT_Class_Info: " + ((CONSTANT_Class_Info) info).name());
+        //  name = ((CONSTANT_Class_Info) info).name();
         //}
       }
-      name = ((CONSTANT_Utf8_Info)info).string();
+      name = ((CONSTANT_Utf8_Info) info).string();
       methodDescriptor = new MethodDescriptor(p, name);
       attributes = new Attributes.MethodAttributes(p);
     }
@@ -156,75 +162,76 @@ aspect BytecodeDescriptor {
       Signatures.MethodSignature s = attributes.methodSignature;
       Access returnType = (s != null && s.hasReturnType()) ? s.returnType() : methodDescriptor.type();
       List parameterList;
-      if(isConstructor() && p.isInnerClass) {
+      if (isConstructor() && p.isInnerClass) {
         parameterList = methodDescriptor.parameterListSkipFirst();
-        if(s != null) {
+        if (s != null) {
           Iterator iter = s.parameterTypes().iterator();
-          if(iter.hasNext()) iter.next();
-          for(int i = 0; iter.hasNext(); i++) {
-            Access a = (Access)iter.next();
-            ((ParameterDeclaration)parameterList.getChildNoTransform(i)).setTypeAccess(a);
+          if (iter.hasNext()) {
+            iter.next();
+          }
+          for (int i = 0; iter.hasNext(); i++) {
+            Access a = (Access) iter.next();
+            ((ParameterDeclaration) parameterList.getChildNoTransform(i)).setTypeAccess(a);
           }
         }
-      }
-      else {
+      } else {
         parameterList = methodDescriptor.parameterList();
-        if(s != null) {
+        if (s != null) {
           int i = 0;
-          for(Iterator iter = s.parameterTypes().iterator(); iter.hasNext(); i++) {
-            Access a = (Access)iter.next();
-            ((ParameterDeclaration)parameterList.getChildNoTransform(i)).setTypeAccess(a);
+          for (Iterator iter = s.parameterTypes().iterator(); iter.hasNext(); i++) {
+            Access a = (Access) iter.next();
+            ((ParameterDeclaration) parameterList.getChildNoTransform(i)).setTypeAccess(a);
           }
         }
       }
-      if((flags & Flags.ACC_VARARGS) != 0) {
+      if ((flags & Flags.ACC_VARARGS) != 0) {
         int lastIndex = parameterList.getNumChildNoTransform() - 1;
-        ParameterDeclaration p = (ParameterDeclaration)parameterList.getChildNoTransform(lastIndex);
+        ParameterDeclaration p = (ParameterDeclaration) parameterList.getChildNoTransform(lastIndex);
         parameterList.setChild(
             new VariableArityParameterDeclaration(
               p.getModifiersNoTransform(),
-              ((ArrayTypeAccess)p.getTypeAccessNoTransform()).getAccessNoTransform(),
+              ((ArrayTypeAccess) p.getTypeAccessNoTransform()).getAccessNoTransform(),
               p.getID()
             ),
           lastIndex
         );
       }
-      List exceptionList = (s != null && s.hasExceptionList()) ? s.exceptionList() : attributes.exceptionList();
+      List exceptionList = (s != null && s.hasExceptionList())
+          ? s.exceptionList()
+          : attributes.exceptionList();
 
-      if(attributes.parameterAnnotations != null) {
-        for(int i = 0; i < attributes.parameterAnnotations.length; i++) {
-          ParameterDeclaration p = (ParameterDeclaration)parameterList.getChildNoTransform(i);
-          for(Iterator iter = attributes.parameterAnnotations[i].iterator(); iter.hasNext(); ) {
-            Modifier m = (Modifier)iter.next();
+      if (attributes.parameterAnnotations != null) {
+        for (int i = 0; i < attributes.parameterAnnotations.length; i++) {
+          ParameterDeclaration p = (ParameterDeclaration) parameterList.getChildNoTransform(i);
+          for (Iterator iter = attributes.parameterAnnotations[i].iterator(); iter.hasNext(); ) {
+            Modifier m = (Modifier) iter.next();
             p.getModifiersNoTransform().addModifier(m);
           }
         }
       }
 
       BodyDecl b;
-      if(isConstructor()) {
+      if (isConstructor()) {
         b = new ConstructorDecl(BytecodeParser.modifiers(flags), name, parameterList,
             exceptionList, new Opt(), new Block());
-      }
-      else if(attributes.elementValue() != null) {
+      } else if (attributes.elementValue() != null) {
         b = new AnnotationMethodDecl(BytecodeParser.modifiers(flags), returnType, name,
             parameterList, exceptionList,
             new Opt(new Block()), new Opt(attributes.elementValue()));
-      }
-      else if(s != null && s.hasFormalTypeParameters()) {
+      } else if (s != null && s.hasFormalTypeParameters()) {
         b = new GenericMethodDecl(BytecodeParser.modifiers(flags), returnType, name, parameterList,
             exceptionList, new Opt(new Block()), s.typeParameters());
-      }
-      else {
+      } else {
         b = new MethodDecl(BytecodeParser.modifiers(flags), returnType, name, parameterList,
             exceptionList, new Opt(new Block()));
       }
-      if(attributes.annotations != null) {
-        for(Iterator iter = attributes.annotations.iterator(); iter.hasNext(); ) {
-          if(b instanceof MethodDecl)
-            ((MethodDecl)b).getModifiers().addModifier((Modifier)iter.next());
-          else if(b instanceof ConstructorDecl)
-            ((ConstructorDecl)b).getModifiers().addModifier((Modifier)iter.next());
+      if (attributes.annotations != null) {
+        for (Iterator iter = attributes.annotations.iterator(); iter.hasNext(); ) {
+          if (b instanceof MethodDecl) {
+            ((MethodDecl) b).getModifiers().addModifier((Modifier) iter.next());
+          } else if (b instanceof ConstructorDecl) {
+            ((ConstructorDecl) b).getModifiers().addModifier((Modifier) iter.next());
+          }
         }
       }
       return b;
@@ -291,7 +298,7 @@ aspect BytecodeDescriptor {
     public List parameterList() {
       List list = new List();
       String s = descriptor;
-      while(!s.equals("")) {
+      while (!s.equals("")) {
         s = typeList(s, list);
       }
       return list;
@@ -299,9 +306,10 @@ aspect BytecodeDescriptor {
     public List parameterListSkipFirst() {
       List list = new List();
       String s = descriptor;
-      if(!s.equals(""))
+      if (!s.equals("")) {
         s = typeList(s, new List()); // skip first
-      while(!s.equals("")) {
+      }
+      while (!s.equals("")) {
         s = typeList(s, list);
       }
       return list;
@@ -352,11 +360,12 @@ aspect BytecodeDescriptor {
           return s2;
         case '[':
           int i = 1;
-          while(s.charAt(i) == '[') i++;
+          while (s.charAt(i) == '[') i++;
           ArrayTypeAccess bottom = new ArrayTypeAccess(new ParseName("")); // dummy name is replaced later
           ArrayTypeAccess top = bottom;
-          for(int j = 0; j < i - 1; j++)
+          for (int j = 0; j < i - 1; j++) {
             top = new ArrayTypeAccess(top);
+          }
           l.add(new ParameterDeclaration(new Modifiers(), top, "p" + l.getNumChild()));
           return arrayTypeList(s.substring(i), bottom);
         default:

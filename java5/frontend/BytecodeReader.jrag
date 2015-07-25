@@ -59,9 +59,9 @@ aspect BytecodeReader {
           int status;
           do {
             status = is.read(bytes, index, size - index);
-            if(status != -1) {
+            if (status != -1) {
               index += status;
-              if(index == size) {
+              if (index == size) {
                 byte[] newBytes = new byte[size*2];
                 System.arraycopy(bytes, 0, newBytes, 0, size);
                 bytes = newBytes;
@@ -109,18 +109,20 @@ aspect BytecodeReader {
       }
 
       public long skip(long n) {
-        if(size == pos)
+        if (size == pos) {
           return -1;
+        }
         long skipSize = Math.min(n, size-pos);
         pos += skipSize;
         return skipSize;
       }
 
       public int read() throws IOException {
-        if(pos < size) {
+        if (pos < size) {
           int i = bytes[pos++];
-          if(i < 0)
+          if (i < 0) {
             i = 256 + i;
+          }
           return i;
         }
         return -1;
@@ -246,7 +248,7 @@ aspect BytecodeReader {
           throw new FileNotFoundException(name);
         }
 
-        if(BytecodeParser.VERBOSE) {
+        if (BytecodeParser.VERBOSE) {
           println("Parsing byte codes in " + name);
         }
 
@@ -262,7 +264,7 @@ aspect BytecodeReader {
         parseFields(typeDecl);
         parseMethods(typeDecl);
         //parse attributes, and if we have an inner class, then execute the branch...
-        if(new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program).isInnerClass()) {
+        if (new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program).isInnerClass()) {
           //this is a workaround for the fact that JastAdd stores inner classes as members of
           //their outer classes, even for inner classes that come from bytecode;
           //to avoid having inner classes show up as top-level classes, we remove them here
@@ -271,7 +273,7 @@ aspect BytecodeReader {
           //first add the cu to the program, so that getTypeDecls() won't fail
           program.addCompilationUnit(cu);
           //then clear the cu
-          for(int i=0;i<cu.getTypeDecls().getNumChild();i++) {
+          for (int i=0;i<cu.getTypeDecls().getNumChild();i++) {
             cu.getTypeDecls().removeChild(i);
           }
           //and remove the cu from the program again
@@ -284,22 +286,25 @@ aspect BytecodeReader {
       }
 
     public void parseMagic() {
-      if (next() != 0xca || next() != 0xfe || next() != 0xba || next() != 0xbe)
+      if (next() != 0xca || next() != 0xfe || next() != 0xba || next() != 0xbe) {
         error("magic error");
+      }
     }
 
     public void parseMinor() {
       int low = u1();
       int high = u1();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         println("Minor: " + high + "." + low);
+      }
     }
 
     public void parseMajor() {
       int low = u1();
       int high = u1();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         println("Major: " + high + "." + low);
+      }
     }
 
     public boolean isInnerClass = false;
@@ -307,7 +312,7 @@ aspect BytecodeReader {
     public TypeDecl parseTypeDecl() {
       int flags = u2();
       Modifiers modifiers = modifiers(flags & 0xfddf);
-      if((flags & (ACC_INTERFACE | ACC_ENUM)) == ACC_ENUM) {
+      if ((flags & (ACC_INTERFACE | ACC_ENUM)) == ACC_ENUM) {
         // Modifiers <ID:String> /[SuperClass:Access]/ Implements:Access* BodyDecl*;
         EnumDecl decl = new EnumDecl();
         decl.setModifiers(modifiers);
@@ -316,8 +321,7 @@ aspect BytecodeReader {
         // TODO attempting to set NTA child?
         decl.setImplementsList(parseInterfaces(new List()));
         return decl;
-      }
-      else if ((flags & ACC_INTERFACE) == 0) {
+      } else if ((flags & ACC_INTERFACE) == 0) {
         ClassDecl decl = new ClassDecl();
         decl.setModifiers(modifiers);
         decl.setID(parseThisClass());
@@ -326,7 +330,7 @@ aspect BytecodeReader {
             : new Opt(superClass));
         decl.setImplementsList(parseInterfaces(new List()));
         return decl;
-      } else if((flags & ACC_ANNOTATION) == 0) {
+      } else if ((flags & ACC_ANNOTATION) == 0) {
         InterfaceDecl decl = new InterfaceDecl();
         decl.setModifiers(modifiers);
         decl.setID(parseThisClass());
@@ -358,8 +362,9 @@ aspect BytecodeReader {
 
     public Access parseSuperClass() {
       int index = u2();
-      if (index == 0)
+      if (index == 0) {
         return null;
+      }
       CONSTANT_Class_Info info = (CONSTANT_Class_Info) constantPool[index];
       return info.access();
     }
@@ -382,65 +387,83 @@ aspect BytecodeReader {
 
       String packageName = "";
       int index = s.lastIndexOf('/');
-      if(index != -1)
+      if (index != -1) {
         packageName = s.substring(0, index).replace('/', '.');
+      }
       String typeName = s.substring(index + 1, s.length());
-      if(typeName.indexOf('$') != -1)
+      if (typeName.indexOf('$') != -1) {
         return new BytecodeTypeAccess(packageName, typeName);
-      else
+      } else {
         return new TypeAccess(packageName, typeName);
+      }
     }
 
     public static Modifiers modifiers(int flags) {
       Modifiers m = new Modifiers();
-      if ((flags & 0x0001) != 0)
+      if ((flags & 0x0001) != 0) {
         m.addModifier(new Modifier("public"));
-      if ((flags & 0x0002) != 0)
+      }
+      if ((flags & 0x0002) != 0) {
         m.addModifier(new Modifier("private"));
-      if ((flags & 0x0004) != 0)
+      }
+      if ((flags & 0x0004) != 0) {
         m.addModifier(new Modifier("protected"));
-      if ((flags & 0x0008) != 0)
+      }
+      if ((flags & 0x0008) != 0) {
         m.addModifier(new Modifier("static"));
-      if ((flags & 0x0010) != 0)
+      }
+      if ((flags & 0x0010) != 0) {
         m.addModifier(new Modifier("final"));
-      if ((flags & 0x0020) != 0)
+      }
+      if ((flags & 0x0020) != 0) {
         m.addModifier(new Modifier("synchronized"));
-      if ((flags & 0x0040) != 0)
+      }
+      if ((flags & 0x0040) != 0) {
         m.addModifier(new Modifier("volatile"));
-      if ((flags & 0x0080) != 0)
+      }
+      if ((flags & 0x0080) != 0) {
         m.addModifier(new Modifier("transient"));
-      if ((flags & 0x0100) != 0)
+      }
+      if ((flags & 0x0100) != 0) {
         m.addModifier(new Modifier("native"));
-      if ((flags & 0x0400) != 0)
+      }
+      if ((flags & 0x0400) != 0) {
         m.addModifier(new Modifier("abstract"));
-      if ((flags & 0x0800) != 0)
+      }
+      if ((flags & 0x0800) != 0) {
         m.addModifier(new Modifier("strictfp"));
+      }
       return m;
     }
 
     public void parseFields(TypeDecl typeDecl) {
       int count = u2();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         println("Fields (" + count + "):");
+      }
       for (int i = 0; i < count; i++) {
-        if(BytecodeParser.VERBOSE)
+        if (BytecodeParser.VERBOSE) {
           print(" Field nbr " + i + " ");
+        }
         FieldInfo fieldInfo = new FieldInfo(this);
-        if(!fieldInfo.isSynthetic())
+        if (!fieldInfo.isSynthetic()) {
           typeDecl.addBodyDecl(fieldInfo.bodyDecl());
+        }
       }
     }
 
 
     public void parseMethods(TypeDecl typeDecl) {
       int count = u2();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         println("Methods (" + count + "):");
+      }
       for (int i = 0; i < count; i++) {
-        if(BytecodeParser.VERBOSE)
+        if (BytecodeParser.VERBOSE) {
           print("  Method nbr " + i + " ");
+        }
         MethodInfo info = new MethodInfo(this);
-        if(!info.isSynthetic() && !info.name.equals("<clinit>")) {
+        if (!info.isSynthetic() && !info.name.equals("<clinit>")) {
           typeDecl.addBodyDecl(info.bodyDecl());
         }
       }
@@ -450,11 +473,12 @@ aspect BytecodeReader {
     public CONSTANT_Info[] constantPool = null;
 
     private void checkLengthAndNull(int index) {
-      if(index >= constantPool.length) {
+      if (index >= constantPool.length) {
         throw new Error("Trying to access element " + index  + " in constant pool of length " + constantPool.length);
       }
-      if(constantPool[index] == null)
+      if (constantPool[index] == null) {
         throw new Error("Unexpected null element in constant pool at index " + index);
+      }
     }
     public boolean validConstantPoolIndex(int index) {
       return index < constantPool.length && constantPool[index] != null;
@@ -466,22 +490,25 @@ aspect BytecodeReader {
     public CONSTANT_Utf8_Info getCONSTANT_Utf8_Info(int index) {
       checkLengthAndNull(index);
       CONSTANT_Info info = constantPool[index];
-      if(!(info instanceof CONSTANT_Utf8_Info))
+      if (!(info instanceof CONSTANT_Utf8_Info)) {
         throw new Error("Expected CONSTANT_Utf8_info at " + index + " in constant pool but found " + info.getClass().getName());
-      return (CONSTANT_Utf8_Info)info;
+      }
+      return (CONSTANT_Utf8_Info) info;
     }
     public CONSTANT_Class_Info getCONSTANT_Class_Info(int index) {
       checkLengthAndNull(index);
       CONSTANT_Info info = constantPool[index];
-      if(!(info instanceof CONSTANT_Class_Info))
+      if (!(info instanceof CONSTANT_Class_Info)) {
         throw new Error("Expected CONSTANT_Class_info at " + index + " in constant pool but found " + info.getClass().getName());
-      return (CONSTANT_Class_Info)info;
+      }
+      return (CONSTANT_Class_Info) info;
     }
 
     public void parseConstantPool() {
       int count = u2();
-      if(BytecodeParser.VERBOSE)
+      if (BytecodeParser.VERBOSE) {
         println("constant_pool_count: " + count);
+      }
       constantPool = new CONSTANT_Info[count + 1];
       for (int i = 1; i < count; i++) {
         parseEntry(i);
@@ -491,7 +518,7 @@ aspect BytecodeReader {
       }
 
       //println("ConstantPool: ");
-      //for(int i = 1; i < count; i++) {
+      //for (int i = 1; i < count; i++) {
       //  println(i + ", " + constantPool[i]);
       //}
 
@@ -563,16 +590,20 @@ aspect BytecodeReader {
     }
 
     public boolean next(String s) {
-      for(int i = 0; i < s.length(); i++)
-        if(data.charAt(pos + i) != s.charAt(i))
+      for (int i = 0; i < s.length(); i++) {
+        if (data.charAt(pos + i) != s.charAt(i)) {
           return false;
+        }
+      }
       return true;
     }
 
     public void eat(String s) {
-      for(int i = 0; i < s.length(); i++)
-        if(data.charAt(pos + i) != s.charAt(i))
+      for (int i = 0; i < s.length(); i++) {
+        if (data.charAt(pos + i) != s.charAt(i)) {
           error(s);
+        }
+      }
       pos += s.length();
     }
 
@@ -582,8 +613,9 @@ aspect BytecodeReader {
 
     public String identifier() {
       int i = pos;
-      while(Character.isJavaIdentifierPart(data.charAt(i)))
+      while (Character.isJavaIdentifierPart(data.charAt(i))) {
         i++;
+      }
       String result = data.substring(pos, i);
       pos = i;
       return result;
@@ -601,10 +633,11 @@ aspect BytecodeReader {
         classSignature();
       }
       void classSignature() {
-        if(next("<"))
+        if (next("<")) {
           formalTypeParameters();
+        }
         superclassSignature = parseSuperclassSignature();
-        while(!eof()) {
+        while (!eof()) {
           superinterfaceSignature.add(parseSuperinterfaceSignature());
         }
       }
@@ -646,34 +679,33 @@ aspect BytecodeReader {
         methodTypeSignature();
       }
       void methodTypeSignature() {
-        if(next("<"))
+        if (next("<")) {
           formalTypeParameters();
+        }
         eat("(");
-        while(!next(")")) {
+        while (!next(")")) {
           parameterTypes.add(typeSignature());
         }
         eat(")");
         returnType = parseReturnType();
-        while(!eof()) {
+        while (!eof()) {
           exceptionList.add(throwsSignature());
         }
       }
       Access parseReturnType() {
-        if(next("V")) {
+        if (next("V")) {
           eat("V");
           return new PrimitiveTypeAccess("void");
-        }
-        else {
+        } else {
           return typeSignature();
         }
       }
 
       Access throwsSignature() {
         eat("^");
-        if(next("L")) {
+        if (next("L")) {
           return classTypeSignature();
-        }
-        else {
+        } else {
           return typeVariableSignature();
         }
       }
@@ -700,7 +732,7 @@ aspect BytecodeReader {
       typeParameters = new List();
       do {
         typeParameters.add(formalTypeParameter());
-      } while(!next(">"));
+      } while (!next(">"));
       eat(">");
     }
 
@@ -708,22 +740,23 @@ aspect BytecodeReader {
       String id = identifier();
       List bounds = new List();
       Access classBound = classBound();
-      if(classBound != null)
+      if (classBound != null) {
         bounds.add(classBound);
-      while(next(":")) {
+      }
+      while (next(":")) {
         bounds.add(interfaceBound());
       }
-      if(bounds.getNumChildNoTransform() == 0)
+      if (bounds.getNumChildNoTransform() == 0) {
         bounds.add(new TypeAccess("java.lang", "Object"));
+      }
       return new TypeVariable(new Modifiers(new List()), id, new List(), bounds);
     }
 
     Access classBound() {
       eat(":");
-      if(nextIsFieldTypeSignature()) {
+      if (nextIsFieldTypeSignature()) {
         return fieldTypeSignature();
-      }
-      else {
+      } else {
         return null;
         //return new TypeAccess("java.lang", "Object");
       }
@@ -736,14 +769,15 @@ aspect BytecodeReader {
 
 
     Access fieldTypeSignature() {
-      if(next("L"))
+      if (next("L")) {
         return classTypeSignature();
-      else if(next("["))
+      } else if (next("[")) {
         return arrayTypeSignature();
-      else if(next("T"))
+      } else if (next("T")) {
         return typeVariableSignature();
-      else
+      } else {
         error("L or [ or T");
+      }
       return null; // error never returns
     }
     boolean nextIsFieldTypeSignature() {
@@ -781,7 +815,7 @@ aspect BytecodeReader {
       String id = identifier();
       Access a = id.indexOf('$') == -1 ?
         new TypeAccess(id) : new BytecodeTypeAccess("", id);
-      if(next("<")) {
+      if (next("<")) {
         a = new ParTypeAccess(a, typeArguments());
       }
       return a;
@@ -799,25 +833,22 @@ aspect BytecodeReader {
       List list = new List();
       do {
         list.add(typeArgument());
-      } while(!next(">"));
+      } while (!next(">"));
       eat(">");
       return list;
     }
 
     Access typeArgument() {
-      if(next("*")) {
+      if (next("*")) {
         eat("*");
         return new Wildcard();
-      }
-      else if(next("+")) {
+      } else if (next("+")) {
         eat("+");
         return new WildcardExtends(fieldTypeSignature());
-      }
-      else if(next("-")) {
+      } else if (next("-")) {
         eat("-");
         return new WildcardSuper(fieldTypeSignature());
-      }
-      else {
+      } else {
         return fieldTypeSignature();
       }
     }
@@ -828,23 +859,15 @@ aspect BytecodeReader {
     }
 
     Access typeSignature() {
-      if(nextIsFieldTypeSignature()) {
+      if (nextIsFieldTypeSignature()) {
         return fieldTypeSignature();
-      }
-      else {
+      } else {
         return baseType();
       }
     }
 
     Access baseType() {
-      if(next("B")) { eat("B"); return new PrimitiveTypeAccess("byte"); }
-      else if(next("C")) { eat("C"); return new PrimitiveTypeAccess("char"); }
-      else if(next("D")) { eat("D"); return new PrimitiveTypeAccess("double"); }
-      else if(next("F")) { eat("F"); return new PrimitiveTypeAccess("float"); }
-      else if(next("I")) { eat("I"); return new PrimitiveTypeAccess("int"); }
-      else if(next("J")) { eat("J"); return new PrimitiveTypeAccess("long"); }
-      else if(next("S")) { eat("S"); return new PrimitiveTypeAccess("short"); }
-      else if(next("Z")) { eat("Z"); return new PrimitiveTypeAccess("boolean"); }
+      if (next("B")) { eat("B"); return new PrimitiveTypeAccess("byte"); } else if (next("C")) { eat("C"); return new PrimitiveTypeAccess("char"); } else if (next("D")) { eat("D"); return new PrimitiveTypeAccess("double"); } else if (next("F")) { eat("F"); return new PrimitiveTypeAccess("float"); } else if (next("I")) { eat("I"); return new PrimitiveTypeAccess("int"); } else if (next("J")) { eat("J"); return new PrimitiveTypeAccess("long"); } else if (next("S")) { eat("S"); return new PrimitiveTypeAccess("short"); } else if (next("Z")) { eat("Z"); return new PrimitiveTypeAccess("boolean"); }
       error("baseType");
       return null; // error never returns
     }

@@ -22,10 +22,11 @@ aspect TryWithResources {
    */
   public void ResourceDeclaration.typeCheck() {
     TypeDecl typeAutoCloseable = lookupType("java.lang", "AutoCloseable");
-    if (typeAutoCloseable.isUnknown())
+    if (typeAutoCloseable.isUnknown()) {
       error("java.lang.AutoCloseable not found");
-    else if (!getTypeAccess().type().instanceOf(typeAutoCloseable))
+    } else if (!getTypeAccess().type().instanceOf(typeAutoCloseable)) {
       error("Resource specification must declare an AutoCloseable resource");
+    }
   }
 
   /*coll Set<TypeDecl> Stmt.uncaughtExceptions()
@@ -42,13 +43,16 @@ aspect TryWithResources {
     // Check exception handling of exceptions on auto closing of resource
     for (ResourceDeclaration resource : getResourceList()) {
       MethodDecl close = lookupClose(resource);
-      if (close == null) continue;
+      if (close == null) {
+        continue;
+      }
       for (Access exception : close.getExceptionList()) {
         TypeDecl exceptionType = exception.type();
-        if (!twrHandlesException(exceptionType))
-          error("automatic closing of resource "+resource.name()+
-              " may raise the uncaught exception "+exceptionType.fullName()+"; "+
-              "it must be caught or declared as being thrown");
+        if (!twrHandlesException(exceptionType)) {
+          error("automatic closing of resource " + resource.name()
+              + " may raise the uncaught exception " + exceptionType.fullName() + "; "
+              + "it must be caught or declared as being thrown");
+        }
       }
     }
   }
@@ -59,8 +63,9 @@ aspect TryWithResources {
    */
   syn boolean TryWithResources.catchHandlesException(TypeDecl exceptionType) {
     for (int i = 0; i < getNumCatchClause(); i++)
-      if (getCatchClause(i).handles(exceptionType))
+      if (getCatchClause(i).handles(exceptionType)) {
         return true;
+      }
     return false;
   }
 
@@ -70,10 +75,12 @@ aspect TryWithResources {
    * within the directly enclosing method or initializer block.
    */
   syn boolean TryWithResources.twrHandlesException(TypeDecl exceptionType) {
-    if (catchHandlesException(exceptionType))
+    if (catchHandlesException(exceptionType)) {
       return true;
-    if (hasNonEmptyFinally() && !getFinally().canCompleteNormally())
+    }
+    if (hasNonEmptyFinally() && !getFinally().canCompleteNormally()) {
       return true;
+    }
     return handlesException(exceptionType);
   }
 
@@ -83,10 +90,10 @@ aspect TryWithResources {
   inh lazy boolean TryWithResources.handlesException(TypeDecl exceptionType);
 
   eq TryWithResources.getResource(int i).handlesException(TypeDecl exceptionType) =
-    twrHandlesException(exceptionType);
+      twrHandlesException(exceptionType);
 
   eq TryWithResources.getBlock().handlesException(TypeDecl exceptionType) =
-    twrHandlesException(exceptionType);
+      twrHandlesException(exceptionType);
 
 
   /**
@@ -112,12 +119,15 @@ aspect TryWithResources {
 
   eq TryWithResources.getCatchClause(int childIndex).reachableCatchClause(TypeDecl exceptionType) {
     for (int i = 0; i < childIndex; i++)
-      if (getCatchClause(i).handles(exceptionType))
+      if (getCatchClause(i).handles(exceptionType)) {
         return false;
-    if (catchableException(exceptionType))
+      }
+    if (catchableException(exceptionType)) {
       return true;
-    if (exceptionType.mayCatch(typeError()) || exceptionType.mayCatch(typeRuntimeException()))
+    }
+    if (exceptionType.mayCatch(typeError()) || exceptionType.mayCatch(typeRuntimeException())) {
       return true;
+    }
     return false;
   }
 
@@ -127,13 +137,16 @@ aspect TryWithResources {
   eq TryWithResources.getBlock().lookupVariable(String name) = localLookup(name);
   syn lazy SimpleSet TryWithResources.localLookup(String name) {
     VariableDeclaration v = localVariableDeclaration(name);
-    if (v != null) return v;
+    if (v != null) {
+      return v;
+    }
     return lookupVariable(name);
   }
   syn lazy VariableDeclaration TryWithResources.localVariableDeclaration(String name) {
     for (ResourceDeclaration resource : getResourceList())
-      if (resource.declaresVariable(name))
+      if (resource.declaresVariable(name)) {
         return resource;
+      }
     return null;
   }
 
@@ -145,8 +158,9 @@ aspect TryWithResources {
   inh boolean TryWithResources.resourcePreviouslyDeclared(String name);
   eq TryWithResources.getResource(int index).resourcePreviouslyDeclared(String name) {
     for (int i = 0; i < index; ++i) {
-      if (getResource(i).name().equals(name))
+      if (getResource(i).name().equals(name)) {
         return true;
+      }
     }
     return false;
   }
@@ -155,24 +169,25 @@ aspect TryWithResources {
 
   public void ResourceDeclaration.nameCheck() {
     // Special name check for resource specification
-    if (resourcePreviouslyDeclared(name()))
-      error("A resource with the name "+name()+
-          " has already been declared in this try statement.");
+    if (resourcePreviouslyDeclared(name())) {
+      error("A resource with the name " + name()
+          + " has already been declared in this try statement.");
+    }
 
     // Do regular name check for variable declaration
     super.nameCheck();
   }
 
   // Definite Assignment
-  eq TryWithResources.isDAafter(Variable v) =
-    getBlock().isDAafter(v);
+  eq TryWithResources.isDAafter(Variable v) = getBlock().isDAafter(v);
 
   // 16.2.2 7th bullet
   eq TryWithResources.getResource(int index).isDAbefore(Variable v) =
-    index == 0 ? isDAbefore(v) : getResource(index - 1).isDAafter(v);
+      index == 0 ? isDAbefore(v) : getResource(index - 1).isDAafter(v);
   eq TryWithResources.getBlock().isDAbefore(Variable v) =
-    getNumResource() == 0 ? isDAbefore(v) :
-    getResource(getNumResource() - 1).isDAafter(v);
+      getNumResource() == 0
+      ? isDAbefore(v)
+      : getResource(getNumResource() - 1).isDAafter(v);
 
   /**
    * Returns true if the try-with-resources statement can throw
@@ -181,19 +196,24 @@ aspect TryWithResources {
   protected boolean TryWithResources.reachedException(TypeDecl catchType) {
     boolean found = false;
     // found is true if the exception type is caught by a catch clause
-    for(int i = 0; i < getNumCatchClause() && !found; i++)
-      if(getCatchClause(i).handles(catchType))
+    for (int i = 0; i < getNumCatchClause() && !found; i++)
+      if (getCatchClause(i).handles(catchType)) {
         found = true;
+      }
     // if an exception is thrown in the block and the exception is not caught and
     // either there is no finally block or the finally block can complete normally
-    if(!found && (!hasNonEmptyFinally() || getFinally().canCompleteNormally()) )
-      if(catchableException(catchType))
+    if (!found && (!hasNonEmptyFinally() || getFinally().canCompleteNormally()) ) {
+      if (catchableException(catchType)) {
         return true;
+      }
+    }
     // even if the exception is caught by the catch clauses they may
     // throw new exceptions
-    for(int i = 0; i < getNumCatchClause(); i++)
-      if(getCatchClause(i).reachedException(catchType))
+    for (int i = 0; i < getNumCatchClause(); i++) {
+      if (getCatchClause(i).reachedException(catchType)) {
         return true;
+      }
+    }
     return hasNonEmptyFinally() && getFinally().reachedException(catchType);
   }
 
@@ -204,11 +224,14 @@ aspect TryWithResources {
   syn boolean TryWithResources.resourceClosingException(TypeDecl catchType) {
     for (ResourceDeclaration resource : getResourceList()) {
       MethodDecl close = lookupClose(resource);
-      if (close == null) continue;
+      if (close == null) {
+        continue;
+      }
       for (Access exception : close.getExceptionList()) {
         TypeDecl exceptionType = exception.type();
-        if (catchType.mayCatch(exception.type()))
+        if (catchType.mayCatch(exception.type())) {
           return true;
+        }
       }
     }
     return false;
@@ -220,8 +243,9 @@ aspect TryWithResources {
    */
   syn boolean TryWithResources.resourceInitializationException(TypeDecl catchType) {
     for (ResourceDeclaration resource : getResourceList()) {
-      if (resource.reachedException(catchType))
+      if (resource.reachedException(catchType)) {
         return true;
+      }
     }
     return false;
   }
@@ -230,9 +254,9 @@ aspect TryWithResources {
    * @see AST.TryStmt#catchableException(TypeDecl) TryStmt.catchableException(TypeDecl)
    */
   eq TryWithResources.catchableException(TypeDecl type) =
-    getBlock().reachedException(type) ||
-      resourceClosingException(type) ||
-      resourceInitializationException(type);
+      getBlock().reachedException(type)
+      || resourceClosingException(type)
+      || resourceInitializationException(type);
 
   eq ResourceModifiers.isFinal() = true;
 }

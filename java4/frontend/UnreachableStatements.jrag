@@ -12,16 +12,19 @@ aspect UnreachableStatements {
   void ASTNode.checkUnreachableStmt() {
   }
   void Stmt.checkUnreachableStmt() {
-    if(!reachable() && reportUnreachable())
+    if (!reachable() && reportUnreachable()) {
       error("statement is unreachable");
+    }
   }
   void StaticInitializer.checkUnreachableStmt() {
-    if(!getBlock().canCompleteNormally())
+    if (!getBlock().canCompleteNormally()) {
       error("static initializer in " + hostType().fullName() + " can not complete normally");
+    }
   }
   void InstanceInitializer.checkUnreachableStmt() {
-    if(!getBlock().canCompleteNormally())
+    if (!getBlock().canCompleteNormally()) {
       error("instance initializer in " + hostType().fullName() + " can not complete normally");
+    }
   }
 
   inh boolean Stmt.reachable();
@@ -33,17 +36,22 @@ aspect UnreachableStatements {
 
   // NB we only check the parsed constructor invocation since an implicit one should always complete normally!
   eq ConstructorDecl.getBlock().reachable() =
-    !hasParsedConstructorInvocation() ? true :
-    getParsedConstructorInvocation().canCompleteNormally();
+      !hasParsedConstructorInvocation()
+      ? true
+      : getParsedConstructorInvocation().canCompleteNormally();
 
   eq MethodDecl.getBlock().reachable() = true;
   eq StaticInitializer.getBlock().reachable() = true;
   eq InstanceInitializer.getBlock().reachable() = true;
 
   eq Block.canCompleteNormally() =
-    getNumStmt() == 0 ? reachable() : getStmt(getNumStmt() - 1).canCompleteNormally();
+      getNumStmt() == 0
+      ? reachable()
+      : getStmt(getNumStmt() - 1).canCompleteNormally();
   eq Block.getStmt(int index).reachable() =
-    index == 0 ? reachable() : getStmt(index-1).canCompleteNormally();
+      index == 0
+      ? reachable()
+      : getStmt(index-1).canCompleteNormally();
 
   eq LocalClassDeclStmt.canCompleteNormally() = reachable();
 
@@ -56,9 +64,10 @@ aspect UnreachableStatements {
 
   syn lazy boolean BranchTargetStmt.reachableBreak() {
     for (Iterator iter = targetBreaks().iterator(); iter.hasNext(); ) {
-      BreakStmt stmt = (BreakStmt)iter.next();
-      if(stmt.reachable())
+      BreakStmt stmt = (BreakStmt) iter.next();
+      if (stmt.reachable()) {
         return true;
+      }
     }
     return false;
   }
@@ -68,47 +77,66 @@ aspect UnreachableStatements {
   syn boolean SwitchStmt.lastStmtCanCompleteNormally() = getBlock().canCompleteNormally();
 
   syn boolean SwitchStmt.noStmts() {
-    for(int i = 0; i < getBlock().getNumStmt(); i++)
-      if(!(getBlock().getStmt(i) instanceof Case))
+    for (int i = 0; i < getBlock().getNumStmt(); i++) {
+      if (!(getBlock().getStmt(i) instanceof Case)) {
         return false;
+      }
+    }
     return true;
   }
 
   syn boolean SwitchStmt.noStmtsAfterLastLabel() =
-    getBlock().getNumStmt() > 0 && getBlock().getStmt(getBlock().getNumStmt()-1) instanceof Case;
+      getBlock().getNumStmt() > 0
+      && getBlock().getStmt(getBlock().getNumStmt()-1) instanceof Case;
 
   syn boolean SwitchStmt.noDefaultLabel() {
-    for(int i = 0; i < getBlock().getNumStmt(); i++)
-      if(getBlock().getStmt(i) instanceof DefaultCase)
+    for (int i = 0; i < getBlock().getNumStmt(); i++) {
+      if (getBlock().getStmt(i) instanceof DefaultCase) {
         return false;
+      }
+    }
     return true;
   }
 
   eq SwitchStmt.canCompleteNormally() =
-    lastStmtCanCompleteNormally() || noStmts() || noStmtsAfterLastLabel() || noDefaultLabel() || reachableBreak();
+      lastStmtCanCompleteNormally() || noStmts()
+      || noStmtsAfterLastLabel()
+      || noDefaultLabel() || reachableBreak();
 
   eq SwitchStmt.getBlock().reachable() = reachable();
-  syn boolean Case.reachable() = getParent().getParent() instanceof Block && ((Block)getParent().getParent()).reachable();
 
-  eq WhileStmt.canCompleteNormally() = reachable() && (!getCondition().isConstant() || !getCondition().isTrue()) || reachableBreak();
+  syn boolean Case.reachable() =
+      getParent().getParent() instanceof Block && ((Block) getParent().getParent()).reachable();
+
+  eq WhileStmt.canCompleteNormally() =
+      reachable() && (!getCondition().isConstant() || !getCondition().isTrue()) || reachableBreak();
+
   eq WhileStmt.getStmt().reachable() = reachable() && !getCondition().isFalse();
 
-  eq DoStmt.canCompleteNormally() = getStmt().canCompleteNormally() && (!getCondition().isConstant() || !getCondition().isTrue())
-    || reachableContinue() && (!getCondition().isConstant() || !getCondition().isTrue()) || reachableBreak();
+  eq DoStmt.canCompleteNormally() =
+      getStmt().canCompleteNormally() && (!getCondition().isConstant() || !getCondition().isTrue())
+      || reachableContinue() && (!getCondition().isConstant() || !getCondition().isTrue())
+      || reachableBreak();
 
   syn lazy boolean BranchTargetStmt.reachableContinue() {
-    for(Iterator iter = targetContinues().iterator(); iter.hasNext(); ) {
-      Stmt stmt = (Stmt)iter.next();
-      if(stmt.reachable())
+    for (Iterator iter = targetContinues().iterator(); iter.hasNext(); ) {
+      Stmt stmt = (Stmt) iter.next();
+      if (stmt.reachable()) {
         return true;
+      }
     }
     return false;
   }
 
   eq DoStmt.getStmt().reachable() = reachable();
 
-  eq ForStmt.canCompleteNormally() = reachable() && hasCondition() && (!getCondition().isConstant() || !getCondition().isTrue()) || reachableBreak();
-  eq ForStmt.getStmt().reachable() = reachable() && (!hasCondition() || (!getCondition().isConstant() || !getCondition().isFalse()));
+  eq ForStmt.canCompleteNormally() =
+      reachable() && hasCondition()
+      && (!getCondition().isConstant() || !getCondition().isTrue()) || reachableBreak();
+
+  eq ForStmt.getStmt().reachable() =
+      reachable()
+      && (!hasCondition() || (!getCondition().isConstant() || !getCondition().isFalse()));
 
   eq BreakStmt.canCompleteNormally() = false;
   eq ContinueStmt.canCompleteNormally() = false;
@@ -120,8 +148,9 @@ aspect UnreachableStatements {
 
   eq TryStmt.canCompleteNormally() {
      boolean anyCatchClauseCompleteNormally = false;
-     for(int i = 0; i < getNumCatchClause() && !anyCatchClauseCompleteNormally; i++)
+     for (int i = 0; i < getNumCatchClause() && !anyCatchClauseCompleteNormally; i++) {
        anyCatchClauseCompleteNormally = getCatchClause(i).getBlock().canCompleteNormally();
+     }
      return (getBlock().canCompleteNormally() || anyCatchClauseCompleteNormally) &&
        (!hasNonEmptyFinally() || getFinally().canCompleteNormally());
   }
@@ -134,13 +163,17 @@ aspect UnreachableStatements {
    */
   inh lazy boolean CatchClause.reachableCatchClause(TypeDecl exceptionType);
   eq TryStmt.getCatchClause(int childIndex).reachableCatchClause(TypeDecl exceptionType) {
-    for(int i = 0; i < childIndex; i++)
-      if(getCatchClause(i).handles(exceptionType))
+    for (int i = 0; i < childIndex; i++) {
+      if (getCatchClause(i).handles(exceptionType)) {
         return false;
-    if(catchableException(exceptionType))
+      }
+    }
+    if (catchableException(exceptionType)) {
       return true;
-    if(exceptionType.mayCatch(typeError()) || exceptionType.mayCatch(typeRuntimeException()))
+    }
+    if (exceptionType.mayCatch(typeError()) || exceptionType.mayCatch(typeRuntimeException())) {
       return true;
+    }
     return false;
   }
   inh lazy TypeDecl TryStmt.typeError();

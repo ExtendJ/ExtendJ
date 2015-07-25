@@ -10,14 +10,14 @@
 aspect Transformations {
   // generic traversal of the tree
   public void ASTNode.transformation() {
-    for(int i = 0; i < getNumChild(); i++) {
+    for (int i = 0; i < getNumChild(); i++) {
         getChild(i).transformation();
     }
   }
 
   public void CompilationUnit.transformation() {
-    if(fromSource()) {
-      for(int i = 0; i < getNumTypeDecl(); i++) {
+    if (fromSource()) {
+      for (int i = 0; i < getNumTypeDecl(); i++) {
         getTypeDecl(i).transformation();
       }
     }
@@ -27,7 +27,7 @@ aspect Transformations {
   public void TypeDecl.transformation() {
     addEnclosingVariables();
     super.transformation();
-    if(isNestedType()) {
+    if (isNestedType()) {
       enclosingType().addNestedType(this);
     }
   }
@@ -42,15 +42,16 @@ aspect Transformations {
   // remote collection
   public void TypeAccess.transformation() {
     super.transformation();
-    if(type().elementType().isNestedType() && hostType() != null)
+    if (type().elementType().isNestedType() && hostType() != null) {
       hostType().addUsedNestedType(type().elementType());
+    }
   }
 
   // remote collection / demand driven creation of accessor
   public void MethodAccess.transformation() {
     MethodDecl m = decl();
 
-    if(requiresAccessor()) {
+    if (requiresAccessor()) {
       /* Access to private methods in enclosing types:
       The original MethodAccess is replaced with an access to an accessor method
       built by createAccessor(). This method is built lazily and differs from
@@ -63,8 +64,7 @@ aspect Transformations {
       super.transformation();
       this.replaceWith(decl().createAccessor(methodQualifierType()).createBoundAccess(getArgList()));
       return;
-    }
-    else if(!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
+    } else if (!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
       decl().createSuperAccessor(superAccessorTarget());
     }
     super.transformation();
@@ -73,14 +73,16 @@ aspect Transformations {
   // remote collection / demand driven creation of accessor
   public void VarAccess.transformation() {
     Variable v = decl();
-    if(v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration)v;
-      if(requiresAccessor()) {
+    if (v instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration) v;
+      if (requiresAccessor()) {
         TypeDecl typeDecl = fieldQualifierType();
-        if(isSource())
+        if (isSource()) {
           f.createAccessor(typeDecl);
-        if(isDest())
+        }
+        if (isDest()) {
           f.createAccessorWrite(typeDecl);
+        }
       }
     }
     super.transformation();
@@ -99,7 +101,7 @@ aspect Transformations {
     // this$val
     addEnclosingVariables();
     // touch accessorIndex go force creation of private constructorAccessor
-    if(decl().isPrivate() && type() != hostType()) {
+    if (decl().isPrivate() && type() != hostType()) {
       decl().createAccessor();
     }
     super.transformation();
@@ -110,7 +112,7 @@ aspect Transformations {
     // this$val
     addEnclosingVariables();
     // touch accessorIndex go force creation of private constructorAccessor
-    if(decl().isPrivate() && decl().hostType() != hostType()) {
+    if (decl().isPrivate() && decl().hostType() != hostType()) {
       decl().createAccessor();
     }
     super.transformation();
@@ -121,7 +123,7 @@ aspect Transformations {
     // this$val
     addEnclosingVariables();
     // touch accessorIndex to force creation of private constructorAccessor
-    if(decl().isPrivate() && decl().hostType() != hostType()) {
+    if (decl().isPrivate() && decl().hostType() != hostType()) {
       decl().createAccessor();
     }
     super.transformation();
@@ -131,7 +133,7 @@ aspect Transformations {
   public void ClassAccess.transformation() {
     super.transformation();
     // touch static class method before any accessors to make it first in method
-    if(isQualified() && qualifier().type().isReferenceType()) {
+    if (isQualified() && qualifier().type().isReferenceType()) {
       hostType().topLevelType().createStaticClassMethod();
       FieldDeclaration f = hostType().topLevelType().createStaticClassField(prevExpr().type().referenceClassFieldName());
     }
@@ -145,15 +147,14 @@ aspect Transformations {
     FieldDeclaration assertionsDisabled = hostType().createAssertionsDisabled();
     Expr condition = (Expr) getCondition().treeCopyNoTransform();
     List args = new List();
-    if(hasMessage()) {
-      if(getMessage().type().isString()) {
+    if (hasMessage()) {
+      if (getMessage().type().isString()) {
         args.add(new CastExpr(new TypeAccess("java.lang", "Object"), (Expr) getMessage().treeCopyNoTransform()));
       } else {
         args.add(getMessage().treeCopyNoTransform());
       }
     }
-    Stmt stmt =
-      new IfStmt(
+    Stmt stmt = new IfStmt(
         new LogNotExpr(
           new ParExpr(
             new OrLogicalExpr(

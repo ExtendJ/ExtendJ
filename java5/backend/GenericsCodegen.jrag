@@ -52,54 +52,59 @@ aspect GenericsCodegen {
 
   refine CodeGeneration public void VarAccess.emitStore(CodeGeneration gen) {
     Variable v = decl();
-    if(v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration)v;
+    if (v instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration) v;
       f = f.erasedField();
-      if(requiresAccessor())
+      if (requiresAccessor()) {
         f.createAccessorWrite(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      else
+      } else {
         f.emitStoreField(gen, fieldQualifierType());
-    }
-    else
+      }
+    } else {
       refined(gen);
+    }
   }
   refine CreateBCode public void VarAccess.createAssignLoadDest(CodeGeneration gen) {
     Variable v = decl();
-    if(v instanceof FieldDeclaration) {
+    if (v instanceof FieldDeclaration) {
       createLoadQualifier(gen);
-      if(v.isInstanceVariable())
+      if (v.isInstanceVariable()) {
         gen.emitDup();
-      FieldDeclaration f = (FieldDeclaration)v;
+      }
+      FieldDeclaration f = (FieldDeclaration) v;
       f = f.erasedField();
-      if(requiresAccessor())
+      if (requiresAccessor()) {
         f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      else
+      } else {
         f.emitLoadField(gen, fieldQualifierType());
-    }
-    else
+      }
+    } else {
       refined(gen);
+    }
   }
 
   refine CreateBCode public void VarAccess.createBCode(CodeGeneration gen) {
     Variable v = decl();
-    if(v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration)v;
+    if (v instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration) v;
       f = f.erasedField();
       createLoadQualifier(gen);
-      if(f.isConstant() && (f.type().isPrimitive() || f.type().isString())) {
-        if(!f.isStatic())
+      if (f.isConstant() && (f.type().isPrimitive() || f.type().isString())) {
+        if (!f.isStatic()) {
           fieldQualifierType().emitPop(gen);
+        }
         f.constant().createBCode(gen);
-      }
-      else if(requiresAccessor())
+      } else if (requiresAccessor()) {
         f.createAccessor(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      else
+      } else {
         f.emitLoadField(gen, fieldQualifierType());
-      if(f.type() != decl().type())
+      }
+      if (f.type() != decl().type()) {
         gen.emitCheckCast(decl().type());
-    }
-    else
+      }
+    } else {
       refined(gen);
+    }
   }
 
   refine CreateBCode public void MethodAccess.createBCode(CodeGeneration gen) {
@@ -110,22 +115,22 @@ aspect GenericsCodegen {
       if (decl.type().isUnknown()) {
         System.err.println("Could not bind " + this);
         for (int i = 0; i < getNumArg(); ++i) {
-          System.err.println("Argument " + getArg(i) +
-              " is of type " + getArg(i).type().typeName());
+          System.err.println("Argument " + getArg(i)
+              + " is of type " + getArg(i).type().typeName());
           if (getArg(i).varDecl() != null) {
-            System.err.println(getArg(i).varDecl() + " in " +
-                getArg(i).varDecl().hostType().typeName());
+            System.err.println(getArg(i).varDecl() + " in "
+                + getArg(i).varDecl().hostType().typeName());
           }
         }
         if (isQualified()) {
-          System.err.println("Qualifier " + qualifier() +
-              " is of type " + qualifier().type().typeName());
+          System.err.println("Qualifier " + qualifier()
+              + " is of type " + qualifier().type().typeName());
         }
         throw new Error("Could not bind " + this);
       }
-      if(decl.getNumParameter() != getNumArg()) {
-        System.out.println(this +
-            " does not have the same number of arguments as " + decl);
+      if (decl.getNumParameter() != getNumArg()) {
+        System.out.println(this
+            + " does not have the same number of arguments as " + decl);
       }
     }
 
@@ -153,13 +158,15 @@ aspect GenericsCodegen {
 
   refine InnerClasses protected TypeDecl MethodAccess.methodQualifierType() {
     TypeDecl typeDecl = refined();
-    if(typeDecl == null)
+    if (typeDecl == null) {
       return null;
+    }
     typeDecl = typeDecl.erasure();
     MethodDecl m = decl().sourceMethodDecl();
     Collection methods = typeDecl.memberMethods(m.name());
-    if(!methods.contains(decl()) && !methods.contains(m))
+    if (!methods.contains(decl()) && !methods.contains(m)) {
       return m.hostType();
+    }
     return typeDecl.erasure();
   }
 
@@ -196,19 +203,20 @@ aspect GenericsCodegen {
   eq InterfaceDecl.bridgeCandidates(String signature) = ancestorMethods(signature);
   eq ClassDecl.bridgeCandidates(String signature) {
     SimpleSet set = ancestorMethods(signature);
-    for(Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); )
+    for (Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); ) {
       set = set.add(iter.next());
+    }
     return set;
   }
 
   public void MethodDecl.transformation() {
     super.transformation();
     HashSet processed = new HashSet();
-    for(Iterator iter = hostType().bridgeCandidates(signature()).iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if(this.overrides(m)) {
+    for (Iterator iter = hostType().bridgeCandidates(signature()).iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl) iter.next();
+      if (this.overrides(m)) {
         MethodDecl erased = m.erasedMethod();
-        if(!erased.signature().equals(signature()) || erased.type().erasure() != type().erasure()) {
+        if (!erased.signature().equals(signature()) || erased.type().erasure() != type().erasure()) {
           StringBuilder keyBuffer = new StringBuilder();
           for (int i = 0; i < getNumParameter(); i++) {
             keyBuffer.append(erased.getParameter(i).type().erasure().fullName());
@@ -241,9 +249,9 @@ aspect GenericsCodegen {
             List modifiersList = new List();
             if (isPublic()) {
               modifiersList.add(new Modifier("public"));
-            } else if(isProtected()) {
+            } else if (isProtected()) {
               modifiersList.add(new Modifier("protected"));
-            } else if(isPrivate()) {
+            } else if (isPrivate()) {
               modifiersList.add(new Modifier("private"));
             }
             MethodDecl bridge = new BridgeMethodDecl(
@@ -251,7 +259,7 @@ aspect GenericsCodegen {
                 erased.type().erasure().createBoundAccess(),
                 erased.name(),
                 parameters,
-                (List)getExceptionList().treeCopyNoTransform(),
+                (List) getExceptionList().treeCopyNoTransform(),
                 new Opt(
                   new Block(
                     new List().add(stmt)
@@ -270,29 +278,33 @@ aspect GenericsCodegen {
 
   refine Transformations public void TypeAccess.transformation() {
     super.transformation();
-    if(type().elementType().isNestedType() && hostType() != null)
+    if (type().elementType().isNestedType() && hostType() != null) {
       hostType().addUsedNestedType(type().elementType().erasure().sourceTypeDecl());
+    }
   }
 
   // add Signature Attribute
   refine AnnotationsCodegen eq TypeDecl.attributes() {
     Collection c = refined();
-    if(needsSignatureAttribute())
+    if (needsSignatureAttribute()) {
       c.add(new SignatureAttribute(constantPool(), classSignature()));
+    }
     return c;
   }
 
   refine AnnotationsCodegen eq MethodDecl.attributes() {
     Collection c = refined();
-    if(needsSignatureAttribute())
+    if (needsSignatureAttribute()) {
       c.add(new SignatureAttribute(hostType().constantPool(), methodTypeSignature()));
+    }
     return c;
   }
 
   refine AnnotationsCodegen eq FieldDeclaration.attributes() {
     Collection c = refined();
-    if(needsSignatureAttribute())
+    if (needsSignatureAttribute()) {
       c.add(new SignatureAttribute(hostType().constantPool(), type().fieldTypeSignature()));
+    }
     return c;
   }
 
@@ -313,8 +325,9 @@ aspect GenericsCodegen {
   eq TypeVariable.needsSignatureAttribute() = true;
   eq ArrayDecl.needsSignatureAttribute() = elementType().needsSignatureAttribute();
   eq ClassDecl.needsSignatureAttribute() {
-    if(hasSuperclass() && superclass().needsSignatureAttribute())
+    if (hasSuperclass() && superclass().needsSignatureAttribute()) {
       return true;
+    }
     for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
       if (iter.next().needsSignatureAttribute()) {
         return true;
@@ -334,19 +347,24 @@ aspect GenericsCodegen {
 
   syn boolean BodyDecl.needsSignatureAttribute() = false;
   syn boolean MethodDecl.needsSignatureAttribute() {
-    if(type().needsSignatureAttribute())
+    if (type().needsSignatureAttribute()) {
       return true;
-    for(int i = 0; i < getNumParameter(); i++)
-      if(getParameter(i).type().needsSignatureAttribute())
+    }
+    for (int i = 0; i < getNumParameter(); i++) {
+      if (getParameter(i).type().needsSignatureAttribute()) {
         return true;
+      }
+    }
     return false;
   }
 
   eq GenericMethodDecl.needsSignatureAttribute() = true;
   syn boolean ConstructorDecl.needsSignatureAttribute() {
-    for(int i = 0; i < getNumParameter(); i++)
-      if(getParameter(i).type().needsSignatureAttribute())
+    for (int i = 0; i < getNumParameter(); i++) {
+      if (getParameter(i).type().needsSignatureAttribute()) {
         return true;
+      }
+    }
     return false;
   }
   eq GenericConstructorDecl.needsSignatureAttribute() = true;
@@ -437,12 +455,13 @@ aspect GenericsCodegen {
 
   syn String TypeDecl.classTypeSignatureContents() {
     StringBuilder buf = new StringBuilder();
-    if(isTopLevelType()) {
-      if(!packageName().equals(""))
+    if (isTopLevelType()) {
+      if (!packageName().equals("")) {
         buf.append(packageName().replace('.', '/') + "/");
-    }
-    else
+      }
+    } else {
       buf.append(enclosingType().classTypeSignatureContents() + ".");
+    }
     buf.append(name());
     buf.append(typeArgumentsOpt());
     return buf.toString();

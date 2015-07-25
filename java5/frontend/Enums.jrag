@@ -17,10 +17,11 @@ aspect Enums {
   eq EnumDecl.isEnumDecl() = true;
 
   refine NameCheck public void ClassInstanceExpr.nameCheck() {
-    if(getAccess().type().isEnumDecl() && !enclosingBodyDecl().isEnumConstant())
+    if (getAccess().type().isEnumDecl() && !enclosingBodyDecl().isEnumConstant()) {
       error("enum types may not be instantiated explicitly");
-    else
+    } else {
       refined();
+    }
   }
 
   syn boolean BodyDecl.isEnumConstant() = false;
@@ -45,10 +46,11 @@ aspect Enums {
   */
   public void EnumDecl.typeCheck() {
     super.typeCheck();
-    for(Iterator iter = memberMethods("finalize").iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl)iter.next();
-      if(m.getNumParameter() == 0 && m.hostType() == this)
+    for (Iterator iter = memberMethods("finalize").iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl) iter.next();
+      if (m.getNumParameter() == 0 && m.hostType() == this) {
         error("an enum may not declare a finalizer");
+      }
     }
     checkEnum(this);
   }
@@ -81,7 +83,9 @@ aspect Enums {
   // TODO Remove
   private boolean EnumDecl.done = false;
   private boolean EnumDecl.done() {
-    if(done) return true;
+    if (done) {
+      return true;
+    }
     done = true;
     return false;
   }
@@ -132,10 +136,11 @@ aspect Enums {
   }
 
   protected void ASTNode.transformEnumConstructors() {
-    for(int i = 0; i < getNumChildNoTransform(); i++) {
+    for (int i = 0; i < getNumChildNoTransform(); i++) {
       ASTNode child = getChildNoTransform(i);
-      if(child != null)
+      if (child != null) {
         child.transformEnumConstructors();
+      }
     }
   }
 
@@ -217,16 +222,18 @@ aspect Enums {
   }
 
   syn lazy List<Expr> EnumInstanceExpr.getArgList() {
-    EnumConstant ec = (EnumConstant)getParent().getParent();
+    EnumConstant ec = (EnumConstant) getParent().getParent();
     List<EnumConstant> ecs = (List<EnumConstant>)ec.getParent();
     int idx = ecs.getIndexOfChild(ec);
-    if(idx == -1)
+    if (idx == -1) {
       throw new Error("internal: cannot determine numeric value of enum constant");
+    }
     List<Expr> argList = new List<Expr>();
     argList.add(Literal.buildStringLiteral(ec.name()));
     argList.add(Literal.buildIntegerLiteral(idx));
-    for(Expr arg : ec.getArgs())
-      argList.add((Expr)arg.treeCopyNoTransform());
+    for (Expr arg : ec.getArgs()) {
+      argList.add((Expr) arg.treeCopyNoTransform());
+    }
     return argList;
   }
 
@@ -240,8 +247,9 @@ aspect Enums {
   */
 
   private static Opt<TypeDecl> EnumConstant.createOptAnonymousDecl(List<BodyDecl> bds) {
-    if(bds.getNumChildNoTransform() == 0)
+    if (bds.getNumChildNoTransform() == 0) {
       return new Opt<TypeDecl>();
+    }
     return new Opt<TypeDecl>(
       new AnonymousDecl(
         new Modifiers(),
@@ -254,22 +262,29 @@ aspect Enums {
   // simulate list of body declarations
   public int EnumConstant.getNumBodyDecl() {
     int cnt = 0;
-    ClassInstanceExpr init = (ClassInstanceExpr)getInit();
-    if(!init.hasTypeDecl())
+    ClassInstanceExpr init = (ClassInstanceExpr) getInit();
+    if (!init.hasTypeDecl()) {
       return 0;
-    for(BodyDecl bd : init.getTypeDecl().getBodyDecls())
-      if(!(bd instanceof ConstructorDecl))
+    }
+    for (BodyDecl bd : init.getTypeDecl().getBodyDecls()) {
+      if (!(bd instanceof ConstructorDecl)) {
         ++cnt;
+      }
+    }
     return cnt;
   }
 
   public BodyDecl EnumConstant.getBodyDecl(int i) {
-    ClassInstanceExpr init = (ClassInstanceExpr)getInit();
-    if(init.hasTypeDecl())
-      for(BodyDecl bd : init.getTypeDecl().getBodyDecls())
-        if(!(bd instanceof ConstructorDecl))
-          if(i-- == 0)
+    ClassInstanceExpr init = (ClassInstanceExpr) getInit();
+    if (init.hasTypeDecl()) {
+      for (BodyDecl bd : init.getTypeDecl().getBodyDecls()) {
+        if (!(bd instanceof ConstructorDecl)) {
+          if (i-- == 0) {
             return bd;
+          }
+        }
+      }
+    }
     throw new ArrayIndexOutOfBoundsException(i);
   }
 
@@ -287,11 +302,12 @@ aspect Enums {
   */
 
   eq EnumDecl.isFinal() {
-    for(Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
-      EnumConstant c = (EnumConstant)iter.next();
-      ClassInstanceExpr e = (ClassInstanceExpr)c.getInit();
-      if(e.hasTypeDecl())
+    for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
+      EnumConstant c = (EnumConstant) iter.next();
+      ClassInstanceExpr e = (ClassInstanceExpr) c.getInit();
+      if (e.hasTypeDecl()) {
         return false;
+      }
     }
     return true;
   }
@@ -299,9 +315,11 @@ aspect Enums {
 
   syn lazy ArrayList EnumDecl.enumConstants() {
     ArrayList list = new ArrayList();
-    for(int i = 0; i < getNumBodyDecl(); i++)
-      if(getBodyDecl(i).isEnumConstant())
+    for (int i = 0; i < getNumBodyDecl(); i++) {
+      if (getBodyDecl(i).isEnumConstant()) {
         list.add(getBodyDecl(i));
+      }
+    }
     return list;
   }
 
@@ -315,8 +333,8 @@ aspect Enums {
   private void EnumDecl.addValues() {
     int numConstants = enumConstants().size();
     List initValues = new List();
-    for(Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
-      EnumConstant c = (EnumConstant)iter.next();
+    for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
+      EnumConstant c = (EnumConstant) iter.next();
       initValues.add(c.createBoundFieldAccess());
     }
     FieldDeclaration values = new FieldDeclaration(
@@ -377,7 +395,7 @@ aspect Enums {
         )
       )
     );
-    // public static Test valueOf(String s) { return (Test)java.lang.Enum.valueOf(Test.class, s); }
+    // public static Test valueOf(String s) { return (Test) java.lang.Enum.valueOf(Test.class, s); }
     addBodyDecl(
       new MethodDecl(
         new Modifiers(new List().add(
@@ -439,17 +457,19 @@ aspect Enums {
   eq EnumDecl.isAbstract() {
     for (int i = 0; i < getNumBodyDecl(); i++) {
       if (getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl)getBodyDecl(i);
-        if (m.isAbstract())
+        MethodDecl m = (MethodDecl) getBodyDecl(i);
+        if (m.isAbstract()) {
           return true;
+        }
       }
     }
     return false;
   }
 
   protected void ASTNode.checkEnum(EnumDecl enumDecl) {
-    for(int i = 0; i < getNumChild(); i++)
+    for (int i = 0; i < getNumChild(); i++) {
       getChild(i).checkEnum(enumDecl);
+    }
   }
 
   protected void EnumDecl.checkEnum(EnumDecl enumDecl) {
@@ -459,7 +479,7 @@ aspect Enums {
       } else if (getBodyDecl(i) instanceof InstanceInitializer) {
         getBodyDecl(i).checkEnum(enumDecl);
       } else if (getBodyDecl(i) instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration)getBodyDecl(i);
+        FieldDeclaration f = (FieldDeclaration) getBodyDecl(i);
         if (!f.isStatic() && f.hasInit()) {
           f.checkEnum(enumDecl);
         }
@@ -473,8 +493,9 @@ aspect Enums {
 
   protected void VarAccess.checkEnum(EnumDecl enumDecl) {
     super.checkEnum(enumDecl);
-    if(decl().isStatic() && decl().hostType() == enumDecl && !isConstant())
+    if (decl().isStatic() && decl().hostType() == enumDecl && !isConstant()) {
       error("may not reference a static field of an enum type from here");
+    }
   }
 
   /**
@@ -523,8 +544,9 @@ aspect Enums {
 
   refine TypeCheck public void SwitchStmt.typeCheck() {
      TypeDecl type = getExpr().type();
-    if((!type.isIntegralType() || type.isLong()) && !type.isEnumDecl())
+    if ((!type.isIntegralType() || type.isLong()) && !type.isEnumDecl()) {
       error("Switch expression must be of char, byte, short, int, or enum type");
+    }
   }
 
   eq ConstCase.getValue().lookupVariable(String name)
@@ -535,26 +557,28 @@ aspect Enums {
 
   refine TypeCheck public void ConstCase.typeCheck() {
     boolean isEnumConstant = getValue().isEnumConstant();
-    if(switchType().isEnumDecl() && !isEnumConstant) {
+    if (switchType().isEnumDecl() && !isEnumConstant) {
       error("Unqualified enumeration constant required");
     } else {
       TypeDecl switchType = switchType();
       TypeDecl type = getValue().type();
-      if(!type.assignConversionTo(switchType, getValue()))
+      if (!type.assignConversionTo(switchType, getValue())) {
         error("Constant expression must be assignable to Expression");
-      if(!getValue().isConstant() && !getValue().type().isUnknown() &&
+      }
+      if (!getValue().isConstant() && !getValue().type().isUnknown() &&
           !isEnumConstant)
         error("Switch expression must be constant");
     }
   }
   refine NameCheck eq ConstCase.constValue(Case c) {
-    if(switchType().isEnumDecl()) {
-      if(!(c instanceof ConstCase) || !getValue().isConstant())
+    if (switchType().isEnumDecl()) {
+      if (!(c instanceof ConstCase) || !getValue().isConstant()) {
         return false;
-      return getValue().varDecl() == ((ConstCase)c).getValue().varDecl();
-    }
-    else
+      }
+      return getValue().varDecl() == ((ConstCase) c).getValue().varDecl();
+    } else {
       return refined(c);
+    }
   }
 
   public void EnumDecl.prettyPrint(StringBuffer sb) {
@@ -576,8 +600,8 @@ aspect Enums {
         if (i + 1 < getNumBodyDecl() && !(getBodyDecl(i + 1) instanceof EnumConstant)) {
           sb.append(indent() + ";");
         }
-      } else if(d instanceof ConstructorDecl) {
-        ConstructorDecl c = (ConstructorDecl)d;
+      } else if (d instanceof ConstructorDecl) {
+        ConstructorDecl c = (ConstructorDecl) d;
         if (!c.isSynthetic()) {
           sb.append(indent());
           c.getModifiers().prettyPrint(sb);
@@ -606,12 +630,12 @@ aspect Enums {
           sb.append("}");
         }
       } else if (d instanceof MethodDecl) {
-        MethodDecl m = (MethodDecl)d;
+        MethodDecl m = (MethodDecl) d;
         if (!m.isSynthetic()) {
           m.prettyPrint(sb);
         }
       } else if (d instanceof FieldDeclaration) {
-        FieldDeclaration f = (FieldDeclaration)d;
+        FieldDeclaration f = (FieldDeclaration) d;
         if (!f.isSynthetic()) {
           f.prettyPrint(sb);
         }
@@ -656,47 +680,51 @@ aspect Enums {
   eq EnumDecl.unimplementedMethods() {
     Collection<MethodDecl> methods = new LinkedList<MethodDecl>();
     for (Iterator iter = interfacesMethodsIterator(); iter.hasNext(); ) {
-      MethodDecl method = (MethodDecl)iter.next();
-      SimpleSet set = (SimpleSet)localMethodsSignature(method.signature());
+      MethodDecl method = (MethodDecl) iter.next();
+      SimpleSet set = (SimpleSet) localMethodsSignature(method.signature());
       if (set.size() == 1) {
-        MethodDecl n = (MethodDecl)set.iterator().next();
-        if (!n.isAbstract())
-    continue;
+        MethodDecl n = (MethodDecl) set.iterator().next();
+        if (!n.isAbstract()) {
+          continue;
+        }
       }
       boolean implemented = false;
-      set = (SimpleSet)ancestorMethods(method.signature());
+      set = (SimpleSet) ancestorMethods(method.signature());
       for (Iterator i2 = set.iterator(); i2.hasNext(); ) {
-        MethodDecl n = (MethodDecl)i2.next();
+        MethodDecl n = (MethodDecl) i2.next();
         if (!n.isAbstract()) {
           implemented = true;
-    break;
-  }
+          break;
+        }
       }
-      if (!implemented)
-  methods.add(method);
+      if (!implemented) {
+        methods.add(method);
+      }
     }
 
     for (Iterator iter = localMethodsIterator(); iter.hasNext(); ) {
-      MethodDecl method = (MethodDecl)iter.next();
-      if (method.isAbstract())
+      MethodDecl method = (MethodDecl) iter.next();
+      if (method.isAbstract()) {
         methods.add(method);
+      }
     }
 
     Collection unimplemented = new ArrayList();
     for (MethodDecl method : methods) {
       if (enumConstants().isEmpty()) {
-  unimplemented.add(method);
-  continue;
+        unimplemented.add(method);
+        continue;
       }
       boolean missing = false;
       for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
-  if (!((EnumConstant) iter.next()).implementsMethod(method)) {
-    missing = true;
-    break;
+        if (!((EnumConstant) iter.next()).implementsMethod(method)) {
+          missing = true;
+          break;
         }
       }
-      if (missing)
-  unimplemented.add(method);
+      if (missing) {
+        unimplemented.add(method);
+      }
     }
 
     return unimplemented;
@@ -709,10 +737,10 @@ aspect Enums {
     super.checkModifiers();
     if (!unimplementedMethods().isEmpty()) {
       StringBuilder sb = new StringBuilder();
-      sb.append("" + name() + " lacks implementations in one or more " +
-    "enum constants for the following methods:\n");
+      sb.append("" + name() + " lacks implementations in one or more "
+          + "enum constants for the following methods:\n");
       for (Iterator iter = unimplementedMethods().iterator(); iter.hasNext(); ) {
-        MethodDecl m = (MethodDecl)iter.next();
+        MethodDecl m = (MethodDecl) iter.next();
         sb.append("  " + m.signature() + " in " + m.hostType().typeName() + "\n");
       }
       error(sb.toString());
@@ -721,16 +749,18 @@ aspect Enums {
 
   syn SimpleSet EnumConstant.localMethodsSignature(String signature) {
     SimpleSet set = localMethodsSignatureMap().get(signature);
-    if(set != null) return set;
+    if (set != null) {
+      return set;
+    }
     return SimpleSet.emptySet;
   }
 
   // signature -> method declaration
   syn lazy Map<String,SimpleSet> EnumConstant.localMethodsSignatureMap() {
     HashMap map = new HashMap(getNumBodyDecl());
-    for(int i = 0; i < getNumBodyDecl(); i++) {
-      if(getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl decl = (MethodDecl)getBodyDecl(i);
+    for (int i = 0; i < getNumBodyDecl(); i++) {
+      if (getBodyDecl(i) instanceof MethodDecl) {
+        MethodDecl decl = (MethodDecl) getBodyDecl(i);
         putSimpleSetElement(map, decl.signature(), decl);
       }
     }
@@ -738,11 +768,12 @@ aspect Enums {
   }
 
   syn boolean EnumConstant.implementsMethod(MethodDecl method) {
-    SimpleSet set = (SimpleSet)localMethodsSignature(method.signature());
+    SimpleSet set = (SimpleSet) localMethodsSignature(method.signature());
     if (set.size() == 1) {
-      MethodDecl n = (MethodDecl)set.iterator().next();
-      if (!n.isAbstract())
-  return true;
+      MethodDecl n = (MethodDecl) set.iterator().next();
+      if (!n.isAbstract()) {
+        return true;
+      }
     }
     return false;
   }
@@ -750,50 +781,63 @@ aspect Enums {
   refine Modifiers
   public void MethodDecl.checkModifiers() {
     super.checkModifiers();
-    if(hostType().isClassDecl()) {
+    if (hostType().isClassDecl()) {
       // 8.4.3.1
-      if(!hostType().isEnumDecl() && isAbstract() && !hostType().isAbstract())
+      if (!hostType().isEnumDecl() && isAbstract() && !hostType().isAbstract()) {
         error("class must be abstract to include abstract methods");
+      }
       // 8.4.3.1
-      if(isAbstract() && isPrivate())
+      if (isAbstract() && isPrivate()) {
         error("method may not be abstract and private");
+      }
       // 8.4.3.1
       // 8.4.3.2
-      if(isAbstract() && isStatic())
+      if (isAbstract() && isStatic()) {
         error("method may not be abstract and static");
-      if(isAbstract() && isSynchronized())
+      }
+      if (isAbstract() && isSynchronized()) {
         error("method may not be abstract and synchronized");
+      }
       // 8.4.3.4
-      if(isAbstract() && isNative())
+      if (isAbstract() && isNative()) {
         error("method may not be abstract and native");
-      if(isAbstract() && isStrictfp())
+      }
+      if (isAbstract() && isStrictfp()) {
         error("method may not be abstract and strictfp");
-      if(isNative() && isStrictfp())
+      }
+      if (isNative() && isStrictfp()) {
         error("method may not be native and strictfp");
+      }
     }
-    if(hostType().isInterfaceDecl()) {
+    if (hostType().isInterfaceDecl()) {
       // 9.4
-      if(isStatic())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be static");
-      if(isStrictfp())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be strictfp");
-      if(isNative())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be native");
-      if(isSynchronized())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be synchronized");
-      if(isProtected())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be protected");
-      if(isPrivate())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be private");
-      else if(isFinal())
-        error("interface method " + signature() + " in " +
-            hostType().typeName() +  " may not be final");
+      if (isStatic()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be static");
+      }
+      if (isStrictfp()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be strictfp");
+      }
+      if (isNative()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be native");
+      }
+      if (isSynchronized()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be synchronized");
+      }
+      if (isProtected()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be protected");
+      }
+      if (isPrivate()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be private");
+      } else if (isFinal()) {
+        error("interface method " + signature() + " in "
+            + hostType().typeName() +  " may not be final");
+      }
     }
   }
 }

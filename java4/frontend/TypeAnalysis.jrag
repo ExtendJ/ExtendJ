@@ -34,20 +34,26 @@ aspect TypeConversion {
 
   // 5.1.5 Narrowing Reference Conversions
   eq ReferenceType.narrowingConversionTo(TypeDecl type) {
-    if(type.instanceOf(this))
+    if (type.instanceOf(this)) {
       return true;
-    if(isClassDecl() && !getModifiers().isFinal() && type.isInterfaceDecl())
+    }
+    if (isClassDecl() && !getModifiers().isFinal() && type.isInterfaceDecl()) {
       return true;
-    if(isInterfaceDecl() && type.isClassDecl() && !type.getModifiers().isFinal())
+    }
+    if (isInterfaceDecl() && type.isClassDecl() && !type.getModifiers().isFinal()) {
       return true;
-    if(isInterfaceDecl() && type.instanceOf(this))
+    }
+    if (isInterfaceDecl() && type.instanceOf(this)) {
       return true;
-    if(fullName().equals("java.lang.Object") && type.isInterfaceDecl())
+    }
+    if (fullName().equals("java.lang.Object") && type.isInterfaceDecl()) {
       return true;
+    }
     // Dragons
     // TODO: Check if both are interfaces with compatible methods
-    if(isArrayDecl() && type.isArrayDecl() && elementType().instanceOf(type.elementType()))
+    if (isArrayDecl() && type.isArrayDecl() && elementType().instanceOf(type.elementType())) {
       return true;
+    }
     return false;
   }
 
@@ -60,11 +66,12 @@ aspect TypeConversion {
     //System.out.println("@@@ " + fullName() + " assign conversion to " + type.fullName() + ", expr: " + expr);
     boolean sourceIsConstant = expr != null ? expr.isConstant() : false;
     //System.out.println("@@@ sourceIsConstant: " + sourceIsConstant);
-    if(identityConversionTo(type) || wideningConversionTo(type))
+    if (identityConversionTo(type) || wideningConversionTo(type)) {
       return true;
+    }
     //System.out.println("@@@ narrowing conversion needed");
     //System.out.println("@@@ value: " + expr.value());
-    if(sourceIsConstant && (isInt() || isChar() || isShort() || isByte()) &&
+    if (sourceIsConstant && (isInt() || isChar() || isShort() || isByte()) &&
         (type.isByte() || type.isShort() || type.isChar()) &&
         narrowingConversionTo(type) && expr.representableIn(type))
       return true;
@@ -82,59 +89,52 @@ aspect TypeConversion {
     wideningConversionTo(type) || narrowingConversionTo(type);
 
   eq ClassDecl.castingConversionTo(TypeDecl type) {
-    if(type.isArrayDecl()) {
+    if (type.isArrayDecl()) {
       return isObject();
-    }
-    else if(type.isClassDecl()) {
+    } else if (type.isClassDecl()) {
       return this == type || instanceOf(type) || type.instanceOf(this);
-    }
-    else if(type.isInterfaceDecl()) {
+    } else if (type.isInterfaceDecl()) {
       return !isFinal() || instanceOf(type);
-    }
-    else return super.castingConversionTo(type);
+    } else return super.castingConversionTo(type);
   }
 
   inh MethodDecl InterfaceDecl.unknownMethod();
 
   eq InterfaceDecl.castingConversionTo(TypeDecl type) {
-    if(type.isArrayDecl()) {
+    if (type.isArrayDecl()) {
       return type.instanceOf(this);
-    }
-    else if(type.isClassDecl()) {
+    } else if (type.isClassDecl()) {
       return !type.isFinal() || type.instanceOf(this);
-    }
-    else if(type.isInterfaceDecl()) {
-      for(Iterator i1 = methodsIterator(); i1.hasNext(); ) {
-        MethodDecl m = (MethodDecl)i1.next();
-        for(Iterator iter = type.methodsSignature(m.signature()).iterator(); iter.hasNext(); ) {
-          MethodDecl n = (MethodDecl)iter.next();
-          if(n.type() != m.type())
+    } else if (type.isInterfaceDecl()) {
+      for (Iterator i1 = methodsIterator(); i1.hasNext(); ) {
+        MethodDecl m = (MethodDecl) i1.next();
+        for (Iterator iter = type.methodsSignature(m.signature()).iterator(); iter.hasNext(); ) {
+          MethodDecl n = (MethodDecl) iter.next();
+          if (n.type() != m.type()) {
             return false;
+          }
         }
       }
       return true;
-    }
-    else return super.castingConversionTo(type);
+    } else return super.castingConversionTo(type);
   }
 
   eq ArrayDecl.castingConversionTo(TypeDecl type) {
-    if(type.isArrayDecl()) {
+    if (type.isArrayDecl()) {
       TypeDecl SC = componentType();
       TypeDecl TC = type.componentType();
-      if(SC.isPrimitiveType() && TC.isPrimitiveType() && SC == TC)
+      if (SC.isPrimitiveType() && TC.isPrimitiveType() && SC == TC) {
         return true;
-      if(SC.isReferenceType() && TC.isReferenceType()) {
+      }
+      if (SC.isReferenceType() && TC.isReferenceType()) {
         return SC.castingConversionTo(TC);
       }
       return false;
-    }
-    else if(type.isClassDecl()) {
+    } else if (type.isClassDecl()) {
       return type.isObject();
-    }
-    else if(type.isInterfaceDecl()) {
+    } else if (type.isInterfaceDecl()) {
       return type == typeSerializable() || type == typeCloneable();
-    }
-    else return super.castingConversionTo(type);
+    } else return super.castingConversionTo(type);
   }
 
   inh TypeDecl ArrayDecl.typeSerializable();
@@ -153,8 +153,9 @@ aspect NumericPromotion {
   // 5.6.2 Binary Numeric Promotion
   syn TypeDecl TypeDecl.binaryNumericPromotion(TypeDecl type) = unknownType();
   syn lazy TypeDecl NumericType.binaryNumericPromotion(TypeDecl type) {
-    if(!type.isNumericType())
+    if (!type.isNumericType()) {
       return unknownType();
+    }
      return unaryNumericPromotion().instanceOf(type) ? type : unaryNumericPromotion();
   }
 
@@ -234,18 +235,18 @@ aspect TypeAnalysis {
 
   eq Program.getChild().unknownField() = unknownType().findSingleVariable("unknown");
   public FieldDeclaration TypeDecl.findSingleVariable(String name) {
-    return (FieldDeclaration)memberFields(name).iterator().next();
+    return (FieldDeclaration) memberFields(name).iterator().next();
   }
   eq Program.getChild().unknownMethod() {
-    for(Iterator iter = unknownType().memberMethods("unknown").iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl)iter.next();
+    for (Iterator iter = unknownType().memberMethods("unknown").iterator(); iter.hasNext(); ) {
+      MethodDecl m = (MethodDecl) iter.next();
       return m;
     }
     throw new Error("Could not find method unknown in type Unknown");
   }
   eq Program.getChild().unknownConstructor() = unknownConstructor();
   syn lazy ConstructorDecl Program.unknownConstructor() {
-    return (ConstructorDecl)unknownType().constructors().iterator().next();
+    return (ConstructorDecl) unknownType().constructors().iterator().next();
   }
 
   eq AbstractDot.type() = lastAccess().type();
@@ -330,11 +331,12 @@ aspect TypeAnalysis {
   eq AddExpr.type() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
-    if(!left.isString() && !right.isString())
+    if (!left.isString() && !right.isString()) {
       return super.type();
-    else {
-      if(left.isVoid() || right.isVoid())
+    } else {
+      if (left.isVoid() || right.isVoid()) {
         return unknownType();
+      }
       // pick the string type
       return left.isString() ? left : right;
     }
@@ -351,12 +353,13 @@ aspect TypeAnalysis {
 
   // 15.22
   eq BitwiseExpr.type() {
-    if(getLeftOperand().type().isIntegralType() && getRightOperand().type().isIntegralType())
+    if (getLeftOperand().type().isIntegralType() && getRightOperand().type().isIntegralType()) {
       // 15.22.1
       return getLeftOperand().type().binaryNumericPromotion(getRightOperand().type());
-    else if(getLeftOperand().type().isBoolean() && getRightOperand().type().isBoolean())
+    } else if (getLeftOperand().type().isBoolean() && getRightOperand().type().isBoolean()) {
       // 15.22.2
       return typeBoolean();
+    }
     return unknownType();
   }
 
@@ -368,37 +371,45 @@ aspect TypeAnalysis {
     TypeDecl trueType = getTrueExpr().type();
     TypeDecl falseType = getFalseExpr().type();
 
-    if(trueType == falseType) return trueType;
+    if (trueType == falseType) {
+      return trueType;
+    }
 
-    if(trueType.isNumericType() && falseType.isNumericType()) {
-      if(trueType.isByte() && falseType.isShort()) return falseType;
-      if(trueType.isShort() && falseType.isByte()) return trueType;
-      if((trueType.isByte() || trueType.isShort() || trueType.isChar()) &&
-         falseType.isInt() && getFalseExpr().isConstant() && getFalseExpr().representableIn(trueType))
-        return trueType;
-      if((falseType.isByte() || falseType.isShort() || falseType.isChar()) &&
-         trueType.isInt() && getTrueExpr().isConstant() && getTrueExpr().representableIn(falseType))
+    if (trueType.isNumericType() && falseType.isNumericType()) {
+      if (trueType.isByte() && falseType.isShort()) {
         return falseType;
+      }
+      if (trueType.isShort() && falseType.isByte()) {
+        return trueType;
+      }
+      if ((trueType.isByte() || trueType.isShort() || trueType.isChar())
+          && falseType.isInt() && getFalseExpr().isConstant()
+          && getFalseExpr().representableIn(trueType)) {
+        return trueType;
+      }
+      if ((falseType.isByte() || falseType.isShort() || falseType.isChar())
+          && trueType.isInt() && getTrueExpr().isConstant()
+          && getTrueExpr().representableIn(falseType)) {
+        return falseType;
+      }
       return trueType.binaryNumericPromotion(falseType);
-    }
-    else if(trueType.isBoolean() && falseType.isBoolean()) {
+    } else if (trueType.isBoolean() && falseType.isBoolean()) {
       return trueType;
-    }
-    else if(trueType.isReferenceType() && falseType.isNull()) {
+    } else if (trueType.isReferenceType() && falseType.isNull()) {
       return trueType;
-    }
-    else if(trueType.isNull() && falseType.isReferenceType()) {
+    } else if (trueType.isNull() && falseType.isReferenceType()) {
       return falseType;
-    }
-    else if(trueType.isReferenceType() && falseType.isReferenceType()) {
-      if(trueType.assignConversionTo(falseType, null))
+    } else if (trueType.isReferenceType() && falseType.isReferenceType()) {
+      if (trueType.assignConversionTo(falseType, null)) {
         return falseType;
-      if(falseType.assignConversionTo(trueType, null))
+      }
+      if (falseType.assignConversionTo(trueType, null)) {
         return trueType;
+      }
+      return unknownType();
+    } else {
       return unknownType();
     }
-    else
-      return unknownType();
   }
 
   eq ClassAccess.type() = lookupType("java.lang", "Class");
@@ -425,8 +436,9 @@ aspect TypeWideningAndIdentity {
 
   syn boolean TypeDecl.isSupertypeOfClassDecl(ClassDecl type) = type == this;
   eq ClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
-    if(super.isSupertypeOfClassDecl(type))
+    if (super.isSupertypeOfClassDecl(type)) {
       return true;
+    }
     return type.hasSuperclass() && type.superclass().instanceOf(this);
   }
   eq InterfaceDecl.isSupertypeOfClassDecl(ClassDecl type) {
@@ -434,7 +446,7 @@ aspect TypeWideningAndIdentity {
       return true;
     }
     for (Iterator<TypeDecl> iter = type.interfacesIterator(); iter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)iter.next();
+      TypeDecl typeDecl = (TypeDecl) iter.next();
       if (typeDecl.instanceOf(this)) {
         return true;
       }
@@ -449,7 +461,7 @@ aspect TypeWideningAndIdentity {
       return true;
     }
     for (Iterator<TypeDecl> iter = type.interfacesIterator(); iter.hasNext(); ) {
-      TypeDecl superinterface = (TypeDecl)iter.next();
+      TypeDecl superinterface = (TypeDecl) iter.next();
       if (superinterface.instanceOf(this)) {
         return true;
       }
@@ -459,8 +471,9 @@ aspect TypeWideningAndIdentity {
 
   syn boolean TypeDecl.isSupertypeOfArrayDecl(ArrayDecl type) = this == type;
   eq ClassDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
-    if(super.isSupertypeOfArrayDecl(type))
+    if (super.isSupertypeOfArrayDecl(type)) {
       return true;
+    }
     return type.hasSuperclass() && type.superclass().instanceOf(this);
   }
   eq InterfaceDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
@@ -468,7 +481,7 @@ aspect TypeWideningAndIdentity {
       return true;
     }
     for (Iterator<TypeDecl> iter = type.interfacesIterator(); iter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl)iter.next();
+      TypeDecl typeDecl = (TypeDecl) iter.next();
       if (typeDecl.instanceOf(this)) {
         return true;
       }
@@ -476,15 +489,17 @@ aspect TypeWideningAndIdentity {
     return false;
   }
   eq ArrayDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
-    if(type.elementType().isPrimitive() && elementType().isPrimitive())
+    if (type.elementType().isPrimitive() && elementType().isPrimitive()) {
       return type.dimension() == dimension() && type.elementType() == elementType();
+    }
     return type.componentType().instanceOf(componentType());
   }
 
   syn boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) = type == this;
   eq PrimitiveType.isSupertypeOfPrimitiveType(PrimitiveType type) {
-    if(super.isSupertypeOfPrimitiveType(type))
+    if (super.isSupertypeOfPrimitiveType(type)) {
       return true;
+    }
     return type.hasSuperclass() && type.superclass().isPrimitive() && type.superclass().instanceOf(this);
   }
 
@@ -507,16 +522,18 @@ aspect NestedTypes {
 
   inh TypeDecl TypeDecl.enclosingType();
   syn TypeDecl TypeDecl.topLevelType() {
-    if(isTopLevelType())
+    if (isTopLevelType()) {
       return this;
+    }
     return enclosingType().topLevelType();
   }
 
   syn Stmt Expr.enclosingStmt() {
     ASTNode node = this;
-    while(node != null && !(node instanceof Stmt))
+    while (node != null && !(node instanceof Stmt)) {
       node = node.getParent();
-    return (Stmt)node;
+    }
+    return (Stmt) node;
   }
 
   inh BodyDecl Expr.enclosingBodyDecl();
@@ -556,20 +573,24 @@ aspect NestedTypes {
   eq LocalClassDeclStmt.getClassDecl().isLocalClass() = true;
 
   syn TypeDecl TypeDecl.withinBodyThatSubclasses(TypeDecl type) {
-    if(instanceOf(type))
+    if (instanceOf(type)) {
       return this;
-    if(!isTopLevelType())
+    }
+    if (!isTopLevelType()) {
       return enclosingType().withinBodyThatSubclasses(type);
+    }
     return null;
   }
 
   syn boolean TypeDecl.encloses(TypeDecl type) = type.enclosedBy(this);
 
   syn boolean TypeDecl.enclosedBy(TypeDecl type) {
-    if(this == type)
+    if (this == type) {
       return true;
-    if(isTopLevelType())
+    }
+    if (isTopLevelType()) {
       return false;
+    }
     return enclosingType().enclosedBy(type);
   }
 
@@ -659,11 +680,12 @@ aspect SuperClasses {
       private TypeDecl current = null;
       private void computeNextCurrent() {
         current = null;
-        if(isObject() || isCircular())
+        if (isObject() || isCircular()) {
           return;
-        while(index < getNumImplements()) {
+        }
+        while (index < getNumImplements()) {
           TypeDecl typeDecl = getImplements(index++).type();
-          if(!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
+          if (!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
             current = typeDecl;
             return;
           }
@@ -708,31 +730,34 @@ aspect Circularity {
   inh lazy TypeDecl TypeDecl.unknownType();
   syn lazy boolean TypeDecl.isCircular() circular [true] = false;
   eq ClassDecl.isCircular() {
-    if(hasSuperClass()) {
+    if (hasSuperClass()) {
       Access a = getSuperClass().lastAccess();
-      while(a != null) {
-        if(a.type().isCircular())
+      while (a != null) {
+        if (a.type().isCircular()) {
           return true;
-        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (Access)a.qualifier() : null;
+        }
+        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (Access) a.qualifier() : null;
       }
     }
-    for(int i = 0; i < getNumImplements(); i++) {
+    for (int i = 0; i < getNumImplements(); i++) {
       Access a = getImplements(i).lastAccess();
-      while(a != null) {
-        if(a.type().isCircular())
+      while (a != null) {
+        if (a.type().isCircular()) {
           return true;
-        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (Access)a.qualifier() : null;
+        }
+        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (Access) a.qualifier() : null;
       }
     }
     return false;
   }
   eq InterfaceDecl.isCircular() {
-    for(int i = 0; i < getNumSuperInterface(); i++) {
+    for (int i = 0; i < getNumSuperInterface(); i++) {
       Access a = getSuperInterface(i).lastAccess();
-      while(a != null) {
-        if(a.type().isCircular())
+      while (a != null) {
+        if (a.type().isCircular()) {
           return true;
-        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (Access)a.qualifier() : null;
+        }
+        a = (a.isQualified() && a.qualifier().isTypeAccess()) ? (Access) a.qualifier() : null;
       }
     }
     return false;

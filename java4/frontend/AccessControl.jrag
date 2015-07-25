@@ -13,115 +13,117 @@ aspect AccessControl {
   syn lazy boolean ArrayDecl.accessibleFrom(TypeDecl type) = elementType().accessibleFrom(type);
 
   syn lazy boolean TypeDecl.accessibleFromPackage(String packageName) =
-    !isPrivate() && (isPublic() || hostPackage().equals(packageName));
+      !isPrivate() && (isPublic() || hostPackage().equals(packageName));
 
   eq UnknownType.accessibleFromPackage(String packageName) = false;
 
   syn lazy boolean TypeDecl.accessibleFromExtend(TypeDecl type) {
-    if(type == this)
+    if (type == this) {
       return true;
-    if(isInnerType()) {
-      if(!enclosingType().accessibleFrom(type)) {
+    }
+    if (isInnerType()) {
+      if (!enclosingType().accessibleFrom(type)) {
         return false;
       }
     }
-    if(isPublic())
+    if (isPublic()) {
       return true;
-    else if(isProtected()) {
+    } else if (isProtected()) {
       // isProtected implies a nested type
-      if(hostPackage().equals(type.hostPackage())) {
+      if (hostPackage().equals(type.hostPackage())) {
         return true;
       }
-      if(type.isNestedType() && type.enclosingType().withinBodyThatSubclasses(enclosingType()) != null)
+      if (type.isNestedType() && type.enclosingType().withinBodyThatSubclasses(enclosingType()) != null) {
         return true;
+      }
       return false;
-    }
-    else if(isPrivate()) {
+    } else if (isPrivate()) {
       return topLevelType() == type.topLevelType();
-    }
-    else
+    } else {
       return hostPackage().equals(type.hostPackage());
+    }
   }
 
   syn lazy boolean TypeDecl.accessibleFrom(TypeDecl type) {
-    if(type == this)
+    if (type == this) {
       return true;
-    if(isInnerType()) {
-      if(!enclosingType().accessibleFrom(type)) {
+    }
+    if (isInnerType()) {
+      if (!enclosingType().accessibleFrom(type)) {
         return false;
       }
     }
-    if(isPublic()) {
+    if (isPublic()) {
       return true;
-    }
-    else if(isProtected()) {
-      if(hostPackage().equals(type.hostPackage())) {
+    } else if (isProtected()) {
+      if (hostPackage().equals(type.hostPackage())) {
         return true;
       }
-      if(isMemberType()) {
+      if (isMemberType()) {
         TypeDecl typeDecl = type;
-        while(typeDecl != null && !typeDecl.instanceOf(enclosingType()))
+        while (typeDecl != null && !typeDecl.instanceOf(enclosingType())) {
           typeDecl = typeDecl.enclosingType();
-        if(typeDecl != null) {
+        }
+        if (typeDecl != null) {
           return true;
         }
       }
       return false;
-    }
-    else if(isPrivate()) {
+    } else if (isPrivate()) {
       return topLevelType() == type.topLevelType();
-    }
-    else {
+    } else {
       return hostPackage().equals(type.hostPackage());
     }
   }
 
   syn lazy boolean MethodDecl.accessibleFrom(TypeDecl type) {
-    if(isPublic()) {
+    if (isPublic()) {
       return true;
-    }
-    else if(isProtected()) {
-      if(hostPackage().equals(type.hostPackage()))
+    } else if (isProtected()) {
+      if (hostPackage().equals(type.hostPackage())) {
         return true;
-      if(type.withinBodyThatSubclasses(hostType()) != null)
+      }
+      if (type.withinBodyThatSubclasses(hostType()) != null) {
         return true;
+      }
       return false;
-    }
-    else if(isPrivate())
+    } else if (isPrivate()) {
       return hostType().topLevelType() == type.topLevelType();
-    else
+    } else {
       return hostPackage().equals(type.hostPackage());
+    }
   }
 
   syn lazy boolean ConstructorDecl.accessibleFrom(TypeDecl type) {
-    if(!hostType().accessibleFrom(type))
+    if (!hostType().accessibleFrom(type)) {
       return false;
-    else if(isPublic())
+    } else if (isPublic()) {
       return true;
-    else if(isProtected()) {
+    } else if (isProtected()) {
       return true;
-    }
-    else if(isPrivate()) {
+    } else if (isPrivate()) {
       return hostType().topLevelType() == type.topLevelType();
-    }
-    else
+    } else {
       return hostPackage().equals(type.hostPackage());
+    }
   }
 
   syn lazy boolean FieldDeclaration.accessibleFrom(TypeDecl type) {
-    if(isPublic())
+    if (isPublic()) {
       return true;
-    else if(isProtected()) {
-      if(hostPackage().equals(type.hostPackage()))
+    } else if (isProtected()) {
+      if (hostPackage().equals(type.hostPackage())) {
         return true;
-      if(type.withinBodyThatSubclasses(hostType()) != null)
+      }
+      if (type.withinBodyThatSubclasses(hostType()) != null) {
         return true;
+      }
       return false;
-    }
-    else if(isPrivate())
+    } else if (isPrivate()) {
       return hostType().topLevelType() == type.topLevelType();
-    else
+    } else {
       return hostPackage().equals(type.hostPackage());
+    }
   }
 
   public void ASTNode.accessControl() {
@@ -130,20 +132,21 @@ aspect AccessControl {
   public void TypeAccess.accessControl() {
     super.accessControl();
     TypeDecl hostType = hostType();
-    if(hostType != null && !hostType.isUnknown() && !type().accessibleFrom(hostType)) {
+    if (hostType != null && !hostType.isUnknown() && !type().accessibleFrom(hostType)) {
       error("" + this.prettyPrint() + " in " + hostType().fullName() + " can not access type " + type().fullName());
-    }
-    else if((hostType == null || hostType.isUnknown())  && !type().accessibleFromPackage(hostPackage())) {
+    } else if ((hostType == null || hostType.isUnknown())  && !type().accessibleFromPackage(hostPackage())) {
       error("" + this.prettyPrint() + " can not access type " + type().fullName());
     }
   }
 
   public void ClassInstanceExpr.accessControl() {
     super.accessControl();
-    if(type().isAbstract())
+    if (type().isAbstract()) {
       error("Can not instantiate abstract class " + type().fullName());
-    if(!decl().accessibleFrom(hostType()))
+    }
+    if (!decl().accessibleFrom(hostType())) {
       error("constructor " + decl().signature() + " is not accessible");
+    }
   }
 
   public void ClassDecl.accessControl() {
@@ -171,19 +174,22 @@ aspect AccessControl {
   public void InterfaceDecl.accessControl() {
     super.accessControl();
 
-    if(!isCircular()) {
+    if (!isCircular()) {
       // 9.1.2
       HashSet set = new HashSet();
-      for(int i = 0; i < getNumSuperInterface(); i++) {
+      for (int i = 0; i < getNumSuperInterface(); i++) {
         TypeDecl decl = getSuperInterface(i).type();
 
-        if(!decl.isInterfaceDecl() && !decl.isUnknown())
+        if (!decl.isInterfaceDecl() && !decl.isUnknown()) {
           error("interface " + fullName() + " tries to extend non interface type " + decl.fullName());
-        if(!decl.isCircular() && !decl.accessibleFrom(this))
+        }
+        if (!decl.isCircular() && !decl.accessibleFrom(this)) {
           error("interface " + fullName() + " can not extend non accessible type " + decl.fullName());
+        }
 
-        if(set.contains(decl))
+        if (set.contains(decl)) {
           error("extended interface " + decl.fullName() + " mentionened multiple times in extends clause");
+        }
         set.add(decl);
       }
     }

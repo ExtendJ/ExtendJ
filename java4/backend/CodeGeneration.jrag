@@ -16,12 +16,14 @@ aspect CodeGeneration {
   syn int ASTNode.sourceLineNumber() = getStart() != 0 ? getLine(getStart()) : -1;
   eq ReturnStmt.sourceLineNumber() {
     int num = super.sourceLineNumber();
-    if(num != -1)
+    if (num != -1) {
       return num;
-    if(hasResult()) {
+    }
+    if (hasResult()) {
       num = getResult().findFirstSourceLineNumber();
-      if(num != -1)
+      if (num != -1) {
         return num;
+      }
     }
     return getLine(getParent().getParent().getEnd());
   }
@@ -29,12 +31,14 @@ aspect CodeGeneration {
   eq Access.sourceLineNumber() = findFirstSourceLineNumber();
 
   protected int ASTNode.findFirstSourceLineNumber() {
-    if(getStart() != 0)
+    if (getStart() != 0) {
       return getLine(getStart());
-    for(int i = 0; i < getNumChild(); i++) {
+    }
+    for (int i = 0; i < getNumChild(); i++) {
       int num = getChild(i).findFirstSourceLineNumber();
-      if(num != -1)
+      if (num != -1) {
         return num;
+      }
     }
     return -1;
   }
@@ -78,62 +82,63 @@ aspect CodeGeneration {
         gen.emit(Bytecode.ICONST_5);
         break;
       default:
-        if(value >= -128 && value <= 127) {
+        if (value >= -128 && value <= 127) {
           gen.emit(Bytecode.BIPUSH).add(value);
-        }
-        else if(value >= -32768 && value <= 32767) {
+        } else if (value >= -32768 && value <= 32767) {
           gen.emit(Bytecode.SIPUSH).add2(value);
-        }
-        else {
+        } else {
           int index = gen.constantPool().addConstant(value);
-          if(index < 256)
+          if (index < 256) {
             gen.emit(Bytecode.LDC).add(index);
-          else
+          } else {
             gen.emit(Bytecode.LDC_W).add2(index);
+          }
         }
     }
   }
   public static void LongLiteral.push(CodeGeneration gen, long value) {
-    if(value == 0)
+    if (value == 0) {
       gen.emit(Bytecode.LCONST_0);
-    else if(value == 1)
+    } else if (value == 1) {
       gen.emit(Bytecode.LCONST_1);
-    else {
+    } else {
       int index = gen.constantPool().addConstant(value);
       gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
   public static void DoubleLiteral.push(CodeGeneration gen, double value) {
-    if(value == 0)
+    if (value == 0) {
       gen.emit(Bytecode.DCONST_0);
-    else if(value == 1)
+    } else if (value == 1) {
       gen.emit(Bytecode.DCONST_1);
-    else {
+    } else {
       int index = gen.constantPool().addConstant(value);
       gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
   public static void FloatingPointLiteral.push(CodeGeneration gen, float value) {
-    if(value == 0)
+    if (value == 0) {
       gen.emit(Bytecode.FCONST_0);
-    else if(value == 1)
+    } else if (value == 1) {
       gen.emit(Bytecode.FCONST_1);
-    else if(value == 2)
+    } else if (value == 2) {
       gen.emit(Bytecode.FCONST_2);
-    else {
+    } else {
       int index = gen.constantPool().addConstant(value);
-      if(index < 256)
+      if (index < 256) {
         gen.emit(Bytecode.LDC).add(index);
-      else
+      } else {
         gen.emit(Bytecode.LDC_W).add2(index);
+      }
     }
   }
   public static void StringLiteral.push(CodeGeneration gen, String value) {
     int index = gen.constantPool().addConstant(value);
-    if(index < 256)
+    if (index < 256) {
       gen.emit(Bytecode.LDC).add(index);
-    else
+    } else {
       gen.emit(Bytecode.LDC_W).add2(index);
+    }
   }
 
   public static void BooleanLiteral.push(CodeGeneration gen, boolean value) {
@@ -192,25 +197,26 @@ aspect CodeGeneration {
   }
 
   public void Constant.createBCode(CodeGeneration gen) {
-    if(this instanceof ConstantInt)
+    if (this instanceof ConstantInt) {
       IntegerLiteral.push(gen, intValue());
-    else if(this instanceof ConstantLong)
+    } else if (this instanceof ConstantLong) {
       LongLiteral.push(gen, longValue());
-    else if(this instanceof ConstantFloat)
+    } else if (this instanceof ConstantFloat) {
       FloatingPointLiteral.push(gen, floatValue());
-    else if(this instanceof ConstantDouble)
+    } else if (this instanceof ConstantDouble) {
       DoubleLiteral.push(gen, doubleValue());
-    else if(this instanceof ConstantChar)
+    } else if (this instanceof ConstantChar) {
       IntegerLiteral.push(gen, intValue());
-    else if(this instanceof ConstantBoolean)
+    } else if (this instanceof ConstantBoolean) {
       BooleanLiteral.push(gen, booleanValue());
-    else if(this instanceof ConstantString)
+    } else if (this instanceof ConstantString) {
       StringLiteral.push(gen, stringValue());
+    }
   }
 
   // return
 
-  public void TypeDecl.emitReturn(CodeGeneration gen) { error(); }
+  public void TypeDecl.emitReturn(CodeGeneration gen)      { error(); }
   public void VoidType.emitReturn(CodeGeneration gen)      { gen.emit(Bytecode.RETURN);}
   public void PrimitiveType.emitReturn(CodeGeneration gen) { gen.emit(Bytecode.IRETURN);}
   public void LongType.emitReturn(CodeGeneration gen)      { gen.emit(Bytecode.LRETURN);}
@@ -235,39 +241,67 @@ aspect CodeGeneration {
   public void TypeDecl.emitLoadLocal(CodeGeneration gen, int pos) {error();}
   public void PrimitiveType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
-    if(pos == 0) gen.emit(Bytecode.ILOAD_0);
-    else if(pos == 1) gen.emit(Bytecode.ILOAD_1);
-    else if(pos == 2) gen.emit(Bytecode.ILOAD_2);
-    else if(pos == 3) gen.emit(Bytecode.ILOAD_3);
-    else if(pos < 256) gen.emit(Bytecode.ILOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.ILOAD).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.ILOAD_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.ILOAD_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.ILOAD_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.ILOAD_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.ILOAD).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.ILOAD).add2(pos);
+    }
   }
   public void LongType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
-    if(pos == 0) gen.emit(Bytecode.LLOAD_0);
-    else if(pos == 1) gen.emit(Bytecode.LLOAD_1);
-    else if(pos == 2) gen.emit(Bytecode.LLOAD_2);
-    else if(pos == 3) gen.emit(Bytecode.LLOAD_3);
-    else if(pos < 256) gen.emit(Bytecode.LLOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.LLOAD).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.LLOAD_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.LLOAD_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.LLOAD_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.LLOAD_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.LLOAD).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.LLOAD).add2(pos);
+    }
   }
   public void FloatType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
-    if(pos == 0) gen.emit(Bytecode.FLOAD_0);
-    else if(pos == 1) gen.emit(Bytecode.FLOAD_1);
-    else if(pos == 2) gen.emit(Bytecode.FLOAD_2);
-    else if(pos == 3) gen.emit(Bytecode.FLOAD_3);
-    else if(pos < 256) gen.emit(Bytecode.FLOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.FLOAD).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.FLOAD_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.FLOAD_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.FLOAD_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.FLOAD_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.FLOAD).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.FLOAD).add2(pos);
+    }
   }
   public void DoubleType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
-    if(pos == 0) gen.emit(Bytecode.DLOAD_0);
-    else if(pos == 1) gen.emit(Bytecode.DLOAD_1);
-    else if(pos == 2) gen.emit(Bytecode.DLOAD_2);
-    else if(pos == 3) gen.emit(Bytecode.DLOAD_3);
-    else if(pos < 256) gen.emit(Bytecode.DLOAD).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.DLOAD).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.DLOAD_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.DLOAD_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.DLOAD_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.DLOAD_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.DLOAD).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.DLOAD).add2(pos);
+    }
   }
   public void ReferenceType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.emitLoadReference(pos);
@@ -277,7 +311,7 @@ aspect CodeGeneration {
   }
 
   public void FieldDeclaration.emitLoadField(CodeGeneration gen, TypeDecl typeDecl) {
-    if(hostType().isArrayDecl() && name().equals("length")) {
+    if (hostType().isArrayDecl() && name().equals("length")) {
       gen.emit(Bytecode.ARRAYLENGTH);
       return;
     }
@@ -285,10 +319,11 @@ aspect CodeGeneration {
     String      desc = type().typeDescriptor();
     String      name = name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
-    if(isStatic())
+    if (isStatic()) {
       gen.emit(Bytecode.GETSTATIC, type().variableSize()).add2(index);
-    else
+    } else {
       gen.emit(Bytecode.GETFIELD, type().variableSize() - 1).add2(index);
+    }
   }
 
 
@@ -299,22 +334,22 @@ aspect CodeGeneration {
 
   public void VarAccess.emitStore(CodeGeneration gen) {
     Variable v = decl();
-    if(v instanceof VariableDeclaration) {
-      VariableDeclaration decl = (VariableDeclaration)v;
-      if(isDUbefore(v))
+    if (v instanceof VariableDeclaration) {
+      VariableDeclaration decl = (VariableDeclaration) v;
+      if (isDUbefore(v)) {
          gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type().typeDescriptor(), decl.localNum(), decl.variableScopeEndLabel(gen));
+      }
       decl.type().emitStoreLocal(gen, decl.localNum());
-    }
-    else if(v instanceof ParameterDeclaration) {
-      ParameterDeclaration decl = (ParameterDeclaration)v;
+    } else if (v instanceof ParameterDeclaration) {
+      ParameterDeclaration decl = (ParameterDeclaration) v;
       decl.type().emitStoreLocal(gen, decl.localNum());
-    }
-    else if(v instanceof FieldDeclaration) {
-      FieldDeclaration f = (FieldDeclaration)v;
-      if(f.isPrivate() && !hostType().hasField(v.name()))
+    } else if (v instanceof FieldDeclaration) {
+      FieldDeclaration f = (FieldDeclaration) v;
+      if (f.isPrivate() && !hostType().hasField(v.name())) {
         f.createAccessorWrite(fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
-      else
+      } else {
         f.emitStoreField(gen, fieldQualifierType());
+      }
     }
   }
 
@@ -339,48 +374,77 @@ aspect CodeGeneration {
     String      desc = type().typeDescriptor();
     String      name = name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
-    if(isStatic())
+    if (isStatic()) {
       gen.emit(Bytecode.PUTSTATIC, -type().variableSize()).add2(index);
-    else
+    } else {
       gen.emit(Bytecode.PUTFIELD, -type().variableSize() - 1).add2(index);
+    }
   }
 
   public void TypeDecl.emitStoreLocal(CodeGeneration gen, int pos) {error();}
   public void PrimitiveType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
-    if(pos == 0) gen.emit(Bytecode.ISTORE_0);
-    else if(pos == 1) gen.emit(Bytecode.ISTORE_1);
-    else if(pos == 2) gen.emit(Bytecode.ISTORE_2);
-    else if(pos == 3) gen.emit(Bytecode.ISTORE_3);
-    else if(pos < 256) gen.emit(Bytecode.ISTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.ISTORE).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.ISTORE_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.ISTORE_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.ISTORE_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.ISTORE_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.ISTORE).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.ISTORE).add2(pos);
+    }
   }
   public void LongType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
-    if(pos == 0) gen.emit(Bytecode.LSTORE_0);
-    else if(pos == 1) gen.emit(Bytecode.LSTORE_1);
-    else if(pos == 2) gen.emit(Bytecode.LSTORE_2);
-    else if(pos == 3) gen.emit(Bytecode.LSTORE_3);
-    else if(pos < 256) gen.emit(Bytecode.LSTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.LSTORE).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.LSTORE_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.LSTORE_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.LSTORE_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.LSTORE_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.LSTORE).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.LSTORE).add2(pos);
+    }
   }
   public void FloatType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
-    if(pos == 0) gen.emit(Bytecode.FSTORE_0);
-    else if(pos == 1) gen.emit(Bytecode.FSTORE_1);
-    else if(pos == 2) gen.emit(Bytecode.FSTORE_2);
-    else if(pos == 3) gen.emit(Bytecode.FSTORE_3);
-    else if(pos < 256) gen.emit(Bytecode.FSTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.FSTORE).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.FSTORE_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.FSTORE_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.FSTORE_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.FSTORE_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.FSTORE).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.FSTORE).add2(pos);
+    }
   }
   public void DoubleType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
-    if(pos == 0) gen.emit(Bytecode.DSTORE_0);
-    else if(pos == 1) gen.emit(Bytecode.DSTORE_1);
-    else if(pos == 2) gen.emit(Bytecode.DSTORE_2);
-    else if(pos == 3) gen.emit(Bytecode.DSTORE_3);
-    else if(pos < 256) gen.emit(Bytecode.DSTORE).add(pos);
-    else gen.emit(Bytecode.WIDE).emit(Bytecode.DSTORE).add2(pos);
+    if (pos == 0) {
+      gen.emit(Bytecode.DSTORE_0);
+    } else if (pos == 1) {
+      gen.emit(Bytecode.DSTORE_1);
+    } else if (pos == 2) {
+      gen.emit(Bytecode.DSTORE_2);
+    } else if (pos == 3) {
+      gen.emit(Bytecode.DSTORE_3);
+    } else if (pos < 256) {
+      gen.emit(Bytecode.DSTORE).add(pos);
+    } else {
+      gen.emit(Bytecode.WIDE).emit(Bytecode.DSTORE).add2(pos);
+    }
   }
   public void ReferenceType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.emitStoreReference(pos);
@@ -486,12 +550,13 @@ aspect CodeGeneration {
 }
 aspect CodeGenerationConversions {
   void TypeDecl.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {
-    if(!type.isIntegralType() || !isIntegralType() || type.isLong())
+    if (!type.isIntegralType() || !isIntegralType() || type.isLong()) {
       emitCastTo(gen, type);
+    }
   }
 
   void TypeDecl.emitCastTo(CodeGeneration gen, TypeDecl type) { throw new Error("CastTo not implemented for " + getClass().getName()); }
-  void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) { if(!instanceOf(type) && !type.isNull()) gen.emitCheckCast(type); }
+  void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) { if (!instanceOf(type) && !type.isNull()) gen.emitCheckCast(type); }
   void IntType.emitCastTo(CodeGeneration gen, TypeDecl type)      { type.intToThis(gen); }
   void FloatType.emitCastTo(CodeGeneration gen, TypeDecl type)    { type.floatToThis(gen); }
   void DoubleType.emitCastTo(CodeGeneration gen, TypeDecl type)   { type.doubleToThis(gen); }
