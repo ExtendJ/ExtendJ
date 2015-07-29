@@ -64,7 +64,7 @@ aspect ClassPath {
     try {
       SourceFilePath pathPart = new SourceFilePath(fileName);
       CompilationUnit cu = pathPart.getCompilationUnit(this, fileName);
-      if (cu != null) {
+      if (cu != emptyCompilationUnit()) {
         classPath.addPackage(cu.packageName());
         addCompilationUnit(cu);
       }
@@ -225,18 +225,18 @@ aspect ClassPath {
     }
 
     /**
-     * Load a compilation unit from disk, selecting a class file
-     * if one exists that is not older than a corresponding source
-     * file, otherwise the source file is selected.
+     * Load a compilation unit from disk based on a classname. A class file is parsed if one exists
+     * matching the classname that is not older than a corresponding source file, otherwise the
+     * source file is selected.
+     * <p>
+     * This method is called by the LibCompilationUnit NTA.  We rely on the result of this method
+     * being cached because it will return a newly parsed compilation unit each time it is called.
      *
-     * This method is called by the LibCompilationUnit NTA.  We rely on the
-     * result of this method being cached because it will return a newly parsed
-     * compilation unit each time it is called.
-     *
-     * @return the loaded compilation unit, or {@code null} if no compilation
-     * unit was found
+     * @return the loaded compilation unit, or the provided default compilation unit if no matching
+     * compilation unit was found.
      */
-    public synchronized CompilationUnit getCompilationUnit(String typeName) {
+    public synchronized CompilationUnit getCompilationUnit(String typeName,
+        CompilationUnit defaultCompilationUnit) {
       try {
         initPaths();
         ClassSource sourcePart = ClassSource.NONE;
@@ -277,10 +277,11 @@ aspect ClassPath {
             return unit;
           }
         }
-        return null;
+        return defaultCompilationUnit;
       } catch(IOException e) {
+        e.printStackTrace(System.err);
       }
-      return null;
+      return defaultCompilationUnit;
     }
 
     /**
@@ -351,17 +352,16 @@ aspect ClassPath {
    * Load a compilation unit from disk, selecting a class file
    * if one exists that is not older than a corresponding source
    * file, otherwise the source file is selected.
-   *
+   * <p>
    * This method is called by the LibCompilationUnit NTA.  We rely on the
    * result of this method being cached because it will return a newly parsed
    * compilation unit each time it is called.
    *
-   * @return the loaded compilation unit, or {@code null} if no compilation
-   * unit was found
+   * @return the loaded compilation unit, or the empty compilation unit if no compilation unit was
+   * found.
    */
-  syn lazy CompilationUnit Program.getCompilationUnit(String typeName) {
-    return classPath.getCompilationUnit(typeName);
-  }
+  syn lazy CompilationUnit Program.getCompilationUnit(String typeName) =
+      classPath.getCompilationUnit(typeName, emptyCompilationUnit());
 
   /**
    * @return <code>true</code> if there is a package with the given name on

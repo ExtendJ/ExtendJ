@@ -16,6 +16,7 @@ aspect SpecialClasses {
   syn lazy TypeDecl Program.typeObject() = lookupType("java.lang", "Object");
   syn lazy TypeDecl Program.typeCloneable() = lookupType("java.lang", "Cloneable");
   syn lazy TypeDecl Program.typeSerializable() = lookupType("java.io", "Serializable");
+
   eq Program.getChild().typeObject() = typeObject();
   eq Program.getChild().typeCloneable() = typeCloneable();
   eq Program.getChild().typeSerializable() = typeSerializable();
@@ -29,6 +30,7 @@ aspect SpecialClasses {
   syn lazy TypeDecl Program.typeFloat() = lookupType(PRIMITIVE_PACKAGE_NAME , "float");
   syn lazy TypeDecl Program.typeDouble() = lookupType(PRIMITIVE_PACKAGE_NAME , "double");
   syn lazy TypeDecl Program.typeString() = lookupType("java.lang", "String");
+
   eq Program.getChild().typeBoolean() = typeBoolean();
   eq Program.getChild().typeByte() = typeByte();
   eq Program.getChild().typeShort() = typeShort();
@@ -41,6 +43,7 @@ aspect SpecialClasses {
 
   syn lazy TypeDecl Program.typeVoid() = lookupType(PRIMITIVE_PACKAGE_NAME, "void");
   eq Program.getChild().typeVoid() = typeVoid();
+
   syn lazy TypeDecl Program.typeNull() = lookupType(PRIMITIVE_PACKAGE_NAME, "null");
   eq Program.getChild().typeNull() = typeNull();
 
@@ -75,26 +78,32 @@ aspect SpecialClasses {
 }
 
 aspect LookupFullyQualifiedTypes {
-  syn lazy boolean Program.hasPackage(String packageName) {
-    return isPackage(packageName);
-  }
+  syn lazy boolean Program.hasPackage(String packageName) =
+      isPackage(packageName);
+
   /**
    * The scope of a declaration of an observable top level package is all
    * observable compilation units
    */
   eq Program.getChild().hasPackage(String packageName) = hasPackage(packageName);
-  eq AbstractDot.getRight().hasPackage(String packageName) = getLeft().hasQualifiedPackage(packageName);
+  eq AbstractDot.getRight().hasPackage(String packageName) =
+      getLeft().hasQualifiedPackage(packageName);
   syn boolean Expr.hasQualifiedPackage(String packageName) = false;
   eq PackageAccess.hasQualifiedPackage(String packageName) =
       hasPackage(packageName() + "." + packageName);
   inh boolean Expr.hasPackage(String packageName);
-  eq MethodAccess.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
-  eq ConstructorAccess.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
-  eq SuperConstructorAccess.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
-  eq ArrayAccess.getExpr().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
-  eq ArrayTypeWithSizeAccess.getExpr().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
-  eq ClassInstanceExpr.getArg().hasPackage(String packageName) = unqualifiedScope().hasPackage(packageName);
-
+  eq MethodAccess.getArg().hasPackage(String packageName) =
+      unqualifiedScope().hasPackage(packageName);
+  eq ConstructorAccess.getArg().hasPackage(String packageName) =
+      unqualifiedScope().hasPackage(packageName);
+  eq SuperConstructorAccess.getArg().hasPackage(String packageName) =
+      unqualifiedScope().hasPackage(packageName);
+  eq ArrayAccess.getExpr().hasPackage(String packageName) =
+      unqualifiedScope().hasPackage(packageName);
+  eq ArrayTypeWithSizeAccess.getExpr().hasPackage(String packageName) =
+      unqualifiedScope().hasPackage(packageName);
+  eq ClassInstanceExpr.getArg().hasPackage(String packageName) =
+      unqualifiedScope().hasPackage(packageName);
 
   inh TypeDecl Expr.lookupType(String packageName, String typeName);
   inh TypeDecl Stmt.lookupType(String packageName, String typeName);
@@ -107,7 +116,8 @@ aspect LookupFullyQualifiedTypes {
   /**
    * Defers the lookup to the synthesized attribute.
    */
-  eq Program.getChild().lookupType(String packageName, String typeName) = lookupType(packageName, typeName);
+  eq Program.getChild().lookupType(String packageName, String typeName) =
+      lookupType(packageName, typeName);
 
   /**
    * Extra cache for sourcel type lookups. This cache is important in order to
@@ -125,13 +135,13 @@ aspect LookupFullyQualifiedTypes {
   syn lazy TypeDecl Program.lookupType(String packageName, String typeName) {
     String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
 
-    // Check for type in source
+    // Check for type in source type map.
     if (sourceTypeMap.containsKey(fullName)) {
       return sourceTypeMap.get(fullName);
     }
 
     if (!sourceTypeMapInitialized) {
-      // initialize source type map
+      // Initialize source type map.
       for (int i = 0; i < getNumCompilationUnit(); i++) {
         CompilationUnit unit = getCompilationUnit(i);
         for (int j = 0; j < unit.getNumTypeDecl(); j++) {
@@ -145,7 +155,7 @@ aspect LookupFullyQualifiedTypes {
       }
     }
 
-    // Check for type in library
+    // Look for a matching library type.
     return lookupLibType(packageName, typeName);
   }
 
@@ -169,12 +179,8 @@ aspect LookupFullyQualifiedTypes {
   public TypeDecl Program.lookupLibType(String packageName, String typeName) {
     String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
 
-    if (libraryTypeMap.containsKey(fullName)) {
-      return libraryTypeMap.get(fullName);
-    }
-
     if (!primitiveTypeMapInitialized) {
-      // initialize primitive type map
+      // Initialize primitive types in the library type map.
       PrimitiveCompilationUnit unit = getPrimitiveCompilationUnit();
       libraryTypeMap.put("@primitive.boolean", unit.typeBoolean());
       libraryTypeMap.put("@primitive.byte", unit.typeByte());
@@ -194,45 +200,44 @@ aspect LookupFullyQualifiedTypes {
       return libraryTypeMap.get(fullName);
     }
 
-    // Check the library:
-    //  We avoid creating a null NTA value here by first using the
-    //  getCompilationUnit reference attribute to check for an existing
-    //  CompilationUnit. If one is found, then we can safely call
-    //  getLibCompilationUnit which creates the NTA:
-    if (getCompilationUnit(fullName) != null) {
-      CompilationUnit libUnit = getLibCompilationUnit(fullName);
-      for (int j = 0; j < libUnit.getNumTypeDecl(); j++) {
-        TypeDecl type = libUnit.getTypeDecl(j);
-        if (!libraryTypeMap.containsKey(type.fullName())) {
-          libraryTypeMap.put(type.fullName(), type);
-        }
-      }
-      if (libraryTypeMap.containsKey(fullName)) {
-        return libraryTypeMap.get(fullName);
+    // Lookup the type in the library class path.
+    CompilationUnit libraryUnit = getLibCompilationUnit(fullName);
+
+    // Add all types from the compilation unit in the library type map so that we can find them on
+    // the next type lookup. If we don't do this lookup might incorrectly miss a type that is not
+    // declared in a Java source file with a matching name.
+    for (int j = 0; j < libraryUnit.getNumTypeDecl(); j++) {
+      TypeDecl type = libraryUnit.getTypeDecl(j);
+      if (!libraryTypeMap.containsKey(type.fullName())) {
+        libraryTypeMap.put(type.fullName(), type);
       }
     }
 
-    // No type found in the library
-    return unknownType();
+    if (libraryTypeMap.containsKey(fullName)) {
+      return libraryTypeMap.get(fullName);
+    } else {
+      libraryTypeMap.put(fullName, unknownType());
+      return unknownType();
+    }
   }
 
-  // Store library units (including primitive unit) in a parameterized nta
-  syn nta CompilationUnit Program.getLibCompilationUnit(String fullName) {
-    return getCompilationUnit(fullName);
-  }
+  /**
+   * This attribute is used to cache library compilation units, including primitive types, by
+   * storing the compilation units in a parameterized nta.
+   */
+  syn nta CompilationUnit Program.getLibCompilationUnit(String typeName) =
+      getCompilationUnit(typeName);
 
+  syn nta CompilationUnit Program.emptyCompilationUnit() = new CompilationUnit();
 }
 
 aspect TypeScopePropagation {
   inh TypeDecl Access.unknownType();
 
-  syn lazy SimpleSet TypeAccess.decls() {
-    if (packageName().equals("")) {
-      return lookupType(name());
-    } else {
-      return lookupType(packageName(), name()).asSet();
-    }
-  }
+  syn lazy SimpleSet TypeAccess.decls() =
+      packageName().equals("")
+      ? lookupType(name())
+      : lookupType(packageName(), name()).asSet();
 
   /**
    * @return a set containing this type, unless this is the unknown type in
@@ -286,31 +291,31 @@ aspect TypeScopePropagation {
   // The scope of a type import declaration is all the class and interface type declarations in
   // the compilation unit in which the import declaration appears.
   eq CompilationUnit.getChild().lookupType(String name) {
-    // locally declared types in compilation unit
+    // Locally declared types in the compilation unit.
     SimpleSet set = localLookupType(name);
     if (!set.isEmpty()) {
       return set;
     }
 
-    // imported types
+    // Imported types.
     set = importedTypes(name);
     if (!set.isEmpty()) {
       return set;
     }
 
-    // types in the same package
+    // Types in the same package.
     TypeDecl result = lookupType(packageName(), name);
     if (result.accessibleFromPackage(packageName())) {
       return result;
     }
 
-    // types imported on demand
+    // Types imported on demand.
     set = importedTypesOnDemand(name);
     if (!set.isEmpty()) {
       return set;
     }
 
-    // include primitive types
+    // Include primitive types.
     result = lookupType(PRIMITIVE_PACKAGE_NAME, name);
     if (!result.isUnknown()) {
       return result;
@@ -324,6 +329,7 @@ aspect TypeScopePropagation {
     return lookupType(name);
   }
 
+  /** Searches for a type with the given simple name in this compilation unit. */
   syn SimpleSet CompilationUnit.localLookupType(String name) {
     for (int i = 0; i < getNumTypeDecl(); i++) {
       if (getTypeDecl(i).name().equals(name)) {
@@ -344,6 +350,7 @@ aspect TypeScopePropagation {
     }
     return set;
   }
+
   syn SimpleSet CompilationUnit.importedTypesOnDemand(String name) {
     SimpleSet set = SimpleSet.emptySet;
     for (int i = 0; i < getNumImportDecl(); i++) {
@@ -384,15 +391,17 @@ aspect TypeScopePropagation {
       TypeDecl typeDecl = lookupType(packageName, name);
       if (typeDecl.accessibleFromPackage(packageName()) &&
          typeDecl.typeName().equals(packageName + "." + name)) {
-        // canonical names match
+        // Canonical names match.
         set = set.add(typeDecl);
-     }
+      }
     } else {
       for (Iterator iter = getAccess().type().memberTypes(name).iterator(); iter.hasNext(); ) {
         TypeDecl decl = (TypeDecl) iter.next();
         if (decl.accessibleFromPackage(packageName()) &&
-           decl.typeName().equals(getAccess().typeName() + "." + name)) // canonical names match
+           decl.typeName().equals(getAccess().typeName() + "." + name)) {
+          // Canonical names match.
           set = set.add(decl);
+        }
       }
     }
     return set;
@@ -403,7 +412,7 @@ aspect TypeScopePropagation {
   syn boolean ImportDecl.isOnDemand() = false;
   eq TypeImportOnDemandDecl.isOnDemand() = true;
 
-  // imports are not themselves affected by imports
+  // Imports are not themselves affected by imports.
   eq CompilationUnit.getImportDecl().lookupType(String name) = lookupType(name);
 
   eq TypeDecl.getBodyDecl(int index).lookupType(String name) = localLookupType(name);
@@ -526,12 +535,10 @@ aspect TypeScopePropagation {
     return newSet;
   }
 
-  syn lazy SimpleSet ClassInstanceExpr.localLookupType(String name) {
-    if (hasTypeDecl() && getTypeDecl().name().equals(name)) {
-      return SimpleSet.emptySet.add(getTypeDecl());
-    }
-    return SimpleSet.emptySet;
-  }
+  syn lazy SimpleSet ClassInstanceExpr.localLookupType(String name) =
+    hasTypeDecl() && getTypeDecl().name().equals(name)
+    ? SimpleSet.emptySet.add(getTypeDecl())
+    : SimpleSet.emptySet;
 
   syn boolean TypeDecl.hasType(String name) = !memberTypes(name).isEmpty();
   syn boolean BodyDecl.declaresType(String name) = false;
