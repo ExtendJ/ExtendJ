@@ -21,14 +21,14 @@ aspect SpecialClasses {
   eq Program.getChild().typeCloneable() = typeCloneable();
   eq Program.getChild().typeSerializable() = typeSerializable();
 
-  syn lazy TypeDecl Program.typeBoolean() = lookupType(PRIMITIVE_PACKAGE_NAME, "boolean");
-  syn lazy TypeDecl Program.typeByte() = lookupType(PRIMITIVE_PACKAGE_NAME , "byte");
-  syn lazy TypeDecl Program.typeShort() = lookupType(PRIMITIVE_PACKAGE_NAME , "short");
-  syn lazy TypeDecl Program.typeChar() = lookupType(PRIMITIVE_PACKAGE_NAME , "char");
-  syn lazy TypeDecl Program.typeInt() = lookupType(PRIMITIVE_PACKAGE_NAME , "int");
-  syn lazy TypeDecl Program.typeLong() = lookupType(PRIMITIVE_PACKAGE_NAME , "long");
-  syn lazy TypeDecl Program.typeFloat() = lookupType(PRIMITIVE_PACKAGE_NAME , "float");
-  syn lazy TypeDecl Program.typeDouble() = lookupType(PRIMITIVE_PACKAGE_NAME , "double");
+  syn lazy TypeDecl Program.typeBoolean() = getPrimitiveCompilationUnit().typeBoolean();
+  syn lazy TypeDecl Program.typeByte() = getPrimitiveCompilationUnit().typeByte();
+  syn lazy TypeDecl Program.typeShort() = getPrimitiveCompilationUnit().typeShort();
+  syn lazy TypeDecl Program.typeChar() = getPrimitiveCompilationUnit().typeChar();
+  syn lazy TypeDecl Program.typeInt() = getPrimitiveCompilationUnit().typeInt();
+  syn lazy TypeDecl Program.typeLong() = getPrimitiveCompilationUnit().typeLong();
+  syn lazy TypeDecl Program.typeFloat() = getPrimitiveCompilationUnit().typeFloat();
+  syn lazy TypeDecl Program.typeDouble() = getPrimitiveCompilationUnit().typeDouble();
   syn lazy TypeDecl Program.typeString() = lookupType("java.lang", "String");
 
   eq Program.getChild().typeBoolean() = typeBoolean();
@@ -41,13 +41,13 @@ aspect SpecialClasses {
   eq Program.getChild().typeDouble() = typeDouble();
   eq Program.getChild().typeString() = typeString();
 
-  syn lazy TypeDecl Program.typeVoid() = lookupType(PRIMITIVE_PACKAGE_NAME, "void");
+  syn lazy TypeDecl Program.typeVoid() = getPrimitiveCompilationUnit().typeVoid();
   eq Program.getChild().typeVoid() = typeVoid();
 
-  syn lazy TypeDecl Program.typeNull() = lookupType(PRIMITIVE_PACKAGE_NAME, "null");
+  syn lazy TypeDecl Program.typeNull() = getPrimitiveCompilationUnit().typeNull();
   eq Program.getChild().typeNull() = typeNull();
 
-  syn lazy TypeDecl Program.unknownType() = lookupType(PRIMITIVE_PACKAGE_NAME, "Unknown");
+  syn lazy TypeDecl Program.unknownType() = getPrimitiveCompilationUnit().unknownType();
   eq Program.getChild().unknownType() = unknownType();
 
   inh TypeDecl Expr.typeBoolean();
@@ -120,63 +120,92 @@ aspect LookupFullyQualifiedTypes {
       lookupType(packageName, typeName);
 
   /**
-   * Extra cache for sourcel type lookups. This cache is important in order to
-   * make all source types shadow library types with matching names, even when
-   * the source type lives in a compilation unit with a different simple name.
-   */
-  private Map<String, TypeDecl> Program.sourceTypeMap = new HashMap<String, TypeDecl>();
-  private boolean Program.sourceTypeMapInitialized = false;
-
-  /**
    * Checks from-source compilation units for the given type.
    * If no matching compilation unit is found the library compliation units
    * will be searched.
    */
   syn lazy TypeDecl Program.lookupType(String packageName, String typeName) {
-    String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
-
-    // Check for type in source type map.
-    if (sourceTypeMap.containsKey(fullName)) {
-      return sourceTypeMap.get(fullName);
-    }
-
-    if (!sourceTypeMapInitialized) {
-      // Initialize source type map.
-      for (int i = 0; i < getNumCompilationUnit(); i++) {
-        CompilationUnit unit = getCompilationUnit(i);
-        for (int j = 0; j < unit.getNumTypeDecl(); j++) {
-          TypeDecl type = unit.getTypeDecl(j);
-          sourceTypeMap.put(type.fullName(), type);
-        }
-      }
-      sourceTypeMapInitialized = true;
-      if (sourceTypeMap.containsKey(fullName)) {
-        return sourceTypeMap.get(fullName);
-      }
+    // Look for a matching source type.
+    TypeDecl sourceType = lookupSourceType(packageName, typeName);
+    if (!sourceType.isUnknown()) {
+      return sourceType;
     }
 
     // Look for a matching library type.
-    return lookupLibType(packageName, typeName);
+    return lookupLibraryType(packageName, typeName);
+  }
+
+  /**
+   * Extra cache for source type lookups. This cache is important in order to
+   * make all source types shadow library types with matching names, even when
+   * the source type lives in a compilation unit with a different simple name.
+   */
+  private final Map<String, TypeDecl> Program.sourceTypeMap = new HashMap<String, TypeDecl>();
+  private boolean Program.sourceTypeMapInitialized = false;
+
+  /**
+   * Lookup a type among source classes.
+   * <p>
+   * Invoking this method may cause more than just the specified type to be loaded, for
+   * example if there exists other types in the same source file, the additional
+   * types are also loaded and cached for the next lookup.
+   * <p>
+   * This method is not an attribute due to the necessary side-effects caused
+   * by loading and caching of extra types.
+   */
+  protected TypeDecl Program.lookupSourceType(String packageName, String typeName) {
+    String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
+
+    if (!sourceTypeMapInitialized) {
+      initializeSourceTypeMap();
+      sourceTypeMapInitialized = true;
+    }
+
+    if (sourceTypeMap.containsKey(fullName)) {
+      return sourceTypeMap.get(fullName);
+    } else {
+      sourceTypeMap.put(fullName, unknownType());
+    }
+
+    // Look for a matching library type.
+    return unknownType();
+  }
+
+  /**
+   * Initialize source types in the source type map.  This puts all the types provided by
+   * Program.addSourceFile() in a map for lookup by Program.lookupSourceType.
+   */
+  private void Program.initializeSourceTypeMap() {
+    // Initialize source type map with the compilation units supplied by Program.addSourceFile.
+    for (int i = 0; i < getNumCompilationUnit(); i++) {
+      CompilationUnit unit = getCompilationUnit(i);
+      for (int j = 0; j < unit.getNumTypeDecl(); j++) {
+        TypeDecl type = unit.getTypeDecl(j);
+        sourceTypeMap.put(type.fullName(), type);
+      }
+    }
   }
 
   /**
    * Extra cache for library type lookups. This cache does not have a big
    * effect on performance due to the caching of the parameterized
-   * lookupLibType attribute.
+   * lookupLibraryType attribute. The cache is needed to be able to track library types
+   * that are declared in compilation units with a different simple name than the type itself.
    */
-  private Map<String, TypeDecl> Program.libraryTypeMap = new HashMap<String, TypeDecl>();
+  private final Map<String, TypeDecl> Program.libraryTypeMap = new HashMap<String, TypeDecl>();
   private boolean Program.libraryTypeMapInitialized = false;
 
   /**
    * Lookup a type among library classes. The lookup includes Jar and source files.
+   * <p>
    * Invoking this method may cause more than just the specified type to be loaded, for
-   * example if there are other public types in the same source file, the additional
-   * types are also cached for the next lookup.
-   *
+   * example if there exists other types in the same source file, the additional
+   * types are also loaded and cached for the next lookup.
+   * <p>
    * This method is not an attribute due to the necessary side-effects caused
    * by loading and caching of extra types.
    */
-  public TypeDecl Program.lookupLibType(String packageName, String typeName) {
+  protected TypeDecl Program.lookupLibraryType(String packageName, String typeName) {
     String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
 
     if (!libraryTypeMapInitialized) {
@@ -212,17 +241,17 @@ aspect LookupFullyQualifiedTypes {
   /** Initialize primitive types in the library type map.  */
   private void Program.initializeLibraryTypeMap() {
       PrimitiveCompilationUnit unit = getPrimitiveCompilationUnit();
-      libraryTypeMap.put("@primitive.boolean", unit.typeBoolean());
-      libraryTypeMap.put("@primitive.byte", unit.typeByte());
-      libraryTypeMap.put("@primitive.short", unit.typeShort());
-      libraryTypeMap.put("@primitive.char", unit.typeChar());
-      libraryTypeMap.put("@primitive.int", unit.typeInt());
-      libraryTypeMap.put("@primitive.long", unit.typeLong());
-      libraryTypeMap.put("@primitive.float", unit.typeFloat());
-      libraryTypeMap.put("@primitive.double", unit.typeDouble());
-      libraryTypeMap.put("@primitive.null", unit.typeNull());
-      libraryTypeMap.put("@primitive.void", unit.typeVoid());
-      libraryTypeMap.put("@primitive.Unknown", unit.unknownType());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".boolean", unit.typeBoolean());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".byte", unit.typeByte());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".short", unit.typeShort());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".char", unit.typeChar());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".int", unit.typeInt());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".long", unit.typeLong());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".float", unit.typeFloat());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".double", unit.typeDouble());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".null", unit.typeNull());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".void", unit.typeVoid());
+      libraryTypeMap.put(PRIMITIVE_PACKAGE_NAME + ".Unknown", unit.unknownType());
   }
 
   /**
