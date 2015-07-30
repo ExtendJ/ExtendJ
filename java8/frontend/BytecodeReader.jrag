@@ -25,10 +25,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+
+import java.io.BufferedInputStream;
+import java.io.DataInputStream;
+
 aspect BytecodeReader {
 
   public class BytecodeParser implements Flags, BytecodeReader {
-    public CompilationUnit read(InputStream is, String fullName, Program p) throws FileNotFoundException, IOException {
+    public CompilationUnit read(InputStream is, String fullName, Program p)
+        throws FileNotFoundException, IOException {
       return new BytecodeParser(is, fullName).parse(null, null, p);
     }
 
@@ -39,14 +44,8 @@ aspect BytecodeReader {
     public String outerClassName;
     public String name;
 
-    public BytecodeParser(byte[] buffer, int size, String name) {
-      //this.is = new DataInputStream(new DummyInputStream(buffer, size));
-      this.is = new DataInputStream(new ByteArrayInputStream(buffer, 0, size));
-      this.name = name;
-    }
     public BytecodeParser(InputStream in, String name) {
-      //this.is = new DataInputStream(new DummyInputStream(buffer, size));
-      this.is = new DataInputStream(new DummyInputStream(in));
+      this.is = new DataInputStream(new BufferedInputStream(in));
       this.name = name;
     }
 
@@ -55,96 +54,9 @@ aspect BytecodeReader {
     }
     public BytecodeParser(String name) {
       if (!name.endsWith(".class")) {
-        //name = name.replaceAll("\\.", "/") + ".class";
         name = name.replace('.', '/') + ".class";
       }
       this.name = name;
-    }
-
-    private static class DummyInputStream extends InputStream {
-      byte[] bytes;
-      int pos;
-      int size;
-      public DummyInputStream(byte[] buffer, int size) {
-        bytes = buffer;
-        this.size = size;
-      }
-      public DummyInputStream(InputStream is) {
-        bytes = new byte[1024];
-        int index = 0;
-        size = 1024;
-        try {
-          int status;
-          do {
-            status = is.read(bytes, index, size - index);
-            if (status != -1) {
-              index += status;
-              if (index == size) {
-                byte[] newBytes = new byte[size*2];
-                System.arraycopy(bytes, 0, newBytes, 0, size);
-                bytes = newBytes;
-                size *= 2;
-              }
-            }
-          } while (status != -1);
-        } catch (IOException e) {
-          System.err.println("Something went wrong trying to read " + is);
-          //System.exit(1);
-        }
-        size = index;
-        pos = 0;
-      }
-
-      public int available() {
-        return size - pos;
-      }
-
-      public void close() {
-      }
-
-      public void mark(int readlimit) {
-      }
-
-      public boolean markSupported() {
-        return false;
-      }
-
-      public int read(byte[] b) {
-        int actualLength = Math.min(b.length, size-pos);
-        System.arraycopy(bytes, pos, b, 0, actualLength);
-        pos += actualLength;
-        return actualLength;
-      }
-
-      public int read(byte[] b, int offset, int length) {
-        int actualLength = Math.min(length, size-pos);
-        System.arraycopy(bytes, pos, b, offset, actualLength);
-        pos += actualLength;
-        return actualLength;
-      }
-
-      public void reset() {
-      }
-
-      public long skip(long n) {
-        if (size == pos) {
-          return -1;
-        }
-        long skipSize = Math.min(n, size-pos);
-        pos += skipSize;
-        return skipSize;
-      }
-
-      public int read() throws IOException {
-        if (pos < size) {
-          int i = bytes[pos++];
-          if (i < 0) {
-            i = 256 + i;
-          }
-          return i;
-        }
-        return -1;
-      }
     }
 
     public int next() {
@@ -230,7 +142,9 @@ aspect BytecodeReader {
 
     public void skip(int length) {
       try {
-        is.skip(length);
+        while (length > 0) {
+          length -= is.skip(length);
+        }
       } catch (IOException e) {
         System.exit(1);
       }
@@ -252,56 +166,50 @@ aspect BytecodeReader {
       print("\n");
     }
 
-    public CompilationUnit parse(TypeDecl outerTypeDecl, String outerClassName, Program classPath, boolean isInner)
+    public CompilationUnit parse(TypeDecl outerTypeDecl, String outerClassName,
+        Program classPath, boolean isInner)
         throws FileNotFoundException, IOException {
-          isInnerClass = isInner;
-          return parse(outerTypeDecl, outerClassName, classPath);
+      isInnerClass = isInner;
+      return parse(outerTypeDecl, outerClassName, classPath);
     }
 
     public CompilationUnit parse(TypeDecl outerTypeDecl, String outerClassName, Program program)
-      throws FileNotFoundException, IOException {
-        //InputStream file = ClassLoader.getSystemResourceAsStream(name);
+        throws FileNotFoundException, IOException {
 
-        if (is == null) {
-          throw new FileNotFoundException(name);
-        }
-
-        if (BytecodeParser.VERBOSE) {
-          println("Parsing byte codes in " + name);
-        }
-
-        this.outerClassName = outerClassName;
-        parseMagic();
-        parseMinor();
-        parseMajor();
-        parseConstantPool();
-        CompilationUnit cu = new CompilationUnit();
-        TypeDecl typeDecl = parseTypeDecl();
-        cu.setPackageDecl(classInfo.packageDecl());
-        cu.addTypeDecl(typeDecl);
-        parseFields(typeDecl);
-        parseMethods(typeDecl);
-        //parse attributes, and if we have an inner class, then execute the branch...
-        if (new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program).isInnerClass()) {
-          //this is a workaround for the fact that JastAdd stores inner classes as members of
-          //their outer classes, even for inner classes that come from bytecode;
-          //to avoid having inner classes show up as top-level classes, we remove them here
-          //from the compilation unit again...
-
-          //first add the cu to the program, so that getTypeDecls() won't fail
-          program.addCompilationUnit(cu);
-          //then clear the cu
-          for (int i=0;i<cu.getTypeDecls().getNumChild();i++) {
-            cu.getTypeDecls().removeChild(i);
-          }
-          //and remove the cu from the program again
-          program.getCompilationUnits().removeChild(program.getCompilationUnits().getIndexOfChild(cu));
-        }
-
-        is.close();
-        is = null;
-        return cu;
+      if (BytecodeParser.VERBOSE) {
+        println("Parsing byte codes in " + name);
       }
+
+      this.outerClassName = outerClassName;
+      parseMagic();
+      parseMinor();
+      parseMajor();
+      parseConstantPool();
+      CompilationUnit cu = new CompilationUnit();
+      TypeDecl typeDecl = parseTypeDecl();
+      cu.setPackageDecl(classInfo.packageDecl());
+      cu.addTypeDecl(typeDecl);
+      parseFields(typeDecl);
+      parseMethods(typeDecl);
+      //parse attributes, and if we have an inner class, then execute the branch...
+      if (new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program).isInnerClass()) {
+        //this is a workaround for the fact that JastAdd stores inner classes as members of
+        //their outer classes, even for inner classes that come from bytecode;
+        //to avoid having inner classes show up as top-level classes, we remove them here
+        //from the compilation unit again...
+
+        //first add the cu to the program, so that getTypeDecls() won't fail
+        program.addCompilationUnit(cu);
+        //then clear the cu
+        for (int i=0;i<cu.getTypeDecls().getNumChild();i++) {
+          cu.getTypeDecls().removeChild(i);
+        }
+        //and remove the cu from the program again
+        program.getCompilationUnits().removeChild(program.getCompilationUnits().getIndexOfChild(cu));
+      }
+
+      return cu;
+    }
 
     public void parseMagic() {
       if (next() != 0xca || next() != 0xfe || next() != 0xba || next() != 0xbe) {
@@ -546,17 +454,11 @@ aspect BytecodeReader {
       }
       constantPool = new CONSTANT_Info[count + 1];
       for (int i = 1; i < count; i++) {
-        parseEntry(i);
+        parseConstantPoolEntry(i);
         if (constantPool[i] instanceof CONSTANT_Long_Info
             || constantPool[i] instanceof CONSTANT_Double_Info)
           i++;
       }
-
-      //println("ConstantPool: ");
-      //for (int i = 1; i < count; i++) {
-      //  println(i + ", " + constantPool[i]);
-      //}
-
     }
 
     private static final int CONSTANT_Class = 7;
@@ -571,7 +473,7 @@ aspect BytecodeReader {
     private static final int CONSTANT_NameAndType = 12;
     private static final int CONSTANT_Utf8 = 1;
 
-    public void parseEntry(int i) {
+    public void parseConstantPoolEntry(int i) {
       int tag = u1();
       switch (tag) {
         case CONSTANT_Class:
