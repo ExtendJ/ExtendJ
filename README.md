@@ -91,6 +91,26 @@ Development
 Some useful scripts for ExtendJ development can be found at [the JJScripts
 repository][2].
 
+###Coding Style
+
+*Note: The source code of ExtendJ does not fully follow this style guide yet.
+We are in a conversion process to get the code consistent, but it takes a lot of
+work.*
+
+For the most part, JastAdd code should follow [Google's Java Style Guide][3].
+JastAdd code should use a 100 character maximum line width, two-space
+indentation, as in the linked style guide. Line breaking rules are also
+generally the same.
+
+Some things to note about JastAdd code:
+
+* Don't let synthesized and inherited attributes share the same name. That is a
+  sure way to cause unexpected behaviour.
+* The `refine` constructs can cause lines to be very long, so it's a good idea
+  to consistently always insert a line break after aspect name part of a refinement.
+* If you have a long equation, prefer to add a line break after the first equals
+  sign.
+
 ###Debugging
 
 If ExtendJ should generate faulty bytecode there are a number of different
@@ -109,3 +129,4 @@ of bytecode. There is also a useful plugin for eclipse called
 
 [1]: https://bitbucket.org/extendj/extendj/src/HEAD/ExtensionMigrationGuide.md?at=master
 [2]: https://bitbucket.org/joqvist/jjscripts
+[3]: http://google.github.io/styleguide/javaguide.html
