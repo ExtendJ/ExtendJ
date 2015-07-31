@@ -66,6 +66,13 @@ aspect BytecodeReader {
       if (AbstractClassfileParser.VERBOSE) {
         println(String.format("Classfile version: %d.%d", major, minor));
       }
+      if (major > 51) {
+        // The Java 5 bytecode parser handles up to Java 7 bytecode fine.
+        error(String.format("Can not parse classfile version %d.%d."
+              + " Classfile versions up to 51.x (Java 7) are supported by"
+              + " this version of the compiler.",
+              major, minor));
+      }
       parseConstantPool();
       CompilationUnit cu = new CompilationUnit();
       TypeDecl typeDecl = parseTypeDecl();
@@ -73,20 +80,21 @@ aspect BytecodeReader {
       cu.addTypeDecl(typeDecl);
       parseFields(typeDecl);
       parseMethods(typeDecl);
-      //parse attributes, and if we have an inner class, then execute the branch...
-      if (new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program).isInnerClass()) {
-        //this is a workaround for the fact that JastAdd stores inner classes as members of
-        //their outer classes, even for inner classes that come from bytecode;
-        //to avoid having inner classes show up as top-level classes, we remove them here
-        //from the compilation unit again...
 
-        //first add the cu to the program, so that getTypeDecls() won't fail
+      // Parse attributes, and if we have an inner class, then execute the branch.
+      if (new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program).isInnerClass()) {
+        // This is a workaround for the fact that JastAdd stores inner classes as members of
+        // their outer classes, even for inner classes that come from bytecode;
+        // to avoid having inner classes show up as top-level classes, we remove them here
+        // from the compilation unit again...
+
+        // First add the cu to the program, so that getTypeDecls() won't fail.
         program.addCompilationUnit(cu);
-        //then clear the cu
+        // Then clear the compilation unit.
         for (int i=0;i<cu.getTypeDecls().getNumChild();i++) {
           cu.getTypeDecls().removeChild(i);
         }
-        //and remove the cu from the program again
+        // Remove the compilation unit from the program again.
         program.getCompilationUnits().removeChild(program.getCompilationUnits().getIndexOfChild(cu));
       }
 
