@@ -1,10 +1,30 @@
-/*
- * The JastAdd Extensible Java Compiler (http://jastadd.org) is covered
- * by the modified BSD License. You should have received a copy of the
- * modified BSD license with this compiler.
- *
- * Copyright (c) 2005-2008, Torbjorn Ekman
+/* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2015, Jesper Öqvist <joqvist@google.com>
  * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
  */
 
 import java.io.BufferedInputStream;
@@ -12,97 +32,23 @@ import java.io.DataInputStream;
 
 aspect BytecodeReader {
 
-  public class BytecodeParser implements BytecodeReader {
-    public CompilationUnit read(InputStream is, String fullName, Program p)
-        throws FileNotFoundException, IOException {
-      return new BytecodeParser(is, fullName).parse(null, null, p);
-    }
+  public class BytecodeParser extends AbstractClassfileParser {
 
-    public static final boolean VERBOSE = false;
-
-    private DataInputStream is;
-    public CONSTANT_Class_Info classInfo;
     public CONSTANT_Class_Info outerClassInfo;
-    public String name;
 
     public BytecodeParser(InputStream in, String name) {
-      this.is = new DataInputStream(new BufferedInputStream(in));
-      this.name = name;
+      super(in, name);
     }
 
-    public BytecodeParser() {
-      this("");
-    }
-
-    public BytecodeParser(String name) {
-      if (!name.endsWith(".class")) {
-        name = name.replace('.', '/') + ".class";
-      }
-      this.name = name;
-    }
-
-    public int next() throws IOException {
-      return is.read();
-    }
-
-    public int u1() throws IOException {
-      return is.readUnsignedByte();
-    }
-
-    public int u2() throws IOException {
-      return is.readUnsignedShort();
-    }
-
-    public int u4() throws IOException {
-      return is.readInt();
-    }
-
-    public int readInt() throws IOException {
-      return is.readInt();
-    }
-
-    public float readFloat() throws IOException {
-      return is.readFloat();
-    }
-
-    public long readLong() throws IOException {
-      return is.readLong();
-    }
-
-    public double readDouble() throws IOException {
-      return is.readDouble();
-    }
-
-    public String readUTF() throws IOException {
-      return is.readUTF();
-    }
-
-    public void skip(int length) throws IOException {
-      while (length > 0) {
-        length -= is.skip(length);
-      }
-    }
-
-    public void error(String s) {
-      throw new RuntimeException(s);
-    }
-
-    public void print(String s) {
-      //System.out.print(s);
-    }
-
-    public void println(String s) {
-      print(s + "\n");
-    }
-
-    public void println() {
-      print("\n");
+    @Override
+    public boolean outerClassNameEquals(String name) {
+      return outerClassInfo != null && outerClassInfo.name().equals(name);
     }
 
     public CompilationUnit parse(TypeDecl outerTypeDecl, CONSTANT_Class_Info outerClassInfo,
         Program classPath) throws IOException {
 
-      if (BytecodeParser.VERBOSE) {
+      if (VERBOSE) {
         println("Parsing byte codes in " + name);
       }
 
@@ -121,28 +67,6 @@ aspect BytecodeReader {
       return cu;
     }
 
-    public void parseMagic() throws IOException {
-      if (next() != 0xca || next() != 0xfe || next() != 0xba || next() != 0xbe) {
-        error("magic error");
-      }
-    }
-
-    public void parseMinor() throws IOException {
-      int low = u1();
-      int high = u1();
-      if (BytecodeParser.VERBOSE) {
-        println("Minor: " + high + "." + low);
-      }
-    }
-
-    public void parseMajor() throws IOException {
-      int low = u1();
-      int high = u1();
-      if (BytecodeParser.VERBOSE) {
-        println("Major: " + high + "." + low);
-      }
-    }
-
     public TypeDecl parseTypeDecl() throws IOException {
       int flags = u2();
       Modifiers modifiers = modifiers(flags & 0xfddf);
@@ -151,7 +75,9 @@ aspect BytecodeReader {
         decl.setModifiers(modifiers);
         decl.setID(parseThisClass());
         Access superClass = parseSuperClass();
-        decl.setSuperClassOpt(superClass == null ? new Opt()
+        decl.setSuperClassOpt(
+            superClass == null
+            ? new Opt()
             : new Opt(superClass));
         decl.setImplementsList(parseInterfaces(new List()));
         return decl;
@@ -160,37 +86,12 @@ aspect BytecodeReader {
         decl.setModifiers(modifiers);
         decl.setID(parseThisClass());
         Access superClass = parseSuperClass();
-        decl.setSuperInterfaceList(
-            parseInterfaces(
-              superClass == null ? new List()
-              : new List().add(superClass)));
+        decl.setSuperInterfaceList(parseInterfaces(
+            superClass == null
+            ? new List()
+            : new List().add(superClass)));
         return decl;
       }
-    }
-
-    public String parseThisClass() throws IOException {
-      int index = u2();
-      CONSTANT_Class_Info info = (CONSTANT_Class_Info) constantPool[index];
-      classInfo = info;
-      return info.simpleName();
-    }
-
-    public Access parseSuperClass() throws IOException {
-      int index = u2();
-      if (index == 0) {
-        return null;
-      }
-      CONSTANT_Class_Info info = (CONSTANT_Class_Info) constantPool[index];
-      return info.access();
-    }
-
-    public List parseInterfaces(List list) throws IOException {
-      int count = u2();
-      for (int i = 0; i < count; i++) {
-        CONSTANT_Class_Info info = (CONSTANT_Class_Info) constantPool[u2()];
-        list.add(info.access());
-      }
-      return list;
     }
 
     public static Access fromClassName(String s) {
@@ -212,67 +113,13 @@ aspect BytecodeReader {
       return result;
     }
 
-    public static Modifiers modifiers(int flags) {
-      Modifiers m = new Modifiers();
-      if ((flags & 0x0001) != 0) {
-        m.addModifier(new Modifier("public"));
-      }
-      if ((flags & 0x0002) != 0) {
-        m.addModifier(new Modifier("private"));
-      }
-      if ((flags & 0x0004) != 0) {
-        m.addModifier(new Modifier("protected"));
-      }
-      if ((flags & 0x0008) != 0) {
-        m.addModifier(new Modifier("static"));
-      }
-      if ((flags & 0x0010) != 0) {
-        m.addModifier(new Modifier("final"));
-      }
-      if ((flags & 0x0020) != 0) {
-        m.addModifier(new Modifier("synchronized"));
-      }
-      if ((flags & 0x0040) != 0) {
-        m.addModifier(new Modifier("volatile"));
-      }
-      if ((flags & 0x0080) != 0) {
-        m.addModifier(new Modifier("transient"));
-      }
-      if ((flags & 0x0100) != 0) {
-        m.addModifier(new Modifier("native"));
-      }
-      if ((flags & 0x0400) != 0) {
-        m.addModifier(new Modifier("abstract"));
-      }
-      if ((flags & 0x0800) != 0) {
-        m.addModifier(new Modifier("strictfp"));
-      }
-      return m;
-    }
-
-    public void parseFields(TypeDecl typeDecl) throws IOException {
-      int count = u2();
-      if (BytecodeParser.VERBOSE) {
-        println("Fields (" + count + "):");
-      }
-      for (int i = 0; i < count; i++) {
-        if (BytecodeParser.VERBOSE) {
-          print(" Field nbr " + i + " ");
-        }
-        FieldInfo fieldInfo = new FieldInfo(this);
-        if (!fieldInfo.isSynthetic()) {
-          typeDecl.addBodyDecl(fieldInfo.bodyDecl());
-        }
-      }
-    }
-
     public void parseMethods(TypeDecl typeDecl) throws IOException {
       int count = u2();
-      if (BytecodeParser.VERBOSE) {
+      if (VERBOSE) {
         println("Methods (" + count + "):");
       }
       for (int i = 0; i < count; i++) {
-        if (BytecodeParser.VERBOSE) {
+        if (VERBOSE) {
           print("  Method nbr " + i + " ");
         }
         MethodInfo info = new MethodInfo(this);
@@ -282,70 +129,7 @@ aspect BytecodeReader {
       }
     }
 
-    public CONSTANT_Info[] constantPool = null;
-
-    private void checkLengthAndNull(int index) {
-      if (index >= constantPool.length) {
-        throw new Error("Trying to access element " + index  + " in constant pool of length " + constantPool.length);
-      }
-      if (constantPool[index] == null) {
-        throw new Error("Unexpected null element in constant pool at index " + index);
-      }
-    }
-
-    public boolean validConstantPoolIndex(int index) {
-      return index < constantPool.length && constantPool[index] != null;
-    }
-
-    public CONSTANT_Info getCONSTANT_Info(int index) {
-      checkLengthAndNull(index);
-      return constantPool[index];
-    }
-
-    public CONSTANT_Utf8_Info getCONSTANT_Utf8_Info(int index) {
-      checkLengthAndNull(index);
-      CONSTANT_Info info = constantPool[index];
-      if (!(info instanceof CONSTANT_Utf8_Info)) {
-        throw new Error("Expected CONSTANT_Utf8_info at " + index + " in constant pool but found " + info.getClass().getName());
-      }
-      return (CONSTANT_Utf8_Info) info;
-    }
-
-    public CONSTANT_Class_Info getCONSTANT_Class_Info(int index) {
-      checkLengthAndNull(index);
-      CONSTANT_Info info = constantPool[index];
-      if (!(info instanceof CONSTANT_Class_Info)) {
-        throw new Error("Expected CONSTANT_Class_info at " + index + " in constant pool but found " + info.getClass().getName());
-      }
-      return (CONSTANT_Class_Info) info;
-    }
-
-    public void parseConstantPool() throws IOException {
-      int count = u2();
-      if (BytecodeParser.VERBOSE) {
-        println("constant_pool_count: " + count);
-      }
-      constantPool = new CONSTANT_Info[count + 1];
-      for (int i = 1; i < count; i++) {
-        parseConstantPoolEntry(i);
-        if (constantPool[i] instanceof CONSTANT_Long_Info
-            || constantPool[i] instanceof CONSTANT_Double_Info)
-          i++;
-      }
-    }
-
-    private static final int CONSTANT_Class = 7;
-    private static final int CONSTANT_FieldRef = 9;
-    private static final int CONSTANT_MethodRef = 10;
-    private static final int CONSTANT_InterfaceMethodRef = 11;
-    private static final int CONSTANT_String = 8;
-    private static final int CONSTANT_Integer = 3;
-    private static final int CONSTANT_Float = 4;
-    private static final int CONSTANT_Long = 5;
-    private static final int CONSTANT_Double = 6;
-    private static final int CONSTANT_NameAndType = 12;
-    private static final int CONSTANT_Utf8 = 1;
-
+    @Override
     public void parseConstantPoolEntry(int i) throws IOException {
       int tag = u1();
       switch (tag) {

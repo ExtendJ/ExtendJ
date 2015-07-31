@@ -11,6 +11,9 @@ package org.jastadd.extendj;
 
 import org.jastadd.extendj.ast.*;
 
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.io.IOException;
 import java.util.*;
 
 /**
@@ -30,7 +33,7 @@ class JavaPrettyPrinter extends Frontend {
 	}
 
 	private final JavaParser parser;
-	private final BytecodeParser bytecodeParser;
+	private final BytecodeReader bytecodeParser;
 
 	/**
 	 * Initialize the compiler.
@@ -39,13 +42,18 @@ class JavaPrettyPrinter extends Frontend {
 		super("ExtendJ Java Pretty Printer", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
-			public CompilationUnit parse(java.io.InputStream is,
-					String fileName) throws java.io.IOException,
+			public CompilationUnit parse(InputStream is, String fileName) throws IOException,
 					beaver.Parser.Exception {
 				return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
 			}
 		};
-		bytecodeParser = new BytecodeParser();
+		bytecodeParser = new BytecodeReader() {
+			@Override
+			public CompilationUnit read(InputStream is, String fullName, Program p)
+					throws FileNotFoundException, IOException {
+				return new BytecodeParser(is, fullName).parse(null, null, p);
+			}
+		};
 	}
 
 	/**

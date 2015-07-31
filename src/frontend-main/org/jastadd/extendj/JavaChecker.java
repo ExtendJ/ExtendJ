@@ -11,6 +11,10 @@ package org.jastadd.extendj;
 
 import org.jastadd.extendj.ast.*;
 
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.io.IOException;
+
 /**
  * Perform static semantic checks on a Java program.
  */
@@ -28,7 +32,7 @@ public class JavaChecker extends Frontend {
 	}
 
 	private final JavaParser parser;
-	private final BytecodeParser bytecodeParser;
+	private final BytecodeReader bytecodeParser;
 
 	/**
 	 * Initialize the Java checker.
@@ -37,13 +41,18 @@ public class JavaChecker extends Frontend {
 		super("Java Checker", ExtendJVersion.getVersion());
 		parser = new JavaParser() {
 			@Override
-			public CompilationUnit parse(java.io.InputStream is, String
-					fileName) throws java.io.IOException,
+			public CompilationUnit parse(InputStream is, String fileName) throws IOException,
 					beaver.Parser.Exception {
 				return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
 			}
 		};
-		bytecodeParser = new BytecodeParser();
+		bytecodeParser = new BytecodeReader() {
+			@Override
+			public CompilationUnit read(InputStream is, String fullName, Program p)
+					throws FileNotFoundException, IOException {
+				return new BytecodeParser(is, fullName).parse(null, null, p);
+			}
+		};
 	}
 
 	/**
@@ -59,7 +68,7 @@ public class JavaChecker extends Frontend {
 	/**
 	 * Run the Java checker.
 	 * @param args command-line arguments
-     * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
+	 * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
 	 */
 	public int run(String args[]) {
 		return run(args, bytecodeParser, parser);

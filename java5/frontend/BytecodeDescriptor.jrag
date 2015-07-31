@@ -10,14 +10,14 @@
 aspect BytecodeDescriptor {
 
   class FieldDescriptor {
-    private BytecodeParser p;
+    private AbstractClassfileParser p;
     String typeDescriptor;
 
-    public FieldDescriptor(BytecodeParser parser, String name) throws IOException {
+    public FieldDescriptor(AbstractClassfileParser parser, String name) throws IOException {
       p = parser;
       int descriptor_index = p.u2();
       typeDescriptor = ((CONSTANT_Utf8_Info) p.constantPool[descriptor_index]).string();
-      if (BytecodeParser.VERBOSE) {
+      if (AbstractClassfileParser.VERBOSE) {
         p.println("  Field: " + name + ", " + typeDescriptor);
       }
     }
@@ -34,16 +34,16 @@ aspect BytecodeDescriptor {
 
 
   class FieldInfo {
-    private BytecodeParser p;
+    private AbstractClassfileParser p;
     String name;
     int flags;
     private FieldDescriptor fieldDescriptor;
     private Attributes.FieldAttributes attributes;
 
-    public FieldInfo(BytecodeParser parser) throws IOException {
+    public FieldInfo(AbstractClassfileParser parser) throws IOException {
       p = parser;
       flags = p.u2();
-      if (BytecodeParser.VERBOSE) {
+      if (AbstractClassfileParser.VERBOSE) {
         p.print("Flags: " + flags);
       }
       int name_index = p.u2();
@@ -58,7 +58,7 @@ aspect BytecodeDescriptor {
       if ((flags & Flags.ACC_ENUM) != 0) {
         //EnumConstant : FieldDeclaration ::= Modifiers <ID:String> Arg:Expr* BodyDecl* /TypeAccess:Access/ /[Init:Expr]/;
         f = new EnumConstant(
-            BytecodeParser.modifiers(flags),
+            AbstractClassfileParser.modifiers(flags),
             name,
             new List(),
             new List()
@@ -67,7 +67,7 @@ aspect BytecodeDescriptor {
         Signatures.FieldSignature s = attributes.fieldSignature;
         Access type = s != null ? s.fieldTypeAccess() : fieldDescriptor.type();
         f = new FieldDeclaration(
-            BytecodeParser.modifiers(flags),
+            AbstractClassfileParser.modifiers(flags),
             type,
             name,
             new Opt()
@@ -98,15 +98,15 @@ aspect BytecodeDescriptor {
 
 
   class MethodDescriptor {
-    private BytecodeParser p;
+    private AbstractClassfileParser p;
     private String parameterDescriptors;
     private String typeDescriptor;
 
-    public MethodDescriptor(BytecodeParser parser, String name) throws IOException {
+    public MethodDescriptor(AbstractClassfileParser parser, String name) throws IOException {
       p = parser;
       int descriptor_index = p.u2();
       String descriptor = ((CONSTANT_Utf8_Info) p.constantPool[descriptor_index]).string();
-      if (BytecodeParser.VERBOSE) {
+      if (AbstractClassfileParser.VERBOSE) {
         p.println("  Method: " + name + ", " + descriptor);
       }
       //String[] strings = descriptor.substring(1).split("\\)");
@@ -133,16 +133,16 @@ aspect BytecodeDescriptor {
   }
 
   class MethodInfo {
-    private BytecodeParser p;
+    private AbstractClassfileParser p;
     String name;
     int flags;
     private MethodDescriptor methodDescriptor;
     private Attributes.MethodAttributes attributes;
 
-    public MethodInfo(BytecodeParser parser) throws IOException {
+    public MethodInfo(AbstractClassfileParser parser) throws IOException {
       p = parser;
       flags = p.u2();
-      if (BytecodeParser.VERBOSE) {
+      if (AbstractClassfileParser.VERBOSE) {
         p.print("  Flags: " + Integer.toBinaryString(flags));
       }
       int name_index = p.u2();
@@ -213,17 +213,17 @@ aspect BytecodeDescriptor {
 
       BodyDecl b;
       if (isConstructor()) {
-        b = new ConstructorDecl(BytecodeParser.modifiers(flags), name, parameterList,
+        b = new ConstructorDecl(AbstractClassfileParser.modifiers(flags), name, parameterList,
             exceptionList, new Opt(), new Block());
       } else if (attributes.elementValue() != null) {
-        b = new AnnotationMethodDecl(BytecodeParser.modifiers(flags), returnType, name,
+        b = new AnnotationMethodDecl(AbstractClassfileParser.modifiers(flags), returnType, name,
             parameterList, exceptionList,
             new Opt(new Block()), new Opt(attributes.elementValue()));
       } else if (s != null && s.hasFormalTypeParameters()) {
-        b = new GenericMethodDecl(BytecodeParser.modifiers(flags), returnType, name, parameterList,
+        b = new GenericMethodDecl(AbstractClassfileParser.modifiers(flags), returnType, name, parameterList,
             exceptionList, new Opt(new Block()), s.typeParameters());
       } else {
-        b = new MethodDecl(BytecodeParser.modifiers(flags), returnType, name, parameterList,
+        b = new MethodDecl(AbstractClassfileParser.modifiers(flags), returnType, name, parameterList,
             exceptionList, new Opt(new Block()));
       }
       if (attributes.annotations != null) {
@@ -249,10 +249,10 @@ aspect BytecodeDescriptor {
   }
 
   class TypeDescriptor {
-    private BytecodeParser p;
+    private AbstractClassfileParser p;
     private String descriptor;
 
-    public TypeDescriptor(BytecodeParser parser, String descriptor) {
+    public TypeDescriptor(AbstractClassfileParser parser, String descriptor) {
       p = parser;
       this.descriptor = descriptor;
     }
@@ -285,7 +285,7 @@ aspect BytecodeDescriptor {
         case 'Z':
           return new PrimitiveTypeAccess("boolean");
         case 'L':
-          return p.fromClassName(s.substring(1, s.length() - 1));
+          return BytecodeParser.fromClassName(s.substring(1, s.length() - 1));
         case '[':
           return new ArrayTypeAccess(type(s.substring(1)));
         case 'V':
@@ -356,7 +356,7 @@ aspect BytecodeDescriptor {
           String s1 = s.substring(1, pos);
           String s2 = s.substring(pos+1, s.length());
           l.add(new ParameterDeclaration(new Modifiers(),
-                p.fromClassName(s1),
+                BytecodeParser.fromClassName(s1),
                 "p" + l.getNumChildNoTransform()));
           return s2;
         case '[':
@@ -405,12 +405,12 @@ aspect BytecodeDescriptor {
           return s.substring(1);
         case 'L':
           //String[] strings = s.substring(1).split("\\;", 2);
-          //typeAccess.setAccess(p.fromClassName(strings[0]));
+          //typeAccess.setAccess(BytecodeParser.fromClassName(strings[0]));
           //return strings[1];
           int pos = s.indexOf(';');
           String s1 = s.substring(1, pos);
           String s2 = s.substring(pos+1, s.length());
-          typeAccess.setAccess(p.fromClassName(s1));
+          typeAccess.setAccess(BytecodeParser.fromClassName(s1));
           return s2;
         default:
           throw new Error("Error: unknown Type in TypeDescriptor: " + s);
