@@ -82,7 +82,7 @@ public class JavaCompiler extends Frontend {
 	 */
 	@Deprecated
 	public static boolean compile(String args[]) {
-		return 0 == new JavaCompiler().run(args);
+		return EXIT_SUCCESS == new JavaCompiler().run(args);
 	}
 
 	/**
