@@ -40,9 +40,10 @@ aspect NameCheck {
 
   public void SingleTypeImportDecl.nameCheck() {
     if (!getAccess().type().typeName().equals(typeName()) && !getAccess().type().isUnknown()) {
-      error("Single-type import " + typeName() + " is not the canonical name of type " + getAccess().type().typeName());
+      errorf("Single-type import %s is not the canonical name of type %s",
+          typeName(), getAccess().type().typeName());
     } else if (allImportedTypes(getAccess().type().name()).size() > 1) {
-      error(getAccess().type().name() + " is imported multiple times");
+      errorf("%s is imported multiple times", getAccess().type().name());
     }
   }
 
@@ -52,8 +53,8 @@ aspect NameCheck {
   public void TypeImportOnDemandDecl.nameCheck() {
     if (getAccess().lastAccess().isTypeAccess()
         && !getAccess().type().typeName().equals(typeName())) {
-      error("On demand type import " + typeName()
-          + ".* is not the canonical name of type " + getAccess().type().typeName());
+      errorf("On demand type import %s.* is not the canonical name of type %s",
+          typeName(), getAccess().type().typeName());
     }
   }
 
@@ -68,8 +69,7 @@ aspect NameCheck {
           while (iter.hasNext()) {
             TypeDecl local = (TypeDecl) iter.next();
             if (local != importedType) {
-              error("imported type " + decl.typeName()
-                  + " conflicts with visible type");
+              errorf("imported type %s conflicts with visible type", decl.typeName());
             }
           }
         }
@@ -79,7 +79,7 @@ aspect NameCheck {
 
   public void PackageAccess.nameCheck() {
     if (!hasPackage(packageName())) {
-      error("package " + packageName() + " not found");
+      errorf("package %s not found", packageName());
     }
   }
 
@@ -96,16 +96,18 @@ aspect NameCheck {
     super.nameCheck();
     // 8.8
     if (!hostType().name().equals(name())) {
-      error("constructor " + name() +" does not have the same name as the simple name of the host class " + hostType().name());
+      errorf("constructor %s does not have the same name as the simple name of the host class %s",
+          name(), hostType().name());
     }
 
     // 8.8.2
     if (hostType().lookupConstructor(this) != this) {
-      error("constructor with signature " + signature() + " is multiply declared in type " + hostType().typeName());
+      errorf("constructor with signature %s is multiply declared in type %s", signature(),
+          hostType().typeName());
     }
 
     if (circularThisInvocation(this)) {
-      error("The constructor " + signature() + " may not directly or indirectly invoke itself");
+      errorf("The constructor %s may not directly or indirectly invoke itself", signature());
     }
   }
 
@@ -128,7 +130,8 @@ aspect NameCheck {
     // 8.4
     // 8.4.2
     if (hostType().methodsSignature(signature()).size() > 1) {
-      error("method with signature " + signature() + " is multiply declared in type " + hostType().typeName());
+      errorf("method with signature %s is multiply declared in type %s", signature(),
+          hostType().typeName());
     }
     // 8.4.3.4
     if (isNative() && hasBlock()) {
@@ -150,11 +153,11 @@ aspect NameCheck {
     if (((ExprStmt) decl.getConstructorInvocation()).getExpr() == this) {
       // don't error-check the parsed constructor invocation in case it is not the used one
       if (decls().isEmpty()) {
-        error("no constructor matches " + this.prettyPrint());
+        errorf("no constructor matches %s", this.prettyPrint());
       } else if (decls().size() > 1 && validArgs()) {
-        error("several most specific constructors for " + this.prettyPrint());
+        errorf("several most specific constructors for %s", this.prettyPrint());
         for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-          error("         " + ((ConstructorDecl) iter.next()).signature());
+          errorf("         %s", ((ConstructorDecl) iter.next()).signature());
         }
       }
     }
@@ -181,11 +184,12 @@ aspect NameCheck {
   public void ClassInstanceExpr.nameCheck() {
     super.nameCheck();
     if (decls().isEmpty()) {
-      error("can not instantiate " + type().typeName() + " no matching constructor found in " + type().typeName());
+      errorf("can not instantiate %s no matching constructor found in %s", type().typeName(),
+          type().typeName());
     } else if (decls().size() > 1 && validArgs()) {
       error("several most specific constructors found");
       for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-        error("         " + ((ConstructorDecl) iter.next()).signature());
+        errorf("         %s", ((ConstructorDecl) iter.next()).signature());
       }
     } else if (!hasTypeDecl()) {
       // check if the constructor is accessible (stricter when not in a class instance expression)
@@ -193,23 +197,23 @@ aspect NameCheck {
       ConstructorDecl decl = decl();
       if (decl.isProtected() && !hostPackage().equals(decl.hostPackage()) &&
           !hostType().instanceOf(decl.hostType())) {
-        error("can not access the constructor " + this.prettyPrint());
+        errorf("can not access the constructor %s", this.prettyPrint());
       }
     }
   }
 
   public void ArrayTypeAccess.nameCheck() {
     if (decl().elementType().isUnknown()) {
-      error("no type named " + decl().elementType().typeName());
+      errorf("no type named %s", decl().elementType().typeName());
     }
   }
 
   public void TypeAccess.nameCheck() {
     if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
-      error("can not access the type named " + decl().typeName() + " in this context");
+      errorf("can not access the type named %s in this context", decl().typeName());
     }
     if (decls().isEmpty()) {
-      error("no visible type named " + typeName());
+      errorf("no visible type named %s", typeName());
     }
     if (decls().size() > 1) {
       StringBuilder sb = new StringBuilder();
@@ -231,7 +235,7 @@ aspect NameCheck {
 
   public void VarAccess.nameCheck() {
     if (decls().isEmpty() && (!isQualified() || !qualifier().type().isUnknown() || qualifier().isPackageAccess())) {
-      error("no field named " + name() + " is accessible");
+      errorf("no field named %s is accessible", name());
     }
     if (decls().size() > 1) {
       StringBuffer sb = new StringBuffer();
@@ -245,7 +249,7 @@ aspect NameCheck {
 
     // 8.8.5.1
     if (inExplicitConstructorInvocation() && !isQualified() && decl().isInstanceVariable() && hostType() == decl().hostType()) {
-      error("instance variable " + name() + " may not be accessed in an explicit constructor invocation");
+      errorf("instance variable %s may not be accessed in an explicit constructor invocation", name());
     }
 
     Variable v = decl();
@@ -258,8 +262,7 @@ aspect NameCheck {
       if (hostType() != null && !hostType().declaredBeforeUse(decl(), this)) {
         if (inSameInitializer() && !simpleAssignment() && inDeclaringClass()) {
           BodyDecl b = closestBodyDecl(hostType());
-          error("variable " + decl().name() + " is used in "
-              + b.prettyPrint() + " before it is declared");
+          errorf("variable %s is used in %s before it is declared", decl().name(), b.prettyPrint());
         }
       }
     }
@@ -310,23 +313,24 @@ aspect NameCheck {
 
   public void TypeDecl.nameCheck() {
     if (isTopLevelType() && lookupType(packageName(), name()) != this) {
-      error("duplicate type " + name() + " in package " + packageName());
+      errorf("duplicate type %s in package %s", name(), packageName());
     }
 
     if (!isTopLevelType() && !isAnonymous() && !isLocalClass() && extractSingleType(enclosingType().memberTypes(name())) != this) {
-      error("duplicate member type " + name() + " in type " + enclosingType().typeName());
+      errorf("duplicate member type %s in type %s", name(), enclosingType().typeName());
     }
 
     // 14.3
     if (isLocalClass()) {
       TypeDecl typeDecl = extractSingleType(lookupType(name()));
       if (typeDecl != null && typeDecl != this && typeDecl.isLocalClass() && enclosingBlock() == typeDecl.enclosingBlock()) {
-        error("local class named " + name() + " may not be redeclared as a local class in the same block");
+        errorf("local class named %s may not be redeclared as a local class in the same block",
+            name());
       }
     }
 
     if (!packageName().equals("") && hasPackage(fullName())) {
-      error("type name conflicts with a package using the same name: " + name());
+      errorf("type name conflicts with a package using the same name: %s", name());
     }
 
     // 8.1 & 9.1
@@ -349,7 +353,7 @@ aspect NameCheck {
     for (Iterator iter = hostType().memberFields(name()).iterator(); iter.hasNext(); ) {
       Variable v = (Variable) iter.next();
       if (v != this && v.hostType() == hostType()) {
-        error("field named " + name() + " is multiply declared in type " + hostType().typeName());
+        errorf("field named %s is multiply declared in type %s", name(), hostType().typeName());
       }
     }
 
@@ -373,14 +377,14 @@ aspect NameCheck {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl != this && decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          error("duplicate declaration of local variable " + name() + " in enclosing scope");
+          errorf("duplicate declaration of local variable %s in enclosing scope", name());
         }
       }
       // 8.4.1
       else if (var instanceof ParameterDeclaration) {
         ParameterDeclaration decl = (ParameterDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          error("duplicate declaration of local variable and parameter " + name());
+          errorf("duplicate declaration of local variable and parameter %s", name());
         }
       }
     }
@@ -390,7 +394,7 @@ aspect NameCheck {
         if (block.getStmt(i) instanceof Variable) {
           Variable v = (Variable) block.getStmt(i);
           if (v.name().equals(name()) && v != this) {
-            error("duplicate declaration of local variable " + name());
+            errorf("duplicate declaration of local variable %s", name());
           }
         }
       }
@@ -404,19 +408,19 @@ aspect NameCheck {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          error("duplicate declaration of local variable " + name());
+          errorf("duplicate declaration of local variable %s", name());
         }
       } else if (var instanceof ParameterDeclaration) {
         ParameterDeclaration decl = (ParameterDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          error("duplicate declaration of local variable " + name());
+          errorf("duplicate declaration of local variable %s", name());
         }
       }
     }
 
     // 8.4.1
     if (!lookupVariable(name()).contains(this)) {
-      error("duplicate declaration of parameter " + name());
+      errorf("duplicate declaration of parameter %s", name());
     }
   }
 
@@ -464,7 +468,7 @@ aspect NameCheck {
       if (label == null) {
         error("labeled continue must have visible matching label");
       } else if (!label.getStmt().continueLabel()) {
-        error(getLabel() + " is not a loop label");
+        errorf("%s is not a loop label", getLabel());
       }
     }
   }
@@ -476,8 +480,8 @@ aspect NameCheck {
 
   public void ConstCase.nameCheck() {
     if (getValue().isConstant() && bind(this) != this) {
-      error("constant expression " + getValue().prettyPrint()
-          + " is multiply declared in two case statements");
+      errorf("constant expression %s is multiply declared in two case statements",
+          getValue().prettyPrint());
     }
   }
 
@@ -545,8 +549,7 @@ aspect NameCheck {
     TypeDecl decl = getClassDecl();
     SimpleSet decls = otherLocalClassDecls(decl.name());
     if (!decls.isEmpty()) {
-      error("another local class " + decl.name()
-          + " has already been declared in this scope");
+      errorf("another local class %s has already been declared in this scope", decl.name());
     }
   }
 }

@@ -134,8 +134,8 @@ aspect TypeCheck {
 
     if (!iDecl.isFunctional()) {
       // 15.27
-      error("Interface " + iDecl.typeName()
-          + " is not functional and can therefore not be targeted by a lambda expression");
+      errorf("Interface %s is not functional and can therefore not be targeted by a lambda expression",
+          iDecl.typeName());
       return;
     }
 
@@ -143,42 +143,45 @@ aspect TypeCheck {
 
     if (f.isGeneric()) {
       // 15.27
-      error("Illegal lambda expression: Method " + iDecl.functionDescriptor().method.name()
-          + " in interface " + iDecl.typeName() + " is generic");
+      errorf("Illegal lambda expression: Method %s in interface %s is generic",
+          iDecl.functionDescriptor().method.name(), iDecl.typeName());
       return;
     }
 
     if (!getLambdaParameters().congruentTo(f)) {
-      error("Lambda expression parameters incompatible with parameters in method "
-          + f.method.name() + " in interface " + iDecl.typeName());
+      errorf("Lambda expression parameters incompatible with"
+          + " parameters in method %s in interface %s",
+          f.method.name(), iDecl.typeName());
     }
 
     if (getLambdaBody() instanceof ExprLambdaBody) {
       ExprLambdaBody exprBody = (ExprLambdaBody)getLambdaBody();
       if (f.method.type().isVoid()) {
         if (!exprBody.getExpr().stmtCompatible()) {
-          error("Lambda expression body must be a statement expression, because the method "
-                + f.method.name() + " in interface " + iDecl.typeName() + " has return type void");
+          errorf("Lambda expression body must be a statement expression,"
+              + " because the method %s in interface %s has return type void",
+              f.method.name(), iDecl.typeName());
         }
       } else {
         if (!exprBody.getExpr().type().assignConversionTo(f.method.type(), exprBody.getExpr())) {
-          error("Lambda expression body is not compatible with the return type "
-              + f.method.type().typeName()
-              + " in method " + f.method.name() + " in interface " + iDecl.typeName());
+          errorf("Lambda expression body is not compatible with"
+              + " the return type %s in method %s in interface %s",
+              f.method.type().typeName(), f.method.name(), iDecl.typeName());
         }
       }
     } else {
       BlockLambdaBody blockBody = (BlockLambdaBody)getLambdaBody();
       if (f.method.type().isVoid()) {
         if (!blockBody.voidCompatible()) {
-          error("Lambda expression body is not allowed to return a value, because the method "
-              + f.method.name() + " in interface " + iDecl.typeName() + " has return type void");
+          errorf("Lambda expression body is not allowed to return a value,"
+              + " because the method %s in interface %s has return type void",
+              f.method.name(), iDecl.typeName());
         }
       } else if (!blockBody.valueCompatible()) {
-        error("Lambda expression body must not complete normally or "
-            + "contain empty return statments, because the method "
-            + f.method.name() + " in interface " + iDecl.typeName()
-            + " has a return type which is non-void");
+        errorf("Lambda expression body must not complete normally or contain empty return"
+            + " statments, because the method %s in interface"
+            + " %s has a return type which is non-void",
+            f.method.name(), iDecl.typeName());
       }
     }
   }
@@ -195,8 +198,8 @@ aspect TypeCheck {
     if (enclosingLambda() == null || enclosingLambda().hostType() != hostType()) {
       if (hasResult() && !returnType().isVoid()) {
         if (!getResult().type().assignConversionTo(returnType(), getResult())) {
-          error("return value must be an instance of " + returnType().typeName() + " which "
-              + getResult().type().typeName() + " is not");
+          errorf("return value must be an instance of %s which %s is not",
+              returnType().typeName(), getResult().type().typeName());
         }
       }
       // 8.4.5 8.8.5
@@ -214,8 +217,8 @@ aspect TypeCheck {
     } else {
       if (hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)) {
         if (!getResult().type().assignConversionTo(returnType(), getResult())) {
-          error("return value must be an instance of " + returnType().typeName()
-              + " which " + getResult().type().typeName() + " is not");
+          errorf("return value must be an instance of %s which %s is not",
+              returnType().typeName(), getResult().type().typeName());
         }
       }
     }
@@ -241,7 +244,8 @@ aspect TypeCheck {
     InterfaceDecl iDecl = targetInterface();
 
     if (!iDecl.isFunctional()) {
-      error("Interface " + iDecl.typeName() + " is not functional and can therefore not be targeted by a method reference");
+      errorf("Interface %s is not functional and can therefore not be targeted by a method reference",
+          iDecl.typeName());
       return;
     }
 
@@ -253,17 +257,16 @@ aspect TypeCheck {
       found = ref.targetMethod(f);
       if (unknownMethod() == found) {
         // 15.13.1
-        error("No method " + name() + " that is compatible with the method "
-            + iDecl.functionDescriptor().method.fullSignature()
-            + " in the interface " + iDecl.typeName() + " was found");
+        errorf("No method %s that is compatible with the method %s in the interface %s was found",
+            name(), iDecl.functionDescriptor().method.fullSignature(), iDecl.typeName());
       } else if (found.isStatic()) {
-        error("The method " + found.fullSignature() + " in type " + found.hostType().typeName()
-            + " must be accessed in a static way");
+        errorf("The method %s in type %s must be accessed in a static way",
+            found.fullSignature(), found.hostType().typeName());
       } else if (ref.getExpr() instanceof Access && ((Access)ref.getExpr()).lastAccess() instanceof SuperAccess) {
         // 15.13.2
         if (found.isAbstract()) {
-          error("Cannot directly invoke the abstract method " + found.fullSignature()
-              + " in type " + found.hostType().typeName());
+          errorf("Cannot directly invoke the abstract method %s in type %s",
+              found.fullSignature(), found.hostType().typeName());
         }
 
         SuperAccess superAccess = (SuperAccess)((Access)ref.getExpr()).lastAccess();
@@ -271,14 +274,14 @@ aspect TypeCheck {
           if (hostType().isClassDecl()) {
             ClassDecl classDecl = (ClassDecl)hostType();
             if (classDecl.hasOverridingMethodInSuper(found)) {
-              error("Cannot make a super reference to method " + found.fullSignature()
-                  + ", there is a more specific override");
+              errorf("Cannot make a super reference to method %s, there is a more specific override",
+                  found.fullSignature());
             }
           } else if (hostType().isInterfaceDecl()) {
             InterfaceDecl interfaceDecl = (InterfaceDecl)hostType();
             if (interfaceDecl.hasOverridingMethodInSuper(found)) {
-              error("Cannot make a super reference to method " + found.fullSignature()
-                  + ", there is a more specific override");
+              errorf("Cannot make a super reference to method %s, there is a more specific override",
+                  found.fullSignature());
             }
           }
         }
@@ -289,12 +292,11 @@ aspect TypeCheck {
       MethodDecl staticMethod = ref.targetStaticMethod(f);
       MethodDecl instanceMethod = ref.targetInstanceMethod(f);
       if (ref.validStaticMethod(f) && ref.validInstanceMethod(f)) {
-        error("Ambiguity error: two possible methods " + staticMethod.name() + " was found");
+        errorf("Ambiguity error: two possible methods %s was found", staticMethod.name());
         return;
       } else if (unknownMethod() == staticMethod && unknownMethod() == instanceMethod) {
-        error("No method " + name() + " that is compatible with the method "
-            + iDecl.functionDescriptor().method.fullSignature()
-            + " in the interface " + iDecl.typeName() + " was found");
+        errorf("No method %s that is compatible with the method %s in the interface %s was found",
+            name(), iDecl.functionDescriptor().method.fullSignature(), iDecl.typeName());
          return;
       } else if (ref.validStaticMethod(f)) {
         if (ref.getTypeAccess() instanceof ParTypeAccess) {
@@ -305,12 +307,12 @@ aspect TypeCheck {
       } else if (ref.validInstanceMethod(f)) {
         found = instanceMethod;
       } else if (unknownMethod() != staticMethod && !staticMethod.isStatic()) {
-        error("Cannot make a static reference to the non-static method "
-            + staticMethod.fullSignature() + " in type " + staticMethod.hostType().typeName());
+        errorf("Cannot make a static reference to the non-static method %s in type %s",
+            staticMethod.fullSignature(), staticMethod.hostType().typeName());
         return;
       } else if (instanceMethod.isStatic()) {
-        error("The method " + instanceMethod.fullSignature() + " in type "
-            + instanceMethod.hostType().typeName() + " must be accessed in a static way");
+        errorf("The method %s in type %s must be accessed in a static way",
+            instanceMethod.fullSignature(), instanceMethod.hostType().typeName());
         return;
       }
     }
@@ -321,10 +323,9 @@ aspect TypeCheck {
         // 15.13.1
         if (found.type().isVoid()
             || !found.type().assignConversionTo(iDecl.functionDescriptor().method.type(), null)) {
-          error("Return type of referenced method " + found.fullSignature()
-              + " is not compatible with method "
-              + iDecl.functionDescriptor().method.fullSignature()
-              + " in interface " + iDecl.typeName());
+          errorf("Return type of referenced method %s is not compatible with method %s in interface %s",
+              found.fullSignature(), iDecl.functionDescriptor().method.fullSignature(),
+              iDecl.typeName());
         }
       }
 
@@ -343,8 +344,8 @@ aspect TypeCheck {
         }
         if (!legalException) {
           // 15.13.1
-          error("Referenced method " + found.name()
-              + " throws unhandled exception type " + exception.typeName());
+          errorf("Referenced method %s throws unhandled exception type %s",
+              found.name(), exception.typeName());
         }
       }
     }
@@ -369,8 +370,8 @@ aspect TypeCheck {
     InterfaceDecl iDecl = targetInterface();
 
     if (!iDecl.isFunctional()) {
-      error("Interface " + iDecl.typeName()
-          + " is not functional and can therefore not be targeted by a constructor reference");
+      errorf("Interface %s is not functional and can therefore not be targeted by a constructor reference",
+          iDecl.typeName());
       return;
     }
 
@@ -380,17 +381,16 @@ aspect TypeCheck {
       ClassReference ref = (ClassReference)this;
       ConstructorDecl decl = ref.targetConstructor(f);
       if (unknownConstructor() == decl) {
-        error("No constructor for the type " + getTypeAccess().type().typeName()
-             + " that is compatible with the method " + f.method.fullSignature()
-             + " in the interface " + iDecl.typeName() + " was found");
+        errorf("No constructor for the type %s that is compatible with the method %s in the interface %s was found",
+            getTypeAccess().type().typeName(), f.method.fullSignature(), iDecl.typeName());
       }
       if (!f.method.type().isVoid()) {
         // 15.13.1
         TypeDecl returnType = ref.syntheticInstanceExpr(f).type();
         if (!returnType.assignConversionTo(f.method.type(), null)) {
-          error("Return type of method " + f.method.fullSignature()
-            + " in interface " + iDecl.typeName() + " is not compatible with referenced constructor"
-            + " which has return type: " + returnType.typeName());
+          errorf("Return type of method %s in interface %s is not compatible with"
+              + " referenced constructor which has return type: %s",
+              f.method.fullSignature(), iDecl.typeName(), returnType.typeName());
         }
       }
       for (int i = 0; i < decl.getNumException(); i++) {
@@ -408,31 +408,27 @@ aspect TypeCheck {
         }
         if (!legalException) {
           // 15.13.1
-          error("Referenced constructor " + decl.name()
-              + " throws unhandled exception type " + exception.typeName());
+          errorf("Referenced constructor %s throws unhandled exception type %s",
+              decl.name(), exception.typeName());
         }
       }
       ref.syntheticInstanceExpr(f).typeCheck();
     } else {
       ArrayReference ref = (ArrayReference)this;
       if (f.method.getNumParameter() != 1) {
-        error("Array reference not compatible with method " + f.method.fullSignature()
-            + " in interface " + iDecl.typeName()
-            + ", should have a single parameter of type int");
+        errorf("Array reference not compatible with method %s in interface %s, should have a single parameter of type int",
+            f.method.fullSignature(), iDecl.typeName());
         return;
       }
       if (!f.method.getParameter(0).type().assignConversionTo(iDecl.typeInt(), null)) {
-        error("Array reference not compatible with method " + f.method.fullSignature()
-            + " in interface " + iDecl.typeName()
-            + ", should have a single parameter of type int");
+        errorf("Array reference not compatible with method %s in interface %s, should have a single parameter of type int",
+            f.method.fullSignature(), iDecl.typeName());
         return;
       }
       if (!f.method.type().isVoid()) {
         if (!getTypeAccess().type().assignConversionTo(f.method.type(), null)) {
-          error("Return type " + f.method.type().typeName() + " of method "
-              + f.method.fullSignature() + " in interface " + iDecl.typeName()
-              + " is not compatible with the array reference type "
-              + getTypeAccess().type().typeName());
+          errorf("Return type %s of method %s in interface %s is not compatible with the array reference type %s",
+              f.method.type().typeName(), f.method.fullSignature(), iDecl.typeName(), getTypeAccess().type().typeName());
         }
       }
     }
