@@ -43,11 +43,10 @@ aspect GenericMethods {
     }
   }
 
-  syn lazy final MethodDecl GenericMethodDecl.rawMethodDecl() = lookupParMethodDecl(new ArrayList());
+  syn lazy final MethodDecl GenericMethodDecl.rawMethodDecl() =
+      lookupParMethodDecl(Collections.<TypeDecl>emptyList());
 
-  syn lazy GenericMethodDecl ParMethodDecl.genericMethodDecl() {
-    return getGenericMethodDecl();
-  }
+  syn lazy GenericMethodDecl ParMethodDecl.genericMethodDecl() = getGenericMethodDecl();
 
   syn lazy GenericConstructorDecl ParConstructorDecl.genericConstructorDecl() {
     if (getParent() != null && getParent().getParent() instanceof GenericConstructorDecl) {
@@ -56,24 +55,25 @@ aspect GenericMethods {
     return null;
   }
 
-  syn nta MethodDecl GenericMethodDecl.lookupParMethodDecl(java.util.List typeArguments) {
-    return newParMethodDecl(typeArguments);
-  }
+  syn nta MethodDecl GenericMethodDecl.lookupParMethodDecl(Collection<TypeDecl> typeArguments) =
+      newParMethodDecl(typeArguments);
 
-  public ParMethodDecl GenericMethodDecl.newParMethodDecl(java.util.List typeArguments) {
+  public ParMethodDecl GenericMethodDecl.newParMethodDecl(Collection<TypeDecl> typeArguments) {
     ParMethodDecl methodDecl = typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl();
-    // adding a link to GenericMethodDecl to be used during substitution
-    // instead of the not yet existing parent link
+
+    // Adding a link to GenericMethodDecl to be used during substitution
+    // instead of the not yet existing parent link.
     methodDecl.setGenericMethodDecl(this);
-    List list = new List();
+
+    List<Access> list = new List<Access>();
     if (typeArguments.isEmpty()) {
       GenericMethodDecl original = original();
       for (int i = 0; i < original.getNumTypeParameter(); i++) {
         list.add(original.getTypeParameter(i).erasure().createBoundAccess());
       }
     } else {
-      for (Iterator iter = typeArguments.iterator(); iter.hasNext(); ) {
-        list.add(((TypeDecl) iter.next()).createBoundAccess());
+      for (TypeDecl arg : typeArguments) {
+        list.add(arg.createBoundAccess());
       }
     }
     methodDecl.setTypeArgumentList(list);
