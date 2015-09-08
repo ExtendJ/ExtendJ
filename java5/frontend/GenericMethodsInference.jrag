@@ -44,27 +44,34 @@ aspect GenericMethodsInference {
 
   eq MethodAccess.getArg().assignConvertedType() = typeObject();
 
-  inh TypeDecl MethodAccess.typeObject();
+  inh TypeDecl Access.typeObject();
 
-  // Generic Method Type Inference
-  public Collection<TypeDecl> MethodAccess.computeConstraints(GenericMethodDecl decl) {
+  /**
+   * Infer type arguments based on the actual arguments and result assignment type.
+   */
+  public Collection<TypeDecl> Access.computeConstraints(
+      TypeDecl resultType,
+      List<ParameterDeclaration> params,
+      List<Expr> args,
+      List<TypeVariable> typeParams) {
     Constraints c = new Constraints();
     // Store type parameters.
-    for (int i = 0; i < decl.original().getNumTypeParameter(); i++) {
-      c.addTypeVariable(decl.original().getTypeParameter(i));
+    for (int i = 0; i < typeParams.getNumChild(); i++) {
+      c.addTypeVariable(typeParams.getChild(i));
     }
 
     // Add initial constraints.
-    for (int i = 0; i < getNumArg(); i++) {
-      TypeDecl A = getArg(i).type();
-      int index = i >= decl.getNumParameter() ? decl.getNumParameter() - 1 : i;
-      TypeDecl F = decl.getParameter(index).type();
-      if (decl.getParameter(index) instanceof VariableArityParameterDeclaration
-         && (getNumArg() != decl.getNumParameter() || !A.isArrayDecl())) {
+    for (int i = 0; i < args.getNumChild(); i++) {
+      TypeDecl A = args.getChild(i).type();
+      int index = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
+      TypeDecl F = params.getChild(index).type();
+      if (params.getChild(index) instanceof VariableArityParameterDeclaration
+         && (args.getNumChild() != params.getNumChild() || !A.isArrayDecl())) {
         F = F.componentType();
       }
       c.convertibleTo(A, F);
     }
+
     if (c.rawAccess) {
       return new ArrayList<TypeDecl>();
     }
@@ -87,7 +94,7 @@ aspect GenericMethodsInference {
       if (S.isUnboxedPrimitive()) {
         S = S.boxed();
       }
-      TypeDecl R = decl.type();
+      TypeDecl R = resultType;
       // TODO: replace all uses of type variables in R with their inferred types
       TypeDecl Rprime = R;
       if (R.isVoid()) {

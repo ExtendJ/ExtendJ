@@ -288,7 +288,11 @@ aspect Diamond {
     java.util.List<TypeDecl> typeArguments = new LinkedList<TypeDecl>();
     if (decl instanceof GenericMethodDecl) {
       GenericMethodDecl method = (GenericMethodDecl) decl;
-      Collection<TypeDecl> arguments = computeConstraints(method);
+      Collection<TypeDecl> arguments = computeConstraints(
+          method.type(),
+          method.getParameterList(),
+          getClassInstanceExpr().getArgList(),
+          method.getTypeParameterList());
       if (arguments.isEmpty()) {
         return typeArguments;
       }
@@ -309,53 +313,6 @@ aspect Diamond {
       }
     }
     return typeArguments;
-  }
-
-  /**
-   * Diamond type inference.
-   */
-  public Collection<TypeDecl> DiamondAccess.computeConstraints(GenericMethodDecl decl) {
-    Constraints c = new Constraints();
-
-    // Store type parameters.
-    for (int i = 0; i < decl.original().getNumTypeParameter(); i++) {
-      c.addTypeVariable(decl.original().getTypeParameter(i));
-    }
-
-    ClassInstanceExpr instanceExpr = getClassInstanceExpr();
-    for (int i = 0; i < instanceExpr.getNumArg(); i++) {
-      TypeDecl A = instanceExpr.getArg(i).type();
-      int index = i >= decl.getNumParameter() ?  decl.getNumParameter() - 1 : i;
-      TypeDecl F = decl.getParameter(index).type();
-      if (decl.getParameter(index) instanceof VariableArityParameterDeclaration
-          && (instanceExpr.getNumArg() != decl.getNumParameter() || !A.isArrayDecl())) {
-        F = F.componentType();
-      }
-      c.convertibleTo(A, F);
-    }
-    if (c.rawAccess) {
-      return new ArrayList();
-    }
-
-    c.resolveEqualityConstraints();
-    c.resolveSupertypeConstraints();
-
-    if (c.unresolvedTypeArguments()) {
-      TypeDecl S = assignConvertedType();
-      if (S.isUnboxedPrimitive()) {
-        S = S.boxed();
-      }
-      TypeDecl R = decl.type();
-      if (R.isVoid()) {
-        R = typeObject();
-      }
-      c.convertibleFrom(S, R);
-      c.resolveEqualityConstraints();
-      c.resolveSupertypeConstraints();
-      c.resolveSubtypeConstraints();
-    }
-
-    return c.typeArguments();
   }
 
   /**
