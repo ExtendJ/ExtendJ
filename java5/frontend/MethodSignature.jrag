@@ -46,7 +46,8 @@ aspect MethodSignature15 {
       MethodDecl decl = (MethodDecl) iter.next();
       if (potentiallyApplicable(decl) && accessible(decl)) {
         if (decl instanceof GenericMethodDecl) {
-          decl = ((GenericMethodDecl) decl).lookupParMethodDecl(typeArguments(decl));
+          decl = ((GenericMethodDecl) decl).lookupParMethodDecl(
+              typeArguments((GenericMethodDecl) decl));
         }
         potentiallyApplicable = potentiallyApplicable.add(decl);
       }
@@ -386,7 +387,7 @@ aspect MethodSignature15 {
     }
     if (m instanceof GenericMethodDecl) {
       GenericMethodDecl gm = (GenericMethodDecl) m;
-      ArrayList<TypeDecl> list = typeArguments(m);
+      ArrayList<TypeDecl> list = typeArguments((GenericMethodDecl) m);
       if (!list.isEmpty()) {
         if (gm.getNumTypeParameter() != list.size()) {
           return false;
@@ -408,36 +409,33 @@ aspect MethodSignature15 {
   /**
    * Infers type arguments for this method invocation.
    */
-  syn lazy ArrayList<TypeDecl> MethodAccess.typeArguments(MethodDecl m) {
+  syn lazy ArrayList<TypeDecl> MethodAccess.typeArguments(GenericMethodDecl g) {
     ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
-    if (m instanceof GenericMethodDecl) {
-      GenericMethodDecl g = (GenericMethodDecl) m;
-      Collection<TypeDecl> arguments = computeConstraints(g);
-      if (arguments.isEmpty()) {
-        return typeArguments;
-      }
-      int i = 0;
-      for (Iterator<TypeDecl> iter = arguments.iterator(); iter.hasNext(); i++) {
-        TypeDecl typeDecl = iter.next();
-        if (typeDecl == null) {
-          TypeVariable v = g.original().getTypeParameter(i);
-          if (v.getNumTypeBound() == 0) {
-            typeDecl = typeObject();
-          } else if (v.getNumTypeBound() == 1) {
-            typeDecl = v.getTypeBound(0).type();
-          } else {
-            typeDecl = v.lubType();
-          }
+    Collection<TypeDecl> arguments = computeConstraints(g);
+    if (arguments.isEmpty()) {
+      return typeArguments;
+    }
+    int i = 0;
+    for (Iterator<TypeDecl> iter = arguments.iterator(); iter.hasNext(); i++) {
+      TypeDecl typeDecl = iter.next();
+      if (typeDecl == null) {
+        TypeVariable v = g.original().getTypeParameter(i);
+        if (v.getNumTypeBound() == 0) {
+          typeDecl = typeObject();
+        } else if (v.getNumTypeBound() == 1) {
+          typeDecl = v.getTypeBound(0).type();
+        } else {
+          typeDecl = v.lubType();
         }
-        typeArguments.add(typeDecl);
       }
+      typeArguments.add(typeDecl);
     }
     return typeArguments;
   }
 
-  eq ParMethodAccess.typeArguments(MethodDecl m) {
+  eq ParMethodAccess.typeArguments(GenericMethodDecl g) {
     ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
-    for (Access typeArgument: getTypeArgumentList()) {
+    for (Access typeArgument : getTypeArgumentList()) {
       typeArguments.add(typeArgument.type());
     }
     return typeArguments;
