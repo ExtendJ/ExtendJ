@@ -189,8 +189,8 @@ aspect Diamond {
         typeVars.add((TypeVariable) typeVar.treeCopyNoTransform());
       }
 
-      if (decl instanceof GenericConstructorDecl) {
-        GenericConstructorDecl genericDecl = (GenericConstructorDecl) decl;
+      if (decl.isGeneric()) {
+        GenericConstructorDecl genericDecl = decl.genericDecl();
         List<TypeVariable> typeVariables = new List<TypeVariable>();
         for (int i = 0; i < genericDecl.getNumTypeParameter(); ++i) {
           String substName = "#" + (arg+i);
@@ -243,7 +243,12 @@ aspect Diamond {
     Collection<MethodDecl> potentiallyApplicable = new LinkedList<MethodDecl>();
     for (GenericMethodDecl candidate : candidates) {
       if (potentiallyApplicable(candidate)) {
-        MethodDecl decl = candidate.lookupParMethodDecl(typeArguments(candidate));
+        MethodDecl decl = candidate.lookupParMethodDecl(
+            inferTypeArguments(
+                candidate.type(),
+                candidate.getParameterList(),
+                getClassInstanceExpr().getArgList(),
+                candidate.getTypeParameterList()));
         potentiallyApplicable.add(decl);
       }
     }
@@ -264,7 +269,11 @@ aspect Diamond {
       return false;
     }
 
-    java.util.List<TypeDecl> typeArgs = typeArguments(candidate);
+    java.util.List<TypeDecl> typeArgs = inferTypeArguments(
+        candidate.type(),
+        candidate.getParameterList(),
+        getClassInstanceExpr().getArgList(),
+        candidate.getTypeParameterList());
     Parameterization par = new SimpleParameterization(candidate.getTypeParameterList(), typeArgs);
     if (typeArgs.size() != 0) {
       if (candidate.getNumTypeParameter() != typeArgs.size()) {
@@ -277,42 +286,6 @@ aspect Diamond {
       }
     }
     return true;
-  }
-
-  inh TypeDecl DiamondAccess.typeObject();
-
-  /**
-   * Type inference for placeholder methods.
-   */
-  syn lazy java.util.List<TypeDecl> DiamondAccess.typeArguments(MethodDecl decl) {
-    java.util.List<TypeDecl> typeArguments = new LinkedList<TypeDecl>();
-    if (decl instanceof GenericMethodDecl) {
-      GenericMethodDecl method = (GenericMethodDecl) decl;
-      Collection<TypeDecl> arguments = computeConstraints(
-          method.type(),
-          method.getParameterList(),
-          getClassInstanceExpr().getArgList(),
-          method.getTypeParameterList());
-      if (arguments.isEmpty()) {
-        return typeArguments;
-      }
-      int i = 0;
-      for (TypeDecl argument : arguments) {
-        if (argument == null) {
-          TypeVariable v = method.original().getTypeParameter(i);
-          if (v.getNumTypeBound() == 0) {
-            argument = typeObject();
-          } else if (v.getNumTypeBound() == 1) {
-            argument = v.getTypeBound(0).type();
-          } else {
-            argument = v.lubType();
-          }
-        }
-        typeArguments.add(argument);
-        i += 1;
-      }
-    }
-    return typeArguments;
   }
 
   /**

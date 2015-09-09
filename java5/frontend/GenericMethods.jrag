@@ -48,12 +48,8 @@ aspect GenericMethods {
 
   syn lazy GenericMethodDecl ParMethodDecl.genericMethodDecl() = getGenericMethodDecl();
 
-  syn lazy GenericConstructorDecl ParConstructorDecl.genericConstructorDecl() {
-    if (getParent() != null && getParent().getParent() instanceof GenericConstructorDecl) {
-      return (GenericConstructorDecl) getParent().getParent();
-    }
-    return null;
-  }
+  syn lazy GenericConstructorDecl ParConstructorDecl.genericConstructorDecl() =
+      getGenericConstructorDecl();
 
   syn nta MethodDecl GenericMethodDecl.lookupParMethodDecl(Collection<TypeDecl> typeArguments) =
       newParMethodDecl(typeArguments);
@@ -85,6 +81,36 @@ aspect GenericMethods {
     return methodDecl;
   }
 
+  syn nta ParConstructorDecl GenericConstructorDecl.lookupParConstructorDecl(Collection<TypeDecl> typeArguments) =
+      newParConstructorDecl(typeArguments);
+
+  public ParConstructorDecl GenericConstructorDecl.newParConstructorDecl(Collection<TypeDecl> typeArguments) {
+    ParConstructorDecl constructorDecl = typeArguments.isEmpty()
+        ? new RawConstructorDecl()
+        : new ParConstructorDecl();
+
+    // Adding a link to GenericConstructorDecl to be used during substitution
+    // instead of the not yet existing parent link.
+    constructorDecl.setGenericConstructorDecl(this);
+
+    List<Access> list = new List<Access>();
+    if (typeArguments.isEmpty()) {
+      GenericConstructorDecl original = original();
+      for (int i = 0; i < original.getNumTypeParameter(); i++) {
+        list.add(original.getTypeParameter(i).erasure().createBoundAccess());
+      }
+    } else {
+      for (TypeDecl arg : typeArguments) {
+        list.add(arg.createBoundAccess());
+      }
+    }
+    constructorDecl.setTypeArgumentList(list);
+    constructorDecl.setModifiers((Modifiers) getModifiers().treeCopyNoTransform());
+    constructorDecl.setID(getID());
+    constructorDecl.setParameterList(getParameterList().substitute(constructorDecl));
+    constructorDecl.setExceptionList(getExceptionList().substitute(constructorDecl));
+    return constructorDecl;
+  }
 
 }
 

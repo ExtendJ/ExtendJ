@@ -45,9 +45,14 @@ aspect MethodSignature15 {
     for (Iterator iter = candidates.iterator(); iter.hasNext(); ) {
       MethodDecl decl = (MethodDecl) iter.next();
       if (potentiallyApplicable(decl) && accessible(decl)) {
-        if (decl instanceof GenericMethodDecl) {
-          decl = ((GenericMethodDecl) decl).lookupParMethodDecl(
-              typeArguments((GenericMethodDecl) decl));
+        if (decl.isGeneric()) {
+          GenericMethodDecl gm = decl.genericDecl();
+          decl = gm.lookupParMethodDecl(
+              inferTypeArguments(
+                  gm.type(),
+                  gm.getParameterList(),
+                  getArgList(),
+                  gm.getTypeParameterList()));
         }
         potentiallyApplicable = potentiallyApplicable.add(decl);
       }
@@ -97,13 +102,13 @@ aspect MethodSignature15 {
     return chooseConstructor(typeDecl.constructors(), getArgList());
   }
 
-  refine ConstructScope eq ConstructorAccess.decls() {
-    return chooseConstructor(lookupConstructor(), getArgList());
-  }
+  refine ConstructScope eq ConstructorAccess.decls() =
+      chooseConstructor(lookupConstructor(), getArgList());
 
   refine ConstructScope eq SuperConstructorAccess.decls() {
-    Collection c = hasPrevExpr() && !prevExpr().isTypeAccess() ?
-      hostType().lookupSuperConstructor() : lookupSuperConstructor();
+    Collection c = hasPrevExpr() && !prevExpr().isTypeAccess()
+        ? hostType().lookupSuperConstructor()
+        : lookupSuperConstructor();
     return chooseConstructor(c, getArgList());
   }
 
@@ -118,14 +123,25 @@ aspect MethodSignature15 {
 
   protected SimpleSet Expr.chooseConstructor(Collection constructors, List<Expr> argList) {
     SimpleSet potentiallyApplicable = SimpleSet.emptySet;
-    // select potentially applicable constructors
+
+    // Select potentially applicable constructors.
     for (Iterator iter = constructors.iterator(); iter.hasNext(); ) {
       ConstructorDecl decl = (ConstructorDecl) iter.next();
       if (decl.potentiallyApplicable(argList) && decl.accessibleFrom(hostType())) {
+        if (decl.isGeneric()) {
+          GenericConstructorDecl gc = decl.genericDecl();
+          decl = gc.lookupParConstructorDecl(
+              inferTypeArguments(
+                  gc.type(),
+                  gc.getParameterList(),
+                  argList,
+                  gc.getTypeParameterList()));
+        }
         potentiallyApplicable = potentiallyApplicable.add(decl);
       }
     }
-    // first phase
+
+    // First phase.
     SimpleSet maxSpecific = SimpleSet.emptySet;
     for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
       ConstructorDecl decl = (ConstructorDecl) iter.next();
@@ -134,7 +150,7 @@ aspect MethodSignature15 {
       }
     }
 
-    // second phase
+    // Second phase.
     if (maxSpecific.isEmpty()) {
       for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
         ConstructorDecl decl = (ConstructorDecl) iter.next();
@@ -144,7 +160,7 @@ aspect MethodSignature15 {
       }
     }
 
-    // third phase
+    // Third phase.
     if (maxSpecific.isEmpty()) {
       for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
         ConstructorDecl decl = (ConstructorDecl) iter.next();
@@ -155,7 +171,6 @@ aspect MethodSignature15 {
     }
     return maxSpecific;
   }
-
 
   protected static SimpleSet Expr.mostSpecific(SimpleSet maxSpecific, ConstructorDecl decl) {
     if (maxSpecific.isEmpty()) {
@@ -351,6 +366,52 @@ aspect MethodSignature15 {
     return true;
   }
 
+  /**
+   * @return {@code true} if this is a generic method or constructor, or a
+   * substitued generic method or constructor.
+   */
+  syn boolean BodyDecl.isGeneric() = false;
+  eq GenericMethodDecl.isGeneric() = true;
+  eq MethodDeclSubstituted.isGeneric() = sourceMethodDecl().isGeneric();
+  eq GenericConstructorDecl.isGeneric() = true;
+  eq ConstructorDeclSubstituted.isGeneric() = sourceConstructorDecl().isGeneric();
+
+  /**
+   * Note: isGeneric must be called first to check if this declaration is generic.
+   * Otherwise this attribute will throw an error!
+   * @return the original generic declaration of this method.
+   */
+  syn GenericMethodDecl MethodDecl.genericDecl() {
+    throw new Error("can not evaulate generic declaration of non-generic method");
+  }
+  eq GenericMethodDecl.genericDecl() = this;
+  eq MethodDeclSubstituted.genericDecl() = sourceMethodDecl().genericDecl();
+
+  /**
+   * Note: isGeneric must be called first to check if this declaration is generic.
+   * Otherwise this attribute will throw an error!
+   * @return original generic declaration of this constructor.
+   */
+  syn GenericConstructorDecl ConstructorDecl.genericDecl() {
+    throw new Error("can not evaulate generic declaration of non-generic constructor");
+  }
+  eq GenericConstructorDecl.genericDecl() = this;
+  eq ConstructorDeclSubstituted.genericDecl() = sourceConstructorDecl().genericDecl();
+
+  /**
+   * Note: isGeneric must be called first to check if this declaration is generic.
+   * Otherwise this attribute will throw an error!
+   * @return type parameters for this declaration.
+   */
+  syn List<TypeVariable> BodyDecl.typeParameters() {
+    throw new Error("can not evaulate type parameters for non-generic declaration");
+  }
+
+  eq GenericMethodDecl.typeParameters() = getTypeParameterList();
+  eq MethodDeclSubstituted.typeParameters() = sourceMethodDecl().typeParameters();
+  eq GenericConstructorDecl.typeParameters() = getTypeParameterList();
+  eq ConstructorDeclSubstituted.typeParameters() = sourceConstructorDecl().typeParameters();
+
   // 15.12.2.1
 
   /**
@@ -385,16 +446,20 @@ aspect MethodSignature15 {
     if (!m.isVariableArity() && !(m.arity() == arity())) {
       return false;
     }
-    if (m instanceof GenericMethodDecl) {
-      GenericMethodDecl gm = (GenericMethodDecl) m;
-      ArrayList<TypeDecl> list = typeArguments((GenericMethodDecl) m);
-      if (!list.isEmpty()) {
-        if (gm.getNumTypeParameter() != list.size()) {
+    if (m.isGeneric()) {
+      GenericMethodDecl gm = m.genericDecl();
+      ArrayList<TypeDecl> typeArguments = inferTypeArguments(
+          gm.type(),
+          gm.getParameterList(),
+          getArgList(),
+          gm.getTypeParameterList());
+      if (!typeArguments.isEmpty()) {
+        if (gm.getNumTypeParameter() != typeArguments.size()) {
           return false;
         }
-        Parameterization par = new SimpleParameterization(gm.getTypeParameterList(), list);
+        Parameterization par = new SimpleParameterization(gm.getTypeParameterList(), typeArguments);
         for (int i = 0; i < gm.getNumTypeParameter(); i++) {
-          if (!list.get(i).withinBounds(gm.original().getTypeParameter(i), par)) {
+          if (!typeArguments.get(i).withinBounds(gm.original().getTypeParameter(i), par)) {
             return false;
           }
         }
@@ -409,13 +474,17 @@ aspect MethodSignature15 {
   /**
    * Infers type arguments for this method invocation.
    */
-  syn lazy ArrayList<TypeDecl> MethodAccess.typeArguments(GenericMethodDecl g) {
+  syn lazy ArrayList<TypeDecl> Expr.inferTypeArguments(
+      TypeDecl resultType,
+      List<ParameterDeclaration> params,
+      List<Expr> args,
+      List<TypeVariable> typeParams) {
     ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
     Collection<TypeDecl> arguments = computeConstraints(
-        g.type(),
-        g.getParameterList(),
-        getArgList(),
-        g.getTypeParameterList());
+        resultType,
+        params,
+        args,
+        typeParams);
     if (arguments.isEmpty()) {
       return typeArguments;
     }
@@ -423,7 +492,7 @@ aspect MethodSignature15 {
     for (Iterator<TypeDecl> iter = arguments.iterator(); iter.hasNext(); i++) {
       TypeDecl typeDecl = iter.next();
       if (typeDecl == null) {
-        TypeVariable v = g.original().getTypeParameter(i);
+        TypeVariable v = typeParams.getChild(i);
         if (v.getNumTypeBound() == 0) {
           typeDecl = typeObject();
         } else if (v.getNumTypeBound() == 1) {
@@ -437,7 +506,23 @@ aspect MethodSignature15 {
     return typeArguments;
   }
 
-  eq ParMethodAccess.typeArguments(GenericMethodDecl g) {
+  eq ParMethodAccess.inferTypeArguments(
+      TypeDecl resultType,
+      List<ParameterDeclaration> params,
+      List<Expr> args,
+      List<TypeVariable> typeParams) {
+    ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
+    for (Access typeArgument : getTypeArgumentList()) {
+      typeArguments.add(typeArgument.type());
+    }
+    return typeArguments;
+  }
+
+  eq ParConstructorAccess.inferTypeArguments(
+      TypeDecl resultType,
+      List<ParameterDeclaration> params,
+      List<Expr> args,
+      List<TypeVariable> typeParams) {
     ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
     for (Access typeArgument : getTypeArgumentList()) {
       typeArguments.add(typeArgument.type());
@@ -504,7 +589,8 @@ aspect MethodSignature15 {
       for (Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl) iter.next();
         if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-          if (!(m instanceof MethodDeclSubstituted) || !localMap.containsKey(m.sourceMethodDecl().signature())) {
+          if (!(m instanceof MethodDeclSubstituted)
+              || !localMap.containsKey(m.sourceMethodDecl().signature())) {
             putSimpleSetElement(map, m.signature(), m);
           }
         }
@@ -513,7 +599,8 @@ aspect MethodSignature15 {
     for (Iterator iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl) iter.next();
       if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-        if (!(m instanceof MethodDeclSubstituted) || !localMap.containsKey(m.sourceMethodDecl().signature())) {
+        if (!(m instanceof MethodDeclSubstituted)
+            || !localMap.containsKey(m.sourceMethodDecl().signature())) {
           if (allMethodsAbstract((SimpleSet) map.get(m.signature())) &&
             (!(m instanceof MethodDeclSubstituted) ||
              allMethodsAbstract((SimpleSet) map.get(m.sourceMethodDecl().signature()))              )

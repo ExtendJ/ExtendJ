@@ -203,7 +203,7 @@ aspect Generics {
     TypeDecl original();
     int getNumTypeParameter();
     TypeVariable getTypeParameter(int index);
-    List getTypeParameterList();
+    List<TypeVariable> getTypeParameterList();
     syn lazy TypeDecl rawType();
     public String fullName();
     public String typeName();
@@ -972,6 +972,19 @@ aspect LookupParTypeDecl {
     return genericMethodDecl().hostType().substitute(typeVariable);
   }
 
+  public boolean ParConstructorDecl.isRawType() {
+    return false;
+  }
+
+  public TypeDecl ParConstructorDecl.substitute(TypeVariable typeVariable) {
+    for (int i = 0; i < numTypeParameter(); i++) {
+      if (typeParameter(i) == typeVariable) {
+        return getTypeArgument(i).type();
+      }
+    }
+    return genericConstructorDecl().hostType().substitute(typeVariable);
+  }
+
   public int ParTypeDecl.numTypeParameter() {
     return ((GenericTypeDecl) original()).getNumTypeParameter();
   }
@@ -981,6 +994,7 @@ aspect LookupParTypeDecl {
   }
 
   ParMethodDecl implements Parameterization;
+  ParConstructorDecl implements Parameterization;
 
   public boolean ParMethodDecl.isRawType() {
     return false;
@@ -994,8 +1008,16 @@ aspect LookupParTypeDecl {
     return genericMethodDecl().original().getNumTypeParameter();
   }
 
+  public int ParConstructorDecl.numTypeParameter() {
+    return genericConstructorDecl().original().getNumTypeParameter();
+  }
+
   public TypeVariable ParMethodDecl.typeParameter(int index) {
     return genericMethodDecl().original().getTypeParameter(index);
+  }
+
+  public TypeVariable ParConstructorDecl.typeParameter(int index) {
+    return genericConstructorDecl().original().getTypeParameter(index);
   }
 
   public Access TypeDecl.substitute(Parameterization parTypeDecl) {
@@ -1081,7 +1103,7 @@ aspect LookupParTypeDecl {
     }
     TypeDecl typeDecl = parTypeDecl.substitute(this);
     if (typeDecl instanceof WildcardType) {
-      // the bound of this type variable
+      // The bound of this type variable
       return createBoundAccess();
       //return lubType().createBoundAccess();
       //return typeObject().createBoundAccess();
@@ -1331,7 +1353,6 @@ aspect LookupParTypeDecl {
     return constructors;
   }
 
-  // ES: adding NTA to store copies in
   syn nta ConstructorDecl BodyDeclList.constructorCopy(ConstructorDecl originalDecl,
       MemberSubstitutor m) = originalDecl.substitutedBodyDecl(m);
 
@@ -1340,7 +1361,6 @@ aspect LookupParTypeDecl {
   }
 
   public BodyDecl MethodDecl.substitutedBodyDecl(Parameterization parTypeDecl) {
-    //System.out.println("Begin substituting " + signature() + " in " + hostType().typeName() + " with " + parTypeDecl.typeSignature());
     MethodDecl m = new MethodDeclSubstituted(
       (Modifiers) getModifiers().treeCopyNoTransform(),
       getTypeAccess().type().substituteReturnType(parTypeDecl),
@@ -1350,7 +1370,6 @@ aspect LookupParTypeDecl {
       substituteBody(parTypeDecl),
       this
     );
-    //System.out.println("End substituting " + signature());
     return m;
   }
 
@@ -1358,21 +1377,6 @@ aspect LookupParTypeDecl {
     return new Opt();
   }
 
-  public BodyDecl GenericMethodDecl.substitutedBodyDecl(Parameterization parTypeDecl) {
-    //System.out.println("Begin substituting generic " + signature() + " in " + hostType().typeName() + " with " + parTypeDecl.typeSignature());
-    GenericMethodDecl m = new GenericMethodDecl(
-      (Modifiers) getModifiers().treeCopyNoTransform(),
-      getTypeAccess().type().substituteReturnType(parTypeDecl),
-      getID(),
-      getParameterList().substitute(parTypeDecl),
-      getExceptionList().substitute(parTypeDecl),
-      new Opt(),
-      (List) getTypeParameterList().treeCopyNoTransform()
-    );
-    m.original = this;
-    //System.out.println("End substituting generic " + signature());
-    return m;
-  }
   syn GenericMethodDecl GenericMethodDecl.original() = original != null ? original : this;
   public GenericMethodDecl GenericMethodDecl.original;
 
