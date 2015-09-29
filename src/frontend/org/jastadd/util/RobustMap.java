@@ -50,137 +50,137 @@ import java.util.Set;
  */
 public class RobustMap<K, V> implements Map<K, V> {
 
-	/**
-	 * Protected for testing reasons
-	 * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
-	 */
-	protected static final class RobustValueIterator<V> implements Iterator<V> {
-		private final Collection<V> values;
-		private final Iterator<V> iter;
-		public RobustValueIterator(Collection<V> values) {
-			this.values = new RobustLinkedList<V>();
-			this.values.addAll(values);
-			iter = this.values.iterator();
-		}
+  /**
+   * Protected for testing reasons
+   * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
+   */
+  protected static final class RobustValueIterator<V> implements Iterator<V> {
+    private final Collection<V> values;
+    private final Iterator<V> iter;
+    public RobustValueIterator(Collection<V> values) {
+      this.values = new RobustLinkedList<V>();
+      this.values.addAll(values);
+      iter = this.values.iterator();
+    }
 
-		@Override
-		public boolean hasNext() {
-			return iter.hasNext();
-		}
+    @Override
+    public boolean hasNext() {
+      return iter.hasNext();
+    }
 
-		@Override
-		public V next() {
-			V nextValue = iter.next();
-			return nextValue;
-		}
+    @Override
+    public V next() {
+      V nextValue = iter.next();
+      return nextValue;
+    }
 
-		@Override
-		public void remove() {
-			throw new UnsupportedOperationException();
-		}
+    @Override
+    public void remove() {
+      throw new UnsupportedOperationException();
+    }
 
-		public void addValue(V item) {
-			values.add(item);
-		}
-	}
+    public void addValue(V item) {
+      values.add(item);
+    }
+  }
 
-	/**
-	 * Protected for testing reasons
-	 */
-	protected Collection<WeakReference<RobustValueIterator<V>>> iterators =
-			new LinkedList<WeakReference<RobustValueIterator<V>>>();
-	private Map<K, V> map;
+  /**
+   * Protected for testing reasons
+   */
+  protected Collection<WeakReference<RobustValueIterator<V>>> iterators =
+      new LinkedList<WeakReference<RobustValueIterator<V>>>();
+  private Map<K, V> map;
 
-	/**
-	 * @param underlyingMap
-	 */
-	public RobustMap(Map<K, V> underlyingMap) {
+  /**
+   * @param underlyingMap
+   */
+  public RobustMap(Map<K, V> underlyingMap) {
 
-		map = underlyingMap;
-	}
+    map = underlyingMap;
+  }
 
-	private void addItemToIterators(V item) {
-		Iterator<WeakReference<RobustValueIterator<V>>> iter = iterators.iterator();
-		while (iter.hasNext()) {
-			RobustValueIterator<V> robustIter = iter.next().get();
-			if (robustIter == null)
-				iter.remove();
-			else
-				robustIter.addValue(item);
-		}
-	}
+  private void addItemToIterators(V item) {
+    Iterator<WeakReference<RobustValueIterator<V>>> iter = iterators.iterator();
+    while (iter.hasNext()) {
+      RobustValueIterator<V> robustIter = iter.next().get();
+      if (robustIter == null)
+        iter.remove();
+      else
+        robustIter.addValue(item);
+    }
+  }
 
-	@Override
-	public V put(K key, V value) {
-		addItemToIterators(value);
-		return map.put(key, value);
-	}
+  @Override
+  public V put(K key, V value) {
+    addItemToIterators(value);
+    return map.put(key, value);
+  }
 
-	@Override
-	public void putAll(Map<? extends K, ? extends V> m) {
-		for (V item: m.values()) {
-			addItemToIterators(item);
-		}
-		map.putAll(m);
-	}
+  @Override
+  public void putAll(Map<? extends K, ? extends V> m) {
+    for (V item: m.values()) {
+      addItemToIterators(item);
+    }
+    map.putAll(m);
+  }
 
-	/**
-	 * @return A robust iterator to iterate over the underlying map values
-	 */
-	public Iterator<V> robustValueIterator() {
-		RobustValueIterator<V> iter = new RobustValueIterator<V>(values());
-		iterators.add(new WeakReference<RobustValueIterator<V>>(iter));
-		return iter;
-	}
+  /**
+   * @return A robust iterator to iterate over the underlying map values
+   */
+  public Iterator<V> robustValueIterator() {
+    RobustValueIterator<V> iter = new RobustValueIterator<V>(values());
+    iterators.add(new WeakReference<RobustValueIterator<V>>(iter));
+    return iter;
+  }
 
-	@Override
-	public void clear() {
-		map.clear();
-	}
+  @Override
+  public void clear() {
+    map.clear();
+  }
 
-	@Override
-	public boolean containsKey(Object key) {
-		return map.containsKey(key);
-	}
+  @Override
+  public boolean containsKey(Object key) {
+    return map.containsKey(key);
+  }
 
-	@Override
-	public boolean containsValue(Object value) {
-		return map.containsValue(value);
-	}
+  @Override
+  public boolean containsValue(Object value) {
+    return map.containsValue(value);
+  }
 
-	@Override
-	public Set<Map.Entry<K, V>> entrySet() {
-		return map.entrySet();
-	}
+  @Override
+  public Set<Map.Entry<K, V>> entrySet() {
+    return map.entrySet();
+  }
 
-	@Override
-	public V get(Object key) {
-		return map.get(key);
-	}
+  @Override
+  public V get(Object key) {
+    return map.get(key);
+  }
 
-	@Override
-	public boolean isEmpty() {
-		return map.isEmpty();
-	}
+  @Override
+  public boolean isEmpty() {
+    return map.isEmpty();
+  }
 
-	@Override
-	public Set<K> keySet() {
-		return map.keySet();
-	}
+  @Override
+  public Set<K> keySet() {
+    return map.keySet();
+  }
 
-	@Override
-	public V remove(Object key) {
-		return map.remove(key);
-	}
+  @Override
+  public V remove(Object key) {
+    return map.remove(key);
+  }
 
-	@Override
-	public int size() {
-		return map.size();
-	}
+  @Override
+  public int size() {
+    return map.size();
+  }
 
-	@Override
-	public Collection<V> values() {
-		return map.values();
-	}
+  @Override
+  public Collection<V> values() {
+    return map.values();
+  }
 
 }
