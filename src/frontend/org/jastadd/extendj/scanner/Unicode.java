@@ -29,7 +29,11 @@
  */
 package org.jastadd.extendj.scanner;
 
-import java.io.*;
+import java.io.FilterReader;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
 
 @SuppressWarnings("javadoc")
 public class Unicode extends FilterReader {
@@ -61,7 +65,7 @@ public class Unicode extends FilterReader {
   private int length = 0;
 
   // interal read with support for lookahead
-  private int next() throws java.io.IOException {
+  private int next() throws IOException {
     int c = lookahead;
     refill();
     lookahead = pos >= length ? -1 : buffer[pos++];
@@ -72,7 +76,7 @@ public class Unicode extends FilterReader {
 
   // read character and translate unicode escapes
   @Override
-  public int read() throws java.io.IOException {
+  public int read() throws IOException {
     int current = next();
     if (current != '\\') {
       numConsecutiveBackSlash = 0;

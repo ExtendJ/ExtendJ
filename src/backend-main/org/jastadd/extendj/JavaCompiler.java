@@ -33,7 +33,13 @@ package org.jastadd.extendj;
 import java.io.File;
 import java.util.Collection;
 
-import org.jastadd.extendj.ast.*;
+import org.jastadd.extendj.ast.Frontend;
+import org.jastadd.extendj.ast.CompilationUnit;
+import org.jastadd.extendj.ast.JavaParser;
+import org.jastadd.extendj.ast.BytecodeParser;
+import org.jastadd.extendj.ast.BytecodeReader;
+import org.jastadd.extendj.ast.Problem;
+import org.jastadd.extendj.ast.Program;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
@@ -130,7 +136,7 @@ public class JavaCompiler extends Frontend {
 
   @SuppressWarnings("rawtypes")
   @Override
-  protected void processErrors(Collection errors, CompilationUnit unit) {
+  protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
     super.processErrors(errors, unit);
     switch (mode) {
       case PRETTY_PRINT:

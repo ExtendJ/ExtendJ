@@ -30,12 +30,18 @@
  */
 package org.jastadd.extendj;
 
-import org.jastadd.extendj.ast.*;
+import org.jastadd.extendj.ast.Frontend;
+import org.jastadd.extendj.ast.CompilationUnit;
+import org.jastadd.extendj.ast.JavaParser;
+import org.jastadd.extendj.ast.BytecodeParser;
+import org.jastadd.extendj.ast.BytecodeReader;
+import org.jastadd.extendj.ast.Problem;
+import org.jastadd.extendj.ast.Program;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
-import java.util.*;
+import java.util.Collection;
 
 /**
  * Pretty-print some Java source files.
@@ -98,7 +104,7 @@ class JavaPrettyPrinter extends Frontend {
 
   @SuppressWarnings("rawtypes")
   @Override
-  protected void processErrors(Collection errors, CompilationUnit unit) {
+  protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
     super.processErrors(errors, unit);
     System.out.println(unit.prettyPrint());
   }
