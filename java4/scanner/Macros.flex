@@ -6,9 +6,9 @@ InputCharacter = [^\r\n]
 WhiteSpace = [ ] | \t | \f | {LineTerminator}
 
 /* 3.7 Comments */
-Comment = {TraditionalComment}
-        | {EndOfLineComment}
+Comment = {TraditionalComment} | {EndOfLineComment}
 
+DocumentationComment = "/**" [^*] ~"*/" | "/**" "*"+ "/" | "/**" "*"+ [^/*] ~"*/"
 TraditionalComment = "/*" [^*] ~"*/" | "/*" "*"+ "/" | "/*" "*"+ [^/*] ~"*/"
 EndOfLineComment = "//" {InputCharacter}* {LineTerminator}?
 

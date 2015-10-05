@@ -1,3 +1,6 @@
 /* 3.7 Comments */
-<YYINITIAL> {Comment} { }
+<YYINITIAL> {
+  {DocumentationComment} { return sym(Terminals.DOC_COMMENT); }
+  {Comment} { }
+}
 

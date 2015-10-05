@@ -5,13 +5,15 @@
           Problem.Severity.ERROR, Problem.Kind.LEXICAL));
     }
     public void syntaxError(Symbol token) {
-      int line = token.getLine(token.getStart());
-      int column = token.getColumn(token.getStart());
-      int endLine = token.getLine(token.getEnd());
-      int endColumn = token.getColumn(token.getEnd());
-      String value = token.value != null ? token.value.toString() : Terminals.NAMES[token.getId()];
-      errors.add(new Problem(null, "unexpected token \"" + value + "\"",
-          line, column, endLine, endColumn, Problem.Severity.ERROR, Problem.Kind.SYNTACTIC));
+      if (!canSkipToken(token)) {
+        int line = token.getLine(token.getStart());
+        int column = token.getColumn(token.getStart());
+        int endLine = token.getLine(token.getEnd());
+        int endColumn = token.getColumn(token.getEnd());
+        String value = token.value != null ? token.value.toString() : Terminals.NAMES[token.getId()];
+        errors.add(new Problem(null, "unexpected token \"" + value + "\"",
+            line, column, endLine, endColumn, Problem.Severity.ERROR, Problem.Kind.SYNTACTIC));
+      }
     }
     public void unexpectedTokenRemoved(Symbol token) {
     }
@@ -48,6 +50,18 @@
       cu.addParseError(p);
     }
     return cu;
+  }
+
+  @Override
+  protected void recoverFromError(Symbol token, TokenStream in)
+      throws java.io.IOException, Parser.Exception {
+    if (!canSkipToken(token)) {
+      super.recoverFromError(token, in);
+    }
+  }
+
+  protected static boolean canSkipToken(Symbol token) {
+    return token.getId() == Terminals.DOC_COMMENT;
   }
 
   protected java.util.Collection errors = new ArrayList();
