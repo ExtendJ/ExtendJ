@@ -8,8 +8,8 @@ WhiteSpace = [ ] | \t | \f | {LineTerminator}
 /* 3.7 Comments */
 Comment = {TraditionalComment} | {EndOfLineComment}
 
-DocumentationComment = "/**" [^*] ~"*/" | "/**" "*"+ "/" | "/**" "*"+ [^/*] ~"*/"
-TraditionalComment = "/*" [^*] ~"*/" | "/*" "*"+ "/" | "/*" "*"+ [^/*] ~"*/"
+DocumentationComment = "/**" ~"*/"
+TraditionalComment = "/*" [^*] ~"*/" | "/*" "*"+ "/"
 EndOfLineComment = "//" {InputCharacter}* {LineTerminator}?
 
 /* Modified numeric literal parsing for Java 7.
