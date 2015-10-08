@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,14 +27,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
+package org.jastadd.util;
 
-aspect PrettyPrint {
+/**
+ * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ */
+public interface PrettyPrintable {
 
   /**
-   * Parser debug printout.
+   * @param prettyPrinter
    */
-  public void ParseName.prettyPrint(StringBuffer sb) {
-    sb.append(getID());
-  }
-
+  void prettyPrint(PrettyPrinter prettyPrinter);
 }

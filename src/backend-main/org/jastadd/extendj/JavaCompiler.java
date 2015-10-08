@@ -44,6 +44,7 @@ import org.jastadd.extendj.ast.Program;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 
 /**
  * Compile Java programs.
@@ -128,7 +129,12 @@ public class JavaCompiler extends Frontend {
       return super.processCompilationUnit(unit);
     } else {
       if (unit != null && unit.fromSource()) {
-        System.out.println(unit.structuredPrettyPrint());
+        try {
+          System.out.println(unit.structuredPrettyPrint());
+        } catch (IOException e) {
+          e.printStackTrace(System.err);
+          return EXIT_ERROR;
+        }
       }
       return EXIT_SUCCESS;
     }
@@ -140,7 +146,11 @@ public class JavaCompiler extends Frontend {
     super.processErrors(errors, unit);
     switch (mode) {
       case PRETTY_PRINT:
-        System.out.println(unit.prettyPrint());
+        try {
+          unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
+        } catch (IOException e) {
+          e.printStackTrace(System.err);
+        }
         return;
       case DUMP_TREE:
         System.out.println(unit.dumpTreeNoRewrite());
@@ -156,7 +166,11 @@ public class JavaCompiler extends Frontend {
         unit.generateClassfile();
         return;
       case PRETTY_PRINT:
-        System.out.println(unit.prettyPrint());
+        try {
+          unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
+        } catch (IOException e) {
+          e.printStackTrace(System.err);
+        }
         return;
       case DUMP_TREE:
         System.out.println(unit.dumpTreeNoRewrite());

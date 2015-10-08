@@ -41,6 +41,7 @@ import org.jastadd.extendj.ast.Program;
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.util.Collection;
 
 /**
@@ -106,10 +107,19 @@ class JavaPrettyPrinter extends Frontend {
   @Override
   protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
     super.processErrors(errors, unit);
-    System.out.println(unit.prettyPrint());
+    try {
+      unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
+    } catch (IOException e) {
+      e.printStackTrace(System.err);
+    }
   }
+
   @Override
   protected void processNoErrors(CompilationUnit unit) {
-    System.out.println(unit.prettyPrint());
+    try {
+      unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
+    } catch (IOException e) {
+      e.printStackTrace(System.err);
+    }
   }
 }

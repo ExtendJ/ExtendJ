@@ -34,24 +34,25 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
-import java.io.UnsupportedEncodingException;
 
 @SuppressWarnings("javadoc")
 public class Unicode extends FilterReader {
-  public Unicode(Reader in) {
+  private static final int SIZE = 1024;
+  private final char[] buffer = new char[SIZE];
+  private int pos = 0;
+  private int length = 0;
+  private int numConsecutiveBackSlash = 0;
+
+  public Unicode(Reader in) throws IOException {
     super(in);
-    // Initialize read ahead character.
-    try {
-      next();
-    } catch (IOException e) {
-    }
+    next(); // Initialize read ahead character.
   }
 
-  public Unicode(InputStream in) throws UnsupportedEncodingException {
+  public Unicode(InputStream in) throws IOException {
     this(new InputStreamReader(in, "UTF8"));
   }
 
-  // buffer reads from filtered stream
+  /** Buffer reads from filtered stream. */
   private void refill() throws IOException {
     if (pos >= length) {
       pos = 0;
@@ -60,12 +61,7 @@ public class Unicode extends FilterReader {
     }
   }
 
-  private static final int SIZE = 1024;
-  private final char[] buffer = new char[SIZE];
-  private int pos = 0;
-  private int length = 0;
-
-  // interal read with support for lookahead
+  /** Interal read with support for lookahead. */
   private int next() throws IOException {
     int c = lookahead;
     refill();
@@ -75,7 +71,7 @@ public class Unicode extends FilterReader {
 
   private int lookahead = -1;
 
-  // read character and translate unicode escapes
+  /** Read character and translate unicode escapes. */
   @Override
   public int read() throws IOException {
     int current = next();
@@ -89,47 +85,49 @@ public class Unicode extends FilterReader {
       return current;
     }
     numConsecutiveBackSlash = 0;
-    // UnicodeEscape found
-    while (lookahead == 'u')
+    /** UnicodeEscape found. */
+    while (lookahead == 'u') {
       next();
+    }
     // The next four characters must be hexadecimal digits or else a
-    // compile-time error is thrown
+    // compile-time error is thrown.
     int result = 0;
     for (int i = 0; i < 4; i++) {
       int c = next();
       int value = Character.digit((char) c, 16);
-      if (value == -1)
+      if (value == -1) {
         throw new Error("Invalid Unicode Escape");
+      }
       result <<= 4;
       result += value;
     }
     return result;
   }
 
-  private int numConsecutiveBackSlash = 0;
-
   @Override
   public int read(char cbuf[], int off, int len) throws IOException {
-    if (!ready())
+    if (!ready()) {
       return -1;
+    }
     len += off;
 
     for (int i = off; i < len; i++) {
-      // simplified common loop for non unicode escapes (read(), next(),
-      // refill(), cbuf[i])
+      // Simplified common loop for non unicode escapes (read(), next(), refill(), cbuf[i]).
       while (pos < length && i < len - 1 && lookahead != '\\') {
-        if (lookahead < 0)
+        if (lookahead < 0) {
           return i - off;
+        }
         cbuf[i++] = (char) lookahead;
         lookahead = buffer[pos++];
         numConsecutiveBackSlash = 0;
       }
 
       int c = read();
-      if (c < 0)
+      if (c < 0) {
         return i - off;
-      else
+      } else {
         cbuf[i] = (char) c;
+      }
     }
     return len - off;
   }

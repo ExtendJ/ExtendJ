@@ -101,8 +101,9 @@ public class PrettyPrintTask extends Task {
 
   public void setClasspathref(Reference ref) {
     Object deref = ref.getReferencedObject();
-    if (deref instanceof Path)
+    if (deref instanceof Path) {
       this.cp = (Path) deref;
+    }
   }
 
   public void setSrcdir(Path srcdir) {

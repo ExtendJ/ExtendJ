@@ -1,0 +1,205 @@
+# Copyright (c) 2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+# All rights reserved.
+#
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+#
+# 1. Redistributions of source code must retain the above copyright notice,
+# this list of conditions and the following disclaimer.
+#
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# this list of conditions and the following disclaimer in the documentation
+# and/or other materials provided with the distribution.
+#
+# 3. Neither the name of the copyright holder nor the names of its
+# contributors may be used to endorse or promote products derived from this
+# software without specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+# ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+# LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+# CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+# SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+# INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+# CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+# ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+# POSSIBILITY OF SUCH DAMAGE.
+
+## this file is used to generate java4/frontend/PrettyPrint.jadd
+
+## CompilationUnit
+
+CompilationUnit [[
+$if(hasPackageDecl)
+package $PackageDecl;
+
+$endif
+$ImportDeclList
+
+$cat(TypeDecls,"\n\n")]]
+
+SingleTypeImportDecl [[import $Access;
+]]
+
+TypeImportOnDemandDecl [[import $Access.*;
+]]
+
+## Accesses (Type etc.)
+
+## For parser debugging
+ParseName [[$ID]]
+
+AbstractDot [[
+$if(needsDot)
+$Left.$Right
+$else
+$Left$Right
+$endif]]
+PackageAccess [[$Package]]
+TypeAccess [[$if(hasPackage)$Package.$endif$ID]]
+ArrayTypeAccess [[$Access[]]]
+ArrayTypeWithSizeAccess [[$Access[$Expr]]]
+ThisAccess [[this]]
+SuperAccess [[super]]
+ArrayAccess [[[$Expr]]]
+ClassAccess [[class]]
+VarAccess [[$ID]]
+MethodAccess [[$ID($cat(ArgList,", "))]]
+ConstructorAccess [[$ID($cat(ArgList,", "))]]
+
+## Types
+
+BooleanType [[boolean]]
+ByteType [[byte]]
+ShortType [[short]]
+CharType [[char]]
+IntType [[int]]
+LongType [[long]]
+FloatType [[float]]
+DoubleType [[double]]
+NullType [[null]]
+VoidType [[void]]
+
+## Statements
+
+Block [[
+{
+  $cat(StmtList,"\n")
+}]]
+
+EmptyStmt [[;]]
+
+ExprStmt [[$Expr;]]
+
+SwitchStmt [[switch ($Expr) $Block]]
+LabeledStmt [[$Label:]]
+ConstCase [[case $Value:]]
+DefaultCase [[default:]]
+
+DoStmt [[do $Stmt while($Condition);]]
+
+# control statements
+BreakStmt [[break$if(hasLabel) $Label$endif;]]
+ContinueStmt [[continue$if(hasLabel) $Label$endif;]]
+ReturnStmt [[return$if(hasResult) $Result$endif;]]
+ThrowStmt [[throw $Expr;]]
+
+SynchronizedStmt [[synchronized ($Expr) $Block]]
+
+TryStmt [[try $Block $cat(CatchClauseList," ")$if(hasFinally) finally $Finally$endif]]
+
+BasicCatch [[catch ($Parameter) $Block]]
+
+AssertStmt [[$if(hasMessage)assert $Condition : $Message;$(else)assert $Condition;$endif]]
+
+LocalClassDeclStmt [[$ClassDecl]]
+
+## Declarations
+
+InstanceInitializer [[$if(!blockIsEmpty)$Block$endif]]
+StaticInitializer [[static $if(!blockIsEmpty)$Block$endif]]
+
+ClassDecl [[
+$if(hasDocComment)#docComment$endif
+$(Modifiers)class $ID$if(hasSuperClass) extends $SuperClass$endif$if(hasImplements) implements $cat(Implementss,", ")$endif {
+  $cat(BodyDecls,"\n\n")
+}]]
+
+InterfaceDecl [[
+$if(hasDocComment)#docComment$endif
+$(Modifiers)interface $ID$if(hasSuperInterface) extends $cat(SuperInterfaceList,", ")$endif {
+  $cat(BodyDecls,"\n\n")
+}]]
+
+FieldDeclaration [[
+$if(hasDocComment)#docComment$endif
+$Modifiers$TypeAccess $ID$if(hasInit) = $Init$endif;]]
+
+VarDeclStmt [[
+$Modifiers$TypeAccess $cat($VariableDecls,", ");]]
+
+VariableDecl [[$ID$DimsList$if(hasInit) = $Init$endif]]
+
+Dims [[[$ExprOpt$]]]
+
+MethodDecl [[
+$if(hasDocComment)#docComment$endif
+$Modifiers$TypeAccess $ID($cat(ParameterList,", "))$if(hasExceptions) throws $cat(ExceptionList,", ")$endif$if(hasBlock) $Block$else;$endif]]
+
+ConstructorDecl [[
+$if(!isImplicitConstructor)
+$if(hasDocComment)#docComment$endif
+$Modifiers$ID($cat(ParameterList,", "))$if(hasExceptions) throws $cat(ExceptionList,", ")$endif {
+  $ParsedConstructorInvocationOpt
+  $cat(#blockStmts,"\n")
+}$endif]]
+
+MemberClassDecl [[$ClassDecl]]
+
+MemberInterfaceDecl [[$InterfaceDecl]]
+
+ParameterDeclaration [[$Modifiers$TypeAccess $ID]]
+
+EmptyType [[;]]
+
+## Expressions
+
+ParExpr [[($Expr)]]
+
+CastExpr [[($TypeAccess) $Expr]]
+
+AssignExpr [[$Dest #printOp $Source]]
+
+Binary [[$LeftOperand #printOp $RightOperand]]
+
+Unary [[#printPreOp$Operand#printPostOp]]
+
+Literal [[$LITERAL]]
+StringLiteral [["#escapedLiteral"]]
+CharacterLiteral [['#escapedLiteral']]
+LongLiteral [[$(LITERAL)L]]
+FloatingPointLiteral [[$(LITERAL)F]]
+DoubleLiteral [[$(LITERAL)D]]
+
+ArrayInit [[{ $cat(InitList,", ") }]]
+
+ArrayCreationExpr [[new $TypeAccess$if(hasArrayInit) $ArrayInit$endif]]
+
+ClassInstanceExpr [[new $Access($cat(ArgList,", "))$if(hasTypeDecl)$if(hasPrintableBodyDecl) {
+  $cat(#bodyDecls,"\n")}$else { }$endif$endif]]
+
+SynchronizedStmt [[
+synchronized $Expr $Block
+]]
+
+InstanceOfExpr [[$Expr instanceof $TypeAccess]]
+
+ConditionalExpr [[$Condition ? $TrueExpr : $FalseExpr]]
+
+# TODO use $join?
+Modifiers [[$if(hasModifier)$cat(ModifierList," ") $endif]]
+
+Modifier [[$ID]]
+
