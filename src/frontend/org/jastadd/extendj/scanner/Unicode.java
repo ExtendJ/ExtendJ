@@ -34,6 +34,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.io.UnsupportedEncodingException;
 
 @SuppressWarnings("javadoc")
 public class Unicode extends FilterReader {
@@ -46,8 +47,8 @@ public class Unicode extends FilterReader {
     }
   }
 
-  public Unicode(InputStream in) {
-    this(new InputStreamReader(in));
+  public Unicode(InputStream in) throws UnsupportedEncodingException {
+    this(new InputStreamReader(in, "UTF8"));
   }
 
   // buffer reads from filtered stream
