@@ -2,27 +2,27 @@
 <YYINITIAL> {
   /* 3.10.1 Integer Literals */
   {DecimalNumeral}               { return sym(Terminals.INTEGER_LITERAL); }
-  {DecimalNumeral} [lL]          { return sym(Terminals.LONG_LITERAL, str().substring(0,len()-1)); }
+  {DecimalNumeral} [lL]          { return sym(Terminals.LONG_LITERAL); }
 
   {HexNumeral}                   { return sym(Terminals.INTEGER_LITERAL); }
-  {HexNumeral} [lL]              { return sym(Terminals.LONG_LITERAL, str().substring(0, len()-1)); }
+  {HexNumeral} [lL]              { return sym(Terminals.LONG_LITERAL); }
 
   {OctalNumeral}                 { return sym(Terminals.INTEGER_LITERAL); }
-  {OctalNumeral} [lL]            { return sym(Terminals.LONG_LITERAL, str().substring(0, len()-1)); }
+  {OctalNumeral} [lL]            { return sym(Terminals.LONG_LITERAL); }
 
   /* 3.10.2 Floating-Point Literals */
-  {FloatingPointLiteral} [fF]    { return sym(Terminals.FLOATING_POINT_LITERAL, str().substring(0,len()-1)); }
-  {FloatingPointLiteral} [dD]    { return sym(Terminals.DOUBLE_LITERAL, str().substring(0,len()-1)); }
+  {FloatingPointLiteral} [fF]    { return sym(Terminals.FLOATING_POINT_LITERAL); }
+  {FloatingPointLiteral} [dD]    { return sym(Terminals.DOUBLE_LITERAL); }
   {FloatingPointLiteral}         { return sym(Terminals.DOUBLE_LITERAL); }
-  [0-9]+ {ExponentPart}? [fF]    { return sym(Terminals.FLOATING_POINT_LITERAL, str().substring(0,len()-1)); }
-  [0-9]+ {ExponentPart}? [dD]    { return sym(Terminals.DOUBLE_LITERAL, str().substring(0,len()-1)); }
+  [0-9]+ {ExponentPart}? [fF]    { return sym(Terminals.FLOATING_POINT_LITERAL); }
+  [0-9]+ {ExponentPart}? [dD]    { return sym(Terminals.DOUBLE_LITERAL); }
 
   /* 3.10.3 Boolean Literals */
   "true"                         { return sym(Terminals.BOOLEAN_LITERAL); }
   "false"                        { return sym(Terminals.BOOLEAN_LITERAL); }
 
   /* 3.10.4 Character Literals */
-  \'{SingleCharacter}\'          { return sym(Terminals.CHARACTER_LITERAL, str().substring(1, len()-1)); }
+  \'{SingleCharacter}\'          { return sym(Terminals.CHARACTER_LITERAL, str().substring(1, len() - 1)); }
   /* 3.10.6 Escape Sequences for Character Literals */
   \'"\\b"\'                      { return sym(Terminals.CHARACTER_LITERAL, "\b"); }
   \'"\\t"\'                      { return sym(Terminals.CHARACTER_LITERAL, "\t"); }
@@ -32,8 +32,8 @@
   \'"\\\""\'                     { return sym(Terminals.CHARACTER_LITERAL, "\""); }
   \'"\\'"\'                      { return sym(Terminals.CHARACTER_LITERAL, "\'"); }
   \'"\\\\"\'                     { return sym(Terminals.CHARACTER_LITERAL, "\\"); }
-  \'{OctalEscape}\'              { int val = Integer.parseInt(str().substring(2,len()-1),8);
-                                   return sym(Terminals.CHARACTER_LITERAL, new Character((char)val).toString()); }
+  \'{OctalEscape}\'              { int val = Integer.parseInt(str().substring(2, len() - 1), 8);
+                                   return sym(Terminals.CHARACTER_LITERAL, "" + ((char) val)); }
   /* Character Literal errors */
   \'\\.                          { error("illegal escape sequence \""+str()+"\""); }
   \'{LineTerminator}             { error("unterminated character literal at end of line"); }
