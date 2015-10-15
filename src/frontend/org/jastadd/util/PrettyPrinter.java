@@ -37,6 +37,11 @@ import java.util.Stack;
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class PrettyPrinter {
+  public interface Joiner {
+    /** Prints a separator to join two PrettyPrintable objects. */
+    void printSeparator(PrettyPrinter out);
+  }
+
   private final String indentation;
   private final java.util.List<String> ind = new ArrayList<String>(32);
   private final Stack<Integer> indentStack = new Stack<Integer>();
@@ -135,24 +140,19 @@ public class PrettyPrinter {
     return newline;
   }
 
-  /**
-   * Concatenate a list of pretty-printable items.
-   * @param list list of items to concatenate
-   * @param sep Separator strings to be printed between each item.
-   * Each separator string is separated by newline.
-   */
-  public final void cat(Iterable<? extends PrettyPrintable> list, String... sep) {
+  /** Concatenate a list of pretty-printable items, without a separator. */
+  public final void join(Iterable<? extends PrettyPrintable> list) {
+    for (PrettyPrintable item : list) {
+      print(item);
+    }
+  }
+
+  /** Concatenate a list of pretty-printable items with a separator. */
+  public final void join(Iterable<? extends PrettyPrintable> list, Joiner joiner) {
     boolean first = true;
-    for (PrettyPrintable item: list) {
+    for (PrettyPrintable item : list) {
       if (!first) {
-        for (int i = 0; i < sep.length; ++i) {
-          if (i > 0) {
-            println();
-          }
-          if (!sep[i].isEmpty()) {
-            print(sep[i]);
-          }
-        }
+        joiner.printSeparator(this);
       }
       first = false;
       print(item);
