@@ -14,6 +14,49 @@ apply plugin: 'application'
 apply plugin: 'jastadd'
 apply plugin: 'eclipse'
 
+/** Helper function to run a command. Returns the command output if the command succeeded. */
+def tryCommand(List command, boolean failOnError = false) {
+	def out = new StringBuilder()
+	def err = new StringBuilder()
+	def proc = command.execute()
+	proc.waitForProcessOutput(out, err)
+	if (proc.exitValue()) {
+		def msg = "failed to run '${command[0]}' command (args: ${command.tail()})\n$err$out"
+		if (failOnError) {
+			throw new GradleException(msg)
+		} else {
+			print 'Warning: '
+			println msg
+		}
+		""
+	} else {
+		if (err) println "${err}"
+		out.toString()
+	}
+}
+
+/** Helper function to retrieve the current version string. */
+def getVersion() {
+	if (hasProperty('newVersion')) {
+		// A new version string should be saved.
+		def versionFile = file('src/res/Version.properties')
+		ant.propertyfile(file: versionFile) {
+			entry(key: 'version', value: newVersion)
+		}
+		return newVersion
+	} else {
+		def output = tryCommand(['git', 'describe'])
+		if (output) {
+			// Use Git describe output.
+			output.readLines()[0]
+		} else {
+			// Git command failed. Read the previous version string instead.
+			ant.property(file: file('src/res/Version.properties'))
+			ant.properties['version']
+		}
+	}
+}
+
 jastadd {
 	modules 'jastadd_modules'
 
@@ -21,13 +64,16 @@ jastadd {
 	// Call Gradle with -Djastadd.module="..." to select module to build (default is "java7 backend")
 	// remember to run the 'clean' task if a new target module is specified!
 	module = System.properties['jastadd.module'] ?: "java7 backend"
-	println "Building ${module.name}"
 
 	astPackage = "org.extendj.ast"
 	genDir = "src/gen"
 	buildInfoDir = "src/gen-res"
 	parser.name = "JavaParser"
 }
+
+project.version = getVersion()
+
+println "Building ${module.name} version ${version}"
 
 // Add main classes depending on target module.
 if (jastadd.module.name.endsWith('backend')) {
@@ -60,7 +106,6 @@ dependencies {
 sourceSets {
 	main {
 		resources {
-			srcDir 'src/res'
 			srcDir jastadd.buildInfoDir
 		}
 	}
@@ -68,30 +113,21 @@ sourceSets {
 
 processResources.dependsOn 'updateVersionString'
 
-// Use git describe to update the version string.
-task updateVersionString << {
-	def out = new StringBuilder()
-	def err = new StringBuilder()
-	def command = ['git', 'describe']
-	def proc = command.execute()
-	proc.waitForProcessOutput(out, err)
-	if (proc.exitValue()) {
-		println "warning: failed to run git describe to update version name"
-		println "${err}"
-	} else {
-		if (err) println "${err}"
-		def outputFile = file('src/res/Version.properties')
-		ant.propertyfile(file: outputFile) {
-			entry(key: 'version', value: out.toString().readLines()[0])
+task updateVersionString {
+	outputs.upToDateWhen {
+		def props = new Properties()
+		def output = file('src/gen-res/Version.properties')
+		if (output.isFile()) {
+			output.withInputStream { stream -> props.load(stream) }
 		}
-		command = ['git', 'update-index', '--assume-unchanged', outputFile.path]
-		out.setLength(0)
-		err.setLength(0)
-		proc = command.execute()
-		proc.waitForProcessOutput(out, err)
-		if (proc.exitValue()) {
-			println 'warning: git update-index failed'
-			println "${err}"
+		props['version'] == project.version
+	}
+
+	doLast {
+		file('src/gen-res').mkdirs()
+		def versionFile = file('src/gen-res/Version.properties')
+		ant.propertyfile(file: versionFile) {
+			entry(key: 'version', value: project.version)
 		}
 	}
 }
