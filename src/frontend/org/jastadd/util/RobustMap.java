@@ -28,6 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 package org.jastadd.util;
+
 import java.lang.ref.WeakReference;
 import java.util.Collection;
 import java.util.Iterator;

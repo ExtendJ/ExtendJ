@@ -28,15 +28,15 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package org.jastadd.extendj;
+package org.extendj;
 
-import org.jastadd.extendj.ast.Program;
-import org.jastadd.extendj.ast.Problem;
-import org.jastadd.extendj.ast.Frontend;
-import org.jastadd.extendj.ast.CompilationUnit;
-import org.jastadd.extendj.ast.BytecodeParser;
-import org.jastadd.extendj.ast.BytecodeReader;
-import org.jastadd.extendj.ast.JavaParser;
+import org.extendj.ast.Program;
+import org.extendj.ast.Problem;
+import org.extendj.ast.Frontend;
+import org.extendj.ast.CompilationUnit;
+import org.extendj.ast.BytecodeParser;
+import org.extendj.ast.BytecodeReader;
+import org.extendj.ast.JavaParser;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
@@ -71,7 +71,7 @@ class JavaDumpTree extends Frontend {
       @Override
       public CompilationUnit parse(InputStream is, String fileName)
           throws IOException, beaver.Parser.Exception {
-        return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
+        return new org.extendj.parser.JavaParser().parse(is, fileName);
       }
     };
     bytecodeParser = new BytecodeReader() {

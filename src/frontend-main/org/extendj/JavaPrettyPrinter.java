@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *                    2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,30 +28,33 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package org.jastadd.extendj;
+package org.extendj;
 
-import org.jastadd.extendj.ast.Program;
-import org.jastadd.extendj.ast.Frontend;
-import org.jastadd.extendj.ast.JavaParser;
-import org.jastadd.extendj.ast.BytecodeReader;
-import org.jastadd.extendj.ast.BytecodeParser;
-import org.jastadd.extendj.ast.CompilationUnit;
+import org.extendj.ast.Frontend;
+import org.extendj.ast.CompilationUnit;
+import org.extendj.ast.JavaParser;
+import org.extendj.ast.BytecodeParser;
+import org.extendj.ast.BytecodeReader;
+import org.extendj.ast.Problem;
+import org.extendj.ast.Program;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.util.Collection;
 
 /**
- * Perform static semantic checks on a Java program.
+ * Pretty-print some Java source files.
  */
-public class JavaChecker extends Frontend {
+class JavaPrettyPrinter extends Frontend {
 
   /**
-   * Entry point for the Java checker.
+   * Entry point for the compiler frontend.
    * @param args command-line arguments
    */
   public static void main(String args[]) {
-    int exitCode = new JavaChecker().run(args);
+    int exitCode = new JavaPrettyPrinter().run(args);
     if (exitCode != 0) {
       System.exit(exitCode);
     }
@@ -61,15 +64,15 @@ public class JavaChecker extends Frontend {
   private final BytecodeReader bytecodeParser;
 
   /**
-   * Initialize the Java checker.
+   * Initialize the compiler.
    */
-  public JavaChecker() {
-    super("Java Checker", ExtendJVersion.getVersion());
+  public JavaPrettyPrinter() {
+    super("ExtendJ Java Pretty Printer", ExtendJVersion.getVersion());
     parser = new JavaParser() {
       @Override
       public CompilationUnit parse(InputStream is, String fileName) throws IOException,
           beaver.Parser.Exception {
-        return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
+        return new org.extendj.parser.JavaParser().parse(is, fileName);
       }
     };
     bytecodeParser = new BytecodeReader() {
@@ -88,15 +91,35 @@ public class JavaChecker extends Frontend {
    */
   @Deprecated
   public static boolean compile(String args[]) {
-    return 0 == new JavaChecker().run(args);
+    return 0 == new JavaPrettyPrinter().run(args);
   }
 
   /**
-   * Run the Java checker.
+   * Pretty print the source files.
    * @param args command-line arguments
    * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
    */
   public int run(String args[]) {
     return run(args, bytecodeParser, parser);
+  }
+
+  @SuppressWarnings("rawtypes")
+  @Override
+  protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
+    super.processErrors(errors, unit);
+    try {
+      unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
+    } catch (IOException e) {
+      e.printStackTrace(System.err);
+    }
+  }
+
+  @Override
+  protected void processNoErrors(CompilationUnit unit) {
+    try {
+      unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
+    } catch (IOException e) {
+      e.printStackTrace(System.err);
+    }
   }
 }

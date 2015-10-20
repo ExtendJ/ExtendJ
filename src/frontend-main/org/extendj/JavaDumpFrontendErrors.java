@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,51 +28,50 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package org.jastadd.extendj;
+package org.extendj;
 
-import org.jastadd.extendj.ast.Frontend;
-import org.jastadd.extendj.ast.CompilationUnit;
-import org.jastadd.extendj.ast.JavaParser;
-import org.jastadd.extendj.ast.BytecodeParser;
-import org.jastadd.extendj.ast.BytecodeReader;
-import org.jastadd.extendj.ast.Problem;
-import org.jastadd.extendj.ast.Program;
+import org.extendj.ast.Program;
+import org.extendj.ast.Problem;
+import org.extendj.ast.Frontend;
+import org.extendj.ast.JavaParser;
+import org.extendj.ast.BytecodeReader;
+import org.extendj.ast.BytecodeParser;
+import org.extendj.ast.CompilationUnit;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
-import java.io.PrintStream;
 import java.util.Collection;
 
 /**
- * Pretty-print some Java source files.
+ * Dump the parsed AST for some Java source files.
  */
-class JavaPrettyPrinter extends Frontend {
-
-  /**
-   * Entry point for the compiler frontend.
-   * @param args command-line arguments
-   */
-  public static void main(String args[]) {
-    int exitCode = new JavaPrettyPrinter().run(args);
-    if (exitCode != 0) {
-      System.exit(exitCode);
-    }
-  }
+class JavaDumpFrontendErrors extends Frontend {
 
   private final JavaParser parser;
   private final BytecodeReader bytecodeParser;
 
   /**
+   * Entry point.
+   * @param args command-line arguments
+   */
+  public static void main(String args[]) {
+    int exitCode = new JavaDumpFrontendErrors().run(args);
+    if (exitCode != 0) {
+      System.exit(exitCode);
+    }
+  }
+
+  /**
    * Initialize the compiler.
    */
-  public JavaPrettyPrinter() {
-    super("ExtendJ Java Pretty Printer", ExtendJVersion.getVersion());
+  public JavaDumpFrontendErrors() {
+    super("Java AST Dumper", ExtendJVersion.getVersion());
     parser = new JavaParser() {
       @Override
-      public CompilationUnit parse(InputStream is, String fileName) throws IOException,
-          beaver.Parser.Exception {
-        return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
+      public CompilationUnit parse(InputStream is, String fileName)
+          throws IOException, beaver.Parser.Exception {
+        return new org.extendj.parser.JavaParser().parse(is, fileName);
       }
     };
     bytecodeParser = new BytecodeReader() {
@@ -91,11 +90,11 @@ class JavaPrettyPrinter extends Frontend {
    */
   @Deprecated
   public static boolean compile(String args[]) {
-    return 0 == new JavaPrettyPrinter().run(args);
+    return 0 == new JavaDumpFrontendErrors().run(args);
   }
 
   /**
-   * Pretty print the source files.
+   * Dump source file abstract syntax trees.
    * @param args command-line arguments
    * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
    */
@@ -106,20 +105,13 @@ class JavaPrettyPrinter extends Frontend {
   @SuppressWarnings("rawtypes")
   @Override
   protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
-    super.processErrors(errors, unit);
-    try {
-      unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
-    } catch (IOException e) {
-      e.printStackTrace(System.err);
+    System.out.println("Errors:");
+    for (Problem error : errors) {
+      System.out.println(error);
     }
   }
 
   @Override
   protected void processNoErrors(CompilationUnit unit) {
-    try {
-      unit.prettyPrint(new PrintStream(System.out, false, "UTF-8"));
-    } catch (IOException e) {
-      e.printStackTrace(System.err);
-    }
   }
 }

@@ -27,13 +27,13 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package org.jastadd.extendj;
+package org.extendj;
 
 import beaver.Symbol;
 
-import org.jastadd.extendj.parser.JavaParser.Terminals;
-import org.jastadd.extendj.scanner.JavaScanner;
-import org.jastadd.extendj.scanner.Unicode;
+import org.extendj.parser.JavaParser.Terminals;
+import org.extendj.scanner.JavaScanner;
+import org.extendj.scanner.Unicode;
 
 import java.io.File;
 import java.io.FileInputStream;

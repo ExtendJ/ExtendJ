@@ -31,10 +31,11 @@ package org.jastadd.jastaddj;
 
 /**
  * Legacy entry-point for ExtendJ provided for backward-compatibility.
- * This class just delegates to org.jastadd.extendj.JavaCompiler.
+ * This class just delegates to org.extendj.JavaCompiler.
  */
-public class JavaCompiler {
+@Deprecated
+public class JavaCompiler extends org.extendj.JavaCompiler {
   public static void main(String[] args) {
-    org.jastadd.extendj.JavaCompiler.main(args);
+    org.extendj.JavaCompiler.main(args);
   }
 }

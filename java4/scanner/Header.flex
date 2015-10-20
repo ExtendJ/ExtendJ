@@ -1,6 +1,6 @@
-package org.jastadd.extendj.scanner;
+package org.extendj.scanner;
 
 import beaver.Symbol;
 import beaver.Scanner;
-import org.jastadd.extendj.parser.JavaParser.Terminals;
+import org.extendj.parser.JavaParser.Terminals;
 import java.io.*;

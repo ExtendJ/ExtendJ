@@ -28,50 +28,48 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package org.jastadd.extendj;
+package org.extendj;
 
-import org.jastadd.extendj.ast.Program;
-import org.jastadd.extendj.ast.Problem;
-import org.jastadd.extendj.ast.Frontend;
-import org.jastadd.extendj.ast.JavaParser;
-import org.jastadd.extendj.ast.BytecodeReader;
-import org.jastadd.extendj.ast.BytecodeParser;
-import org.jastadd.extendj.ast.CompilationUnit;
+import org.extendj.ast.Program;
+import org.extendj.ast.Frontend;
+import org.extendj.ast.JavaParser;
+import org.extendj.ast.BytecodeReader;
+import org.extendj.ast.BytecodeParser;
+import org.extendj.ast.CompilationUnit;
 
 import java.io.FileNotFoundException;
 import java.io.InputStream;
 import java.io.IOException;
-import java.util.Collection;
 
 /**
- * Dump the parsed AST for some Java source files.
+ * Perform static semantic checks on a Java program.
  */
-class JavaDumpFrontendErrors extends Frontend {
-
-  private final JavaParser parser;
-  private final BytecodeReader bytecodeParser;
+public class JavaChecker extends Frontend {
 
   /**
-   * Entry point.
+   * Entry point for the Java checker.
    * @param args command-line arguments
    */
   public static void main(String args[]) {
-    int exitCode = new JavaDumpFrontendErrors().run(args);
+    int exitCode = new JavaChecker().run(args);
     if (exitCode != 0) {
       System.exit(exitCode);
     }
   }
 
+  private final JavaParser parser;
+  private final BytecodeReader bytecodeParser;
+
   /**
-   * Initialize the compiler.
+   * Initialize the Java checker.
    */
-  public JavaDumpFrontendErrors() {
-    super("Java AST Dumper", ExtendJVersion.getVersion());
+  public JavaChecker() {
+    super("Java Checker", ExtendJVersion.getVersion());
     parser = new JavaParser() {
       @Override
-      public CompilationUnit parse(InputStream is, String fileName)
-          throws IOException, beaver.Parser.Exception {
-        return new org.jastadd.extendj.parser.JavaParser().parse(is, fileName);
+      public CompilationUnit parse(InputStream is, String fileName) throws IOException,
+          beaver.Parser.Exception {
+        return new org.extendj.parser.JavaParser().parse(is, fileName);
       }
     };
     bytecodeParser = new BytecodeReader() {
@@ -90,28 +88,15 @@ class JavaDumpFrontendErrors extends Frontend {
    */
   @Deprecated
   public static boolean compile(String args[]) {
-    return 0 == new JavaDumpFrontendErrors().run(args);
+    return 0 == new JavaChecker().run(args);
   }
 
   /**
-   * Dump source file abstract syntax trees.
+   * Run the Java checker.
    * @param args command-line arguments
    * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
    */
   public int run(String args[]) {
     return run(args, bytecodeParser, parser);
-  }
-
-  @SuppressWarnings("rawtypes")
-  @Override
-  protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
-    System.out.println("Errors:");
-    for (Problem error : errors) {
-      System.out.println(error);
-    }
-  }
-
-  @Override
-  protected void processNoErrors(CompilationUnit unit) {
   }
 }

@@ -28,7 +28,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-package org.jastadd.extendj;
+package org.extendj;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -39,15 +39,11 @@ import org.apache.tools.ant.Task;
 import org.apache.tools.ant.types.Path;
 import org.apache.tools.ant.types.Reference;
 
-/**
- * Apache Ant Task for Java7 pretty printer. Works similarly to the compiler
- * Task.
- */
 @SuppressWarnings("javadoc")
-public class PrettyPrintTask extends Task {
-  private Path cp;
-  private Path srcdir;
-  private Path destdir;
+public class JastAddJTask extends Task {
+  private Path  cp;
+  private Path  srcdir;
+  private Path  destdir;
 
   @Override
   public void execute() {
@@ -57,9 +53,11 @@ public class PrettyPrintTask extends Task {
       args.add(cp.toString());
     }
     if (srcdir != null) {
+      //args.add("-sourcepath");
       File fsrcdir = new File(srcdir.toString());
       if (!fsrcdir.exists()) {
-        System.err.println("could not open directory " + srcdir.toString());
+        System.err.println("could not open directory "+
+            srcdir.toString());
       } else {
         addSrcFiles(args, fsrcdir);
       }
@@ -72,11 +70,10 @@ public class PrettyPrintTask extends Task {
     for (int i = 0; i < args.size(); ++i) {
       argv[i] = args.get(i);
     }
-    JavaPrettyPrinter.main(argv);
+    JavaCompiler.main(argv);
   }
 
   private static Pattern srcPattern = Pattern.compile(".+\\.java");
-
   private void addSrcFiles(ArrayList<String> args, File srcdir) {
     for (String child : srcdir.list()) {
       File childFile = new File(srcdir, child);
@@ -101,9 +98,8 @@ public class PrettyPrintTask extends Task {
 
   public void setClasspathref(Reference ref) {
     Object deref = ref.getReferencedObject();
-    if (deref instanceof Path) {
+    if (deref instanceof Path)
       this.cp = (Path) deref;
-    }
   }
 
   public void setSrcdir(Path srcdir) {
@@ -113,4 +109,5 @@ public class PrettyPrintTask extends Task {
   public void setDestdir(Path destdir) {
     this.destdir = destdir;
   }
+
 }

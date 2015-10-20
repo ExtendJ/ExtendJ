@@ -28,6 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 package org.jastadd.util;
+
 import java.util.Collection;
 import java.util.Iterator;
 
