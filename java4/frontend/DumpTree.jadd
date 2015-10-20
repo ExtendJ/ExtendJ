@@ -1,5 +1,4 @@
-/* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2014-2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2014-2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,70 +28,78 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * Helper methods for dumping the AST to a string.
- */
+import java.util.ArrayList;
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+
 aspect DumpTree {
+  private String ASTNode.DUMP_TREE_INDENT = "  ";
+
   public String ASTNode.dumpTree() {
-    StringBuffer sb = new StringBuffer();
-    dumpTree(sb, 0);
-    return sb.toString();
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    dumpTree(new PrintStream(bytes));
+    return bytes.toString();
   }
 
-  public void ASTNode.dumpTree(StringBuffer sb, int j) {
-    for (int i = 0; i < j; i++) {
-      sb.append("  ");
-    }
-    sb.append(dumpString() + "\n");
-    for (int i = 0; i < getNumChild(); i++) {
-      getChild(i).dumpTree(sb, j + 1);
-    }
+  public void ASTNode.dumpTree(PrintStream out) {
+    dumpTree(out, "");
+    out.flush();
   }
 
-  public String ASTNode.dumpTreeNoRewrite() {
-    StringBuffer sb = new StringBuffer();
-    dumpTreeNoRewrite(sb, 0);
-    return sb.toString();
-  }
-
-  protected void ASTNode.dumpTreeNoRewrite(StringBuffer sb, int indent) {
-    for (int i = 0; i < indent; i++) {
-      sb.append("  ");
-    }
-    sb.append(dumpString());
-    sb.append("\n");
-    for (int i = 0; i < getNumChildNoTransform(); i++) {
-      getChildNoTransform(i).dumpTreeNoRewrite(sb, indent+1);
+  public void ASTNode.dumpTree(PrintStream out, String indent) {
+    out.print(indent + getClass().getSimpleName());
+    out.println(getTokens());
+    String childIndent = indent + DUMP_TREE_INDENT;
+    for (int i = 0; i < getNumChild(); ++i) {
+      ASTNode child = getChild(i);
+      if (child == null)  {
+        out.println(childIndent + "null");
+      } else {
+        child.dumpTree(out, childIndent);
+      }
     }
   }
 
-  public String Program.dumpTree() {
-    StringBuffer sb = new StringBuffer();
-    for (Iterator iter = compilationUnitIterator(); iter.hasNext(); ) {
-      CompilationUnit cu = (CompilationUnit)iter.next();
-      if (cu.fromSource()) {
-        sb.append(cu.dumpTree());
+  public String ASTNode.getTokens() {
+    StringBuilder sb = new StringBuilder();
+    Method[] methods = getClass().getMethods();
+    for (Method method : getClass().getMethods()) {
+      ASTNodeAnnotation.Token token = method.getAnnotation(ASTNodeAnnotation.Token.class);
+      if (token != null) {
+        try {
+          sb.append(" " + token.name() + "=\"" + method.invoke(this) + "\"");
+        } catch (IllegalAccessException e) {
+        } catch (InvocationTargetException e) {
+        }
       }
     }
     return sb.toString();
   }
 
-  syn String ASTNode.dumpString() = getClass().getName();
-  eq CompilationUnit.dumpString() = getClass().getName() + " [" + getPackageDecl() + "]";
-  eq VarAccess.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq MethodAccess.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq TypeAccess.dumpString() = getClass().getName() + " [" + getPackage() + ", " + getID() + "]";
-  eq PrimitiveTypeAccess.dumpString() = getClass().getName() + " [" + getName() + "]";
-  eq ArrayTypeAccess.dumpString() = getClass().getName();
-  eq PackageAccess.dumpString() = getClass().getName() + " [" + getPackage() + "]";
-  eq ParseName.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq TypeDecl.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq FieldDeclaration.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq VariableDeclaration.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq ParameterDeclaration.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq MethodDecl.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq Modifier.dumpString() = getClass().getName() + " [" + getID() + "]";
-  eq Literal.dumpString() = getClass().getName() + " [" + getLITERAL() + "]";
-  eq BoundTypeAccess.dumpString() = getClass().getName() + " [" + getTypeDecl().fullName() + "]";
+  public String ASTNode.dumpTreeNoRewrite() {
+    ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+    dumpTreeNoRewrite(new PrintStream(bytes));
+    return bytes.toString();
+  }
 
+  public void ASTNode.dumpTreeNoRewrite(PrintStream out) {
+    dumpTreeNoRewrite(out, "");
+    out.flush();
+  }
+
+  public void ASTNode.dumpTreeNoRewrite(PrintStream out, String indent) {
+    out.print(indent + getClass().getSimpleName());
+    out.println(getTokens());
+    String childIndent = indent + DUMP_TREE_INDENT;
+    for (int i = 0; i < getNumChildNoTransform(); ++i) {
+      ASTNode child = getChildNoTransform(i);
+      if (child == null)  {
+        out.println(childIndent + "null");
+      } else {
+        child.dumpTreeNoRewrite(out, childIndent);
+      }
+    }
+  }
 }

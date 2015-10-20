@@ -125,26 +125,25 @@ class JavaDumpTree extends Frontend {
   @Override
   protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
     super.processErrors(errors, unit);
-    if (program.options().hasOption("-transform")) {
-      System.out.println(unit.dumpTree());
-    } else {
+    if (program.options().hasOption("-notransform")) {
       System.out.println(unit.dumpTreeNoRewrite());
+    } else {
+      System.out.println(unit.dumpTree());
     }
   }
 
   @Override
   protected void processNoErrors(CompilationUnit unit) {
-    if (program.options().hasOption("-transform")) {
-      System.out.println(unit.dumpTree());
-    } else {
+    if (program.options().hasOption("-notransform")) {
       System.out.println(unit.dumpTreeNoRewrite());
+    } else {
+      System.out.println(unit.dumpTree());
     }
   }
 
   @Override
   protected void initOptions() {
     super.initOptions();
-    program.options().addKeyOption("-transform");
+    program.options().addKeyOption("-notransform");
   }
-
 }
