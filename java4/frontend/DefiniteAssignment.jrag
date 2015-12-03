@@ -250,9 +250,7 @@ aspect DefiniteAssignment {
           name(), hostType().typeName());
     }
   }
-}
 
-aspect DA {
   syn lazy boolean ConditionalExpr.booleanOperator() =
       getTrueExpr().type().isBoolean() && getFalseExpr().type().isBoolean();
 
@@ -282,6 +280,16 @@ aspect DA {
 
   inh boolean BodyDecl.assignedBefore(Variable v, BodyDecl b);
 
+  /**
+   * Check if the instance variable is definitely assigned after all
+   * instance initializers and variable initializers preceding the given
+   * body declaration in this type declaration.
+   *
+   * <p>If the given body declaration is a constructor this checks all
+   * preceding instance initializers and instance variable initializers.
+   *
+   * <p>This attribute is not circular.
+   */
   eq TypeDecl.getChild().assignedBefore(Variable v, BodyDecl b) {
     if (!v.isInstanceVariable() && !v.isClassVariable()) {
       if (v.hostType() != this) {
@@ -304,32 +312,24 @@ aspect DA {
       if (v.isFinal() &&  v.hostType() != this && instanceOf(v.hostType())) {
         return true;
       }
-
-      boolean search = true;
-      if (b instanceof ConstructorDecl) {
-        search = false;
-      }
-
+      boolean skip = !(b instanceof ConstructorDecl);
       for (int i = getNumBodyDecl() - 1; i >= 0; --i) {
         BodyDecl decl = getBodyDecl(i);
-        if (b == decl) {
-          search = false;
-          continue;
-        }
-        if (search) {
-          continue;
-        }
-        if (decl instanceof FieldDeclaration) {
-          FieldDeclaration f = (FieldDeclaration) decl;
-          if ((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
-            return f.assignedAfter(v);
+        if (skip && b == decl) {
+          skip = false;
+        } else if (!skip) {
+          if (decl instanceof FieldDeclaration) {
+            FieldDeclaration f = (FieldDeclaration) decl;
+            if ((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
+              return f.assignedAfter(v);
+            }
+          } else if (decl instanceof StaticInitializer && v.isClassVariable()) {
+            StaticInitializer si = (StaticInitializer) decl;
+            return si.assignedAfter(v);
+          } else if (decl instanceof InstanceInitializer && v.isInstanceVariable()) {
+            InstanceInitializer ii = (InstanceInitializer) decl;
+            return ii.assignedAfter(v);
           }
-        } else if (decl instanceof StaticInitializer && v.isClassVariable()) {
-          StaticInitializer si = (StaticInitializer) decl;
-          return si.assignedAfter(v);
-        } else if (decl instanceof InstanceInitializer && v.isInstanceVariable()) {
-          InstanceInitializer ii = (InstanceInitializer) decl;
-          return ii.assignedAfter(v);
         }
       }
     }
@@ -341,7 +341,7 @@ aspect DA {
   eq StaticInitializer.assignedAfter(Variable v) = getBlock().assignedAfter(v);
 
   eq ConstructorDecl.assignedAfter(Variable v) =
-      getBlock().assignedAfter(v) && getBlock().checkReturnDA(v);
+      getBlock().assignedAfter(v) && getBlock().assignedAfterReturn(v);
 
   eq ConstructorAccess.assignedAfter(Variable v) =
       v.isInstanceVariable() || v.isClassVariable();
@@ -352,7 +352,7 @@ aspect DA {
   eq ConstructorDecl.getBlock().assignedBefore(Variable v) =
       getConstructorInvocation().assignedAfter(v);
 
-  syn boolean Block.checkReturnDA(Variable v) circular [true] {
+  syn boolean Block.assignedAfterReturn(Variable v) circular [true] {
     HashSet set = new HashSet();
     collectBranches(set);
     for (Iterator iter = set.iterator(); iter.hasNext(); ) {
@@ -796,7 +796,9 @@ aspect DA {
 
   // 16.2.11 3rd bullet
   syn boolean ForStmt.assignedAfterInitialization(Variable v) =
-      getNumInitStmt() == 0 ? assignedBefore(v) : getInitStmt(getNumInitStmt()-1).assignedAfter(v);
+      getNumInitStmt() == 0
+      ? assignedBefore(v)
+      : getInitStmt(getNumInitStmt()-1).assignedAfter(v);
 
   eq ForStmt.getCondition().assignedBefore(Variable v) = assignedAfterInitialization(v);
 
@@ -917,39 +919,43 @@ aspect DefiniteUnassignment {
 
   inh boolean BodyDecl.unassignedBefore(Variable v, BodyDecl b);
 
+  /**
+   * Check if the instance variable is definitely unassigned after all instance
+   * initializers and variable initializers preceding the given body
+   * declaration in this type declaration.
+   *
+   * <p>If the given body declaration is a constructor this checks all
+   * preceding instance initializers and instance variable initializers.
+   *
+   * <p>This attribute is not circular.
+   */
   eq TypeDecl.getChild().unassignedBefore(Variable v, BodyDecl b) {
     if (b instanceof MethodDecl || b instanceof MemberTypeDecl) {
       return false;
     }
     if (v.isClassVariable() || v.isInstanceVariable()) {
-      boolean search = true;
-      if (b instanceof ConstructorDecl) {
-        search = false;
-      }
+      boolean skip = !(b instanceof ConstructorDecl);
 
       for (int i = getNumBodyDecl() - 1; i >= 0; --i) {
         BodyDecl decl = getBodyDecl(i);
-        if (b == decl) {
-          search = false;
-          continue;
-        }
-        if (search) {
-          continue;
-        }
-        if (decl instanceof FieldDeclaration) {
-          FieldDeclaration f = (FieldDeclaration) decl;
-          if (f == v) {
-            return !f.hasInit();
+        if (skip && b == decl) {
+          skip = false;
+        } else if (!skip) {
+          if (decl instanceof FieldDeclaration) {
+            FieldDeclaration f = (FieldDeclaration) decl;
+            if (f == v) {
+              return !f.hasInit();
+            }
+            if ((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
+              return f.unassignedAfter(v);
+            }
+          } else if (decl instanceof StaticInitializer && v.isClassVariable()) {
+            StaticInitializer si = (StaticInitializer) decl;
+            return si.unassignedAfter(v);
+          } else if (decl instanceof InstanceInitializer && v.isInstanceVariable()) {
+            InstanceInitializer ii = (InstanceInitializer) decl;
+            return ii.unassignedAfter(v);
           }
-          if ((v.isClassVariable() && f.isStatic()) || (v.isInstanceVariable() && !f.isStatic())) {
-            return f.unassignedAfter(v);
-          }
-        } else if (decl instanceof StaticInitializer && v.isClassVariable()) {
-          StaticInitializer si = (StaticInitializer) decl;
-          return si.unassignedAfter(v);
-        } else if (decl instanceof InstanceInitializer && v.isInstanceVariable()) {
-          InstanceInitializer ii = (InstanceInitializer) decl;
-          return ii.unassignedAfter(v);
         }
       }
     }
@@ -961,7 +967,7 @@ aspect DefiniteUnassignment {
   eq StaticInitializer.unassignedAfter(Variable v) = getBlock().unassignedAfter(v);
 
   eq ConstructorDecl.unassignedAfter(Variable v) =
-      getBlock().unassignedAfter(v) && getBlock().checkReturnDU(v);
+      getBlock().unassignedAfter(v) && getBlock().unassignedAfterReturn(v);
 
   eq ConstructorAccess.unassignedAfter(Variable v) =
       !v.isInstanceVariable() && !v.isClassVariable();
@@ -972,7 +978,7 @@ aspect DefiniteUnassignment {
   eq ConstructorDecl.getBlock().unassignedBefore(Variable v) =
       getConstructorInvocation().unassignedAfter(v);
 
-  syn boolean Block.checkReturnDU(Variable v) circular [true] {
+  syn boolean Block.unassignedAfterReturn(Variable v) circular [true] {
     HashSet set = new HashSet();
     collectBranches(set);
     for (Iterator iter = set.iterator(); iter.hasNext(); ) {
