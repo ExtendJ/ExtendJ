@@ -343,12 +343,14 @@ aspect DA {
   eq ConstructorDecl.assignedAfter(Variable v) =
       getBlock().assignedAfter(v) && getBlock().checkReturnDA(v);
 
-  eq ConstructorAccess.assignedAfter(Variable v) = decl().assignedAfter(v);
+  eq ConstructorAccess.assignedAfter(Variable v) =
+      v.isInstanceVariable() || v.isClassVariable();
 
-  eq SuperConstructorAccess.assignedAfter(Variable v) = assignedBefore(v);
+  eq SuperConstructorAccess.assignedAfter(Variable v) =
+      v.isInstanceVariable() ? assignedBefore(v) : v.isClassVariable();
 
   eq ConstructorDecl.getBlock().assignedBefore(Variable v) =
-      hasConstructorInvocation() ? getConstructorInvocation().assignedAfter(v) : assignedBefore(v);
+      getConstructorInvocation().assignedAfter(v);
 
   syn boolean Block.checkReturnDA(Variable v) circular [true] {
     HashSet set = new HashSet();
@@ -365,13 +367,8 @@ aspect DA {
     return true;
   }
 
-  eq FieldDeclaration.assignedAfter(Variable v) {
-    if (v == this) {
-      return hasInit();
-    } else {
-      return hasInit() ? getInit().assignedAfter(v) : assignedBefore(v);
-    }
-  }
+  eq FieldDeclaration.assignedAfter(Variable v) =
+      hasInit() ? getInit().assignedAfter(v) : assignedBefore(v);
 
   eq FieldDeclaration.getInit().assignedBefore(Variable v) = assignedBefore(v);
 
@@ -966,14 +963,14 @@ aspect DefiniteUnassignment {
   eq ConstructorDecl.unassignedAfter(Variable v) =
       getBlock().unassignedAfter(v) && getBlock().checkReturnDU(v);
 
-  eq ConstructorAccess.unassignedAfter(Variable v) = decl().unassignedAfter(v);
+  eq ConstructorAccess.unassignedAfter(Variable v) =
+      !v.isInstanceVariable() && !v.isClassVariable();
 
-  eq SuperConstructorAccess.unassignedAfter(Variable v) = unassignedBefore(v);
+  eq SuperConstructorAccess.unassignedAfter(Variable v) =
+      v.isInstanceVariable() ? unassignedBefore(v) : !v.isClassVariable();
 
   eq ConstructorDecl.getBlock().unassignedBefore(Variable v) =
-      hasConstructorInvocation()
-      ? getConstructorInvocation().unassignedAfter(v)
-      : unassignedBefore(v);
+      getConstructorInvocation().unassignedAfter(v);
 
   syn boolean Block.checkReturnDU(Variable v) circular [true] {
     HashSet set = new HashSet();
@@ -990,13 +987,8 @@ aspect DefiniteUnassignment {
     return true;
   }
 
-  eq FieldDeclaration.unassignedAfter(Variable v) {
-    if (v == this) {
-      return !hasInit();
-    } else {
-      return hasInit() ? getInit().unassignedAfter(v) : unassignedBefore(v);
-    }
-  }
+  eq FieldDeclaration.unassignedAfter(Variable v) =
+      hasInit() ? getInit().unassignedAfter(v) : unassignedBefore(v);
 
   eq Stmt.unassignedAfter(Variable v) {
     throw new Error("unassignedAfter in " + getClass().getName());
