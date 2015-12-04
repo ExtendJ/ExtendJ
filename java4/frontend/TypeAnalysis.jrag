@@ -301,6 +301,9 @@ aspect TypeAnalysis {
 
   syn lazy TypeDecl Expr.type();
 
+  // Can not be lazy due to circular use from StaticImportDecl.importedTypes.
+  syn TypeDecl TypeAccess.type();
+
   eq Access.type() = unknownType();
   eq TypeAccess.type() = decl();
   eq ArrayAccess.type() = isQualified() ? qualifier().type().componentType() : unknownType();
@@ -651,7 +654,7 @@ aspect SuperClasses {
   public TypeDecl ClassDecl.superclass() {
     if (isObject()) {
       return unknownType();
-    } else if (hasSuperClass() && !isCircular() && getSuperClass().type().isClassDecl()) {
+    } else if (hasSuperClass()) {
       return getSuperClass().type();
     } else {
       return typeObject();
@@ -701,12 +704,12 @@ aspect SuperClasses {
       private TypeDecl current = null;
       private void computeNextCurrent() {
         current = null;
-        if (isObject() || isCircular()) {
+        if (isObject()) {
           return;
         }
         while (index < getNumImplements()) {
           TypeDecl typeDecl = getImplements(index++).type();
-          if (!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
+          if (typeDecl.isInterfaceDecl()) {
             current = typeDecl;
             return;
           }
@@ -749,7 +752,9 @@ aspect SuperClasses {
 
 aspect Circularity {
   inh lazy TypeDecl TypeDecl.unknownType();
-  syn lazy boolean TypeDecl.isCircular() circular [true] = false;
+
+  syn boolean TypeDecl.isCircular() circular [true] = false;
+
   eq ClassDecl.isCircular() {
     if (hasSuperClass()) {
       Access a = getSuperClass().lastAccess();
@@ -771,6 +776,7 @@ aspect Circularity {
     }
     return false;
   }
+
   eq InterfaceDecl.isCircular() {
     for (int i = 0; i < getNumSuperInterface(); i++) {
       Access a = getSuperInterface(i).lastAccess();
