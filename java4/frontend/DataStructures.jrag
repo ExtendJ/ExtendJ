@@ -28,8 +28,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * Adds the SimpleSet type which is used to build small sets.
+ */
 aspect DataStructures {
-  // A persistent Set
+  /**
+   * A persistent Set that can be implemented by AST nodes.
+   */
   interface SimpleSet {
     int size();
     boolean isEmpty();
@@ -38,6 +43,7 @@ aspect DataStructures {
     boolean contains(Object o);
     boolean isSingleton();
     boolean isSingleton(Object o);
+
     SimpleSet emptySet = new SimpleSet() {
       public int size() { return 0; }
       public boolean isEmpty() { return true; }
@@ -48,19 +54,50 @@ aspect DataStructures {
         return new SimpleSetImpl().add(o);
       }
       public boolean contains(Object o) { return false; }
-      public Iterator iterator() { return Collections.EMPTY_LIST.iterator(); }
+
+      @Override
+      public Iterator iterator() {
+        return Collections.EMPTY_LIST.iterator();
+      }
+
       public boolean isSingleton() { return false; }
       public boolean isSingleton(Object o) { return false; }
+
+      @Override
+      public boolean equals(Object o) {
+        if (o == emptySet) {
+          return true;
+        }
+        if (o instanceof SimpleSet) {
+          return ((SimpleSet) o).isEmpty();
+        }
+        return false;
+      }
     };
+
     SimpleSet fullSet = new SimpleSet() {
-      public int size() { throw new Error("Operation size not supported on the full set"); }
+      public int size() {
+        throw new UnsupportedOperationException("The full set does not have a size.");
+      }
+
       public boolean isEmpty() { return false; }
       public SimpleSet add(Object o) { return this; }
       public boolean contains(Object o) { return true; }
-      public Iterator iterator() { throw new Error("Operation iterator not supported on the full set"); }
+
+      @Override
+      public Iterator iterator() {
+        throw new UnsupportedOperationException("The full set can not be iterated.");
+      }
+
       public boolean isSingleton() { return false; }
       public boolean isSingleton(Object o) { return false; }
+
+      @Override
+      public boolean equals(Object o) {
+        return o == fullSet;
+      }
     };
+
     class SimpleSetImpl implements SimpleSet {
       private HashSet internalSet;
       public SimpleSetImpl() {
@@ -87,18 +124,65 @@ aspect DataStructures {
         set.internalSet.add(o);
         return set;
       }
+
+      @Override
       public Iterator iterator() {
         return internalSet.iterator();
       }
+
       public boolean contains(Object o) {
         return internalSet.contains(o);
       }
       public boolean isSingleton() { return internalSet.size() == 1; }
       public boolean isSingleton(Object o) { return isSingleton() && contains(o); }
+
+      @Override
+      public boolean equals(Object o) {
+        if (o instanceof SimpleSet) {
+          SimpleSet other = (SimpleSet) o;
+          if (size() != other.size()) {
+            return false;
+          }
+          return isEqualCollection(this, other);
+        } else {
+          return false;
+        }
+      }
+
+      // See http://llbit.se/?p=2009 for algorithm description.
+      private static boolean isEqualCollection(Iterable<?> a, Iterable<?> b) {
+        Map<Object, Integer> map = new java.util.IdentityHashMap<Object, Integer>();
+        for (Object o : a) {
+          Integer val = map.get(o);
+          int count = (val == null) ? 0 : val;
+          map.put(o, count + 1);
+        }
+        for (Object o : b) {
+          Integer val = map.get(o);
+          int count;
+          if (val != null) {
+            count = val;
+            if (count == 0) {
+              return false;
+            }
+          } else {
+            return false;
+          }
+          map.put(o, count - 1);
+        }
+        for (Integer count : map.values()) {
+          if (count != 0) {
+            return false;
+          }
+        }
+        return true;
+      }
     }
   }
 
-  // FieldDeclaration is a SimpleSet
+  SimpleSet implements Iterable<ASTNode>;
+
+  // FieldDeclaration is a SimpleSet.
   FieldDeclaration implements SimpleSet;
   syn int FieldDeclaration.size() = 1;
   syn boolean FieldDeclaration.isEmpty() = false;
@@ -109,14 +193,25 @@ aspect DataStructures {
   public boolean FieldDeclaration.isSingleton() { return true; }
   public boolean FieldDeclaration.isSingleton(Object o) { return contains(o); }
 
+  @Override
+  public boolean FieldDeclaration.equals(Object o) {
+    return this == o;
+  }
+
   FieldDeclaration implements Iterator;
   private FieldDeclaration FieldDeclaration.iterElem;
-  public Iterator FieldDeclaration.iterator() { iterElem = this; return this; }
+
+  @Override
+  public Iterator FieldDeclaration.iterator() {
+    iterElem = this;
+    return this;
+  }
+
   public boolean FieldDeclaration.hasNext() { return iterElem != null; }
   public Object FieldDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
   public void FieldDeclaration.remove() { throw new UnsupportedOperationException(); }
 
-  // VariableDeclaration is a SimpleSet
+  // VariableDeclaration is a SimpleSet.
   VariableDeclaration implements SimpleSet;
   syn int VariableDeclaration.size() = 1;
   syn boolean VariableDeclaration.isEmpty() = false;
@@ -127,14 +222,25 @@ aspect DataStructures {
   public boolean VariableDeclaration.isSingleton() { return true; }
   public boolean VariableDeclaration.isSingleton(Object o) { return contains(o); }
 
+  @Override
+  public boolean VariableDeclaration.equals(Object o) {
+    return this == o;
+  }
+
   VariableDeclaration implements Iterator;
   private VariableDeclaration VariableDeclaration.iterElem;
-  public Iterator VariableDeclaration.iterator() { iterElem = this; return this; }
+
+  @Override
+  public Iterator VariableDeclaration.iterator() {
+    iterElem = this;
+    return this;
+  }
+
   public boolean VariableDeclaration.hasNext() { return iterElem != null; }
   public Object VariableDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
   public void VariableDeclaration.remove() { throw new UnsupportedOperationException(); }
 
-  // ParameterDeclaration is a SimpleSet
+  // ParameterDeclaration is a SimpleSet.
   ParameterDeclaration implements SimpleSet;
   syn int ParameterDeclaration.size() = 1;
   syn boolean ParameterDeclaration.isEmpty() = false;
@@ -147,12 +253,18 @@ aspect DataStructures {
 
   ParameterDeclaration implements Iterator;
   private ParameterDeclaration ParameterDeclaration.iterElem;
-  public Iterator ParameterDeclaration.iterator() { iterElem = this; return this; }
+
+  @Override
+  public Iterator ParameterDeclaration.iterator() {
+    iterElem = this;
+    return this;
+  }
+
   public boolean ParameterDeclaration.hasNext() { return iterElem != null; }
   public Object ParameterDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
   public void ParameterDeclaration.remove() { throw new UnsupportedOperationException(); }
 
-  // TypeDecl is a SimpleSet
+  // TypeDecl is a SimpleSet.
   TypeDecl implements SimpleSet;
   syn int TypeDecl.size() = 1;
   syn boolean TypeDecl.isEmpty() = false;
@@ -165,12 +277,23 @@ aspect DataStructures {
 
   TypeDecl implements Iterator;
   private TypeDecl TypeDecl.iterElem;
-  public Iterator TypeDecl.iterator() { iterElem = this; return this; }
+
+  @Override
+  public Iterator TypeDecl.iterator() {
+    iterElem = this;
+    return this;
+  }
+
   public boolean TypeDecl.hasNext() { return iterElem != null; }
   public Object TypeDecl.next() { Object o = iterElem; iterElem = null; return o; }
   public void TypeDecl.remove() { throw new UnsupportedOperationException(); }
 
-  // MethodDecl is a SimpleSet
+  @Override
+  public boolean TypeDecl.equals(Object o) {
+    return this == o;
+  }
+
+  // MethodDecl is a SimpleSet.
   MethodDecl implements SimpleSet;
   syn int MethodDecl.size() = 1;
   syn boolean MethodDecl.isEmpty() = false;
@@ -181,9 +304,20 @@ aspect DataStructures {
   public boolean MethodDecl.isSingleton() { return true; }
   public boolean MethodDecl.isSingleton(Object o) { return contains(o); }
 
+  @Override
+  public boolean MethodDecl.equals(Object o) {
+    return this == o;
+  }
+
   MethodDecl implements Iterator;
   private MethodDecl MethodDecl.iterElem;
-  public Iterator MethodDecl.iterator() { iterElem = this; return this; }
+
+  @Override
+  public Iterator MethodDecl.iterator() {
+    iterElem = this;
+    return this;
+  }
+
   public boolean MethodDecl.hasNext() { return iterElem != null; }
   public Object MethodDecl.next() { Object o = iterElem; iterElem = null; return o; }
   public void MethodDecl.remove() { throw new UnsupportedOperationException(); }
