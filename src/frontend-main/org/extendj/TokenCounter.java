@@ -126,11 +126,12 @@ public class TokenCounter {
               break;
             }
             switch (id) {
+              case Terminals.DOCUMENTATION_COMMENT:
               case Terminals.LPAREN:
               case Terminals.RPAREN:
               case Terminals.LBRACE:
               case Terminals.RBRACE:
-                // not counted!
+                // Not counted!
                 break;
               default:
                 numTokens += 1;
