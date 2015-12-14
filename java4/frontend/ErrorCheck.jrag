@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,9 +52,10 @@ aspect ErrorCheck {
   }
 
   eq ClassDecl.lineNumber() = getLine(IDstart);
+
   eq MethodDecl.lineNumber() = getLine(IDstart);
 
-  // set start and end position to the same as the argument and return self
+  // Set start and end position to the same as the argument and return self.
   public ASTNode ASTNode.setLocation(ASTNode node) {
     setStart(node.getStart());
     setEnd(node.getEnd());
@@ -64,13 +66,16 @@ aspect ErrorCheck {
     start = i;
     return this;
   }
+
   public int ASTNode.start() {
     return start;
   }
+
   public ASTNode ASTNode.setEnd(int i) {
     end = i;
     return this;
   }
+
   public int ASTNode.end() {
     return end;
   }
@@ -78,21 +83,70 @@ aspect ErrorCheck {
   public String ASTNode.location() {
     return "" + lineNumber();
   }
+
   public String ASTNode.errorPrefix() {
     return sourceFile() + ":" + location() + ":\n" + "  *** Semantic Error: ";
   }
+
   public String ASTNode.warningPrefix() {
     return sourceFile() + ":" + location() + ":\n" + "  *** WARNING: ";
   }
 
   protected Collection<Problem> CompilationUnit.errors = new LinkedList<Problem>();
+
   protected Collection<Problem> CompilationUnit.warnings = new LinkedList<Problem>();
 
-  public Collection CompilationUnit.parseErrors() { return parseErrors; }
-  public void CompilationUnit.addParseError(Problem msg) { parseErrors.add(msg); }
-  protected Collection CompilationUnit.parseErrors = new ArrayList();
+  public Collection CompilationUnit.parseErrors() {
+    return parseErrors;
+  }
+
+  public void CompilationUnit.addParseError(Problem msg) {
+    parseErrors.add(msg);
+  }
+
+  protected Collection<Problem> CompilationUnit.parseErrors = new ArrayList<Problem>();
 
   public class Problem implements Comparable {
+    public static class Severity {
+      public static final Severity ERROR = new Severity("error");
+      public static final Severity WARNING = new Severity("warning");
+
+      private final String name;
+
+      private Severity(String name) {
+        this.name = name;
+      }
+
+      @Override
+      public String toString() {
+        return name;
+      }
+    }
+
+    public static class Kind {
+      public static final Kind OTHER = new Kind();
+      public static final Kind LEXICAL = new Kind();
+      public static final Kind SYNTACTIC = new Kind();
+      public static final Kind SEMANTIC = new Kind();
+      private Kind() { }
+    }
+
+    protected int line = -1;
+
+    protected int column = -1;
+
+    protected int endLine = -1;
+
+    protected int endColumn = -1;
+
+    protected String fileName;
+
+    protected String message;
+
+    protected Severity severity = Severity.ERROR;
+
+    protected Kind kind = Kind.OTHER;
+
     public int compareTo(Object o) {
       if (o instanceof Problem) {
         Problem other = (Problem) o;
@@ -106,68 +160,84 @@ aspect ErrorCheck {
       }
       return 0;
     }
-    public static class Severity {
-      public static final Severity ERROR = new Severity();
-      public static final Severity WARNING = new Severity();
-      private Severity() { }
+
+    public int line() {
+      return line;
     }
-    public static class Kind {
-      public static final Kind OTHER = new Kind();
-      public static final Kind LEXICAL = new Kind();
-      public static final Kind SYNTACTIC = new Kind();
-      public static final Kind SEMANTIC = new Kind();
-      private Kind() { }
+
+    public int column() {
+      return column;
     }
-    protected int line = -1;
-    public int line() { return line; }
-    protected int column = -1;
-    public int column() { return column; }
-    protected int endLine = -1;
-    public int endLine() { return endLine; }
-    protected int endColumn = -1;
-    public int endColumn() { return endColumn; }
-    protected String fileName;
-    public String fileName() { return fileName; }
-    public void setFileName(String fileName) { this.fileName = fileName; }
-    protected String message;
-    public String message() { return message; }
-    protected Severity severity = Severity.ERROR;
-    public Severity severity() { return severity; }
-    protected Kind kind = Kind.OTHER;
-    public Kind kind() { return kind; }
+
+    public int endLine() {
+      return endLine;
+    }
+
+    public int endColumn() {
+      return endColumn;
+    }
+
+    public String fileName() {
+      return fileName;
+    }
+
+    public void setFileName(String fileName) {
+      this.fileName = fileName;
+    }
+
+    public String message() {
+      return message;
+    }
+
+    public Severity severity() {
+      return severity;
+    }
+
+    public Kind kind() {
+      return kind;
+    }
+
     public Problem(String fileName, String message) {
       this.fileName = fileName;
       this.message = message;
     }
+
     public Problem(String fileName, String message, int line) {
       this(fileName, message);
       this.line = line;
     }
+
     public Problem(String fileName, String message, int line, Severity severity) {
       this(fileName, message);
       this.line = line;
       this.severity = severity;
     }
+
     public Problem(String fileName, String message, int line, int column, Severity severity) {
       this(fileName, message);
       this.line = line;
       this.column = column;
       this.severity = severity;
     }
+
     public Problem(String fileName, String message, int line, Severity severity, Kind kind) {
       this(fileName, message);
       this.line = line;
       this.kind = kind;
       this.severity = severity;
     }
-    public Problem(String fileName, String message, int line, int column, Severity severity, Kind kind) {
+
+    public Problem(String fileName, String message, int line, int column, Severity severity,
+        Kind kind) {
       this(fileName, message);
       this.line = line;
       this.column = column;
       this.kind = kind;
       this.severity = severity;
     }
-    public Problem(String fileName, String message, int line, int column, int endLine, int endColumn, Severity severity, Kind kind) {
+
+    public Problem(String fileName, String message, int line, int column, int endLine,
+        int endColumn, Severity severity, Kind kind) {
       this(fileName, message);
       this.line = line;
       this.column = column;
@@ -176,6 +246,7 @@ aspect ErrorCheck {
       this.kind = kind;
       this.severity = severity;
     }
+
     public String toString() {
       String location = "";
       if (line != -1 && column != -1) {
@@ -183,15 +254,7 @@ aspect ErrorCheck {
       } else if (line != -1) {
         location = line + ":";
       }
-      String s = "";
-      if (this.kind == Kind.LEXICAL) {
-        s = "Lexical Error: ";
-      } else if (this.kind == Kind.SYNTACTIC) {
-        s = "Syntactic Error: ";
-      } else if (this.kind == Kind.SEMANTIC) {
-        s = "Semantic Error: ";
-      }
-      return fileName + ":" + location + "\n" + "  " + s + message;
+      return String.format("%s:%s %s: %s", fileName, location, severity, message);
     }
   }
 
@@ -218,15 +281,16 @@ aspect ErrorCheck {
     }
   }
 
-  public void ASTNode.warning(String s) {
+  public void ASTNode.warning(String message) {
     ASTNode node = this;
     while (node != null && !(node instanceof CompilationUnit)) {
       node = node.getParent();
     }
     CompilationUnit cu = (CompilationUnit) node;
-    cu.warnings.add(new Problem(sourceFile(), "WARNING: " + s, lineNumber(), Problem.Severity.WARNING));
+    cu.warnings.add(new Problem(sourceFile(), message, lineNumber(), Problem.Severity.WARNING));
   }
 
+  /** Search for semantic errors in the AST through imperative traversal. */
   public void ASTNode.collectErrors() {
     nameCheck();
     typeCheck();
@@ -248,10 +312,10 @@ aspect ErrorCheck {
   }
 
   public void VarDeclStmt.collectErrors() {
-    // check reachability of the multi-declaration
+    // Check reachability of the multi-declaration.
     checkUnreachableStmt();
 
-    // delegate other error checks to NTA single variable declarations
+    // Delegate other error checks to NTA single variable declarations.
     getSingleDeclList().collectErrors();
   }
 
