@@ -85,8 +85,8 @@ Access qualified_name =
     name.n DOT simple_name.i   {: return n.qualifiesAccess(i); :}
   ;
 CompilationUnit compilation_unit =
-    package_with_comment.p import_declarations.i? type_declarations.t? {: return new CompilationUnit(p.getID(), i, t); :}
-  |                       import_declarations.i? type_declarations.t? {: return new CompilationUnit("", i, t); :}
+    package_with_comment.p import_declarations.i? type_declarations.t? doc_comment_list? {: return new CompilationUnit(p.getID(), i, t); :}
+  |                       import_declarations.i? type_declarations.t? doc_comment_list? {: return new CompilationUnit("", i, t); :}
   ;
 List import_declarations =
     import_with_comment.i                       {: return new List().add(i); :}
@@ -97,11 +97,14 @@ List type_declarations =
   | type_declarations.l type_with_comment.t     {: return !(t instanceof EmptyType) ? l.add(t) : l; :}
   ;
 String doc_comment =
-    DOCUMENTATION_COMMENT
-  | doc_comment DOCUMENTATION_COMMENT {: return DOCUMENTATION_COMMENT; :}
+    DOCUMENTATION_COMMENT.dc {: return new Symbol(Terminals.DOCUMENTATION_COMMENT, dc); :}
+  ;
+String doc_comment_list =
+    doc_comment
+  | doc_comment_list doc_comment.dc {: return new Symbol(Terminals.DOCUMENTATION_COMMENT, dc); :}
   ;
 IdUse package_with_comment =
-    doc_comment? package_declaration
+    doc_comment_list? package_declaration
   ;
 IdUse package_declaration =
     PACKAGE name_decl SEMICOLON {: return name_decl; :}
@@ -117,7 +120,7 @@ IdUse qualified_name_decl =
     name_decl.n DOT IDENTIFIER.i {: return new IdUse(n.getID() + "." + i); :}
   ;
 ImportDecl import_with_comment =
-  doc_comment? import_declaration
+  doc_comment_list? import_declaration
   ;
 ImportDecl import_declaration =
     single_type_import_declaration
@@ -131,7 +134,7 @@ ImportDecl type_import_on_demand_declaration =
   ;
 TypeDecl type_with_comment =
     type_declaration
-  | doc_comment.dc type_declaration.d
+  | doc_comment_list.dc type_declaration.d
     {:
       d.docComment = dc;
       return d;
@@ -174,7 +177,7 @@ List interface_type_list =
   | interface_type_list.l COMMA interface_type.i  {: return l.add(i); :}
   ;
 List class_body =
-    LBRACE class_body_declarations.c? RBRACE      {: return c; :}
+    LBRACE class_body_declarations.c? doc_comment_list? RBRACE      {: return c; :}
   ;
 List class_body_declarations =
     body_decl_with_comment.c                           {: return new List().add(c); :}
@@ -182,7 +185,7 @@ List class_body_declarations =
   ;
 BodyDecl body_decl_with_comment =
     class_body_declaration
-  | doc_comment.dc class_body_declaration.d
+  | doc_comment_list.dc class_body_declaration.d
     {:
       d.docComment = dc;
       return d;
@@ -291,7 +294,7 @@ List extends_interfaces =
   ;
 
 List interface_body =
-    LBRACE interface_member_declarations.i? RBRACE  {: return i; :}
+    LBRACE interface_member_declarations.i? doc_comment_list? RBRACE  {: return i; :}
   ;
 List interface_member_declarations =
     interface_member_with_comment.i                                  {: return new List().add(i); :}
@@ -299,7 +302,7 @@ List interface_member_declarations =
   ;
 BodyDecl interface_member_with_comment =
     interface_member_declaration
-  | doc_comment.dc interface_member_declaration.d
+  | doc_comment_list.dc interface_member_declaration.d
     {:
       d.docComment = dc;
       return d;
