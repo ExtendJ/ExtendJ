@@ -35,10 +35,11 @@ import java.util.Iterator;
 /**
  * A robust linked list that can be iterated while elements are added.
  *
- * The list does not support concurrent (threaded) modification,
- * but simultaneous (non-threaded) modification is supported.
+ * <p>The list supports concurrent modification and iteration in multiple
+ * modifier/iterator threads. Thread safety is achieved by mutual exclusion
+ * using the list instance as a lock.
  *
- * The robust linked list always keeps a tail node, which the iterator
+ * <p>The robust linked list always keeps a tail node, which the iterator
  * points to when it has run past the end.
  *
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
@@ -50,6 +51,7 @@ public class RobustLinkedList<V> implements Collection<V> {
     public V datum;
     Node<V> succ = null;
     Node<V> pred = null;
+
     public Node(V v) {
       this.datum = v;
     }
@@ -58,7 +60,7 @@ public class RobustLinkedList<V> implements Collection<V> {
   /**
    * A robust linked list iterator.
    * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
-   * @param <I> Value type of the iterator
+   * @param <I> Value type of the iterator.
    */
   public class RobustIterator<I> implements Iterator<I> {
 
@@ -75,42 +77,46 @@ public class RobustLinkedList<V> implements Collection<V> {
 
     @Override
     public boolean hasNext() {
-      return ptr.succ.succ != null;
+      boolean result;
+      synchronized (RobustLinkedList.this) {
+        result = ptr.succ.succ != null;
+      }
+      return result;
     }
 
     @Override
     public I next() {
-      I datum = ptr.succ.datum;
-      ptr.succ = ptr.succ.succ;
+      I datum;
+      synchronized (RobustLinkedList.this) {
+        datum = ptr.succ.datum;
+        ptr.succ = ptr.succ.succ;
+      }
       return datum;
     }
 
     @Override
     public void remove() {
-      Node<I> pred = ptr.succ.pred;
-      Node<I> succ = ptr.succ.succ;
-
-      if (pred != null)
-        pred.succ = succ;
-
-      if (succ != null) {
-        succ.pred = pred;
-        size -= 1;
+      synchronized (RobustLinkedList.this) {
+        Node<I> pred = ptr.succ.pred;
+        Node<I> succ = ptr.succ.succ;
+        if (pred != null) {
+          pred.succ = succ;
+        }
+        if (succ != null) {
+          succ.pred = pred;
+          size -= 1;
+        }
+        ptr.succ = succ;
       }
-
-      ptr.succ = succ;
     }
   }
 
-  /**
-   * Head node
-   */
-  private Node<V> head = new Node<V>(null);
+  /** Sentinel empty tail node. Not part of the list. */
+  private Node<V> tail = new Node<V>(null);
 
-  /**
-   * Empty tail node. Not part of the list.
-   */
-  private Node<V> tail = head;
+  /** Head node. Points to tail node if list is empty. */
+  private Node<V> head = tail;
+
   private int size;
 
   @Override
@@ -125,9 +131,9 @@ public class RobustLinkedList<V> implements Collection<V> {
   }
 
   @Override
-  public synchronized boolean addAll(Collection<? extends V> arg0) {
+  public synchronized boolean addAll(Collection<? extends V> collection) {
     boolean changed = false;
-    for (V v: arg0) {
+    for (V v : collection) {
       add(v);
       changed = true;
     }
@@ -136,7 +142,7 @@ public class RobustLinkedList<V> implements Collection<V> {
 
   @Override
   public synchronized void clear() {
-    // set all succ ptrs to null
+    // Set all successor pointers to null.
     Node<V> ptr = head;
     while (ptr != null) {
       Node<V> succ = ptr.succ;
@@ -148,17 +154,18 @@ public class RobustLinkedList<V> implements Collection<V> {
   }
 
   @Override
-  public boolean contains(Object o) {
-    RobustIterator<V> iter = iterator();
+  public synchronized boolean contains(Object o) {
+    Iterator<V> iter = iterator();
     while (iter.hasNext()) {
-      if (iter.next().equals(o))
+      if (iter.next().equals(o)) {
         return true;
+      }
     }
     return false;
   }
 
   @Override
-  public boolean containsAll(Collection<?> arg0) {
+  public synchronized boolean containsAll(Collection<?> collection) {
     throw new UnsupportedOperationException();
   }
 
@@ -168,13 +175,13 @@ public class RobustLinkedList<V> implements Collection<V> {
   }
 
   @Override
-  public RobustIterator<V> iterator() {
+  public synchronized Iterator<V> iterator() {
     return new RobustIterator<V>(head);
   }
 
   @Override
-  public boolean remove(Object o) {
-    RobustIterator<V> iter = iterator();
+  public synchronized boolean remove(Object o) {
+    Iterator<V> iter = iterator();
     while (iter.hasNext()) {
       if (iter.next().equals(o)) {
         iter.remove();
@@ -185,21 +192,21 @@ public class RobustLinkedList<V> implements Collection<V> {
   }
 
   @Override
-  public boolean removeAll(Collection<?> arg0) {
+  public synchronized boolean removeAll(Collection<?> collection) {
     boolean changed = false;
-    for (Object o: arg0) {
+    for (Object o : collection) {
       changed = remove(o) || changed;
     }
     return changed;
   }
 
   @Override
-  public boolean retainAll(Collection<?> arg0) {
+  public boolean retainAll(Collection<?> collection) {
     throw new UnsupportedOperationException();
   }
 
   @Override
-  public int size() {
+  public synchronized int size() {
     return size;
   }
 
@@ -209,8 +216,7 @@ public class RobustLinkedList<V> implements Collection<V> {
   }
 
   @Override
-  public <T> T[] toArray(T[] arg0) {
+  public <T> T[] toArray(T[] array) {
     return null;
   }
-
 }

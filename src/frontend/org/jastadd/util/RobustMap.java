@@ -31,20 +31,21 @@ package org.jastadd.util;
 
 import java.lang.ref.WeakReference;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 
 /**
- * A map with robust iterators that can iterate over the map
- * simultaneously with it being mutated.
+ * A map with robust iterators that can iterate over the map simultaneously
+ * with it being mutated.
  *
- * This map supports simultaneous (non-threaded), not concurrent (threaded)
+ * <p>This map supports simultaneous (non-threaded), not concurrent (threaded)
  * mutation during iteration, and the only mutation supported is adding unique
  * values to the map.
  *
- * NB: It is not possible to remove elements from a robust map using the
+ * <p>NB: It is not possible to remove elements from a robust map using the
  * iterator obtained via the method robustValueIterator!
  *
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
@@ -54,12 +55,13 @@ import java.util.Set;
 public class RobustMap<K, V> implements Map<K, V> {
 
   /**
-   * Protected for testing reasons
+   * This is only protected so the tests can inspect it.
    * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
    */
   protected static final class RobustValueIterator<V> implements Iterator<V> {
     private final Collection<V> values;
     private final Iterator<V> iter;
+
     public RobustValueIterator(Collection<V> values) {
       this.values = new RobustLinkedList<V>();
       this.values.addAll(values);
@@ -87,18 +89,26 @@ public class RobustMap<K, V> implements Map<K, V> {
     }
   }
 
-  /**
-   * Protected for testing reasons
-   */
+  /** This is only protected so the tests can inspect it. */
   protected Collection<WeakReference<RobustValueIterator<V>>> iterators =
       new LinkedList<WeakReference<RobustValueIterator<V>>>();
-  private Map<K, V> map;
+
+  /** Underlying map. */
+  private final Map<K, V> map;
 
   /**
+   * Construct robust map as a wrapper around a HashMap.
+   * @param underlyingMap
+   */
+  public RobustMap() {
+    this(new HashMap<K, V>());
+  }
+
+  /**
+   * Construct robust map as a wrapper around an underlying map.
    * @param underlyingMap
    */
   public RobustMap(Map<K, V> underlyingMap) {
-
     map = underlyingMap;
   }
 
@@ -106,10 +116,11 @@ public class RobustMap<K, V> implements Map<K, V> {
     Iterator<WeakReference<RobustValueIterator<V>>> iter = iterators.iterator();
     while (iter.hasNext()) {
       RobustValueIterator<V> robustIter = iter.next().get();
-      if (robustIter == null)
+      if (robustIter == null) {
         iter.remove();
-      else
+      } else {
         robustIter.addValue(item);
+      }
     }
   }
 
@@ -121,14 +132,16 @@ public class RobustMap<K, V> implements Map<K, V> {
 
   @Override
   public void putAll(Map<? extends K, ? extends V> m) {
-    for (V item: m.values()) {
+    for (V item : m.values()) {
       addItemToIterators(item);
     }
     map.putAll(m);
   }
 
   /**
-   * @return A robust iterator to iterate over the underlying map values
+   * @return A robust iterator to iterate over the underlying map values.  The
+   * iterator is made aware of additional items inserted in the map after it
+   * was created.
    */
   public Iterator<V> robustValueIterator() {
     RobustValueIterator<V> iter = new RobustValueIterator<V>(values());
