@@ -48,12 +48,43 @@ aspect Attributes {
       output.close();
       buf.close();
     }
+
     public int size() { return buf.size(); }
-    public void u1(int v) { try { output.writeByte(v); } catch(IOException e) {} }
-    public void u2(int v) { try { output.writeChar(v); } catch(IOException e) {} }
-    public void u4(int v) { try { output.writeInt(v); } catch(IOException e) {} }
-    public void append(byte[] data) { try { output.write(data, 0, data.length); } catch(IOException e) {} }
-    public void append(Attribute attribute) { try { attribute.emit(output); } catch(IOException e) {} }
+
+    public void u1(int v) {
+      try {
+        output.writeByte(v);
+      } catch(IOException e) {
+      }
+    }
+
+    public void u2(int v) {
+      try {
+        output.writeChar(v);
+      } catch(IOException e) {
+      }
+    }
+
+    public void u4(int v) {
+      try {
+        output.writeInt(v);
+      } catch(IOException e) {
+      }
+    }
+
+    public void append(byte[] data) {
+      try {
+        output.write(data, 0, data.length);
+      } catch(IOException e) {
+      }
+    }
+
+    public void append(Attribute attribute) {
+      try {
+        attribute.emit(output);
+      } catch(IOException e) {
+      }
+    }
   }
 
   class SourceFileAttribute extends Attribute {
@@ -77,17 +108,32 @@ aspect Attributes {
     }
   }
 
-  public int TypeDecl.addConstant(ConstantPool p, Constant c)     {
+  public int TypeDecl.addConstant(ConstantPool p, Constant c) {
     if (isString()) {
       return p.addConstant(c.stringValue());
     }
     throw new Error("Not supported");
   }
-  public int BooleanType.addConstant(ConstantPool p, Constant c)  { return p.addConstant(c.booleanValue() ? 1 : 0); }
-  public int IntegralType.addConstant(ConstantPool p, Constant c) { return p.addConstant(c.intValue()); }
-  public int LongType.addConstant(ConstantPool p, Constant c)     { return p.addConstant(c.longValue()); }
-  public int FloatType.addConstant(ConstantPool p, Constant c)    { return p.addConstant(c.floatValue()); }
-  public int DoubleType.addConstant(ConstantPool p, Constant c)   { return p.addConstant(c.doubleValue()); }
+
+  public int BooleanType.addConstant(ConstantPool p, Constant c) {
+    return p.addConstant(c.booleanValue() ? 1 : 0);
+  }
+
+  public int IntegralType.addConstant(ConstantPool p, Constant c) {
+    return p.addConstant(c.intValue());
+  }
+
+  public int LongType.addConstant(ConstantPool p, Constant c) {
+    return p.addConstant(c.longValue());
+  }
+
+  public int FloatType.addConstant(ConstantPool p, Constant c) {
+    return p.addConstant(c.floatValue());
+  }
+
+  public int DoubleType.addConstant(ConstantPool p, Constant c) {
+    return p.addConstant(c.doubleValue());
+  }
 
   class InnerClassesAttribute extends Attribute {
     public InnerClassesAttribute(TypeDecl typeDecl) {
@@ -98,22 +144,24 @@ aspect Attributes {
       for (Iterator iter = list.iterator(); iter.hasNext(); ) {
         TypeDecl type = (TypeDecl) iter.next();
         u2(c.addClass(type.constantPoolName())); // inner_class_info_index
-        u2(type.isMemberType() ? c.addClass(type.enclosingType().constantPoolName()) : 0); // outer_class_info_index
+        // outer_class_info_index
+        u2(type.isMemberType() ? c.addClass(type.enclosingType().constantPoolName()) : 0);
         u2(type.isAnonymous() ? 0 : c.addUtf8(type.name())); // inner_name_index
-        u2(type.isInterfaceDecl() ? (type.flags() | Modifiers.ACC_INTERFACE) : type.flags()); // inner_class_access_flags
+        // inner_class_access_flags
+        u2(type.isInterfaceDecl() ? (type.flags() | Modifiers.ACC_INTERFACE) : type.flags());
       }
     }
   }
   syn lazy Collection TypeDecl.innerClassesAttributeEntries() {
-    HashSet list = new HashSet();
+    HashSet<TypeDecl> list = new HashSet<TypeDecl>();
     if (isNestedType()) {
       list.add(this);
     }
-    for (Iterator iter = nestedTypes.iterator(); iter.hasNext(); ) {
-      list.add(iter.next());
+    for (TypeDecl decl : nestedTypes) {
+      list.add(decl);
     }
-    for (Iterator iter = usedNestedTypes.iterator(); iter.hasNext(); ) {
-      list.add(iter.next());
+    for (TypeDecl decl : usedNestedTypes) {
+      list.add(decl);
     }
     return list;
   }
@@ -123,7 +171,7 @@ aspect Attributes {
       super(gen.constantPool(), "LocalVariableTable");
       u2(gen.localVariableTable.size());
       for (Iterator iter = gen.localVariableTable.iterator(); iter.hasNext(); ) {
-        CodeGeneration.LocalVariableEntry e = (CodeGeneration.LocalVariableEntry)iter.next();
+        CodeGeneration.LocalVariableEntry e = (CodeGeneration.LocalVariableEntry) iter.next();
         u2(e.start_pc);
         u2(e.length);
         u2(e.name_index);
@@ -138,7 +186,7 @@ aspect Attributes {
       super(gen.constantPool(), "LineNumberTable");
       u2(gen.lineNumberTable.size());
       for (Iterator iter = gen.lineNumberTable.iterator(); iter.hasNext(); ) {
-        CodeGeneration.LineNumberEntry e = (CodeGeneration.LineNumberEntry)iter.next();
+        CodeGeneration.LineNumberEntry e = (CodeGeneration.LineNumberEntry) iter.next();
         u2(e.start_pc);
         u2(e.line_number);
       }
@@ -154,7 +202,7 @@ aspect Attributes {
       append(codeGen.toArray());
       u2(codeGen.exceptions.size());
       for (Iterator iter = codeGen.exceptions.iterator(); iter.hasNext(); ) {
-        CodeGeneration.ExceptionEntry e = (CodeGeneration.ExceptionEntry)iter.next();
+        CodeGeneration.ExceptionEntry e = (CodeGeneration.ExceptionEntry) iter.next();
         u2(e.start_pc);
         u2(e.end_pc);
         u2(e.handlerPC());
@@ -162,11 +210,11 @@ aspect Attributes {
       }
 
       if (m == null || !m.getModifiers().isSynthetic()) {
-        u2(2); // Attribute count
+        u2(2); // Attribute count.
         append(new LineNumberTableAttribute(codeGen));
         append(new LocalVariableTableAttribute(codeGen));
       } else {
-        u2(0); // Attribute count
+        u2(0); // Attribute count.
       }
     }
   }
@@ -209,7 +257,9 @@ aspect Attributes {
     }
     return c;
   }
+
   syn lazy Collection BodyDecl.attributes() = new ArrayList();
+
   eq FieldDeclaration.attributes() {
     ArrayList l = new ArrayList();
     if (isFinal() && isConstant() && (type().isPrimitive() || type().isString())) {

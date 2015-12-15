@@ -141,24 +141,40 @@ aspect ErrorCheck {
 
     protected String fileName;
 
-    protected String message;
+    protected final String message;
 
     protected Severity severity = Severity.ERROR;
 
     protected Kind kind = Kind.OTHER;
 
-    public int compareTo(Object o) {
-      if (o instanceof Problem) {
-        Problem other = (Problem) o;
-        if (!fileName.equals(other.fileName)) {
-          return fileName.compareTo(other.fileName);
-        }
-        if (line != other.line) {
-          return line - other.line;
-        }
-        return message.compareTo(other.message);
-      }
-      return 0;
+    public Problem(String fileName, String message, int line, Severity severity, Kind kind) {
+      this.fileName = fileName;
+      this.message = message;
+      this.line = line;
+      this.kind = kind;
+      this.severity = severity;
+    }
+
+    public Problem(String fileName, String message, int line, int column,
+        Severity severity, Kind kind) {
+      this.fileName = fileName;
+      this.message = message;
+      this.line = line;
+      this.column = column;
+      this.kind = kind;
+      this.severity = severity;
+    }
+
+    public Problem(String fileName, String message, int line, int column, int endLine,
+        int endColumn, Severity severity, Kind kind) {
+      this.fileName = fileName;
+      this.message = message;
+      this.line = line;
+      this.column = column;
+      this.endLine = endLine;
+      this.endColumn = endColumn;
+      this.kind = kind;
+      this.severity = severity;
     }
 
     public int line() {
@@ -197,56 +213,7 @@ aspect ErrorCheck {
       return kind;
     }
 
-    public Problem(String fileName, String message) {
-      this.fileName = fileName;
-      this.message = message;
-    }
-
-    public Problem(String fileName, String message, int line) {
-      this(fileName, message);
-      this.line = line;
-    }
-
-    public Problem(String fileName, String message, int line, Severity severity) {
-      this(fileName, message);
-      this.line = line;
-      this.severity = severity;
-    }
-
-    public Problem(String fileName, String message, int line, int column, Severity severity) {
-      this(fileName, message);
-      this.line = line;
-      this.column = column;
-      this.severity = severity;
-    }
-
-    public Problem(String fileName, String message, int line, Severity severity, Kind kind) {
-      this(fileName, message);
-      this.line = line;
-      this.kind = kind;
-      this.severity = severity;
-    }
-
-    public Problem(String fileName, String message, int line, int column, Severity severity,
-        Kind kind) {
-      this(fileName, message);
-      this.line = line;
-      this.column = column;
-      this.kind = kind;
-      this.severity = severity;
-    }
-
-    public Problem(String fileName, String message, int line, int column, int endLine,
-        int endColumn, Severity severity, Kind kind) {
-      this(fileName, message);
-      this.line = line;
-      this.column = column;
-      this.endLine = endLine;
-      this.endColumn = endColumn;
-      this.kind = kind;
-      this.severity = severity;
-    }
-
+    @Override
     public String toString() {
       String location = "";
       if (line != -1 && column != -1) {
@@ -255,6 +222,21 @@ aspect ErrorCheck {
         location = line + ":";
       }
       return String.format("%s:%s %s: %s", fileName, location, severity, message);
+    }
+
+    @Override
+    public int compareTo(Object o) {
+      if (o instanceof Problem) {
+        Problem other = (Problem) o;
+        if (!fileName.equals(other.fileName)) {
+          return fileName.compareTo(other.fileName);
+        } else if (line != other.line) {
+          return Integer.compare(line, other.line);
+        } else {
+          return message.compareTo(other.message);
+        }
+      }
+      return 0;
     }
   }
 
@@ -287,7 +269,7 @@ aspect ErrorCheck {
       node = node.getParent();
     }
     CompilationUnit cu = (CompilationUnit) node;
-    cu.warnings.add(new Problem(sourceFile(), message, lineNumber(), Problem.Severity.WARNING));
+    cu.warnings.add(new Problem(sourceFile(), message, lineNumber(), Problem.Severity.WARNING, Problem.Kind.SEMANTIC));
   }
 
   /** Search for semantic errors in the AST through imperative traversal. */
