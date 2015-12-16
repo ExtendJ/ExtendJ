@@ -158,13 +158,15 @@ aspect GenericsCodegen {
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // The cast or boxing/unboxing operation must know the bound rather than the erased type.
-      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // MethodInvocationConversion
+      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // Invocation conversion.
     }
 
     if (!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()) {
       if (!hostType().instanceOf(prevExpr().type())) {
+        // TODO(joqvist): investigate the comment below.
         /* Should this be decl instead? possible copy/paste error? */
-        decl().createSuperAccessor(superAccessorTarget()).emitInvokeMethod(gen, superAccessorTarget());
+        decl().createSuperAccessor(superAccessorTarget()).emitInvokeMethod(gen,
+            superAccessorTarget());
       } else {
         decl.emitInvokeSpecialMethod(gen, methodQualifierType());
       }
@@ -242,7 +244,8 @@ aspect GenericsCodegen {
       MethodDecl m = (MethodDecl) iter.next();
       if (this.overrides(m)) {
         MethodDecl erased = m.erasedMethod();
-        if (!erased.signature().equals(signature()) || erased.type().erasure() != type().erasure()) {
+        if (!erased.signature().equals(signature())
+            || erased.type().erasure() != type().erasure()) {
           StringBuilder keyBuffer = new StringBuilder();
           for (int i = 0; i < getNumParameter(); i++) {
             keyBuffer.append(erased.getParameter(i).type().erasure().fullName());
@@ -255,8 +258,10 @@ aspect GenericsCodegen {
             List args = new List();
             List parameters = new List();
             for (int i = 0; i < getNumParameter(); i++) {
-              args.add(new CastExpr(getParameter(i).type().erasure().createBoundAccess(), new VarAccess("p" + i)));
-              parameters.add(new ParameterDeclaration(erased.getParameter(i).type().erasure(), "p" + i));
+              args.add(new CastExpr(getParameter(i).type().erasure().createBoundAccess(),
+                  new VarAccess("p" + i)));
+              parameters.add(
+                  new ParameterDeclaration(erased.getParameter(i).type().erasure(), "p" + i));
             }
             Stmt stmt;
             if (type().isVoid()) {
@@ -309,7 +314,7 @@ aspect GenericsCodegen {
     }
   }
 
-  // add Signature Attribute
+  // Add Signature Attribute.
   refine AnnotationsCodegen eq TypeDecl.attributes() {
     Collection c = refined();
     if (needsSignatureAttribute()) {
@@ -341,7 +346,7 @@ aspect GenericsCodegen {
     }
   }
 
-  // Determine which classes, interfaces, methods, and fields need a signature attribute
+  // Determine which classes, interfaces, methods, and fields need a signature attribute.
   syn lazy boolean TypeDecl.needsSignatureAttribute() = false;
   eq GenericClassDecl.needsSignatureAttribute() = true;
   eq GenericInterfaceDecl.needsSignatureAttribute() = true;
@@ -350,6 +355,7 @@ aspect GenericsCodegen {
   eq AbstractWildcardType.needsSignatureAttribute() = true;
   eq TypeVariable.needsSignatureAttribute() = true;
   eq ArrayDecl.needsSignatureAttribute() = elementType().needsSignatureAttribute();
+
   eq ClassDecl.needsSignatureAttribute() {
     if (hasSuperclass() && superclass().needsSignatureAttribute()) {
       return true;
@@ -372,6 +378,7 @@ aspect GenericsCodegen {
   }
 
   syn boolean BodyDecl.needsSignatureAttribute() = false;
+
   syn boolean MethodDecl.needsSignatureAttribute() {
     if (type().needsSignatureAttribute()) {
       return true;
@@ -385,6 +392,7 @@ aspect GenericsCodegen {
   }
 
   eq GenericMethodDecl.needsSignatureAttribute() = true;
+
   syn boolean ConstructorDecl.needsSignatureAttribute() {
     for (int i = 0; i < getNumParameter(); i++) {
       if (getParameter(i).type().needsSignatureAttribute()) {
@@ -397,44 +405,30 @@ aspect GenericsCodegen {
 
   eq FieldDeclaration.needsSignatureAttribute() = type().needsSignatureAttribute();
 
-  // compute the signature string used for the signature attribute
+  // Compute the signature string used for the signature attribute.
   syn lazy String TypeDecl.classSignature() = "";
   eq ClassDecl.classSignature() {
     StringBuilder buf = new StringBuilder();
-    // SuperclassSignature
     if (hasSuperclass()) {
       buf.append(superclass().classTypeSignature());
     }
-    // SuperinterfaceSignature*
     for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
       buf.append(iter.next().classTypeSignature());
     }
     return buf.toString();
   }
+
   eq InterfaceDecl.classSignature() {
     StringBuilder buf = new StringBuilder();
-    // SuperclassSignature
     buf.append(typeObject().classTypeSignature());
-    // SuperinterfaceSignature*
     for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
       buf.append(iter.next().classTypeSignature());
     }
     return buf.toString();
   }
+
   eq GenericClassDecl.classSignature() {
     StringBuilder buf = new StringBuilder();
-    // FormalTypeParameters
-    buf.append("<");
-    for (int i = 0; i < getNumTypeParameter(); i++) {
-      buf.append(getTypeParameter(i).formalTypeParameter());
-    }
-    buf.append(">");
-    buf.append(super.classSignature());
-    return buf.toString();
-  }
-  eq GenericInterfaceDecl.classSignature() {
-    StringBuilder buf = new StringBuilder();
-    // FormalTypeParameters
     buf.append("<");
     for (int i = 0; i < getNumTypeParameter(); i++) {
       buf.append(getTypeParameter(i).formalTypeParameter());
@@ -444,14 +438,22 @@ aspect GenericsCodegen {
     return buf.toString();
   }
 
-  // FormalTypeParameter
+  eq GenericInterfaceDecl.classSignature() {
+    StringBuilder buf = new StringBuilder();
+    buf.append("<");
+    for (int i = 0; i < getNumTypeParameter(); i++) {
+      buf.append(getTypeParameter(i).formalTypeParameter());
+    }
+    buf.append(">");
+    buf.append(super.classSignature());
+    return buf.toString();
+  }
+
   syn String TypeVariable.formalTypeParameter() {
     StringBuilder buf = new StringBuilder();
-    // Identifier
     buf.append(name());
     buf.append(":");
     if (getNumTypeBound() > 0) {
-      // ClassBound InterfaceBound*
       if (getTypeBound(0).type().isClassDecl()) {
         buf.append(getTypeBound(0).type().fieldTypeSignature());
       } else {
@@ -492,7 +494,9 @@ aspect GenericsCodegen {
     buf.append(typeArgumentsOpt());
     return buf.toString();
   }
+
   syn String TypeDecl.typeArgumentsOpt() = "";
+
   eq ParTypeDecl.typeArgumentsOpt() {
     StringBuilder buf = new StringBuilder();
     buf.append("<");
@@ -502,6 +506,7 @@ aspect GenericsCodegen {
     buf.append(">");
     return buf.toString();
   }
+
   eq RawClassDecl.typeArgumentsOpt() = "";
   eq RawInterfaceDecl.typeArgumentsOpt() = "";
 
@@ -518,6 +523,7 @@ aspect GenericsCodegen {
     }
     return buf.toString();
   }
+
   eq GenericMethodDecl.methodTypeSignature() {
     StringBuilder buf = new StringBuilder();
     buf.append("<");
@@ -529,12 +535,14 @@ aspect GenericsCodegen {
     buf.append(super.methodTypeSignature());
     return buf.toString();
   }
+
   syn lazy String TypeVariable.classBound() {
     if (getNumTypeBound() > 0) {
       return getTypeBound(0).type().fieldTypeSignature();
     }
     return "";
   }
+
   syn lazy String TypeVariable.interfaceBounds() {
     StringBuilder buf = new StringBuilder();
     for (int i = 1; i < getNumTypeBound(); ++i) {

@@ -31,7 +31,9 @@
 import java.util.*;
 
 aspect VariableScope {
-  // lookupVariable(String name) shows the variables in scope named name
+  /**
+   * Finds the variables in the current scope with the given name.
+   */
   inh lazy SimpleSet TypeDecl.lookupVariable(String name);
   inh lazy SimpleSet BodyDecl.lookupVariable(String name);
   inh SimpleSet Stmt.lookupVariable(String name);
@@ -57,18 +59,19 @@ aspect VariableScope {
     return list;
   }
 
-  // The scope of a parameter of a method is the entire body of the method
+  // The scope of a parameter of a method is the entire body of the method.
   eq MethodDecl.getBlock().lookupVariable(String name) {
     SimpleSet set = parameterDeclaration(name);
-    // A declaration of a method parameter name shadows any other variable declarations
+    // A declaration of a method parameter name shadows any other variable declarations.
     if (!set.isEmpty()) {
       return set;
     }
-    // Delegate to other declarations in scope
+    // Delegate to other declarations in scope.
     return lookupVariable(name);
   }
-  // A method declaration may only declare one parameter named name
-  // This is enforced by a check that the declaration in scope for a declaration is itself
+
+  // A method declaration may only declare one parameter named name.
+  // This is enforced by a check that the declaration in scope for a declaration is itself.
   eq MethodDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
   eq ConstructorDecl.getBlock().lookupVariable(String name) {
@@ -120,11 +123,11 @@ aspect VariableScope {
 
   /**
    * The scope of a local variable declaration in a block is the rest of
-   * the block in which the declaration appears
+   * the block in which the declaration appears.
    */
   eq Block.getStmt(int index).lookupVariable(String name) {
     VariableDeclaration v = localVariableDeclaration(name);
-    // declare before use and shadowing
+    // Declare before use and shadowing.
     if (v != null && declaredBeforeUse(v, index)) {
       return v;
     }
@@ -156,8 +159,7 @@ aspect VariableScope {
     return lookupVariable(name);
   }
 
-  // Return the first variable declaration named name
-
+  /** @return the first variable declaration with the given name. */
   syn lazy SimpleSet MethodDecl.parameterDeclaration(String name) {
     for (int i = 0; i < getNumParameter(); i++) {
       if (getParameter(i).name().equals(name)) {
@@ -233,7 +235,7 @@ aspect VariableScope {
 
   // Access control specifies the part of a program where a declared entity can
   // be referred to by a qualified name, field access expression, method
-  // invocation expression without a simple name
+  // invocation expression without a simple name.
   syn SimpleSet Expr.qualifiedLookupVariable(String name) {
     if (type().accessibleFrom(hostType())) {
       return keepAccessibleFields(type().memberFields(name));
@@ -380,7 +382,9 @@ aspect Fields {
     }
     return map;
   }
+
   syn lazy HashMap TypeDecl.memberFieldsMap() = localFieldsMap();
+
   eq ClassDecl.memberFieldsMap() {
     HashMap map = new HashMap(localFieldsMap());
     if (hasSuperclass()) {
@@ -402,6 +406,7 @@ aspect Fields {
     }
     return map;
   }
+
   eq InterfaceDecl.memberFieldsMap() {
     HashMap map = new HashMap(localFieldsMap());
     for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
@@ -415,6 +420,7 @@ aspect Fields {
     }
     return map;
   }
+
   public Iterator TypeDecl.fieldsIterator() {
     return new Iterator() {
       private Iterator outer = memberFieldsMap().values().iterator();
@@ -434,11 +440,11 @@ aspect Fields {
 
   syn lazy SimpleSet TypeDecl.memberFields(String name) = localFields(name);
 
-  // member fields
+  // Class member fields.
   eq ClassDecl.memberFields(String name) {
     SimpleSet fields = localFields(name);
     if (!fields.isEmpty()) {
-      return fields; // this causes hiding of fields in superclass and interfaces
+      return fields; // This causes hiding of fields in superclass and interfaces.
     }
     if (hasSuperclass()) {
       for (Iterator iter = superclass().memberFields(name).iterator(); iter.hasNext(); ) {

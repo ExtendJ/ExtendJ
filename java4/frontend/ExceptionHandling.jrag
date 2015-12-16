@@ -36,17 +36,22 @@ aspect ExceptionHandling {
   syn lazy boolean TryStmt.hasNonEmptyFinally() =
       hasFinally() && getFinally().getNumStmt() > 0;
 
-  // exception types
-  eq Program.getChild().typeException() = lookupType("java.lang", "Exception");
+  // Exception types.
   inh lazy TypeDecl TypeDecl.typeException();
-  eq Program.getChild().typeRuntimeException() = lookupType("java.lang", "RuntimeException");
+  eq Program.getChild().typeException() = lookupType("java.lang", "Exception");
+
   inh lazy TypeDecl TypeDecl.typeRuntimeException();
-  eq Program.getChild().typeError() = lookupType("java.lang", "Error");
+  eq Program.getChild().typeRuntimeException() = lookupType("java.lang", "RuntimeException");
+
   inh lazy TypeDecl TypeDecl.typeError();
-  eq Program.getChild().typeNullPointerException() = lookupType("java.lang", "NullPointerException");
+  eq Program.getChild().typeError() = lookupType("java.lang", "Error");
+
   inh lazy TypeDecl ThrowStmt.typeNullPointerException();
-  eq Program.getChild().typeThrowable() = lookupType("java.lang", "Throwable");
+  eq Program.getChild().typeNullPointerException() =
+      lookupType("java.lang", "NullPointerException");
+
   inh lazy TypeDecl BodyDecl.typeThrowable();
+  eq Program.getChild().typeThrowable() = lookupType("java.lang", "Throwable");
 
   syn lazy boolean TypeDecl.isException() = instanceOf(typeException());
 
@@ -54,7 +59,7 @@ aspect ExceptionHandling {
    * Checked exceptions must be declared thrown or caught in
    * an enclosing try-statement.
    *
-   * Note that this attribute is the opposite of isUncheckedException, i.e.
+   * <p>Note that this attribute is the opposite of isUncheckedException, i.e.
    * the type is not tested for being a subclass of java.lang.Exception.
    *
    * @return {@code true} if this type is not a subtype of java.lang.RuntimException
@@ -99,7 +104,6 @@ aspect ExceptionHandling {
   }
 
   syn lazy Collection MethodAccess.exceptionCollection() {
-    //System.out.println("Computing exceptionCollection for " + name());
     HashSet set = new HashSet();
     Iterator iter = decls().iterator();
     if (!iter.hasNext()) {
@@ -107,18 +111,17 @@ aspect ExceptionHandling {
     }
 
     MethodDecl m = (MethodDecl) iter.next();
-    //System.out.println("Processing first found method " + m.signature() + " in " + m.hostType().fullName());
 
     for (int i = 0; i < m.getNumException(); i++) {
       TypeDecl exceptionType = m.getException(i).type();
       set.add(exceptionType);
     }
+
     while (iter.hasNext()) {
       HashSet first = new HashSet();
       first.addAll(set);
       HashSet second = new HashSet();
       m = (MethodDecl) iter.next();
-      //System.out.println("Processing the next method " + m.signature() + " in " + m.hostType().fullName());
       for (int i = 0; i < m.getNumException(); i++) {
         TypeDecl exceptionType = m.getException(i).type();
         second.add(exceptionType);
@@ -255,8 +258,9 @@ aspect ExceptionHandling {
     return handlesException(exceptionType);
   }
 
-  // the catch clause catches the exception
+  // The catch clause catches the exception.
   syn boolean CatchClause.handles(TypeDecl exceptionType) = false;
+
   eq BasicCatch.handles(TypeDecl exceptionType) =
       !getParameter().type().isUnknown()
       && exceptionType.instanceOf(getParameter().type());
@@ -279,21 +283,21 @@ aspect ExceptionHandling {
 
   protected boolean TryStmt.reachedException(TypeDecl type) {
     boolean found = false;
-    // found is true if the exception type is caught by a catch clause
+    // Found is true if the exception type is caught by a catch clause.
     for (int i = 0; i < getNumCatchClause() && !found; i++) {
       if (getCatchClause(i).handles(type)) {
         found = true;
       }
     }
-    // if an exception is thrown in the block and the exception is not caught and
-    // either there is no finally block or the finally block can complete normally
+    // If an exception is thrown in the block and the exception is not caught and
+    // either there is no finally block or the finally block can complete normally.
     if (!found && (!hasNonEmptyFinally() || getFinally().canCompleteNormally()) ) {
       if (getBlock().reachedException(type)) {
         return true;
       }
     }
-    // even if the exception is caught by the catch clauses they may
-    // throw new exceptions
+    // Even if the exception is caught by the catch clauses they may
+    // throw new exceptions.
     for (int i = 0; i < getNumCatchClause(); i++) {
       if (getCatchClause(i).reachedException(type)) {
         return true;

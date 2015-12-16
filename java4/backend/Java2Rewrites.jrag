@@ -30,12 +30,13 @@
 
 aspect Java2Rewrites {
   int TypeDecl.uniqueIndexCounter = 1;
-  syn lazy int TypeDecl.uniqueIndex() = topLevelType().uniqueIndexCounter++;
 
+  syn lazy int TypeDecl.uniqueIndex() = topLevelType().uniqueIndexCounter++;
 
   syn lazy String TypeDecl.jvmName() {
     throw new Error("Jvm name only supported for reference types and not " + getClass().getName());
   }
+
   eq ReferenceType.jvmName() {
     if (!isNestedType()) {
       return fullName();
@@ -45,6 +46,7 @@ aspect Java2Rewrites {
       return enclosingType().jvmName() + "$" + name();
     }
   }
+
   eq ArrayDecl.jvmName() {
     StringBuffer dim = new StringBuffer();
     for (int i = 0; i < dimension(); i++) {
@@ -56,6 +58,7 @@ aspect Java2Rewrites {
       return dim.toString() + elementType().jvmName();
     }
   }
+
   eq ByteType.jvmName() = "B";
   eq CharType.jvmName() = "C";
   eq ShortType.jvmName() = "S";
@@ -66,7 +69,8 @@ aspect Java2Rewrites {
   eq BooleanType.jvmName() = "Z";
 
   syn String TypeDecl.primitiveClassName() {
-    throw new Error("primitiveClassName not supported for " + name() + " of type " + getClass().getName());
+    throw new Error("primitiveClassName not supported for "
+        + name() + " of type " + getClass().getName());
   }
   eq ByteType.primitiveClassName() = "Byte";
   eq CharType.primitiveClassName() = "Character";
@@ -81,17 +85,20 @@ aspect Java2Rewrites {
   syn String TypeDecl.referenceClassFieldName() {
     throw new Error("referenceClassFieldName not supported for " + name() + " of type " + getClass().getName());
   }
-  eq ReferenceType.referenceClassFieldName() = "class$" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
-  eq ArrayDecl.referenceClassFieldName() = "array" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
 
+  eq ReferenceType.referenceClassFieldName() =
+      "class$" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
 
-  // lazily build a static field for assertionsDisabled
+  eq ArrayDecl.referenceClassFieldName() =
+      "array" + jvmName().replace('[', '$').replace('.', '$').replace(';', ' ').trim();
+
+  // Lazily build a static field for assertionsDisabled.
   private FieldDeclaration TypeDecl.createAssertionsDisabled = null;
+
   public FieldDeclaration TypeDecl.createAssertionsDisabled() {
     if (createAssertionsDisabled != null) {
       return createAssertionsDisabled;
     }
-    // static final boolean $assertionsDisabled = !TypeName.class.desiredAssertionStatus();
     createAssertionsDisabled = new FieldDeclaration(
       new Modifiers(new List().add(new Modifier("public")).add(new Modifier("static")).add(new Modifier("final"))),
       new PrimitiveTypeAccess("boolean"),
@@ -110,10 +117,10 @@ aspect Java2Rewrites {
       )
     );
     getBodyDeclList().insertChild(createAssertionsDisabled, 0);
-    // TODO remove this!
-    // explicit read to trigger possible rewrites
+    // TODO(joqvist): remove this!
+    // Explicit read to trigger possible rewrites.
     createAssertionsDisabled = (FieldDeclaration) getBodyDeclList().getChild(0);
-    // transform the generated initalization, e.g., the ClassAccess construct
+    // Transform the generated initalization, e.g., the ClassAccess construct.
     createAssertionsDisabled.transformation();
     return createAssertionsDisabled;
   }
@@ -121,11 +128,14 @@ aspect Java2Rewrites {
   public FieldDeclaration InterfaceDecl.createStaticClassField(String name) {
     return methodHolder().createStaticClassField(name);
   }
+
   public MethodDecl InterfaceDecl.createStaticClassMethod() {
     return methodHolder().createStaticClassMethod();
   }
-  // create anonymous class to delegate to
+
+  // Create anonymous class to delegate to.
   private TypeDecl InterfaceDecl.methodHolder = null;
+
   public TypeDecl InterfaceDecl.methodHolder() {
     if (methodHolder != null) {
       return methodHolder;
@@ -142,7 +152,7 @@ aspect Java2Rewrites {
     return c;
   }
 
-  // lazily build a static field for each typename used in a .class expression
+  // Lazily build a static field for each typename used in a .class expression.
   private HashMap TypeDecl.createStaticClassField = null;
   public FieldDeclaration TypeDecl.createStaticClassField(String name) {
     if (createStaticClassField == null) {
@@ -151,7 +161,6 @@ aspect Java2Rewrites {
     if (createStaticClassField.containsKey(name)) {
       return (FieldDeclaration) createStaticClassField.get(name);
     }
-    // static synthetic Class class$java$lang$String;
     FieldDeclaration f = new FieldDeclaration(
       new Modifiers(new List().add(new Modifier("public")).add(new Modifier("static"))),
       lookupType("java.lang", "Class").createQualifiedAccess(),
@@ -166,19 +175,12 @@ aspect Java2Rewrites {
     return addMemberField(f);
   }
 
-  // lazily build a static class$ method in this type declaration
+  // Lazily build a static class$ method in this type declaration.
   private MethodDecl TypeDecl.createStaticClassMethod = null;
   public MethodDecl TypeDecl.createStaticClassMethod() {
     if (createStaticClassMethod != null) {
       return createStaticClassMethod;
     }
-    // static synthetic Class class$(String name) {
-    //   try {
-    //     return java.lang.Class.forName(name);
-    //   } catch(java.lang.ClassNotFoundException e) {
-    //     throw new java.lang.NoClassDefFoundError(e.getMessage());
-    //   }
-    // }
     createStaticClassMethod = new MethodDecl(
       new Modifiers(new List().add(new Modifier("public")).add(new Modifier("static"))),
       lookupType("java.lang", "Class").createQualifiedAccess(),
@@ -250,5 +252,4 @@ aspect Java2Rewrites {
     };
     return addMemberMethod(createStaticClassMethod);
   }
-
 }

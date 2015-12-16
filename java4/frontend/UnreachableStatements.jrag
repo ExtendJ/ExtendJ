@@ -32,16 +32,19 @@ aspect UnreachableStatements {
 
   void ASTNode.checkUnreachableStmt() {
   }
+
   void Stmt.checkUnreachableStmt() {
     if (!reachable() && reportUnreachable()) {
       error("statement is unreachable");
     }
   }
+
   void StaticInitializer.checkUnreachableStmt() {
     if (!getBlock().canCompleteNormally()) {
       errorf("static initializer in %s can not complete normally", hostType().fullName());
     }
   }
+
   void InstanceInitializer.checkUnreachableStmt() {
     if (!getBlock().canCompleteNormally()) {
       errorf("instance initializer in %s can not complete normally", hostType().fullName());
@@ -55,11 +58,12 @@ aspect UnreachableStatements {
   eq ConstructorDecl.getParsedConstructorInvocation().reachable() = true;
   eq ConstructorDecl.getImplicitConstructorInvocation().reachable() = true;
 
-  // NB we only check the parsed constructor invocation since an implicit one should always complete normally!
+  // NB: we only check the parsed constructor invocation since an implicit one
+  // should always complete normally!
   eq ConstructorDecl.getBlock().reachable() =
-      !hasParsedConstructorInvocation()
-      ? true
-      : getParsedConstructorInvocation().canCompleteNormally();
+      hasParsedConstructorInvocation()
+      ? getParsedConstructorInvocation().canCompleteNormally()
+      : true;
 
   eq MethodDecl.getBlock().reachable() = true;
   eq StaticInitializer.getBlock().reachable() = true;
@@ -81,6 +85,7 @@ aspect UnreachableStatements {
   eq EmptyStmt.canCompleteNormally() = reachable();
 
   eq LabeledStmt.canCompleteNormally() = getStmt().canCompleteNormally() || reachableBreak();
+
   eq LabeledStmt.getStmt().reachable() = reachable();
 
   syn lazy boolean BranchTargetStmt.reachableBreak() {
@@ -172,8 +177,8 @@ aspect UnreachableStatements {
      for (int i = 0; i < getNumCatchClause() && !anyCatchClauseCompleteNormally; i++) {
        anyCatchClauseCompleteNormally = getCatchClause(i).getBlock().canCompleteNormally();
      }
-     return (getBlock().canCompleteNormally() || anyCatchClauseCompleteNormally) &&
-       (!hasNonEmptyFinally() || getFinally().canCompleteNormally());
+     return (getBlock().canCompleteNormally() || anyCatchClauseCompleteNormally)
+       && (!hasNonEmptyFinally() || getFinally().canCompleteNormally());
   }
   eq TryStmt.getBlock().reachable() = reachable();
   eq TryStmt.getFinally().reachable() = reachable();
@@ -200,8 +205,9 @@ aspect UnreachableStatements {
   inh lazy TypeDecl TryStmt.typeError();
   inh lazy TypeDecl TryStmt.typeRuntimeException();
 
-  eq IfStmt.canCompleteNormally() = (reachable() && !hasElse()) || (getThen().canCompleteNormally() ||
-    (hasElse() && getElse().canCompleteNormally()));
+  eq IfStmt.canCompleteNormally() =
+    (reachable() && !hasElse())
+    || (getThen().canCompleteNormally() || (hasElse() && getElse().canCompleteNormally()));
   eq IfStmt.getThen().reachable() = reachable();
   eq IfStmt.getElse().reachable() = reachable();
 
@@ -220,5 +226,4 @@ aspect UnreachableStatements {
   eq SwitchStmt.getBlock().reportUnreachable() = reachable();
   eq TypeDecl.getChild().reportUnreachable() = true;
   eq Program.getChild().reportUnreachable() = true;
-
 }

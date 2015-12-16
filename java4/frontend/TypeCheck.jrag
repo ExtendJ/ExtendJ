@@ -39,7 +39,7 @@ aspect TypeCheck {
   eq ArrayAccess.isVariable() = true;
   eq ParExpr.isVariable() = getExpr().isVariable();
 
-  // 5.2
+  // JLS section 5.2.
   public void VariableDeclaration.typeCheck() {
     if (hasInit()) {
       TypeDecl source = getInit().type();
@@ -51,7 +51,7 @@ aspect TypeCheck {
     }
   }
 
-  // 5.2
+  // JLS section 5.2.
   public void FieldDeclaration.typeCheck() {
     if (hasInit()) {
       TypeDecl source = getInit().type();
@@ -63,7 +63,7 @@ aspect TypeCheck {
     }
   }
 
-  // 5.2 Assignment Conversion
+  // JLS section 5.2:  Assignment Conversion.
   public void AssignSimpleExpr.typeCheck() {
     if (!getDest().isVariable()) {
       error("left hand side is not a variable");
@@ -264,7 +264,8 @@ aspect TypeCheck {
       return;
     } else if (left.isBoolean() && right.isBoolean()) {
       return;
-    } else if ((left.isReferenceType() || left.isNull()) && (right.isReferenceType() || right.isNull())) {
+    } else if ((left.isReferenceType() || left.isNull())
+        && (right.isReferenceType() || right.isNull())) {
       if (left.castingConversionTo(right) || right.castingConversionTo(left)) {
         return;
       }
@@ -309,7 +310,8 @@ aspect TypeCheck {
 
   public void ParExpr.typeCheck() {
     if (getExpr().isTypeAccess()) {
-      errorf("%s is a type and may not be used in parenthesized expression", getExpr().prettyPrint());
+      errorf("%s is a type and may not be used in parenthesized expression",
+          getExpr().prettyPrint());
     }
   }
 
@@ -451,7 +453,7 @@ aspect TypeCheck {
   }
 
   public void MethodDecl.typeCheck() {
-    // Thrown vs super class method see MethodDecl.nameCheck
+    // Thrown vs super class method see MethodDecl.nameCheck.
     // 8.4.4
     TypeDecl exceptionType = typeThrowable();
     for (int i = 0; i < getNumException(); i++) {
@@ -460,13 +462,12 @@ aspect TypeCheck {
         errorf("%s throws non throwable type %s", signature(), typeDecl.fullName());
       }
     }
-
-    // check returns
+    // Check returns.
     if (!isVoid() && hasBlock() && getBlock().canCompleteNormally()) {
       error("the body of a non void method may not complete normally");
     }
-
   }
+
   // 14.16
   inh TypeDecl TypeDecl.typeVoid();
   inh TypeDecl ReturnStmt.returnType();
@@ -489,7 +490,8 @@ aspect TypeCheck {
     if (!returnType().isVoid() && !hasResult()) {
       error("return stmt must have an expression in non void methods");
     }
-    if (enclosingBodyDecl() instanceof InstanceInitializer || enclosingBodyDecl() instanceof StaticInitializer) {
+    if (enclosingBodyDecl() instanceof InstanceInitializer
+        || enclosingBodyDecl() instanceof StaticInitializer) {
       error("Initializers may not return");
     }
 
@@ -511,8 +513,10 @@ aspect TypeCheck {
       error("*** The expression in a qualified class instance expr must not be a type name");
     }
     // 15.9
-    if (isQualified() && !type().isInnerClass() && !((ClassDecl) type()).superclass().isInnerClass() && !type().isUnknown()) {
-      error("*** Qualified class instance creation can only instantiate inner classes and their anonymous subclasses");
+    if (isQualified() && !type().isInnerClass()
+        && !((ClassDecl) type()).superclass().isInnerClass() && !type().isUnknown()) {
+      error("*** Qualified class instance creation can only instantiate inner "
+          + "classes and their anonymous subclasses");
     }
     if (!type().isClassDecl()) {
       errorf("*** Can only instantiate classes, which %s is not", type().typeName());
@@ -550,7 +554,6 @@ aspect TypeCheck {
       if (!isQualified()) {
         if (noEnclosingInstance()) {
           errorf("No enclosing instance to initialize %s with", C.typeName());
-          //System.err.println("ClassInstanceExpr: Non qualified MemberType " + C.typeName() + " is in a static context when instantiated in " + this);
           enclosing = unknownType();
         } else {
           TypeDecl nest = hostType();
@@ -572,23 +575,31 @@ aspect TypeCheck {
       if (enclosing.isUnknown()) {
         errorf("No enclosing instance to initialize %s with", C.typeName());
       } else if (!enclosing.instanceOf(C.enclosingType())) {
-        errorf("*** Can not instantiate %s with the enclosing instance %s due to incorrect enclosing instance",
+        errorf("*** Can not instantiate %s with the enclosing instance %s due to "
+            + "incorrect enclosing instance",
             C.typeName(), enclosing.typeName());
-      } else if (!isQualified() && C.isMemberType() && inExplicitConstructorInvocation() && enclosing == hostType()) {
-        errorf("*** The innermost enclosing instance of type %s is this which is not yet initialized here.",
+      } else if (!isQualified() && C.isMemberType()
+          && inExplicitConstructorInvocation() && enclosing == hostType()) {
+        errorf("*** The innermost enclosing instance of type %s is this which is "
+            + "not yet initialized here.",
             enclosing.typeName());
       }
     }
   }
 
   inh TypeDecl SuperConstructorAccess.enclosingInstance();
+
   inh TypeDecl ClassInstanceExpr.enclosingInstance();
+
   inh TypeDecl TypeDecl.enclosingInstance();
+
   eq Program.getChild().enclosingInstance() = null;
+
   eq StaticInitializer.getBlock().enclosingInstance() = null;
-  //eq InstanceInitializer.getBlock().enclosingInstance() = null;
+
   eq TypeDecl.getBodyDecl(int index).enclosingInstance() {
-    if (getBodyDecl(index) instanceof MemberTypeDecl && !((MemberTypeDecl) getBodyDecl(index)).typeDecl().isInnerType()) {
+    if (getBodyDecl(index) instanceof MemberTypeDecl
+        && !((MemberTypeDecl) getBodyDecl(index)).typeDecl().isInnerType()) {
       return null;
     }
     if (getBodyDecl(index) instanceof ConstructorDecl) {
@@ -596,8 +607,11 @@ aspect TypeCheck {
     }
     return this;
   }
+
   eq AbstractDot.getRight().enclosingInstance() = getLeft().type();
+
   eq ConstructorDecl.getParsedConstructorInvocation().enclosingInstance() = unknownType();
+
   eq ConstructorDecl.getImplicitConstructorInvocation().enclosingInstance() = unknownType();
 
   syn boolean ClassInstanceExpr.noEnclosingInstance() =
@@ -611,14 +625,16 @@ aspect TypeCheck {
         } else if (noEnclosingInstance()) {
           errorf("*** No enclosing instance to class %s due to static context", type().typeName());
         } else if (inExplicitConstructorInvocation()) {
-          errorf("*** No enclosing instance to superclass %s of %s since this is not initialized yet",
+          errorf("*** No enclosing instance to superclass %s of %s since this is "
+              + "not initialized yet",
               S.typeName(), type().typeName());
         }
       } else if (S.isMemberType()) {
         if (!isQualified()) {
           // 15.9.2 2nd paragraph
           if (noEnclosingInstance()) {
-            errorf("*** No enclosing instance to class %s due to static context", type().typeName());
+            errorf("*** No enclosing instance to class %s due to static context",
+                type().typeName());
           } else {
             TypeDecl nest = hostType();
             while (nest != null && !nest.instanceOf(S.enclosingType())) {
@@ -628,7 +644,8 @@ aspect TypeCheck {
               errorf("*** No enclosing instance to superclass %s of %s",
                   S.typeName(), type().typeName());
             } else if (inExplicitConstructorInvocation()) {
-              errorf("*** No enclosing instance to superclass %s of %s since this is not initialized yet",
+              errorf("*** No enclosing instance to superclass %s of %s since this is "
+                  + "not initialized yet",
                   S.typeName(), type().typeName());
             }
           }
@@ -649,14 +666,17 @@ aspect TypeCheck {
     if (!getCondition().type().isBoolean()) {
       error("The first operand of a conditional expression must be a boolean");
     }
-    if (type().isUnknown() && !getTrueExpr().type().isUnknown() && !getFalseExpr().type().isUnknown()) {
-      error("The types of the second and third operand in this conditional expression do not match");
+    if (type().isUnknown() && !getTrueExpr().type().isUnknown()
+        && !getFalseExpr().type().isUnknown()) {
+      error("The types of the second and third operand in "
+          + "this conditional expression do not match");
     }
   }
 
   public void IntegerLiteral.typeCheck() {
     if (constant().error) {
-      error("The value of an int literal must be a decimal value in the range -2147483648..2147483647 or a hexadecimal or octal literal that fits in 32 bits.");
+      error("The value of an int literal must be a decimal value in the range "
+          + "-2147483648..2147483647 or a hexadecimal or octal literal that fits in 32 bits.");
     }
   }
 
@@ -670,7 +690,8 @@ aspect TypeCheck {
     if (!isZero() && constant().floatValue() == 0.0f) {
       errorf("It is an error for nonzero floating-point %s to round to zero", getLITERAL());
     }
-    if (constant().floatValue() == Float.NEGATIVE_INFINITY || constant().floatValue() == Float.POSITIVE_INFINITY) {
+    if (constant().floatValue() == Float.NEGATIVE_INFINITY
+        || constant().floatValue() == Float.POSITIVE_INFINITY) {
       errorf("the floating-point literal \"%s\" is too large", getLITERAL());
     }
   }
@@ -679,7 +700,8 @@ aspect TypeCheck {
     if (!isZero() && constant().doubleValue() == 0.0f) {
       errorf("It is an error for nonzero floating-point %s to round to zero", getLITERAL());
     }
-    if (constant().doubleValue() == Double.NEGATIVE_INFINITY || constant().doubleValue() == Double.POSITIVE_INFINITY) {
+    if (constant().doubleValue() == Double.NEGATIVE_INFINITY
+        || constant().doubleValue() == Double.POSITIVE_INFINITY) {
       errorf("the floating-point literal \"%s\" is too large", getLITERAL());
     }
   }

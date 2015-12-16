@@ -30,30 +30,27 @@
 
 import java.util.*;
 
-// 5.1 Kinds of Conversion
+// 5.1 Kinds of Conversion.
 aspect TypeConversion {
-  // 5.1.1 Identity Conversion
+  // 5.1.1 Identity Conversion.
   syn boolean TypeDecl.identityConversionTo(TypeDecl type) = this == type;
 
   syn boolean TypeDecl.wideningConversionTo(TypeDecl type) = instanceOf(type);
   syn lazy boolean TypeDecl.narrowingConversionTo(TypeDecl type) = instanceOf(type);
 
-  // 5.1.2 Widening Primitive Conversions
+  // 5.1.2 Widening Primitive Conversions.
   eq PrimitiveType.wideningConversionTo(TypeDecl type) = instanceOf(type);
 
-  //eq IntType.wideningConversionTo(TypeDecl type) = type.isLong() || type.isFloat() || type.isDouble();
-  //eq FloatType.wideningConversionTo(TypeDecl type) = type.isLong();
-
-  // 5.1.3 Narrowing Primitive Conversion
+  // 5.1.3 Narrowing Primitive Conversion.
   eq PrimitiveType.narrowingConversionTo(TypeDecl type) = type.instanceOf(this);
   eq ShortType.narrowingConversionTo(TypeDecl type) = type.isByte() || type.isChar();
   eq CharType.narrowingConversionTo(TypeDecl type) =  type.isByte() || type.isShort();
   eq ByteType.narrowingConversionTo(TypeDecl type) = type.isChar();
 
-  // 5.1.4 Widening Reference Conversions
+  // 5.1.4 Widening Reference Conversions.
   eq ReferenceType.wideningConversionTo(TypeDecl type) = instanceOf(type);
 
-  // 5.1.5 Narrowing Reference Conversions
+  // 5.1.5 Narrowing Reference Conversions.
   eq ReferenceType.narrowingConversionTo(TypeDecl type) {
     if (type.instanceOf(this)) {
       return true;
@@ -84,30 +81,24 @@ aspect TypeConversion {
 
   // 5.2 Assignment Conversion
   syn boolean TypeDecl.assignConversionTo(TypeDecl type, Expr expr) {
-    //System.out.println("@@@ " + fullName() + " assign conversion to " + type.fullName() + ", expr: " + expr);
     boolean sourceIsConstant = expr != null ? expr.isConstant() : false;
-    //System.out.println("@@@ sourceIsConstant: " + sourceIsConstant);
     if (identityConversionTo(type) || wideningConversionTo(type)) {
       return true;
     }
-    //System.out.println("@@@ narrowing conversion needed");
-    //System.out.println("@@@ value: " + expr.value());
-    if (sourceIsConstant && (isInt() || isChar() || isShort() || isByte()) &&
-        (type.isByte() || type.isShort() || type.isChar()) &&
-        narrowingConversionTo(type) && expr.representableIn(type))
-      return true;
-    //System.out.println("@@@ false");
-    return false;
+    return sourceIsConstant
+        && (isInt() || isChar() || isShort() || isByte())
+        && (type.isByte() || type.isShort() || type.isChar())
+        && narrowingConversionTo(type)
+        && expr.representableIn(type);
   }
 
   // 5.3 Method Invocation Conversion
-  syn lazy boolean TypeDecl.methodInvocationConversionTo(TypeDecl type) {
-    return identityConversionTo(type) || wideningConversionTo(type);
-  }
+  syn lazy boolean TypeDecl.methodInvocationConversionTo(TypeDecl type) =
+      identityConversionTo(type) || wideningConversionTo(type);
 
   // 5.5 Casting Conversion
-  syn lazy boolean TypeDecl.castingConversionTo(TypeDecl type) = identityConversionTo(type) ||
-    wideningConversionTo(type) || narrowingConversionTo(type);
+  syn lazy boolean TypeDecl.castingConversionTo(TypeDecl type) =
+      identityConversionTo(type) || wideningConversionTo(type) || narrowingConversionTo(type);
 
   eq ClassDecl.castingConversionTo(TypeDecl type) {
     if (type.isArrayDecl()) {
@@ -164,14 +155,15 @@ aspect TypeConversion {
 }
 
 aspect NumericPromotion {
-  syn TypeDecl TypeDecl.unaryNumericPromotion() = this; // not unknown since this would be
-  // 5.6.1 Unary Numeric Promotion
+  syn TypeDecl TypeDecl.unaryNumericPromotion() = this; // Not unknown since this would be.
+
+  // 5.6.1 Unary Numeric Promotion.
   syn lazy TypeDecl NumericType.unaryNumericPromotion() = this;
   eq ByteType.unaryNumericPromotion() = typeInt();
   eq ShortType.unaryNumericPromotion() = typeInt();
   eq CharType.unaryNumericPromotion() = typeInt();
 
-  // 5.6.2 Binary Numeric Promotion
+  // 5.6.2 Binary Numeric Promotion.
   syn TypeDecl TypeDecl.binaryNumericPromotion(TypeDecl type) = unknownType();
   syn lazy TypeDecl NumericType.binaryNumericPromotion(TypeDecl type) {
     if (!type.isNumericType()) {
@@ -183,15 +175,16 @@ aspect NumericPromotion {
 }
 
 aspect TypeAnalysis {
-  // 4.1 The Kinds of Types and Values
+  // 4.1 The Kinds of Types and Values.
   syn boolean TypeDecl.isReferenceType() = false;
   eq ReferenceType.isReferenceType() = true;
   eq UnknownType.isReferenceType() = true;
+
   syn boolean TypeDecl.isPrimitiveType() = false;
   eq PrimitiveType.isPrimitiveType() = true;
   eq UnknownType.isPrimitiveType() = true;
 
-  // 4.2 Primitive Types and Values
+  // 4.2 Primitive Types and Values.
   syn boolean TypeDecl.isNumericType() = false;
   eq NumericType.isNumericType() = true;
   eq UnknownType.isNumericType() = true;
@@ -520,11 +513,13 @@ aspect TypeWideningAndIdentity {
   }
 
   syn boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) = type == this;
+
   eq PrimitiveType.isSupertypeOfPrimitiveType(PrimitiveType type) {
     if (super.isSupertypeOfPrimitiveType(type)) {
       return true;
     }
-    return type.hasSuperclass() && type.superclass().isPrimitive() && type.superclass().instanceOf(this);
+    return type.hasSuperclass() && type.superclass().isPrimitive()
+        && type.superclass().instanceOf(this);
   }
 
   syn boolean TypeDecl.isSupertypeOfNullType(NullType type) = false;
@@ -568,15 +563,15 @@ aspect NestedTypes {
   eq BodyDecl.getChild().enclosingBodyDecl() = this;
 
 
-  // 8
+  // JLS section 8.
   inh boolean TypeDecl.isNestedType();
   eq CompilationUnit.getChild().isNestedType() = false;
   eq TypeDecl.getBodyDecl().isNestedType() = true;
 
-  // 8
+  // JLS section 8.
   syn boolean TypeDecl.isTopLevelType() = !isNestedType();
 
-  // 8.5
+  // JLS section 8.5.
   inh boolean TypeDecl.isMemberType();
   eq MemberClassDecl.getClassDecl().isMemberType() = true;
   eq MemberInterfaceDecl.getInterfaceDecl().isMemberType() = true;
@@ -586,14 +581,21 @@ aspect NestedTypes {
 
   // 8.1.2
   syn boolean TypeDecl.isInnerClass() = false;
-  eq ClassDecl.isInnerClass() = isNestedType() && !isStatic() && enclosingType().isClassDecl();
-  syn boolean TypeDecl.isInnerType() = (isLocalClass() || isAnonymous() || (isMemberType() && !isStatic())) && !inStaticContext();
 
-  syn boolean TypeDecl.isInnerTypeOf(TypeDecl typeDecl) = typeDecl == this || (isInnerType() && enclosingType().isInnerTypeOf(typeDecl));
+  eq ClassDecl.isInnerClass() = isNestedType() && !isStatic() && enclosingType().isClassDecl();
+
+  syn boolean TypeDecl.isInnerType() =
+      (isLocalClass() || isAnonymous() || (isMemberType() && !isStatic())) && !inStaticContext();
+
+  syn boolean TypeDecl.isInnerTypeOf(TypeDecl typeDecl) =
+      typeDecl == this || (isInnerType() && enclosingType().isInnerTypeOf(typeDecl));
 
   inh boolean TypeDecl.isLocalClass();
+
   eq CompilationUnit.getChild().isLocalClass() = false;
+
   eq TypeDecl.getBodyDecl().isLocalClass() = false;
+
   eq LocalClassDeclStmt.getClassDecl().isLocalClass() = true;
 
   syn TypeDecl TypeDecl.withinBodyThatSubclasses(TypeDecl type) {
@@ -790,4 +792,3 @@ aspect Circularity {
     return false;
   }
 }
-

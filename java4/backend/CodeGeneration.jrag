@@ -35,6 +35,7 @@ aspect CodeGeneration {
   }
 
   syn int ASTNode.sourceLineNumber() = getStart() != 0 ? getLine(getStart()) : -1;
+
   eq ReturnStmt.sourceLineNumber() {
     int num = super.sourceLineNumber();
     if (num != -1) {
@@ -48,7 +49,9 @@ aspect CodeGeneration {
     }
     return getLine(getParent().getParent().getEnd());
   }
+
   eq ExprStmt.sourceLineNumber() = getExpr().findFirstSourceLineNumber();
+
   eq Access.sourceLineNumber() = findFirstSourceLineNumber();
 
   protected int ASTNode.findFirstSourceLineNumber() {
@@ -65,20 +68,21 @@ aspect CodeGeneration {
   }
 
   inh int VariableDeclaration.variableScopeEndLabel(CodeGeneration gen);
+
   syn lazy int Block.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
+
   eq Block.getStmt(int i).variableScopeEndLabel(CodeGeneration gen) = variableScopeEndLabel(gen);
+
   syn lazy int ForStmt.variableScopeEndLabel(CodeGeneration gen) = gen.variableScopeLabel();
-  eq ForStmt.getInitStmt(int i).variableScopeEndLabel(CodeGeneration gen) = variableScopeEndLabel(gen);
+
+  eq ForStmt.getInitStmt(int i).variableScopeEndLabel(CodeGeneration gen) =
+      variableScopeEndLabel(gen);
+
   eq Program.getChild(int i).variableScopeEndLabel(CodeGeneration gen) {
     throw new Error("variableScopeEndLabel not valid from here");
   }
 
-  /*************************************************************
-   * Emit methods
-   *************************************************************/
-
-  // push constants
-
+  /** Push a constant value. */
   public static void IntegerLiteral.push(CodeGeneration gen, int value) {
     switch(value) {
       case -1:
@@ -117,6 +121,7 @@ aspect CodeGeneration {
         }
     }
   }
+
   public static void LongLiteral.push(CodeGeneration gen, long value) {
     if (value == 0) {
       gen.emit(Bytecode.LCONST_0);
@@ -127,6 +132,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
+
   public static void DoubleLiteral.push(CodeGeneration gen, double value) {
     if (value == 0) {
       gen.emit(Bytecode.DCONST_0);
@@ -137,6 +143,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.LDC2_W).add2(index);
     }
   }
+
   public static void FloatingPointLiteral.push(CodeGeneration gen, float value) {
     if (value == 0) {
       gen.emit(Bytecode.FCONST_0);
@@ -153,6 +160,7 @@ aspect CodeGeneration {
       }
     }
   }
+
   public static void StringLiteral.push(CodeGeneration gen, String value) {
     int index = gen.constantPool().addConstant(value);
     if (index < 256) {
@@ -166,13 +174,24 @@ aspect CodeGeneration {
     gen.emit(value ? Bytecode.ICONST_1 : Bytecode.ICONST_0);
   }
 
-  public void TypeDecl.emitPushConstant(CodeGeneration gen, int value) { }
-  public void IntegralType.emitPushConstant(CodeGeneration gen, int value) { IntegerLiteral.push(gen, value); }
-  public void LongType.emitPushConstant(CodeGeneration gen, int value) { LongLiteral.push(gen, value); }
-  public void DoubleType.emitPushConstant(CodeGeneration gen, int value) { DoubleLiteral.push(gen, value); }
-  public void FloatType.emitPushConstant(CodeGeneration gen, int value) { FloatingPointLiteral.push(gen, value); }
+  public void TypeDecl.emitPushConstant(CodeGeneration gen, int value) {
+  }
 
-  // push literals
+  public void IntegralType.emitPushConstant(CodeGeneration gen, int value) {
+    IntegerLiteral.push(gen, value);
+  }
+
+  public void LongType.emitPushConstant(CodeGeneration gen, int value) {
+    LongLiteral.push(gen, value);
+  }
+
+  public void DoubleType.emitPushConstant(CodeGeneration gen, int value) {
+    DoubleLiteral.push(gen, value);
+  }
+
+  public void FloatType.emitPushConstant(CodeGeneration gen, int value) {
+    FloatingPointLiteral.push(gen, value);
+  }
 
   public void Literal.emitPushConstant(CodeGeneration gen) {
     System.err.println("ERROR: Tried to generate bytecode for: " + getClass().getName());
@@ -235,31 +254,64 @@ aspect CodeGeneration {
     }
   }
 
-  // return
+  public void TypeDecl.emitReturn(CodeGeneration gen) {
+    error();
+  }
 
-  public void TypeDecl.emitReturn(CodeGeneration gen)      { error(); }
-  public void VoidType.emitReturn(CodeGeneration gen)      { gen.emit(Bytecode.RETURN);}
-  public void PrimitiveType.emitReturn(CodeGeneration gen) { gen.emit(Bytecode.IRETURN);}
-  public void LongType.emitReturn(CodeGeneration gen)      { gen.emit(Bytecode.LRETURN);}
-  public void FloatType.emitReturn(CodeGeneration gen)     { gen.emit(Bytecode.FRETURN);}
-  public void DoubleType.emitReturn(CodeGeneration gen)    { gen.emit(Bytecode.DRETURN);}
-  public void ReferenceType.emitReturn(CodeGeneration gen) { gen.emit(Bytecode.ARETURN);}
-  public void NullType.emitReturn(CodeGeneration gen)      { gen.emit(Bytecode.ARETURN);}
+  public void VoidType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.RETURN);
+  }
+
+  public void PrimitiveType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.IRETURN);
+  }
+
+  public void LongType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.LRETURN);
+  }
+
+  public void FloatType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.FRETURN);
+  }
+
+  public void DoubleType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.DRETURN);
+  }
+
+  public void ReferenceType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.ARETURN);
+  }
+
+  public void NullType.emitReturn(CodeGeneration gen) {
+    gen.emit(Bytecode.ARETURN);
+  }
 
   syn byte TypeDecl.arrayLoad() {
     throw new Error("Cannot create array load for TypeDecl");
   }
+
   eq ReferenceType.arrayLoad() = Bytecode.AALOAD;
+
   eq IntType.arrayLoad() = Bytecode.IALOAD;
+
   eq LongType.arrayLoad() = Bytecode.LALOAD;
+
   eq FloatType.arrayLoad() = Bytecode.FALOAD;
+
   eq DoubleType.arrayLoad() = Bytecode.DALOAD;
+
   eq ByteType.arrayLoad() = Bytecode.BALOAD;
+
   eq CharType.arrayLoad() = Bytecode.CALOAD;
+
   eq ShortType.arrayLoad() = Bytecode.SALOAD;
+
   eq BooleanType.arrayLoad() = Bytecode.BALOAD;
 
-  public void TypeDecl.emitLoadLocal(CodeGeneration gen, int pos) {error();}
+  public void TypeDecl.emitLoadLocal(CodeGeneration gen, int pos) {
+    error();
+  }
+
   public void PrimitiveType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
     if (pos == 0) {
@@ -276,6 +328,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.ILOAD).add2(pos);
     }
   }
+
   public void LongType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
     if (pos == 0) {
@@ -292,6 +345,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.LLOAD).add2(pos);
     }
   }
+
   public void FloatType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
     if (pos == 0) {
@@ -308,6 +362,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.FLOAD).add2(pos);
     }
   }
+
   public void DoubleType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
     if (pos == 0) {
@@ -324,9 +379,11 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.DLOAD).add2(pos);
     }
   }
+
   public void ReferenceType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.emitLoadReference(pos);
   }
+
   public void NullType.emitLoadLocal(CodeGeneration gen, int pos) {
     gen.emitLoadReference(pos);
   }
@@ -337,8 +394,8 @@ aspect CodeGeneration {
       return;
     }
     String classname = typeDecl.constantPoolName();
-    String      desc = type().typeDescriptor();
-    String      name = name();
+    String desc = type().typeDescriptor();
+    String name = name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
     if (isStatic()) {
       gen.emit(Bytecode.GETSTATIC, type().variableSize()).add2(index);
@@ -348,17 +405,21 @@ aspect CodeGeneration {
   }
 
 
-  // emit store
+  public void Expr.emitStore(CodeGeneration gen) {
+    error("emitStore called with " + getClass().getName());
+  }
 
-  public void Expr.emitStore(CodeGeneration gen) { error("emitStore called with " + getClass().getName()); }
-  public void AbstractDot.emitStore(CodeGeneration gen) { lastAccess().emitStore(gen); }
+  public void AbstractDot.emitStore(CodeGeneration gen) {
+    lastAccess().emitStore(gen);
+  }
 
   public void VarAccess.emitStore(CodeGeneration gen) {
     Variable v = decl();
     if (v instanceof VariableDeclaration) {
       VariableDeclaration decl = (VariableDeclaration) v;
       if (unassignedBefore(v)) {
-         gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type().typeDescriptor(), decl.localNum(), decl.variableScopeEndLabel(gen));
+         gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type().typeDescriptor(),
+             decl.localNum(), decl.variableScopeEndLabel(gen));
       }
       decl.type().emitStoreLocal(gen, decl.localNum());
     } else if (v instanceof ParameterDeclaration) {
@@ -377,23 +438,33 @@ aspect CodeGeneration {
   public void ArrayAccess.emitStore(CodeGeneration gen) {
     gen.emit(type().arrayStore());
   }
+
   syn byte TypeDecl.arrayStore() {
     throw new Error("Cannot create array load for TypeDecl");
   }
+
   eq ReferenceType.arrayStore() = Bytecode.AASTORE;
+
   eq IntType.arrayStore() = Bytecode.IASTORE;
+
   eq LongType.arrayStore() = Bytecode.LASTORE;
+
   eq FloatType.arrayStore() = Bytecode.FASTORE;
+
   eq DoubleType.arrayStore() = Bytecode.DASTORE;
+
   eq ByteType.arrayStore() = Bytecode.BASTORE;
+
   eq CharType.arrayStore() = Bytecode.CASTORE;
+
   eq ShortType.arrayStore() = Bytecode.SASTORE;
+
   eq BooleanType.arrayStore() = Bytecode.BASTORE;
 
   public void FieldDeclaration.emitStoreField(CodeGeneration gen, TypeDecl typeDecl) {
     String classname = typeDecl.constantPoolName();
-    String      desc = type().typeDescriptor();
-    String      name = name();
+    String desc = type().typeDescriptor();
+    String name = name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
     if (isStatic()) {
       gen.emit(Bytecode.PUTSTATIC, -type().variableSize()).add2(index);
@@ -402,7 +473,10 @@ aspect CodeGeneration {
     }
   }
 
-  public void TypeDecl.emitStoreLocal(CodeGeneration gen, int pos) {error();}
+  public void TypeDecl.emitStoreLocal(CodeGeneration gen, int pos) {
+    error();
+  }
+
   public void PrimitiveType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
     if (pos == 0) {
@@ -419,6 +493,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.ISTORE).add2(pos);
     }
   }
+
   public void LongType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
     if (pos == 0) {
@@ -435,6 +510,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.LSTORE).add2(pos);
     }
   }
+
   public void FloatType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+1);
     if (pos == 0) {
@@ -451,6 +527,7 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.FSTORE).add2(pos);
     }
   }
+
   public void DoubleType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.maxLocals = Math.max(gen.maxLocals, pos+2);
     if (pos == 0) {
@@ -467,47 +544,85 @@ aspect CodeGeneration {
       gen.emit(Bytecode.WIDE).emit(Bytecode.DSTORE).add2(pos);
     }
   }
+
   public void ReferenceType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.emitStoreReference(pos);
   }
+
   public void NullType.emitStoreLocal(CodeGeneration gen, int pos) {
     gen.emitStoreReference(pos);
   }
 
-  // exceptions
-
   inh TypeDecl TryStmt.typeThrowable();
 
-  public void TypeDecl.emitDup(CodeGeneration gen)      { gen.emit(Bytecode.DUP); }
-  public void VoidType.emitDup(CodeGeneration gen)      { }
-  public void DoubleType.emitDup(CodeGeneration gen)    { gen.emit(Bytecode.DUP2); }
-  public void LongType.emitDup(CodeGeneration gen)      { gen.emit(Bytecode.DUP2); }
+  public void TypeDecl.emitDup(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP);
+  }
 
-  public void TypeDecl.emitDup_x1(CodeGeneration gen)   { gen.emit(Bytecode.DUP_X1); }
-  public void VoidType.emitDup_x1(CodeGeneration gen)   { }
-  public void DoubleType.emitDup_x1(CodeGeneration gen) { gen.emit(Bytecode.DUP2_X1); }
-  public void LongType.emitDup_x1(CodeGeneration gen)   { gen.emit(Bytecode.DUP2_X1); }
+  public void VoidType.emitDup(CodeGeneration gen) {
+  }
 
-  public void TypeDecl.emitDup_x2(CodeGeneration gen)   { gen.emit(Bytecode.DUP_X2); }
-  public void VoidType.emitDup_x2(CodeGeneration gen)   { }
-  public void DoubleType.emitDup_x2(CodeGeneration gen) { gen.emit(Bytecode.DUP2_X2); }
-  public void LongType.emitDup_x2(CodeGeneration gen)   { gen.emit(Bytecode.DUP2_X2); }
+  public void DoubleType.emitDup(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP2);
+  }
 
-  public void TypeDecl.emitPop(CodeGeneration gen)      { gen.emit(Bytecode.POP); }
-  public void VoidType.emitPop(CodeGeneration gen)      { }
-  public void DoubleType.emitPop(CodeGeneration gen)    { gen.emit(Bytecode.POP2); }
-  public void LongType.emitPop(CodeGeneration gen)      { gen.emit(Bytecode.POP2); }
+  public void LongType.emitDup(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP2);
+  }
 
+  public void TypeDecl.emitDup_x1(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP_X1);
+  }
 
-  // emitInvoke
+  public void VoidType.emitDup_x1(CodeGeneration gen) {
+  }
+
+  public void DoubleType.emitDup_x1(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP2_X1);
+  }
+
+  public void LongType.emitDup_x1(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP2_X1);
+  }
+
+  public void TypeDecl.emitDup_x2(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP_X2);
+  }
+
+  public void VoidType.emitDup_x2(CodeGeneration gen) {
+  }
+
+  public void DoubleType.emitDup_x2(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP2_X2);
+  }
+
+  public void LongType.emitDup_x2(CodeGeneration gen) {
+    gen.emit(Bytecode.DUP2_X2);
+  }
+
+  public void TypeDecl.emitPop(CodeGeneration gen) {
+    gen.emit(Bytecode.POP);
+  }
+
+  public void VoidType.emitPop(CodeGeneration gen) {
+  }
+
+  public void DoubleType.emitPop(CodeGeneration gen) {
+    gen.emit(Bytecode.POP2);
+  }
+
+  public void LongType.emitPop(CodeGeneration gen) {
+    gen.emit(Bytecode.POP2);
+  }
+
 
   public void MethodDecl.emitInvokeMethod(CodeGeneration gen, TypeDecl hostType) {
     if (hostType.isInterfaceDecl()) {
       String classname = hostType.constantPoolName();
-      String      desc = descName();
-      String      name = name();
+      String desc = descName();
+      String name = name();
       int index = gen.constantPool().addInterfaceMethodref(classname, name, desc);
-      int numArg = 1; // instance
+      int numArg = 1;
       for (int i = 0; i < getNumParameter(); i++) {
         numArg += getParameter(i).type().variableSize();
       }
@@ -516,8 +631,8 @@ aspect CodeGeneration {
             .add2(index).add(numArg).add(0);
     } else {
       String classname = hostType.constantPoolName();
-      String      desc = descName();
-      String      name = name();
+      String desc = descName();
+      String name = name();
       int index = gen.constantPool().addMethodref(classname, name, desc);
       int stackChange = type().variableSize();
       for (int i = 0; i < getNumParameter(); i++) {
@@ -534,8 +649,8 @@ aspect CodeGeneration {
 
   public void MethodDecl.emitInvokeSpecialMethod(CodeGeneration gen, TypeDecl hostType) {
     String classname = hostType.constantPoolName();
-    String      desc = descName();
-    String      name = name();
+    String desc = descName();
+    String name = name();
     int index = gen.constantPool().addMethodref(classname, name, desc);
     int stackChange = type().variableSize() - 1;
     for (int i = 0; i < getNumParameter(); i++) {
@@ -556,13 +671,11 @@ aspect CodeGeneration {
       stackChange -= 1;
     }
     String classname = hostType().constantPoolName();
-    String      desc = descName();
-    String      name = "<init>";
+    String desc = descName();
+    String name = "<init>";
     int index = gen.constantPool().addMethodref(classname, name, desc);
     gen.emit(Bytecode.INVOKESPECIAL, stackChange).add2(index);
   }
-
-  // emitNew
 
   public void TypeDecl.emitNew(CodeGeneration gen) {
     int index = gen.constantPool().addClass(constantPoolName());
@@ -576,229 +689,729 @@ aspect CodeGenerationConversions {
     }
   }
 
-  void TypeDecl.emitCastTo(CodeGeneration gen, TypeDecl type) { throw new Error("CastTo not implemented for " + getClass().getName()); }
-  void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) { if (!instanceOf(type) && !type.isNull()) gen.emitCheckCast(type); }
-  void IntType.emitCastTo(CodeGeneration gen, TypeDecl type)      { type.intToThis(gen); }
-  void FloatType.emitCastTo(CodeGeneration gen, TypeDecl type)    { type.floatToThis(gen); }
-  void DoubleType.emitCastTo(CodeGeneration gen, TypeDecl type)   { type.doubleToThis(gen); }
-  void LongType.emitCastTo(CodeGeneration gen, TypeDecl type)     { type.longToThis(gen); }
-  void ByteType.emitCastTo(CodeGeneration gen, TypeDecl type)     { type.byteToThis(gen); }
-  void ShortType.emitCastTo(CodeGeneration gen, TypeDecl type)    { type.shortToThis(gen); }
-  void CharType.emitCastTo(CodeGeneration gen, TypeDecl type)     { type.charToThis(gen); }
-  void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type)  { }
-  void NullType.emitCastTo(CodeGeneration gen, TypeDecl type)     { }
+  void TypeDecl.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    throw new Error("CastTo not implemented for " + getClass().getName());
+  }
 
-  void TypeDecl.intToThis(CodeGeneration gen) { throw new Error("intToThis not implemented for " + getClass().getName()); }
-  void IntType.intToThis(CodeGeneration gen)    { }
-  void LongType.intToThis(CodeGeneration gen)   { gen.emit(Bytecode.I2L); }
-  void FloatType.intToThis(CodeGeneration gen)  { gen.emit(Bytecode.I2F); }
-  void DoubleType.intToThis(CodeGeneration gen) { gen.emit(Bytecode.I2D); }
-  void ByteType.intToThis(CodeGeneration gen)   { gen.emit(Bytecode.I2B); }
-  void CharType.intToThis(CodeGeneration gen)   { gen.emit(Bytecode.I2C); }
-  void ShortType.intToThis(CodeGeneration gen)  { gen.emit(Bytecode.I2S); }
+  void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    if (!instanceOf(type) && !type.isNull()) gen.emitCheckCast(type);
+  }
 
-  void TypeDecl.floatToThis(CodeGeneration gen) { throw new Error("floatToThis not implemented for " + getClass().getName()); }
-  void IntType.floatToThis(CodeGeneration gen)    { gen.emit(Bytecode.F2I); }
-  void ByteType.floatToThis(CodeGeneration gen)   { gen.emit(Bytecode.F2I).emit(Bytecode.I2B); }
-  void ShortType.floatToThis(CodeGeneration gen)  { gen.emit(Bytecode.F2I).emit(Bytecode.I2S); }
-  void CharType.floatToThis(CodeGeneration gen)   { gen.emit(Bytecode.F2I).emit(Bytecode.I2C); }
-  void FloatType.floatToThis(CodeGeneration gen)  { }
-  void LongType.floatToThis(CodeGeneration gen)   { gen.emit(Bytecode.F2L); }
-  void DoubleType.floatToThis(CodeGeneration gen) { gen.emit(Bytecode.F2D); }
+  void IntType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.intToThis(gen);
+  }
 
-  void TypeDecl.doubleToThis(CodeGeneration gen) { throw new Error("doubleToThis not implemented for " + getClass().getName()); }
-  void IntType.doubleToThis(CodeGeneration gen)    { gen.emit(Bytecode.D2I); }
-  void ByteType.doubleToThis(CodeGeneration gen)   { gen.emit(Bytecode.D2I).emit(Bytecode.I2B); }
-  void ShortType.doubleToThis(CodeGeneration gen)  { gen.emit(Bytecode.D2I).emit(Bytecode.I2S); }
-  void CharType.doubleToThis(CodeGeneration gen)   { gen.emit(Bytecode.D2I).emit(Bytecode.I2C); }
-  void FloatType.doubleToThis(CodeGeneration gen)  { gen.emit(Bytecode.D2F); }
-  void LongType.doubleToThis(CodeGeneration gen)   { gen.emit(Bytecode.D2L); }
-  void DoubleType.doubleToThis(CodeGeneration gen) { }
+  void FloatType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.floatToThis(gen);
+  }
 
-  void TypeDecl.longToThis(CodeGeneration gen) { throw new Error("longToThis not implemented for " + getClass().getName()); }
-  void IntType.longToThis(CodeGeneration gen)    { gen.emit(Bytecode.L2I); }
-  void ByteType.longToThis(CodeGeneration gen)   { gen.emit(Bytecode.L2I).emit(Bytecode.I2B); }
-  void ShortType.longToThis(CodeGeneration gen)  { gen.emit(Bytecode.L2I).emit(Bytecode.I2S); }
-  void CharType.longToThis(CodeGeneration gen)   { gen.emit(Bytecode.L2I).emit(Bytecode.I2C); }
-  void FloatType.longToThis(CodeGeneration gen)  { gen.emit(Bytecode.L2F); }
-  void LongType.longToThis(CodeGeneration gen)   { }
-  void DoubleType.longToThis(CodeGeneration gen) { gen.emit(Bytecode.L2D); }
+  void DoubleType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.doubleToThis(gen);
+  }
 
-  void TypeDecl.byteToThis(CodeGeneration gen) { throw new Error("byteToThis not implemented for " + getClass().getName()); }
-  void IntegralType.byteToThis(CodeGeneration gen) { }
-  void CharType.byteToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2C); }
-  void FloatType.byteToThis(CodeGeneration gen)    { gen.emit(Bytecode.I2F); }
-  void LongType.byteToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2L); }
-  void DoubleType.byteToThis(CodeGeneration gen)   { gen.emit(Bytecode.I2D);}
+  void LongType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.longToThis(gen);
+  }
 
-  void TypeDecl.charToThis(CodeGeneration gen) { throw new Error("charToThis not implemented for " + getClass().getName()); }
-  void IntegralType.charToThis(CodeGeneration gen) { }
-  void ByteType.charToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2B); }
-  void ShortType.charToThis(CodeGeneration gen)    { gen.emit(Bytecode.I2S); }
-  void FloatType.charToThis(CodeGeneration gen)    { gen.emit(Bytecode.I2F); }
-  void LongType.charToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2L); }
-  void DoubleType.charToThis(CodeGeneration gen)   { gen.emit(Bytecode.I2D);}
+  void ByteType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.byteToThis(gen);
+  }
 
-  void TypeDecl.shortToThis(CodeGeneration gen) { throw new Error("shortToThis not implemented for " + getClass().getName()); }
-  void IntegralType.shortToThis(CodeGeneration gen) { }
-  void ByteType.shortToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2B); }
-  void CharType.shortToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2C); }
-  void FloatType.shortToThis(CodeGeneration gen)    { gen.emit(Bytecode.I2F); }
-  void LongType.shortToThis(CodeGeneration gen)     { gen.emit(Bytecode.I2L); }
-  void DoubleType.shortToThis(CodeGeneration gen)   { gen.emit(Bytecode.I2D); }
+  void ShortType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.shortToThis(gen);
+  }
 
+  void CharType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    type.charToThis(gen);
+  }
+
+  void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+  }
+
+  void NullType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+  }
+
+  void TypeDecl.intToThis(CodeGeneration gen) {
+    throw new Error("intToThis not implemented for " + getClass().getName());
+  }
+
+  void IntType.intToThis(CodeGeneration gen) {
+  }
+
+  void LongType.intToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2L);
+  }
+
+  void FloatType.intToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2F);
+  }
+
+  void DoubleType.intToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2D);
+  }
+
+  void ByteType.intToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2B);
+  }
+
+  void CharType.intToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2C);
+  }
+
+  void ShortType.intToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2S);
+  }
+
+  void TypeDecl.floatToThis(CodeGeneration gen) {
+    throw new Error("floatToThis not implemented for " + getClass().getName());
+  }
+
+  void IntType.floatToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.F2I);
+  }
+
+  void ByteType.floatToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.F2I).emit(Bytecode.I2B);
+  }
+
+  void ShortType.floatToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.F2I).emit(Bytecode.I2S);
+  }
+
+  void CharType.floatToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.F2I).emit(Bytecode.I2C);
+  }
+
+  void FloatType.floatToThis(CodeGeneration gen) {
+  }
+
+  void LongType.floatToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.F2L);
+  }
+
+  void DoubleType.floatToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.F2D);
+  }
+
+  void TypeDecl.doubleToThis(CodeGeneration gen) {
+    throw new Error("doubleToThis not implemented for " + getClass().getName());
+  }
+
+  void IntType.doubleToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.D2I);
+  }
+
+  void ByteType.doubleToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.D2I).emit(Bytecode.I2B);
+  }
+
+  void ShortType.doubleToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.D2I).emit(Bytecode.I2S);
+  }
+
+  void CharType.doubleToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.D2I).emit(Bytecode.I2C);
+  }
+
+  void FloatType.doubleToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.D2F);
+  }
+
+  void LongType.doubleToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.D2L);
+  }
+
+  void DoubleType.doubleToThis(CodeGeneration gen) {
+  }
+
+  void TypeDecl.longToThis(CodeGeneration gen) {
+    throw new Error("longToThis not implemented for " + getClass().getName());
+  }
+
+  void IntType.longToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.L2I);
+  }
+
+  void ByteType.longToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.L2I).emit(Bytecode.I2B);
+  }
+
+  void ShortType.longToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.L2I).emit(Bytecode.I2S);
+  }
+
+  void CharType.longToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.L2I).emit(Bytecode.I2C);
+  }
+
+  void FloatType.longToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.L2F);
+  }
+
+  void LongType.longToThis(CodeGeneration gen) {
+  }
+
+  void DoubleType.longToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.L2D);
+  }
+
+  void TypeDecl.byteToThis(CodeGeneration gen) {
+    throw new Error("byteToThis not implemented for " + getClass().getName());
+  }
+
+  void IntegralType.byteToThis(CodeGeneration gen) {
+  }
+
+  void CharType.byteToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2C);
+  }
+
+  void FloatType.byteToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2F);
+  }
+
+  void LongType.byteToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2L);
+  }
+
+  void DoubleType.byteToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2D);
+  }
+
+  void TypeDecl.charToThis(CodeGeneration gen) {
+    throw new Error("charToThis not implemented for " + getClass().getName());
+  }
+
+  void IntegralType.charToThis(CodeGeneration gen) {
+  }
+
+  void ByteType.charToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2B);
+  }
+
+  void ShortType.charToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2S);
+  }
+
+  void FloatType.charToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2F);
+  }
+
+  void LongType.charToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2L);
+  }
+
+  void DoubleType.charToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2D);
+  }
+
+  void TypeDecl.shortToThis(CodeGeneration gen) {
+    throw new Error("shortToThis not implemented for " + getClass().getName());
+  }
+
+  void IntegralType.shortToThis(CodeGeneration gen) {
+  }
+
+  void ByteType.shortToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2B);
+  }
+
+  void CharType.shortToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2C);
+  }
+
+  void FloatType.shortToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2F);
+  }
+
+  void LongType.shortToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2L);
+  }
+
+  void DoubleType.shortToThis(CodeGeneration gen) {
+    gen.emit(Bytecode.I2D);
+  }
 }
 
 aspect CodeGenerationBinaryOperations {
-  // emit the desired operation on the operand(s) on the stack
-  void Expr.emitOperation(CodeGeneration gen) {error();}
-  // unary
-  void MinusExpr.emitOperation(CodeGeneration gen)  { type().neg(gen); }
-  void PlusExpr.emitOperation(CodeGeneration gen)   { }
-  void BitNotExpr.emitOperation(CodeGeneration gen) { type().bitNot(gen); }
-  void LogNotExpr.emitOperation(CodeGeneration gen) { type().logNot(gen); }
+  void Expr.emitOperation(CodeGeneration gen) {
+    error();
+  }
 
-  // binary
-  void AddExpr.emitOperation(CodeGeneration gen) { type().add(gen); }
-  void SubExpr.emitOperation(CodeGeneration gen) { type().sub(gen); }
-  void MulExpr.emitOperation(CodeGeneration gen) { type().mul(gen); }
-  void DivExpr.emitOperation(CodeGeneration gen) { type().div(gen); }
-  void ModExpr.emitOperation(CodeGeneration gen) { type().rem(gen); }
+  void MinusExpr.emitOperation(CodeGeneration gen) {
+    type().neg(gen);
+  }
 
-  void LShiftExpr.emitOperation(CodeGeneration gen)     { type().shl(gen); }
-  void RShiftExpr.emitOperation(CodeGeneration gen)     { type().shr(gen); }
-  void URShiftExpr.emitOperation(CodeGeneration gen)    { type().ushr(gen); }
-  void OrBitwiseExpr.emitOperation(CodeGeneration gen)  { type().bitor(gen); }
-  void AndBitwiseExpr.emitOperation(CodeGeneration gen) { type().bitand(gen); }
-  void XorBitwiseExpr.emitOperation(CodeGeneration gen) { type().bitxor(gen); }
+  void PlusExpr.emitOperation(CodeGeneration gen) {
+  }
 
-  void TypeDecl.neg(CodeGeneration gen) { error(); }
-  void IntegralType.neg(CodeGeneration gen) { gen.emit(Bytecode.INEG); }
-  void LongType.neg(CodeGeneration gen)     { gen.emit(Bytecode.LNEG); }
-  void FloatType.neg(CodeGeneration gen)    { gen.emit(Bytecode.FNEG); }
-  void DoubleType.neg(CodeGeneration gen)   { gen.emit(Bytecode.DNEG); }
+  void BitNotExpr.emitOperation(CodeGeneration gen) {
+    type().bitNot(gen);
+  }
 
-  void TypeDecl.bitNot(CodeGeneration gen) { error(); }
-  void IntegralType.bitNot(CodeGeneration gen) { gen.emit(Bytecode.ICONST_M1).emit(Bytecode.IXOR); }
-  void LongType.bitNot(CodeGeneration gen)     { emitPushConstant(gen, -1); gen.emit(Bytecode.LXOR); }
+  void LogNotExpr.emitOperation(CodeGeneration gen) {
+    type().logNot(gen);
+  }
 
-  void TypeDecl.logNot(CodeGeneration gen) { error();}
-  void BooleanType.logNot(CodeGeneration gen) { gen.emit(Bytecode.ICONST_1).emit(Bytecode.IXOR); }
+  void AddExpr.emitOperation(CodeGeneration gen) {
+    type().add(gen);
+  }
 
-  void TypeDecl.add(CodeGeneration gen) {error();}
-  void LongType.add(CodeGeneration gen) {gen.emit(Bytecode.LADD);}
-  void FloatType.add(CodeGeneration gen) {gen.emit(Bytecode.FADD);}
-  void DoubleType.add(CodeGeneration gen) {gen.emit(Bytecode.DADD);}
-  void IntegralType.add(CodeGeneration gen) {gen.emit(Bytecode.IADD);}
+  void SubExpr.emitOperation(CodeGeneration gen) {
+    type().sub(gen);
+  }
 
-  void TypeDecl.sub(CodeGeneration gen) {error();}
-  void LongType.sub(CodeGeneration gen) {gen.emit(Bytecode.LSUB);}
-  void FloatType.sub(CodeGeneration gen) {gen.emit(Bytecode.FSUB);}
-  void DoubleType.sub(CodeGeneration gen) {gen.emit(Bytecode.DSUB);}
-  void IntegralType.sub(CodeGeneration gen) {gen.emit(Bytecode.ISUB);}
+  void MulExpr.emitOperation(CodeGeneration gen) {
+    type().mul(gen);
+  }
 
-  void TypeDecl.mul(CodeGeneration gen) {error();}
-  void LongType.mul(CodeGeneration gen) {gen.emit(Bytecode.LMUL);}
-  void FloatType.mul(CodeGeneration gen) {gen.emit(Bytecode.FMUL);}
-  void DoubleType.mul(CodeGeneration gen) {gen.emit(Bytecode.DMUL);}
-  void IntegralType.mul(CodeGeneration gen) {gen.emit(Bytecode.IMUL);}
+  void DivExpr.emitOperation(CodeGeneration gen) {
+    type().div(gen);
+  }
 
-  void TypeDecl.div(CodeGeneration gen) {error();}
-  void LongType.div(CodeGeneration gen) {gen.emit(Bytecode.LDIV);}
-  void FloatType.div(CodeGeneration gen) {gen.emit(Bytecode.FDIV);}
-  void DoubleType.div(CodeGeneration gen) {gen.emit(Bytecode.DDIV);}
-  void IntegralType.div(CodeGeneration gen) {gen.emit(Bytecode.IDIV);}
+  void ModExpr.emitOperation(CodeGeneration gen) {
+    type().rem(gen);
+  }
 
-  void TypeDecl.rem(CodeGeneration gen) {error();}
-  void LongType.rem(CodeGeneration gen) {gen.emit(Bytecode.LREM);}
-  void FloatType.rem(CodeGeneration gen) {gen.emit(Bytecode.FREM);}
-  void DoubleType.rem(CodeGeneration gen) {gen.emit(Bytecode.DREM);}
-  void IntegralType.rem(CodeGeneration gen) {gen.emit(Bytecode.IREM);}
+  void LShiftExpr.emitOperation(CodeGeneration gen) {
+    type().shl(gen);
+  }
 
-  void TypeDecl.shl(CodeGeneration gen) {error();}
-  void LongType.shl(CodeGeneration gen) {gen.emit(Bytecode.LSHL);}
-  void IntegralType.shl(CodeGeneration gen) {gen.emit(Bytecode.ISHL);}
+  void RShiftExpr.emitOperation(CodeGeneration gen) {
+    type().shr(gen);
+  }
 
-  void TypeDecl.shr(CodeGeneration gen) {error();}
-  void LongType.shr(CodeGeneration gen) {gen.emit(Bytecode.LSHR);}
-  void IntegralType.shr(CodeGeneration gen) {gen.emit(Bytecode.ISHR);}
+  void URShiftExpr.emitOperation(CodeGeneration gen) {
+    type().ushr(gen);
+  }
 
-  void TypeDecl.ushr(CodeGeneration gen) {error();}
-  void LongType.ushr(CodeGeneration gen) {gen.emit(Bytecode.LUSHR);}
-  void IntegralType.ushr(CodeGeneration gen) {gen.emit(Bytecode.IUSHR);}
+  void OrBitwiseExpr.emitOperation(CodeGeneration gen) {
+    type().bitor(gen);
+  }
 
-  void TypeDecl.bitand(CodeGeneration gen) {error();}
-  void LongType.bitand(CodeGeneration gen) {gen.emit(Bytecode.LAND);}
-  void IntegralType.bitand(CodeGeneration gen) {gen.emit(Bytecode.IAND);}
-  void BooleanType.bitand(CodeGeneration gen) {gen.emit(Bytecode.IAND);}
+  void AndBitwiseExpr.emitOperation(CodeGeneration gen) {
+    type().bitand(gen);
+  }
 
-  void TypeDecl.bitor(CodeGeneration gen) {error();}
-  void LongType.bitor(CodeGeneration gen) {gen.emit(Bytecode.LOR);}
-  void IntegralType.bitor(CodeGeneration gen) {gen.emit(Bytecode.IOR);}
-  void BooleanType.bitor(CodeGeneration gen) {gen.emit(Bytecode.IOR);}
+  void XorBitwiseExpr.emitOperation(CodeGeneration gen) {
+    type().bitxor(gen);
+  }
 
-  void TypeDecl.bitxor(CodeGeneration gen) {error();}
-  void LongType.bitxor(CodeGeneration gen) {gen.emit(Bytecode.LXOR);}
-  void IntegralType.bitxor(CodeGeneration gen) {gen.emit(Bytecode.IXOR);}
-  void BooleanType.bitxor(CodeGeneration gen) {gen.emit(Bytecode.IXOR);}
+  void TypeDecl.neg(CodeGeneration gen) {
+    error();
+  }
+
+  void IntegralType.neg(CodeGeneration gen) {
+    gen.emit(Bytecode.INEG);
+  }
+
+  void LongType.neg(CodeGeneration gen) {
+    gen.emit(Bytecode.LNEG);
+  }
+
+  void FloatType.neg(CodeGeneration gen) {
+    gen.emit(Bytecode.FNEG);
+  }
+
+  void DoubleType.neg(CodeGeneration gen) {
+    gen.emit(Bytecode.DNEG);
+  }
+
+  void TypeDecl.bitNot(CodeGeneration gen) {
+    error();
+  }
+
+  void IntegralType.bitNot(CodeGeneration gen) {
+    gen.emit(Bytecode.ICONST_M1).emit(Bytecode.IXOR);
+  }
+
+  void LongType.bitNot(CodeGeneration gen) {
+    emitPushConstant(gen, -1); gen.emit(Bytecode.LXOR);
+  }
+
+  void TypeDecl.logNot(CodeGeneration gen) {
+    error();
+  }
+
+  void BooleanType.logNot(CodeGeneration gen) {
+    gen.emit(Bytecode.ICONST_1).emit(Bytecode.IXOR);
+  }
+
+  void TypeDecl.add(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.add(CodeGeneration gen) {
+    gen.emit(Bytecode.LADD);
+  }
+
+  void FloatType.add(CodeGeneration gen) {
+    gen.emit(Bytecode.FADD);
+  }
+
+  void DoubleType.add(CodeGeneration gen) {
+    gen.emit(Bytecode.DADD);
+  }
+
+  void IntegralType.add(CodeGeneration gen) {
+    gen.emit(Bytecode.IADD);
+  }
+
+  void TypeDecl.sub(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.sub(CodeGeneration gen) {
+    gen.emit(Bytecode.LSUB);
+  }
+
+  void FloatType.sub(CodeGeneration gen) {
+    gen.emit(Bytecode.FSUB);
+  }
+
+  void DoubleType.sub(CodeGeneration gen) {
+    gen.emit(Bytecode.DSUB);
+  }
+
+  void IntegralType.sub(CodeGeneration gen) {
+    gen.emit(Bytecode.ISUB);
+  }
+
+  void TypeDecl.mul(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.mul(CodeGeneration gen) {
+    gen.emit(Bytecode.LMUL);
+  }
+
+  void FloatType.mul(CodeGeneration gen) {
+    gen.emit(Bytecode.FMUL);
+  }
+
+  void DoubleType.mul(CodeGeneration gen) {
+    gen.emit(Bytecode.DMUL);
+  }
+
+  void IntegralType.mul(CodeGeneration gen) {
+    gen.emit(Bytecode.IMUL);
+  }
+
+  void TypeDecl.div(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.div(CodeGeneration gen) {
+    gen.emit(Bytecode.LDIV);
+  }
+
+  void FloatType.div(CodeGeneration gen) {
+    gen.emit(Bytecode.FDIV);
+  }
+
+  void DoubleType.div(CodeGeneration gen) {
+    gen.emit(Bytecode.DDIV);
+  }
+
+  void IntegralType.div(CodeGeneration gen) {
+    gen.emit(Bytecode.IDIV);
+  }
+
+  void TypeDecl.rem(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.rem(CodeGeneration gen) {
+    gen.emit(Bytecode.LREM);
+  }
+
+  void FloatType.rem(CodeGeneration gen) {
+    gen.emit(Bytecode.FREM);
+  }
+
+  void DoubleType.rem(CodeGeneration gen) {
+    gen.emit(Bytecode.DREM);
+  }
+
+  void IntegralType.rem(CodeGeneration gen) {
+    gen.emit(Bytecode.IREM);
+  }
+
+  void TypeDecl.shl(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.shl(CodeGeneration gen) {
+    gen.emit(Bytecode.LSHL);
+  }
+
+  void IntegralType.shl(CodeGeneration gen) {
+    gen.emit(Bytecode.ISHL);
+  }
+
+  void TypeDecl.shr(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.shr(CodeGeneration gen) {
+    gen.emit(Bytecode.LSHR);
+  }
+
+  void IntegralType.shr(CodeGeneration gen) {
+    gen.emit(Bytecode.ISHR);
+  }
+
+  void TypeDecl.ushr(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.ushr(CodeGeneration gen) {
+    gen.emit(Bytecode.LUSHR);
+  }
+
+  void IntegralType.ushr(CodeGeneration gen) {
+    gen.emit(Bytecode.IUSHR);
+  }
+
+  void TypeDecl.bitand(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.bitand(CodeGeneration gen) {
+    gen.emit(Bytecode.LAND);
+  }
+
+  void IntegralType.bitand(CodeGeneration gen) {
+    gen.emit(Bytecode.IAND);
+  }
+
+  void BooleanType.bitand(CodeGeneration gen) {
+    gen.emit(Bytecode.IAND);
+  }
+
+  void TypeDecl.bitor(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.bitor(CodeGeneration gen) {
+    gen.emit(Bytecode.LOR);
+  }
+
+  void IntegralType.bitor(CodeGeneration gen) {
+    gen.emit(Bytecode.IOR);
+  }
+
+  void BooleanType.bitor(CodeGeneration gen) {
+    gen.emit(Bytecode.IOR);
+  }
+
+  void TypeDecl.bitxor(CodeGeneration gen) {
+    error();
+  }
+
+  void LongType.bitxor(CodeGeneration gen) {
+    gen.emit(Bytecode.LXOR);
+  }
+
+  void IntegralType.bitxor(CodeGeneration gen) {
+    gen.emit(Bytecode.IXOR);
+  }
+
+  void BooleanType.bitxor(CodeGeneration gen) {
+    gen.emit(Bytecode.IXOR);
+  }
 }
 
 aspect CodeGenerationBranch {
-  public void TypeDecl.branchLT(CodeGeneration gen, int label) { throw new Error("branchLT not supported for " + getClass().getName()); }
-  public void DoubleType.branchLT(CodeGeneration gen, int label)   { gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFLT, label); }
-  public void FloatType.branchLT(CodeGeneration gen, int label)    { gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFLT, label); }
-  public void LongType.branchLT(CodeGeneration gen, int label)     { gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFLT, label); }
-  public void IntegralType.branchLT(CodeGeneration gen, int label) { gen.emitCompare(Bytecode.IF_ICMPLT, label); }
+  public void TypeDecl.branchLT(CodeGeneration gen, int label) {
+    throw new Error("branchLT not supported for " + getClass().getName());
+  }
 
-  public void TypeDecl.branchLTInv(CodeGeneration gen, int label)   { branchLT(gen, label); }
-  public void DoubleType.branchLTInv(CodeGeneration gen, int label) { gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFLT, label); }
-  public void FloatType.branchLTInv(CodeGeneration gen, int label)  { gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFLT, label); }
+  public void DoubleType.branchLT(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFLT, label);
+  }
 
-  public void TypeDecl.branchLE(CodeGeneration gen, int label) { throw new Error("branchLE not supported for " + getClass().getName()); }
-  public void DoubleType.branchLE(CodeGeneration gen, int label)   { gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFLE, label); }
-  public void FloatType.branchLE(CodeGeneration gen, int label)    { gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFLE, label); }
-  public void LongType.branchLE(CodeGeneration gen, int label)     { gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFLE, label); }
-  public void IntegralType.branchLE(CodeGeneration gen, int label) { gen.emitCompare(Bytecode.IF_ICMPLE, label); }
+  public void FloatType.branchLT(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFLT, label);
+  }
 
-  public void TypeDecl.branchLEInv(CodeGeneration gen, int label)   { branchLE(gen, label); }
-  public void DoubleType.branchLEInv(CodeGeneration gen, int label) { gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFLE, label); }
-  public void FloatType.branchLEInv(CodeGeneration gen, int label)  { gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFLE, label); }
+  public void LongType.branchLT(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFLT, label);
+  }
 
-  public void TypeDecl.branchGE(CodeGeneration gen, int label) { throw new Error("branchGE not supported for " + getClass().getName()); }
-  public void DoubleType.branchGE(CodeGeneration gen, int label)   { gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFGE, label); }
-  public void FloatType.branchGE(CodeGeneration gen, int label)    { gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFGE, label); }
-  public void LongType.branchGE(CodeGeneration gen, int label)     { gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFGE, label); }
-  public void IntegralType.branchGE(CodeGeneration gen, int label) { gen.emitCompare(Bytecode.IF_ICMPGE, label); }
+  public void IntegralType.branchLT(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPLT, label);
+  }
 
-  public void TypeDecl.branchGEInv(CodeGeneration gen, int label)   { branchGE(gen, label); }
-  public void DoubleType.branchGEInv(CodeGeneration gen, int label) { gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFGE, label); }
-  public void FloatType.branchGEInv(CodeGeneration gen, int label)  { gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFGE, label); }
+  public void TypeDecl.branchLTInv(CodeGeneration gen, int label) {
+    branchLT(gen, label);
+  }
 
-  public void TypeDecl.branchGT(CodeGeneration gen, int label) { throw new Error("branchGT not supported for " + getClass().getName()); }
-  public void DoubleType.branchGT(CodeGeneration gen, int label)   { gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFGT, label); }
-  public void FloatType.branchGT(CodeGeneration gen, int label)    { gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFGT, label); }
-  public void LongType.branchGT(CodeGeneration gen, int label)     { gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFGT, label); }
-  public void IntegralType.branchGT(CodeGeneration gen, int label) { gen.emitCompare(Bytecode.IF_ICMPGT, label); }
+  public void DoubleType.branchLTInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFLT, label);
+  }
 
-  public void TypeDecl.branchGTInv(CodeGeneration gen, int label)   { branchGT(gen, label); }
-  public void DoubleType.branchGTInv(CodeGeneration gen, int label) { gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFGT, label); }
-  public void FloatType.branchGTInv(CodeGeneration gen, int label)  { gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFGT, label); }
+  public void FloatType.branchLTInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFLT, label);
+  }
 
-  public void TypeDecl.branchEQ(CodeGeneration gen, int label) { throw new Error("branchEQ not supported for " + getClass().getName()); }
-  public void DoubleType.branchEQ(CodeGeneration gen, int label)    { gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFEQ, label); }
-  public void FloatType.branchEQ(CodeGeneration gen, int label)     { gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFEQ, label); }
-  public void LongType.branchEQ(CodeGeneration gen, int label)      { gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFEQ, label); }
-  public void IntegralType.branchEQ(CodeGeneration gen, int label)  { gen.emitCompare(Bytecode.IF_ICMPEQ, label); }
-  public void BooleanType.branchEQ(CodeGeneration gen, int label)   { gen.emitCompare(Bytecode.IF_ICMPEQ, label); }
-  public void ReferenceType.branchEQ(CodeGeneration gen, int label) { gen.emitCompare(Bytecode.IF_ACMPEQ, label); }
-  public void NullType.branchEQ(CodeGeneration gen, int label)      { gen.emitCompare(Bytecode.IF_ACMPEQ, label); }
+  public void TypeDecl.branchLE(CodeGeneration gen, int label) {
+    throw new Error("branchLE not supported for " + getClass().getName());
+  }
 
-  public void TypeDecl.branchNE(CodeGeneration gen, int label) { throw new Error("branchNE not supported for " + getClass().getName()); }
-  public void DoubleType.branchNE(CodeGeneration gen, int label)    { gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFNE, label); }
-  public void FloatType.branchNE(CodeGeneration gen, int label)     { gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFNE, label); }
-  public void LongType.branchNE(CodeGeneration gen, int label)      { gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFNE, label); }
-  public void IntegralType.branchNE(CodeGeneration gen, int label)  { gen.emitCompare(Bytecode.IF_ICMPNE, label); }
-  public void BooleanType.branchNE(CodeGeneration gen, int label)   { gen.emitCompare(Bytecode.IF_ICMPNE, label); }
-  public void ReferenceType.branchNE(CodeGeneration gen, int label) { gen.emitCompare(Bytecode.IF_ACMPNE, label); }
-  public void NullType.branchNE(CodeGeneration gen, int label)      { gen.emitCompare(Bytecode.IF_ACMPNE, label); }
+  public void DoubleType.branchLE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFLE, label);
+  }
+
+  public void FloatType.branchLE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFLE, label);
+  }
+
+  public void LongType.branchLE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFLE, label);
+  }
+
+  public void IntegralType.branchLE(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPLE, label);
+  }
+
+  public void TypeDecl.branchLEInv(CodeGeneration gen, int label) {
+    branchLE(gen, label);
+  }
+
+  public void DoubleType.branchLEInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFLE, label);
+  }
+
+  public void FloatType.branchLEInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFLE, label);
+  }
+
+  public void TypeDecl.branchGE(CodeGeneration gen, int label) {
+    throw new Error("branchGE not supported for " + getClass().getName());
+  }
+
+  public void DoubleType.branchGE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFGE, label);
+  }
+
+  public void FloatType.branchGE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFGE, label);
+  }
+
+  public void LongType.branchGE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFGE, label);
+  }
+
+  public void IntegralType.branchGE(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPGE, label);
+  }
+
+  public void TypeDecl.branchGEInv(CodeGeneration gen, int label) {
+    branchGE(gen, label);
+  }
+
+  public void DoubleType.branchGEInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFGE, label);
+  }
+
+  public void FloatType.branchGEInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFGE, label);
+  }
+
+  public void TypeDecl.branchGT(CodeGeneration gen, int label) {
+    throw new Error("branchGT not supported for " + getClass().getName());
+  }
+
+  public void DoubleType.branchGT(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFGT, label);
+  }
+
+  public void FloatType.branchGT(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFGT, label);
+  }
+
+  public void LongType.branchGT(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFGT, label);
+  }
+
+  public void IntegralType.branchGT(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPGT, label);
+  }
+
+  public void TypeDecl.branchGTInv(CodeGeneration gen, int label) {
+    branchGT(gen, label);
+  }
+
+  public void DoubleType.branchGTInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPG).emitCompare(Bytecode.IFGT, label);
+  }
+
+  public void FloatType.branchGTInv(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPG).emitCompare(Bytecode.IFGT, label);
+  }
+
+  public void TypeDecl.branchEQ(CodeGeneration gen, int label) {
+    throw new Error("branchEQ not supported for " + getClass().getName());
+  }
+
+  public void DoubleType.branchEQ(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFEQ, label);
+  }
+
+  public void FloatType.branchEQ(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFEQ, label);
+  }
+
+  public void LongType.branchEQ(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFEQ, label);
+  }
+
+  public void IntegralType.branchEQ(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPEQ, label);
+  }
+
+  public void BooleanType.branchEQ(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPEQ, label);
+  }
+
+  public void ReferenceType.branchEQ(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ACMPEQ, label);
+  }
+
+  public void NullType.branchEQ(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ACMPEQ, label);
+  }
+
+  public void TypeDecl.branchNE(CodeGeneration gen, int label) {
+    throw new Error("branchNE not supported for " + getClass().getName());
+  }
+
+  public void DoubleType.branchNE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.DCMPL).emitCompare(Bytecode.IFNE, label);
+  }
+
+  public void FloatType.branchNE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.FCMPL).emitCompare(Bytecode.IFNE, label);
+  }
+
+  public void LongType.branchNE(CodeGeneration gen, int label) {
+    gen.emit(Bytecode.LCMP).emitCompare(Bytecode.IFNE, label);
+  }
+
+  public void IntegralType.branchNE(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPNE, label);
+  }
+
+  public void BooleanType.branchNE(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ICMPNE, label);
+  }
+
+  public void ReferenceType.branchNE(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ACMPNE, label);
+  }
+
+  public void NullType.branchNE(CodeGeneration gen, int label) {
+    gen.emitCompare(Bytecode.IF_ACMPNE, label);
+  }
 }
