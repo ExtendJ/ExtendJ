@@ -123,8 +123,7 @@ aspect InnerClasses {
   syn boolean AddExpr.lastStringAddPart() = !getParent().isStringAdd();
 
   syn MethodDecl TypeDecl.methodWithArgs(String name, TypeDecl[] args) {
-    for (Iterator iter = memberMethods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    for (MethodDecl m : memberMethods(name)) {
       if (m.getNumParameter() == args.length) {
         for (int i = 0; i < args.length; i++) {
           if (m.getParameter(i).type() == args[i]) {
@@ -170,34 +169,35 @@ aspect InnerClasses {
     usedNestedTypes.add(typeDecl);
   }
 
-  // Collect the set of variables used in the enclosing class(es).
-  syn lazy Collection TypeDecl.enclosingVariables() {
-    HashSet set = new HashSet();
+  // TODO(joqvist): convert to collection attribute.
+  /** Collect the set of variables used in the enclosing class(es). */
+  syn lazy Collection<Variable> TypeDecl.enclosingVariables() {
+    Collection<Variable> vars = new HashSet<Variable>();
     for (TypeDecl e = this; e != null; e = e.enclosingType()) {
       if (e.isLocalClass() || e.isAnonymous()) {
-        collectEnclosingVariables(set, e.enclosingType());
+        collectEnclosingVariables(vars, e.enclosingType());
       }
     }
     if (isClassDecl()) {
       ClassDecl classDecl = (ClassDecl) this;
       if (classDecl.isNestedType() && classDecl.hasSuperclass()) {
-        set.addAll(classDecl.superclass().enclosingVariables());
+        vars.addAll(classDecl.superclass().enclosingVariables());
       }
     }
-    return set;
+    return vars;
   }
 
-  public void ASTNode.collectEnclosingVariables(HashSet set, TypeDecl typeDecl) {
+  public void ASTNode.collectEnclosingVariables(Collection<Variable> vars, TypeDecl typeDecl) {
     for (int i = 0; i < getNumChild(); i++) {
-      getChild(i).collectEnclosingVariables(set, typeDecl);
+      getChild(i).collectEnclosingVariables(vars, typeDecl);
     }
   }
-  public void VarAccess.collectEnclosingVariables(HashSet set, TypeDecl typeDecl) {
+  public void VarAccess.collectEnclosingVariables(Collection<Variable> vars, TypeDecl typeDecl) {
     Variable v = decl();
     if (!v.isInstanceVariable() && !v.isClassVariable() && v.hostType() == typeDecl) {
-      set.add(v);
+      vars.add(v);
     }
-    super.collectEnclosingVariables(set, typeDecl);
+    super.collectEnclosingVariables(vars, typeDecl);
   }
 
 

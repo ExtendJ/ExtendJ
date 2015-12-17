@@ -33,11 +33,11 @@ aspect NameCheck {
   public void ASTNode.nameCheck() {
   }
 
-  public TypeDecl ASTNode.extractSingleType(SimpleSet c) {
+  public TypeDecl ASTNode.extractSingleType(SimpleSet<TypeDecl> c) {
     if (c.size() != 1) {
       return null;
     }
-    return (TypeDecl) c.iterator().next();
+    return c.iterator().next();
   }
 
   public void SingleTypeImportDecl.nameCheck() {
@@ -49,7 +49,7 @@ aspect NameCheck {
     }
   }
 
-  inh SimpleSet ImportDecl.allImportedTypes(String name);
+  inh SimpleSet<TypeDecl> ImportDecl.allImportedTypes(String name);
   eq CompilationUnit.getImportDecl().allImportedTypes(String name) = importedTypes(name);
 
   public void TypeImportOnDemandDecl.nameCheck() {
@@ -277,7 +277,7 @@ aspect NameCheck {
 
   }
 
-  // find the bodydecl declared in t in which this construct is nested
+  // Find the bodydecl declared in t in which this construct is nested.
   public BodyDecl VarAccess.closestBodyDecl(TypeDecl t) {
     ASTNode node = this;
     while (!(node.getParent().getParent() instanceof Program)
@@ -372,18 +372,25 @@ aspect NameCheck {
   }
 
   inh VariableScope ParameterDeclaration.outerScope();
+
   inh VariableScope VariableDeclaration.outerScope();
+
   eq BasicCatch.getParameter().outerScope() = this;
+
   eq Block.getStmt().outerScope() = this;
+
   eq TypeDecl.getChild().outerScope() = this;
+
   eq ForStmt.getInitStmt().outerScope() = this;
+
   eq ForStmt.getStmt().outerScope() = this;
+
   eq Program.getChild().outerScope() {
     throw new UnsupportedOperationException("outerScope() not defined");
   }
 
   public void VariableDeclaration.nameCheck() {
-    SimpleSet decls = outerScope().lookupVariable(name());
+    SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable) iter.next();
       if (var instanceof VariableDeclaration) {
@@ -414,7 +421,7 @@ aspect NameCheck {
   }
 
   public void ParameterDeclaration.nameCheck() {
-    SimpleSet decls = outerScope().lookupVariable(name());
+    SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable) iter.next();
       if (var instanceof VariableDeclaration) {
@@ -535,13 +542,14 @@ aspect NameCheck {
 
   eq DefaultCase.constValue(Case c) = c instanceof DefaultCase;
 
-  inh SimpleSet LocalClassDeclStmt.otherLocalClassDecls(String name);
-  inh SimpleSet Block.otherLocalClassDecls(String name);
+  inh SimpleSet<TypeDecl> LocalClassDeclStmt.otherLocalClassDecls(String name);
 
-  eq BodyDecl.getChild().otherLocalClassDecls(String name) = SimpleSet.emptySet;
+  inh SimpleSet<TypeDecl> Block.otherLocalClassDecls(String name);
+
+  eq BodyDecl.getChild().otherLocalClassDecls(String name) = emptySet();
 
   eq Block.getStmt(int index).otherLocalClassDecls(String name) {
-    SimpleSet local = SimpleSet.emptySet;
+    SimpleSet<TypeDecl> local = emptySet();
     for (int i = index-1; i >= 0 && !(getStmt(i) instanceof Case); --i) {
       if (getStmt(i) instanceof LocalClassDeclStmt) {
         TypeDecl t = ((LocalClassDeclStmt) getStmt(i)).getClassDecl();
@@ -563,7 +571,7 @@ aspect NameCheck {
    */
   public void LocalClassDeclStmt.nameCheck() {
     TypeDecl decl = getClassDecl();
-    SimpleSet decls = otherLocalClassDecls(decl.name());
+    SimpleSet<TypeDecl> decls = otherLocalClassDecls(decl.name());
     if (!decls.isEmpty()) {
       errorf("another local class %s has already been declared in this scope", decl.name());
     }

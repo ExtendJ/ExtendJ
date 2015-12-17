@@ -186,7 +186,7 @@ aspect GenericsCodegen {
     }
     typeDecl = typeDecl.erasure();
     MethodDecl m = decl().sourceMethodDecl();
-    Collection methods = typeDecl.memberMethods(m.name());
+    Collection<MethodDecl> methods = typeDecl.memberMethods(m.name());
     if (!methods.contains(decl()) && !methods.contains(m)) {
       return m.hostType();
     }
@@ -227,21 +227,22 @@ aspect GenericsCodegen {
     return res;
   }
 
-  syn SimpleSet TypeDecl.bridgeCandidates(String signature) = SimpleSet.emptySet;
+  syn SimpleSet<MethodDecl> TypeDecl.bridgeCandidates(String signature) = emptySet();
+
   eq InterfaceDecl.bridgeCandidates(String signature) = ancestorMethods(signature);
+
   eq ClassDecl.bridgeCandidates(String signature) {
-    SimpleSet set = ancestorMethods(signature);
-    for (Iterator iter = interfacesMethodsSignature(signature).iterator(); iter.hasNext(); ) {
-      set = set.add(iter.next());
+    SimpleSet<MethodDecl> set = ancestorMethods(signature);
+    for (MethodDecl method : interfacesMethodsSignature(signature)) {
+      set = set.add(method);
     }
     return set;
   }
 
   public void MethodDecl.transformation() {
     super.transformation();
-    HashSet processed = new HashSet();
-    for (Iterator iter = hostType().bridgeCandidates(signature()).iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    Collection<String> processed = new HashSet<String>();
+    for (MethodDecl m : hostType().bridgeCandidates(signature())) {
       if (this.overrides(m)) {
         MethodDecl erased = m.erasedMethod();
         if (!erased.signature().equals(signature())
@@ -316,27 +317,27 @@ aspect GenericsCodegen {
 
   // Add Signature Attribute.
   refine AnnotationsCodegen eq TypeDecl.attributes() {
-    Collection c = refined();
+    Collection<Attribute> attributes = refined();
     if (needsSignatureAttribute()) {
-      c.add(new SignatureAttribute(constantPool(), classSignature()));
+      attributes.add(new SignatureAttribute(constantPool(), classSignature()));
     }
-    return c;
+    return attributes;
   }
 
   refine AnnotationsCodegen eq MethodDecl.attributes() {
-    Collection c = refined();
+    Collection<Attribute> attributes = refined();
     if (needsSignatureAttribute()) {
-      c.add(new SignatureAttribute(hostType().constantPool(), methodTypeSignature()));
+      attributes.add(new SignatureAttribute(hostType().constantPool(), methodTypeSignature()));
     }
-    return c;
+    return attributes;
   }
 
   refine AnnotationsCodegen eq FieldDeclaration.attributes() {
-    Collection c = refined();
+    Collection<Attribute> attributes = refined();
     if (needsSignatureAttribute()) {
-      c.add(new SignatureAttribute(hostType().constantPool(), type().fieldTypeSignature()));
+      attributes.add(new SignatureAttribute(hostType().constantPool(), type().fieldTypeSignature()));
     }
-    return c;
+    return attributes;
   }
 
   class SignatureAttribute extends Attribute {

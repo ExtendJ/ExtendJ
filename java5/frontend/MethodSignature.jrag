@@ -30,10 +30,11 @@
  */
 
 aspect MethodSignature15 {
-  refine LookupMethod protected SimpleSet MethodAccess.maxSpecific(Collection candidates) {
-    SimpleSet potentiallyApplicable = potentiallyApplicable(candidates);
+  refine LookupMethod protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(
+      Collection<MethodDecl> candidates) {
+    SimpleSet<MethodDecl> potentiallyApplicable = potentiallyApplicable(candidates);
     // First phase.
-    SimpleSet maxSpecific = applicableBySubtyping(potentiallyApplicable);
+    SimpleSet<MethodDecl> maxSpecific = applicableBySubtyping(potentiallyApplicable);
     // Second phase.
     maxSpecific = applicableByMethodInvocationConversion(potentiallyApplicable, maxSpecific);
     // Third phase.
@@ -41,58 +42,56 @@ aspect MethodSignature15 {
     return maxSpecific;
   }
 
-  protected SimpleSet MethodAccess.potentiallyApplicable(Collection candidates) {
-    SimpleSet potentiallyApplicable = SimpleSet.emptySet;
+  protected SimpleSet<MethodDecl> MethodAccess.potentiallyApplicable(
+      Collection<MethodDecl> candidates) {
+    SimpleSet<MethodDecl> potentiallyApplicable = emptySet();
     // Select potentially applicable methods.
-    for (Iterator iter = candidates.iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl) iter.next();
-      if (potentiallyApplicable(decl) && accessible(decl)) {
-        if (decl.isGeneric()) {
-          GenericMethodDecl gm = decl.genericDecl();
-          decl = gm.lookupParMethodDecl(
+    for (MethodDecl method : candidates) {
+      if (potentiallyApplicable(method) && accessible(method)) {
+        if (method.isGeneric()) {
+          GenericMethodDecl gm = method.genericDecl();
+          method = gm.lookupParMethodDecl(
               inferTypeArguments(
                   gm.type(),
                   gm.getParameterList(),
                   getArgList(),
                   gm.getTypeParameterList()));
         }
-        potentiallyApplicable = potentiallyApplicable.add(decl);
+        potentiallyApplicable = potentiallyApplicable.add(method);
       }
     }
     return potentiallyApplicable;
   }
 
-  protected SimpleSet MethodAccess.applicableBySubtyping(SimpleSet potentiallyApplicable) {
-    SimpleSet maxSpecific = SimpleSet.emptySet;
-    for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl) iter.next();
-      if (applicableBySubtyping(decl)) {
-        maxSpecific = mostSpecific(maxSpecific, decl);
+  protected SimpleSet<MethodDecl> MethodAccess.applicableBySubtyping(
+      SimpleSet<MethodDecl> potentiallyApplicable) {
+    SimpleSet<MethodDecl> maxSpecific = emptySet();
+    for (MethodDecl method : potentiallyApplicable) {
+      if (applicableBySubtyping(method)) {
+        maxSpecific = mostSpecific(maxSpecific, method);
       }
     }
     return maxSpecific;
   }
 
-  protected SimpleSet MethodAccess.applicableByMethodInvocationConversion(
-      SimpleSet potentiallyApplicable, SimpleSet maxSpecific) {
+  protected SimpleSet<MethodDecl> MethodAccess.applicableByMethodInvocationConversion(
+      SimpleSet<MethodDecl> potentiallyApplicable, SimpleSet<MethodDecl> maxSpecific) {
     if (maxSpecific.isEmpty()) {
-      for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl) iter.next();
-        if (applicableByMethodInvocationConversion(decl)) {
-          maxSpecific = mostSpecific(maxSpecific, decl);
+      for (MethodDecl method : potentiallyApplicable) {
+        if (applicableByMethodInvocationConversion(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
         }
       }
     }
     return maxSpecific;
   }
 
-  protected SimpleSet MethodAccess.applicableVariableArity(SimpleSet potentiallyApplicable,
-      SimpleSet maxSpecific) {
+  protected SimpleSet<MethodDecl> MethodAccess.applicableVariableArity(
+      SimpleSet<MethodDecl> potentiallyApplicable, SimpleSet<MethodDecl> maxSpecific) {
     if (maxSpecific.isEmpty()) {
-      for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
-        MethodDecl decl = (MethodDecl) iter.next();
-        if (decl.isVariableArity() && applicableVariableArity(decl)) {
-          maxSpecific = mostSpecific(maxSpecific, decl);
+      for (MethodDecl method : potentiallyApplicable) {
+        if (method.isVariableArity() && applicableVariableArity(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
         }
       }
     }
@@ -104,31 +103,33 @@ aspect MethodSignature15 {
     return chooseConstructor(typeDecl.constructors(), getArgList());
   }
 
-  refine ConstructScope eq ConstructorAccess.decls() =
-      chooseConstructor(lookupConstructor(), getArgList());
+  refine ConstructScope
+  eq ConstructorAccess.decls() = chooseConstructor(lookupConstructor(), getArgList());
 
-  refine ConstructScope eq SuperConstructorAccess.decls() {
-    Collection c = hasPrevExpr() && !prevExpr().isTypeAccess()
+  refine ConstructScope
+  eq SuperConstructorAccess.decls() {
+    Collection<ConstructorDecl> c = hasPrevExpr() && !prevExpr().isTypeAccess()
         ? hostType().lookupSuperConstructor()
         : lookupSuperConstructor();
     return chooseConstructor(c, getArgList());
   }
 
-  refine AnonymousClasses eq ClassInstanceExpr.getTypeDecl().constructorDecl() {
-    Collection c = getAccess().type().constructors();
-    SimpleSet maxSpecific = chooseConstructor(c, getArgList());
+  refine AnonymousClasses
+  eq ClassInstanceExpr.getTypeDecl().constructorDecl() {
+    Collection<ConstructorDecl> c = getAccess().type().constructors();
+    SimpleSet<ConstructorDecl> maxSpecific = chooseConstructor(c, getArgList());
     if (maxSpecific.size() == 1) {
-      return (ConstructorDecl) maxSpecific.iterator().next();
+      return maxSpecific.iterator().next();
     }
     return unknownConstructor();
   }
 
-  protected SimpleSet Expr.chooseConstructor(Collection constructors, List<Expr> argList) {
-    SimpleSet potentiallyApplicable = SimpleSet.emptySet;
+  protected SimpleSet<ConstructorDecl> Expr.chooseConstructor(
+      Collection<ConstructorDecl> constructors, List<Expr> argList) {
+    SimpleSet<ConstructorDecl> potentiallyApplicable = emptySet();
 
     // Select potentially applicable constructors.
-    for (Iterator iter = constructors.iterator(); iter.hasNext(); ) {
-      ConstructorDecl decl = (ConstructorDecl) iter.next();
+    for (ConstructorDecl decl : constructors) {
       if (decl.potentiallyApplicable(argList) && decl.accessibleFrom(hostType())) {
         if (decl.isGeneric()) {
           GenericConstructorDecl gc = decl.genericDecl();
@@ -144,9 +145,8 @@ aspect MethodSignature15 {
     }
 
     // First phase.
-    SimpleSet maxSpecific = SimpleSet.emptySet;
-    for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
-      ConstructorDecl decl = (ConstructorDecl) iter.next();
+    SimpleSet<ConstructorDecl> maxSpecific = emptySet();
+    for (ConstructorDecl decl : potentiallyApplicable) {
       if (decl.applicableBySubtyping(argList)) {
         maxSpecific = mostSpecific(maxSpecific, decl);
       }
@@ -154,8 +154,7 @@ aspect MethodSignature15 {
 
     // Second phase.
     if (maxSpecific.isEmpty()) {
-      for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
-        ConstructorDecl decl = (ConstructorDecl) iter.next();
+      for (ConstructorDecl decl : potentiallyApplicable) {
         if (decl.applicableByMethodInvocationConversion(argList)) {
           maxSpecific = mostSpecific(maxSpecific, decl);
         }
@@ -164,8 +163,7 @@ aspect MethodSignature15 {
 
     // Third phase.
     if (maxSpecific.isEmpty()) {
-      for (Iterator iter = potentiallyApplicable.iterator(); iter.hasNext(); ) {
-        ConstructorDecl decl = (ConstructorDecl) iter.next();
+      for (ConstructorDecl decl : potentiallyApplicable) {
         if (decl.isVariableArity() && decl.applicableVariableArity(argList)) {
           maxSpecific = mostSpecific(maxSpecific, decl);
         }
@@ -174,13 +172,14 @@ aspect MethodSignature15 {
     return maxSpecific;
   }
 
-  protected static SimpleSet Expr.mostSpecific(SimpleSet maxSpecific, ConstructorDecl decl) {
+  protected static SimpleSet<ConstructorDecl> Expr.mostSpecific(
+      SimpleSet<ConstructorDecl> maxSpecific, ConstructorDecl decl) {
     if (maxSpecific.isEmpty()) {
       maxSpecific = maxSpecific.add(decl);
     } else {
       ConstructorDecl other = (ConstructorDecl) maxSpecific.iterator().next();
       if (decl.moreSpecificThan(other)) {
-        maxSpecific = SimpleSet.emptySet.add(decl);
+        maxSpecific = ASTNode.<ConstructorDecl>emptySet().add(decl);
       } else if (!other.moreSpecificThan(decl)) {
         maxSpecific = maxSpecific.add(decl);
       }
@@ -188,7 +187,8 @@ aspect MethodSignature15 {
     return maxSpecific;
   }
 
-  private static SimpleSet MethodAccess.mostSpecific(SimpleSet maxSpecific, MethodDecl decl) {
+  private static SimpleSet<MethodDecl> MethodAccess.mostSpecific(
+      SimpleSet<MethodDecl> maxSpecific, MethodDecl decl) {
     if (maxSpecific.isEmpty()) {
       maxSpecific = maxSpecific.add(decl);
     } else {
@@ -206,7 +206,8 @@ aspect MethodSignature15 {
       genericMethodDecl().lessSpecificThan(m instanceof ParMethodDecl
           ? ((ParMethodDecl) m).genericMethodDecl() : m );
 
-  refine MethodDecl eq MethodDecl.lessSpecificThan(MethodDecl m) {
+  refine MethodDecl
+  eq MethodDecl.lessSpecificThan(MethodDecl m) {
     int numA = getNumParameter();
     int numB = m.getNumParameter();
     int num = Math.max(numA, numB);
@@ -220,7 +221,8 @@ aspect MethodSignature15 {
     return false;
   }
 
-  refine ConstructorDecl eq ConstructorDecl.lessSpecificThan(ConstructorDecl m) {
+  refine ConstructorDecl
+  eq ConstructorDecl.lessSpecificThan(ConstructorDecl m) {
     int numA = getNumParameter();
     int numB = m.getNumParameter();
     int num = Math.max(numA, numB);
@@ -346,7 +348,8 @@ aspect MethodSignature15 {
         return false;
       }
     for (int i = m.getNumParameter() - 1; i < getNumArg(); i++)
-      if (!getArg(i).type().methodInvocationConversionTo(m.lastParameter().type().componentType())) {
+      if (!getArg(i).type().methodInvocationConversionTo(
+          m.lastParameter().type().componentType())) {
         return false;
       }
     return true;
@@ -548,7 +551,8 @@ aspect MethodSignature15 {
 
   // 15.12.3
   // Refine old type checking to be valid when using variable arity parameters.
-  refine TypeCheck public void MethodAccess.typeCheck() {
+  refine TypeCheck
+  public void MethodAccess.typeCheck() {
     for (int i = 0; i < getNumArg(); ++i) {
       if (getArg(i).type().isVoid()) {
         errorf("expression '%s' has type void and is not a valid method argument",
@@ -571,7 +575,8 @@ aspect MethodSignature15 {
     }
   }
 
-  refine MethodDecl eq MethodDecl.signature() {
+  refine MethodDecl
+  eq MethodDecl.signature() {
     StringBuilder sb = new StringBuilder();
     sb.append(name() + "(");
     for (int i = 0; i < getNumParameter(); i++) {
@@ -585,8 +590,8 @@ aspect MethodSignature15 {
   }
 
   refine MemberMethods eq ClassDecl.methodsSignatureMap() {
-    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
+    Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
     if (hasSuperclass()) {
       for (Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = (MethodDecl) iter.next();
@@ -603,9 +608,9 @@ aspect MethodSignature15 {
       if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
         if (!(m instanceof MethodDeclSubstituted)
             || !localMap.containsKey(m.sourceMethodDecl().signature())) {
-          if (allMethodsAbstract((SimpleSet) map.get(m.signature()))
+          if (allMethodsAbstract(map.get(m.signature()))
               && (!(m instanceof MethodDeclSubstituted)
-                  || allMethodsAbstract((SimpleSet) map.get(m.sourceMethodDecl().signature())))) {
+                  || allMethodsAbstract(map.get(m.sourceMethodDecl().signature())))) {
             putSimpleSetElement(map, m.signature(), m);
           }
         }
@@ -615,10 +620,10 @@ aspect MethodSignature15 {
   }
 
   refine MemberMethods eq InterfaceDecl.methodsSignatureMap() {
-    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
-    for (Iterator iter = interfacesMethodsIterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
+    for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
+      MethodDecl m = iter.next();
       if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
         if (!(m instanceof MethodDeclSubstituted)
             || !localMap.containsKey(m.sourceMethodDecl().signature())) {
@@ -636,14 +641,12 @@ aspect MethodSignature15 {
   }
 
   eq ParTypeDecl.unimplementedMethods() {
-    HashSet set = new HashSet();
-    HashSet result = new HashSet();
-    for (Iterator iter = genericDecl().unimplementedMethods().iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    Collection<MethodDecl> set = new HashSet<MethodDecl>();
+    Collection<MethodDecl> result = new HashSet<MethodDecl>();
+    for (MethodDecl m : genericDecl().unimplementedMethods()) {
       set.add(m.sourceMethodDecl());
     }
-    for (Iterator iter = super.unimplementedMethods().iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    for (MethodDecl m : super.unimplementedMethods()) {
       if (set.contains(m.sourceMethodDecl())) {
         result.add(m);
       }

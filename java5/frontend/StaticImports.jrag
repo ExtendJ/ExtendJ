@@ -39,25 +39,23 @@ aspect StaticImports {
   needed.*/
 
   // The attribute is declared in original type lookup.
-  syn SimpleSet StaticImportDecl.importedTypes(String name) circular [SimpleSet.emptySet] {
-    SimpleSet set = SimpleSet.emptySet;
-    for (Iterator iter = type().memberTypes(name).iterator(); iter.hasNext(); ) {
-      TypeDecl decl = (TypeDecl) iter.next();
-      if (decl.isStatic() && decl.accessibleFromPackage(packageName())) {
-        set = set.add(decl);
+  syn SimpleSet<TypeDecl> StaticImportDecl.importedTypes(String name) circular [emptySet()] {
+    SimpleSet<TypeDecl> set = emptySet();
+    for (TypeDecl type : type().memberTypes(name)) {
+      if (type.isStatic() && type.accessibleFromPackage(packageName())) {
+        set = set.add(type);
       }
     }
     return set;
   }
 
-  syn SimpleSet SingleStaticImportDecl.importedTypes() circular [SimpleSet.emptySet] =
+  syn SimpleSet<TypeDecl> SingleStaticImportDecl.importedTypes() circular [emptySet()] =
       getAccess().type().memberTypes(getID());
 
-  syn SimpleSet ImportDecl.importedFields(String name) circular [SimpleSet.emptySet] =
-      SimpleSet.emptySet;
+  syn SimpleSet<Variable> ImportDecl.importedFields(String name) circular [emptySet()] = emptySet();
 
   eq StaticImportDecl.importedFields(String name) {
-    SimpleSet set = SimpleSet.emptySet;
+    SimpleSet<Variable> set = emptySet();
     for (Iterator iter = type().memberFields(name).iterator(); iter.hasNext(); ) {
       FieldDeclaration decl = (FieldDeclaration) iter.next();
       if (decl.isStatic() && (decl.isPublic() || (!decl.isPrivate()
@@ -72,18 +70,19 @@ aspect StaticImports {
     if (name.equals(getID())) {
       return super.importedFields(name);
     } else {
-      return SimpleSet.emptySet;
+      return emptySet();
     }
   }
 
-  syn lazy Collection ImportDecl.importedMethods(String name) = Collections.EMPTY_LIST;
+  syn lazy Collection<MethodDecl> ImportDecl.importedMethods(String name) = Collections.EMPTY_LIST;
+
   eq StaticImportDecl.importedMethods(String name) {
-    Collection set = new HashSet();
-    for (Iterator iter = type().memberMethods(name).iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl) iter.next();
-      if (decl.isStatic() && (decl.isPublic() || (!decl.isPrivate()
-          && decl.hostType().topLevelType().packageName().equals(packageName())))) {
-        set.add(decl);
+    Collection<MethodDecl> set = new HashSet<MethodDecl>();
+    for (MethodDecl method :type().memberMethods(name)) {
+      if (method.isStatic()
+          && (method.isPublic() || (!method.isPrivate()
+              && method.hostType().topLevelType().packageName().equals(packageName())))) {
+        set.add(method);
       }
     }
     return set;
@@ -175,7 +174,7 @@ aspect StaticImports {
   imports a field named n shadows the declaration of any static field named n
   imported by a static-import-on-demand declaration in c, throughout c.*/
   eq CompilationUnit.getTypeDecl().lookupVariable(String name) {
-    SimpleSet set = importedFields(name);
+    SimpleSet<Variable> set = importedFields(name);
     if (!set.isEmpty()) {
       return set;
     }
@@ -186,26 +185,26 @@ aspect StaticImports {
     return lookupVariable(name);
   }
 
-  inh SimpleSet CompilationUnit.lookupVariable(String name);
+  inh SimpleSet<Variable> CompilationUnit.lookupVariable(String name);
 
-  syn SimpleSet CompilationUnit.importedFields(String name) {
-    SimpleSet set = SimpleSet.emptySet;
+  syn SimpleSet<Variable> CompilationUnit.importedFields(String name) {
+    SimpleSet<Variable> set = emptySet();
     for (int i = 0; i < getNumImportDecl(); i++) {
       if (!getImportDecl(i).isOnDemand()) {
-        for (Iterator iter = getImportDecl(i).importedFields(name).iterator(); iter.hasNext(); ) {
-          set = set.add(iter.next());
+        for (Variable field : getImportDecl(i).importedFields(name)) {
+          set = set.add(field);
         }
       }
     }
     return set;
   }
 
-  syn SimpleSet CompilationUnit.importedFieldsOnDemand(String name) {
-    SimpleSet set = SimpleSet.emptySet;
+  syn SimpleSet<Variable> CompilationUnit.importedFieldsOnDemand(String name) {
+    SimpleSet<Variable> set = emptySet();
     for (int i = 0; i < getNumImportDecl(); i++) {
       if (getImportDecl(i).isOnDemand()) {
-        for (Iterator iter = getImportDecl(i).importedFields(name).iterator(); iter.hasNext(); ) {
-          set = set.add(iter.next());
+        for (Variable field : getImportDecl(i).importedFields(name)) {
+          set = set.add(field);
         }
       }
     }
@@ -217,37 +216,37 @@ aspect StaticImports {
   method named n with signature s imported by a static-import-on-demand
   declaration in c, throughout c.*/
   eq CompilationUnit.getTypeDecl().lookupMethod(String name) {
-    Collection list = importedMethods(name);
-    if (!list.isEmpty()) {
-      return list;
+    Collection<MethodDecl> methods = importedMethods(name);
+    if (!methods.isEmpty()) {
+      return methods;
     }
-    list = importedMethodsOnDemand(name);
-    if (!list.isEmpty()) {
-      return list;
+    methods = importedMethodsOnDemand(name);
+    if (!methods.isEmpty()) {
+      return methods;
     }
     return lookupMethod(name);
   }
 
-  inh Collection CompilationUnit.lookupMethod(String name);
+  inh Collection<MethodDecl> CompilationUnit.lookupMethod(String name);
 
-  syn Collection CompilationUnit.importedMethods(String name) {
-    Collection list = new ArrayList();
+  syn Collection<MethodDecl> CompilationUnit.importedMethods(String name) {
+    Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
     for (int i = 0; i < getNumImportDecl(); i++) {
       if (!getImportDecl(i).isOnDemand()) {
-        list.addAll(getImportDecl(i).importedMethods(name));
+        methods.addAll(getImportDecl(i).importedMethods(name));
       }
     }
-    return list;
+    return methods;
   }
 
-  syn Collection CompilationUnit.importedMethodsOnDemand(String name) {
-    Collection list = new ArrayList();
+  syn Collection<MethodDecl> CompilationUnit.importedMethodsOnDemand(String name) {
+    Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
     for (int i = 0; i < getNumImportDecl(); i++) {
       if (getImportDecl(i).isOnDemand()) {
-        list.addAll(getImportDecl(i).importedMethods(name));
+        methods.addAll(getImportDecl(i).importedMethods(name));
       }
     }
-    return list;
+    return methods;
   }
 
   /* A single-static-import declaration d in a compilation unit c of package p that
@@ -282,7 +281,7 @@ aspect StaticImports {
         SingleStaticImportDecl decl = (SingleStaticImportDecl) getImportDecl(i);
         String name = decl.name();
         if (!decl.importedTypes(name).isEmpty()) {
-          TypeDecl type = (TypeDecl) decl.importedTypes(name).iterator().next();
+          TypeDecl type = decl.importedTypes(name).iterator().next();
           if (localLookupType(name).contains(type)) {
             decl.errorf("the imported name %s.%s is already declared in this compilation unit",
                 packageName(), name);

@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2011-2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,7 +33,7 @@ aspect MultiCatch {
   /**
    * Inherit the lookupVariable attribute.
    */
-  inh SimpleSet CatchParameterDeclaration.lookupVariable(String name);
+  inh SimpleSet<Variable> CatchParameterDeclaration.lookupVariable(String name);
 
   CatchParameterDeclaration implements Variable;
   syn boolean CatchParameterDeclaration.isParameter() = true;
@@ -79,22 +79,63 @@ aspect MultiCatch {
   // Name lookup
 
   // CatchParameterDeclaration is a SimpleSet
-  CatchParameterDeclaration implements SimpleSet;
-  syn int CatchParameterDeclaration.size() = 1;
-  syn boolean CatchParameterDeclaration.isEmpty() = false;
-  public SimpleSet CatchParameterDeclaration.add(Object o) {
-    return new SimpleSetImpl().add(this).add(o);
-  }
-  syn boolean CatchParameterDeclaration.contains(Object o) = this == o;
-  public boolean CatchParameterDeclaration.isSingleton() { return true; }
-  public boolean CatchParameterDeclaration.isSingleton(Object o) { return contains(o); }
+  CatchParameterDeclaration implements SimpleSet<Variable>;
 
-  CatchParameterDeclaration implements Iterator;
-  private CatchParameterDeclaration CatchParameterDeclaration.iterElem;
-  public Iterator CatchParameterDeclaration.iterator() { iterElem = this; return this; }
-  public boolean CatchParameterDeclaration.hasNext() { return iterElem != null; }
-  public Object CatchParameterDeclaration.next() { Object o = iterElem; iterElem = null; return o; }
-  public void CatchParameterDeclaration.remove() { throw new UnsupportedOperationException(); }
+  @Override
+  public int CatchParameterDeclaration.size() {
+    return 1;
+  }
+
+  @Override
+  public boolean CatchParameterDeclaration.isEmpty() {
+    return false;
+  }
+
+  @Override
+  public SimpleSet<Variable> CatchParameterDeclaration.add(Variable o) {
+    return new SimpleSetImpl<Variable>().add(this).add(o);
+  }
+
+  @Override
+  public boolean CatchParameterDeclaration.contains(Variable o) {
+    return this == o;
+  }
+
+  @Override
+  public boolean CatchParameterDeclaration.isSingleton() {
+    return true;
+  }
+
+  @Override
+  public boolean CatchParameterDeclaration.isSingleton(Variable o) {
+    return contains(o);
+  }
+
+  CatchParameterDeclaration implements Iterator<Variable>;
+
+  private int CatchParameterDeclaration.iterElem = -1;
+
+  @Override
+  public Iterator<Variable> CatchParameterDeclaration.iterator() {
+    iterElem = 0;
+    return this;
+  }
+
+  @Override
+  public boolean CatchParameterDeclaration.hasNext() {
+    return iterElem == 0;
+  }
+
+  @Override
+  public Variable CatchParameterDeclaration.next() {
+    iterElem = -1;
+    return this;
+  }
+
+  @Override
+  public void CatchParameterDeclaration.remove() {
+    throw new UnsupportedOperationException();
+  }
 
   /**
    * Variable lookup in catch parameter scope.
@@ -105,7 +146,7 @@ aspect MultiCatch {
    * Variable lookup in catch parameter scope.
    */
   eq MultiCatch.parameterDeclaration(String name) =
-      getParameter().name().equals(name) ? getParameter() : SimpleSet.emptySet;
+      getParameter().name().equals(name) ? getParameter() : ASTNode.<Variable>emptySet();
 
   /**
    * Syntactic classification
@@ -164,7 +205,7 @@ aspect MultiCatch {
     return anyReachable;
   }
 
-  inh LUBType CatchParameterDeclaration.lookupLUBType(Collection bounds);
+  inh LUBType CatchParameterDeclaration.lookupLUBType(Collection<TypeDecl> bounds);
 
   /**
    * A catch parameter declared with a disjunction type has the
@@ -174,8 +215,9 @@ aspect MultiCatch {
    */
   syn TypeDecl CatchParameterDeclaration.type() {
     ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-    for (int i = 0; i < getNumTypeAccess(); i++)
+    for (int i = 0; i < getNumTypeAccess(); i++) {
       list.add(getTypeAccess(i).type());
+    }
     return lookupLUBType(list).lub();
   }
 
@@ -186,7 +228,7 @@ aspect MultiCatch {
    * Duplicate declaration checking for catch parameters.
    */
   public void CatchParameterDeclaration.nameCheck() {
-    SimpleSet decls = outerScope().lookupVariable(name());
+    SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable) iter.next();
       if (var instanceof VariableDeclaration) {
@@ -215,7 +257,7 @@ aspect MultiCatch {
 
   refine NameCheck
   public void ParameterDeclaration.nameCheck() {
-    SimpleSet decls = outerScope().lookupVariable(name());
+    SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable) iter.next();
       if (var instanceof VariableDeclaration) {
@@ -244,7 +286,7 @@ aspect MultiCatch {
 
   refine NameCheck
   public void VariableDeclaration.nameCheck() {
-    SimpleSet decls = outerScope().lookupVariable(name());
+    SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
       Variable var = (Variable) iter.next();
       if (var instanceof VariableDeclaration) {

@@ -141,10 +141,9 @@ aspect Attributes {
     public InnerClassesAttribute(TypeDecl typeDecl) {
       super(typeDecl.constantPool(), "InnerClasses");
       ConstantPool c = typeDecl.constantPool();
-      Collection list = typeDecl.innerClassesAttributeEntries();
+      Collection<TypeDecl> list = typeDecl.innerClassesAttributeEntries();
       u2(list.size());
-      for (Iterator iter = list.iterator(); iter.hasNext(); ) {
-        TypeDecl type = (TypeDecl) iter.next();
+      for (TypeDecl type : list) {
         u2(c.addClass(type.constantPoolName())); // inner_class_info_index
         // outer_class_info_index
         u2(type.isMemberType() ? c.addClass(type.enclosingType().constantPoolName()) : 0);
@@ -154,8 +153,8 @@ aspect Attributes {
       }
     }
   }
-  syn lazy Collection TypeDecl.innerClassesAttributeEntries() {
-    HashSet<TypeDecl> list = new HashSet<TypeDecl>();
+  syn lazy Collection<TypeDecl> TypeDecl.innerClassesAttributeEntries() {
+    Collection<TypeDecl> list = new HashSet<TypeDecl>();
     if (isNestedType()) {
       list.add(this);
     }
@@ -172,8 +171,7 @@ aspect Attributes {
     public LocalVariableTableAttribute(CodeGeneration gen) {
       super(gen.constantPool(), "LocalVariableTable");
       u2(gen.localVariableTable.size());
-      for (Iterator iter = gen.localVariableTable.iterator(); iter.hasNext(); ) {
-        CodeGeneration.LocalVariableEntry e = (CodeGeneration.LocalVariableEntry) iter.next();
+      for (CodeGeneration.LocalVariableEntry e : gen.localVariableTable) {
         u2(e.start_pc);
         u2(e.length);
         u2(e.name_index);
@@ -187,8 +185,7 @@ aspect Attributes {
     public LineNumberTableAttribute(CodeGeneration gen) {
       super(gen.constantPool(), "LineNumberTable");
       u2(gen.lineNumberTable.size());
-      for (Iterator iter = gen.lineNumberTable.iterator(); iter.hasNext(); ) {
-        CodeGeneration.LineNumberEntry e = (CodeGeneration.LineNumberEntry) iter.next();
+      for (CodeGeneration.LineNumberEntry e : gen.lineNumberTable) {
         u2(e.start_pc);
         u2(e.line_number);
       }
@@ -203,8 +200,7 @@ aspect Attributes {
       u4(codeGen.pos()); // code_length
       append(codeGen.toArray());
       u2(codeGen.exceptions.size());
-      for (Iterator iter = codeGen.exceptions.iterator(); iter.hasNext(); ) {
-        CodeGeneration.ExceptionEntry e = (CodeGeneration.ExceptionEntry) iter.next();
+      for (CodeGeneration.ExceptionEntry e : codeGen.exceptions) {
         u2(e.start_pc);
         u2(e.end_pc);
         u2(e.handlerPC());
@@ -238,8 +234,8 @@ aspect Attributes {
     }
   }
 
-  syn lazy Collection TypeDecl.attributes() {
-    Collection c = new ArrayList();
+  syn lazy Collection<Attribute> TypeDecl.attributes() {
+    Collection<Attribute> c = new ArrayList<Attribute>();
     if (!innerClassesAttributeEntries().isEmpty()) {
       c.add(new InnerClassesAttribute(this));
     }
@@ -260,45 +256,45 @@ aspect Attributes {
     return c;
   }
 
-  syn lazy Collection BodyDecl.attributes() = new ArrayList();
+  syn lazy Collection<Attribute> BodyDecl.attributes() = new ArrayList<Attribute>();
 
   eq FieldDeclaration.attributes() {
-    ArrayList l = new ArrayList();
+    Collection<Attribute> attributes = new ArrayList<Attribute>();
     if (isFinal() && isConstant() && (type().isPrimitive() || type().isString())) {
-      l.add(new ConstantValueAttribute(hostType().constantPool(), this));
+      attributes.add(new ConstantValueAttribute(hostType().constantPool(), this));
     }
-    return l;
+    return attributes;
   }
 
   eq MethodDecl.attributes() {
-    ArrayList l = new ArrayList();
+    Collection<Attribute> attributes = new ArrayList<Attribute>();
     CodeGeneration bytecodes = bytecodes(hostType().constantPool());
-    l.add(new ExceptionsAttribute(bytecodes, this));
+    attributes.add(new ExceptionsAttribute(bytecodes, this));
     if (isAbstract() || isNative()) {
-      return l;
+      return attributes;
     } else {
-      l.add(new CodeAttribute(bytecodes, this));
+      attributes.add(new CodeAttribute(bytecodes, this));
       if (getModifiers().isSynthetic()) {
-        l.add(new SyntheticAttribute(hostType().constantPool()));
+        attributes.add(new SyntheticAttribute(hostType().constantPool()));
       }
-      return l;
+      return attributes;
     }
   }
 
   eq ConstructorDecl.attributes() {
-    ArrayList l = new ArrayList();
+    Collection<Attribute> attributes = new ArrayList<Attribute>();
     CodeGeneration bytecodes = bytecodes(hostType().constantPool());
-    l.add(new CodeAttribute(bytecodes, null));
-    l.add(new ExceptionsAttribute(bytecodes, this));
+    attributes.add(new CodeAttribute(bytecodes, null));
+    attributes.add(new ExceptionsAttribute(bytecodes, this));
     if (getModifiers().isSynthetic()) {
-      l.add(new SyntheticAttribute(hostType().constantPool()));
+      attributes.add(new SyntheticAttribute(hostType().constantPool()));
     }
-    return l;
+    return attributes;
   }
 
-  syn lazy Collection TypeDecl.clinit_attributes() {
-    ArrayList l = new ArrayList();
-    l.add(new CodeAttribute(bytecodes(constantPool()), null));
-    return l;
+  syn lazy Collection<Attribute> TypeDecl.clinit_attributes() {
+    Collection<Attribute> attributes = new ArrayList<Attribute>();
+    attributes.add(new CodeAttribute(bytecodes(constantPool()), null));
+    return attributes;
   }
 }

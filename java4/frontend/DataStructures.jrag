@@ -36,57 +36,66 @@ aspect DataStructures {
   /**
    * A persistent Set that can be implemented by AST nodes.
    */
-  interface SimpleSet {
+  interface SimpleSet<T> {
     int size();
 
     boolean isEmpty();
 
-    SimpleSet add(Object o);
+    SimpleSet<T> add(T o);
 
-    Iterator iterator();
+    Iterator<T> iterator();
 
-    boolean contains(Object o);
+    /** @return {@code true} if this set contains the given object. */
+    boolean contains(T o);
 
+    /** @return {@code true} if this set is a singleton set (size == 1). */
     boolean isSingleton();
 
-    boolean isSingleton(Object o);
+    /** @return {@code true} if this set is a singleton set containing the given object. */
+    boolean isSingleton(T o);
 
-    SimpleSet emptySet = new SimpleSet() {
+    SimpleSet<Object> EMPTY_SET = new SimpleSet<Object>() {
+      @Override
       public int size() {
         return 0;
       }
 
+      @Override
       public boolean isEmpty() {
         return true;
       }
 
-      public SimpleSet add(Object o) {
+      @Override
+      public SimpleSet<Object> add(Object o) {
         if (o instanceof SimpleSet) {
-          return (SimpleSet) o;
+          return (SimpleSet<Object>) o;
         }
         return new SimpleSetImpl().add(o);
       }
 
+      @Override
       public boolean contains(Object o) {
         return false;
       }
 
       @Override
-      public Iterator iterator() {
-        return Collections.EMPTY_LIST.iterator();
+      public Iterator<Object> iterator() {
+        return (Iterator<Object>) Collections.EMPTY_LIST.iterator();
       }
 
+      @Override
       public boolean isSingleton() {
         return false;
       }
 
+      @Override
       public boolean isSingleton(Object o) {
         return false;
       }
 
       @Override
       public boolean equals(Object o) {
-        if (o == emptySet) {
+        if (o == this) {
           return true;
         }
         if (o instanceof SimpleSet) {
@@ -96,31 +105,38 @@ aspect DataStructures {
       }
     };
 
-    SimpleSet fullSet = new SimpleSet() {
+    SimpleSet<Object> fullSet = new SimpleSet<Object>() {
+      @Override
       public int size() {
         throw new UnsupportedOperationException("The full set does not have a size.");
       }
 
+      @Override
       public boolean isEmpty() {
         return false;
       }
 
-      public SimpleSet add(Object o) {
+      @Override
+      public SimpleSet<Object> add(Object o) {
         return this;
       }
 
+      @Override
       public boolean contains(Object o) {
         return true;
       }
 
       @Override
-      public Iterator iterator() {
+      public Iterator<Object> iterator() {
         throw new UnsupportedOperationException("The full set can not be iterated.");
       }
 
+      @Override
       public boolean isSingleton() {
         return false;
       }
+
+      @Override
       public boolean isSingleton(Object o) {
         return false;
       }
@@ -131,60 +147,66 @@ aspect DataStructures {
       }
     };
 
-    class SimpleSetImpl implements SimpleSet {
-      private HashSet internalSet;
+    class SimpleSetImpl<T> implements SimpleSet<T> {
+      private java.util.Set<T> internalSet;
 
       public SimpleSetImpl() {
-        internalSet = new HashSet(4);
+        internalSet = new HashSet<T>(4);
       }
 
-      public SimpleSetImpl(java.util.Collection c) {
-        internalSet = new HashSet(c.size());
+      public SimpleSetImpl(java.util.Collection<? extends T> c) {
+        internalSet = new HashSet<T>(c.size());
         internalSet.addAll(c);
       }
 
-      private SimpleSetImpl(SimpleSetImpl set) {
-        this.internalSet = new HashSet(set.internalSet);
+      private SimpleSetImpl(SimpleSetImpl<? extends T> set) {
+        this.internalSet = new HashSet<T>(set.internalSet);
       }
 
+      @Override
       public int size() {
         return internalSet.size();
       }
 
+      @Override
       public boolean isEmpty() {
         return internalSet.isEmpty();
       }
 
-      public SimpleSet add(Object o) {
+      @Override
+      public SimpleSet<T> add(T o) {
         if (internalSet.contains(o)) {
           return this;
         }
-        SimpleSetImpl set = new SimpleSetImpl(this);
+        SimpleSetImpl<T> set = new SimpleSetImpl<T>(this);
         set.internalSet.add(o);
         return set;
       }
 
       @Override
-      public Iterator iterator() {
+      public Iterator<T> iterator() {
         return internalSet.iterator();
       }
 
-      public boolean contains(Object o) {
+      @Override
+      public boolean contains(T o) {
         return internalSet.contains(o);
       }
 
+      @Override
       public boolean isSingleton() {
         return internalSet.size() == 1;
       }
 
-      public boolean isSingleton(Object o) {
+      @Override
+      public boolean isSingleton(T o) {
         return isSingleton() && contains(o);
       }
 
       @Override
       public boolean equals(Object o) {
         if (o instanceof SimpleSet) {
-          SimpleSet other = (SimpleSet) o;
+          SimpleSet<?> other = (SimpleSet<?>) o;
           if (size() != other.size()) {
             return false;
           }
@@ -225,26 +247,42 @@ aspect DataStructures {
     }
   }
 
-  SimpleSet implements Iterable<ASTNode>;
-
-  // FieldDeclaration is a SimpleSet.
-  FieldDeclaration implements SimpleSet;
-
-  syn int FieldDeclaration.size() = 1;
-
-  syn boolean FieldDeclaration.isEmpty() = false;
-
-  public SimpleSet FieldDeclaration.add(Object o) {
-    return new SimpleSetImpl().add(this).add(o);
+  public static <T> SimpleSet<T> ASTNode.emptySet() {
+    return (SimpleSet<T>) SimpleSet.EMPTY_SET;
   }
 
-  syn boolean FieldDeclaration.contains(Object o) = this == o;
+  SimpleSet implements Iterable<T>;
 
+  // FieldDeclaration is part of a variable SimpleSet.
+  FieldDeclaration implements SimpleSet<Variable>;
+
+  @Override
+  public int FieldDeclaration.size() {
+    return 1;
+  }
+
+  @Override
+  public boolean FieldDeclaration.isEmpty() {
+    return false;
+  }
+
+  @Override
+  public SimpleSet<Variable> FieldDeclaration.add(Variable o) {
+    return new SimpleSetImpl<Variable>().add(this).add(o);
+  }
+
+  @Override
+  public boolean FieldDeclaration.contains(Variable o) {
+    return this == o;
+  }
+
+  @Override
   public boolean FieldDeclaration.isSingleton() {
     return true;
   }
 
-  public boolean FieldDeclaration.isSingleton(Object o) {
+  @Override
+  public boolean FieldDeclaration.isSingleton(Variable o) {
     return contains(o);
   }
 
@@ -253,48 +291,63 @@ aspect DataStructures {
     return this == o;
   }
 
-  FieldDeclaration implements Iterator;
+  FieldDeclaration implements Iterator<Variable>;
 
-  private FieldDeclaration FieldDeclaration.iterElem;
+  /** Current index for self-iterator. */
+  private int FieldDeclaration.iterElem = -1;
 
   @Override
-  public Iterator FieldDeclaration.iterator() {
-    iterElem = this;
+  public Iterator<Variable> FieldDeclaration.iterator() {
+    iterElem = 0;
     return this;
   }
 
+  @Override
   public boolean FieldDeclaration.hasNext() {
-    return iterElem != null;
+    return iterElem == 0;
   }
 
-  public Object FieldDeclaration.next() {
-    Object o = iterElem;
-    iterElem = null;
-    return o;
+  @Override
+  public Variable FieldDeclaration.next() {
+    iterElem = -1;
+    return this;
   }
 
+  @Override
   public void FieldDeclaration.remove() {
     throw new UnsupportedOperationException();
   }
 
-  // VariableDeclaration is a SimpleSet.
-  VariableDeclaration implements SimpleSet;
+  // VariableDeclaration is part of a variable SimpleSet.
+  VariableDeclaration implements SimpleSet<Variable>;
 
-  syn int VariableDeclaration.size() = 1;
-
-  syn boolean VariableDeclaration.isEmpty() = false;
-
-  public SimpleSet VariableDeclaration.add(Object o) {
-    return new SimpleSetImpl().add(this).add(o);
+  @Override
+  public int VariableDeclaration.size() {
+    return 1;
   }
 
-  syn boolean VariableDeclaration.contains(Object o) = this == o;
+  @Override
+  public boolean VariableDeclaration.isEmpty() {
+    return false;
+  }
 
+  @Override
+  public SimpleSet<Variable> VariableDeclaration.add(Variable o) {
+    return new SimpleSetImpl<Variable>().add(this).add(o);
+  }
+
+  @Override
+  public boolean VariableDeclaration.contains(Variable o) {
+    return this == o;
+  }
+
+  @Override
   public boolean VariableDeclaration.isSingleton() {
     return true;
   }
 
-  public boolean VariableDeclaration.isSingleton(Object o) {
+  @Override
+  public boolean VariableDeclaration.isSingleton(Variable o) {
     return contains(o);
   }
 
@@ -303,114 +356,149 @@ aspect DataStructures {
     return this == o;
   }
 
-  VariableDeclaration implements Iterator;
+  VariableDeclaration implements Iterator<Variable>;
 
-  private VariableDeclaration VariableDeclaration.iterElem;
+  /** Current index for self-iterator. */
+  private int VariableDeclaration.iterElem = -1;
 
   @Override
-  public Iterator VariableDeclaration.iterator() {
-    iterElem = this;
+  public Iterator<Variable> VariableDeclaration.iterator() {
+    iterElem = 0;
     return this;
   }
 
+  @Override
   public boolean VariableDeclaration.hasNext() {
-    return iterElem != null;
+    return iterElem == 0;
   }
 
-  public Object VariableDeclaration.next() {
-    Object o = iterElem;
-    iterElem = null;
-    return o;
+  @Override
+  public Variable VariableDeclaration.next() {
+    iterElem = -1;
+    return this;
   }
 
+  @Override
   public void VariableDeclaration.remove() {
     throw new UnsupportedOperationException();
   }
 
-  // ParameterDeclaration is a SimpleSet.
-  ParameterDeclaration implements SimpleSet;
+  // ParameterDeclaration is part of a variable SimpleSet.
+  ParameterDeclaration implements SimpleSet<Variable>;
 
-  syn int ParameterDeclaration.size() = 1;
-
-  syn boolean ParameterDeclaration.isEmpty() = false;
-
-  public SimpleSet ParameterDeclaration.add(Object o) {
-    return new SimpleSetImpl().add(this).add(o);
+  @Override
+  public int ParameterDeclaration.size() {
+    return 1;
   }
 
-  syn boolean ParameterDeclaration.contains(Object o) = this == o;
+  @Override
+  public boolean ParameterDeclaration.isEmpty() {
+    return false;
+  }
 
+  @Override
+  public SimpleSet<Variable> ParameterDeclaration.add(Variable o) {
+    return new SimpleSetImpl<Variable>().add(this).add(o);
+  }
+
+  @Override
+  public boolean ParameterDeclaration.contains(Variable o) {
+    return this == o;
+  }
+
+  @Override
   public boolean ParameterDeclaration.isSingleton() {
     return true;
   }
 
-  public boolean ParameterDeclaration.isSingleton(Object o) {
+  @Override
+  public boolean ParameterDeclaration.isSingleton(Variable o) {
     return contains(o);
   }
 
-  ParameterDeclaration implements Iterator;
+  ParameterDeclaration implements Iterator<Variable>;
 
-  private ParameterDeclaration ParameterDeclaration.iterElem;
+  /** Current index for self-iterator. */
+  private int ParameterDeclaration.iterElem = -1;
 
   @Override
-  public Iterator ParameterDeclaration.iterator() {
-    iterElem = this;
+  public Iterator<Variable> ParameterDeclaration.iterator() {
+    iterElem = 0;
     return this;
   }
 
+  @Override
   public boolean ParameterDeclaration.hasNext() {
-    return iterElem != null;
+    return iterElem == 0;
   }
-  public Object ParameterDeclaration.next() {
-    Object o = iterElem;
-    iterElem = null;
-    return o;
+
+  @Override
+  public Variable ParameterDeclaration.next() {
+    iterElem = -1;
+    return this;
   }
+
+  @Override
   public void ParameterDeclaration.remove() {
     throw new UnsupportedOperationException();
   }
 
   // TypeDecl is a SimpleSet.
-  TypeDecl implements SimpleSet;
+  TypeDecl implements SimpleSet<TypeDecl>;
 
-  syn int TypeDecl.size() = 1;
-
-  syn boolean TypeDecl.isEmpty() = false;
-
-  public SimpleSet TypeDecl.add(Object o) {
-    return new SimpleSetImpl().add(this).add(o);
+  @Override
+  public int TypeDecl.size() {
+    return 1;
   }
 
-  syn boolean TypeDecl.contains(Object o) = this == o;
+  @Override
+  public boolean TypeDecl.isEmpty() {
+    return false;
+  }
 
+  @Override
+  public SimpleSet<TypeDecl> TypeDecl.add(TypeDecl o) {
+    return new SimpleSetImpl<TypeDecl>().add(this).add(o);
+  }
+
+  @Override
+  public boolean TypeDecl.contains(TypeDecl o) {
+    return this == o;
+  }
+
+  @Override
   public boolean TypeDecl.isSingleton() {
     return true;
   }
 
-  public boolean TypeDecl.isSingleton(Object o) {
+  @Override
+  public boolean TypeDecl.isSingleton(TypeDecl o) {
     return contains(o);
   }
 
-  TypeDecl implements Iterator;
+  TypeDecl implements Iterator<TypeDecl>;
 
-  private TypeDecl TypeDecl.iterElem;
+  /** Current index for self-iterator. */
+  private int TypeDecl.iterElem = -1;
 
   @Override
-  public Iterator TypeDecl.iterator() {
-    iterElem = this;
+  public Iterator<TypeDecl> TypeDecl.iterator() {
+    iterElem = 0;
     return this;
   }
 
+  @Override
   public boolean TypeDecl.hasNext() {
-    return iterElem != null;
+    return iterElem == 0;
   }
 
-  public Object TypeDecl.next() {
-    Object o = iterElem;
-    iterElem = null;
-    return o;
+  @Override
+  public TypeDecl TypeDecl.next() {
+    iterElem = -1;
+    return this;
   }
 
+  @Override
   public void TypeDecl.remove() {
     throw new UnsupportedOperationException();
   }
@@ -421,23 +509,35 @@ aspect DataStructures {
   }
 
   // MethodDecl is a SimpleSet.
-  MethodDecl implements SimpleSet;
+  MethodDecl implements SimpleSet<MethodDecl>;
 
-  syn int MethodDecl.size() = 1;
-
-  syn boolean MethodDecl.isEmpty() = false;
-
-  public SimpleSet MethodDecl.add(Object o) {
-    return new SimpleSetImpl().add(this).add(o);
+  @Override
+  public int MethodDecl.size() {
+    return 1;
   }
 
-  syn boolean MethodDecl.contains(Object o) = this == o;
+  @Override
+  public boolean MethodDecl.isEmpty() {
+    return false;
+  }
 
+  @Override
+  public SimpleSet<MethodDecl> MethodDecl.add(MethodDecl o) {
+    return new SimpleSetImpl<MethodDecl>().add(this).add(o);
+  }
+
+  @Override
+  public boolean MethodDecl.contains(MethodDecl o) {
+    return this == o;
+  }
+
+  @Override
   public boolean MethodDecl.isSingleton() {
     return true;
   }
 
-  public boolean MethodDecl.isSingleton(Object o) {
+  @Override
+  public boolean MethodDecl.isSingleton(MethodDecl o) {
     return contains(o);
   }
 
@@ -446,28 +546,30 @@ aspect DataStructures {
     return this == o;
   }
 
-  MethodDecl implements Iterator;
+  MethodDecl implements Iterator<MethodDecl>;
 
-  private MethodDecl MethodDecl.iterElem;
+  /** Current index for self-iterator. */
+  private int MethodDecl.iterElem = -1;
 
   @Override
-  public Iterator MethodDecl.iterator() {
-    iterElem = this;
+  public Iterator<MethodDecl> MethodDecl.iterator() {
+    iterElem = 0;
     return this;
   }
 
+  @Override
   public boolean MethodDecl.hasNext() {
-    return iterElem != null;
+    return iterElem == 0;
   }
 
-  public Object MethodDecl.next() {
-    Object o = iterElem;
-    iterElem = null;
-    return o;
+  @Override
+  public MethodDecl MethodDecl.next() {
+    iterElem = -1;
+    return this;
   }
 
+  @Override
   public void MethodDecl.remove() {
     throw new UnsupportedOperationException();
   }
-
 }

@@ -32,121 +32,18 @@ package org.extendj.ast;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Map;
 import java.util.HashMap;
 import java.util.Iterator;
 
 @SuppressWarnings({"javadoc","unchecked","rawtypes"})
 class CodeGeneration {
-  private ByteArray bytes = new ByteArray();
-  private ConstantPool constantPool;
-
-  public void clearCodeGeneration() {
-    bytes = null;
-    constantPool = null;
-    variableScopeLabelAddress = null;
-    variableScopeLabelUses = null;
-    localVariableTable = null;
-    lineNumberTable = null;
-    exceptions = null;
-    address = null;
-    uses = null;
-  }
-
-  private boolean wideGoto = false;
-
-  private boolean numberFormatError = false;
-  public boolean numberFormatError() { return numberFormatError; }
-
-  public CodeGeneration(ConstantPool constantPool) {
-    this.constantPool = constantPool;
-  }
-
-  public CodeGeneration(ConstantPool constantPool, boolean wideGoto) {
-    this.constantPool = constantPool;
-    this.wideGoto = wideGoto;
-  }
-
-  public ConstantPool constantPool() {
-    return constantPool;
-  }
-
-  private int variableScopeLabel = 1;
-  public int variableScopeLabel() {
-    return variableScopeLabel++;
-  }
-  public void addVariableScopeLabel(int label) {
-    Integer label_object = new Integer(label);
-    variableScopeLabelAddress.put(label_object, new Integer(pos()));
-    // Update all reference to this label
-    if(variableScopeLabelUses.containsKey(label_object)) {
-      ArrayList array = (ArrayList)variableScopeLabelUses.get(label_object);
-      for(Iterator iter = array.iterator(); iter.hasNext(); ) {
-        LocalVariableEntry e = (LocalVariableEntry)iter.next();
-        e.length = pos() - e.start_pc;
-      }
-    }
-  }
-  private HashMap variableScopeLabelAddress = new HashMap();
-  private HashMap variableScopeLabelUses = new HashMap();
-
   static class LocalVariableEntry {
     int start_pc;
     int length;
     int name_index;
     int descriptor_index;
     int index;
-  }
-
-  public Collection localVariableTable = new ArrayList();
-  public void addLocalVariableEntryAtCurrentPC(String name, String typeDescriptor, int localNum, int variableScopeEndLabel) {
-    LocalVariableEntry e = new LocalVariableEntry();
-    e.start_pc = pos();
-    e.length = 0;
-    e.name_index = constantPool().addUtf8(name);
-    e.descriptor_index = constantPool().addUtf8(typeDescriptor);
-    e.index = localNum;
-    localVariableTable.add(e);
-    Integer label_object = new Integer(variableScopeEndLabel);
-    if(!variableScopeLabelUses.containsKey(label_object))
-      variableScopeLabelUses.put(label_object, new ArrayList());
-    Collection c = (Collection)variableScopeLabelUses.get(label_object);
-    c.add(e);
-  }
-
-  static class LineNumberEntry {
-    int start_pc;
-    int line_number;
-  }
-
-  public Collection lineNumberTable = new ArrayList();
-  public void addLineNumberEntryAtCurrentPC(ASTNode node) {
-    LineNumberEntry e = new LineNumberEntry();
-    e.start_pc = pos();
-    e.line_number = node.sourceLineNumber();
-    if(e.line_number != -1 && e.line_number != 65535)
-      lineNumberTable.add(e);
-  }
-
-  public Collection exceptions = new ArrayList();
-
-  /**
-   * Adds an exception handler for the given exception type.
-   * If catch_type is zero then this handler catches any exception.
-   * @param start_lbl
-   * @param end_lbl
-   * @param handler_lbl
-   * @param catch_type
-   */
-  public void addException(int start_lbl, int end_lbl, int handler_lbl, int catch_type) {
-    int start_pc = addressOf(start_lbl);
-    int end_pc = addressOf(end_lbl);
-    if (start_pc != end_pc) {
-      exceptions.add(new ExceptionEntry(
-            start_pc,
-            end_pc,
-            handler_lbl,
-            catch_type));
-    }
   }
 
   class ExceptionEntry {
@@ -169,28 +66,145 @@ class CodeGeneration {
     }
   }
 
+  private ByteArray bytes = new ByteArray();
+
+  private ConstantPool constantPool;
+
+  private boolean wideGoto = false;
+
+  private boolean numberFormatError = false;
+
+  private int variableScopeLabel = 1;
+
+  private Map<Integer, Integer> variableScopeLabelAddress = new HashMap<Integer, Integer>();
+
+  private Map<Integer, Collection<LocalVariableEntry>> variableScopeLabelUses =
+      new HashMap<Integer, Collection<LocalVariableEntry>>();
+
+  public Collection<LocalVariableEntry> localVariableTable = new ArrayList<LocalVariableEntry>();
+
+  public Collection<LineNumberEntry> lineNumberTable = new ArrayList<LineNumberEntry>();
+
+  public Collection<ExceptionEntry> exceptions = new ArrayList<ExceptionEntry>();
+
+  int maxLocals = 0;
+
+  private Map<Integer, Integer> address = new HashMap<Integer, Integer>();
+
+  private Map<Integer, Collection<Integer>> uses = new HashMap<Integer, Collection<Integer>>();
+
+  public void clearCodeGeneration() {
+    bytes = null;
+    constantPool = null;
+    variableScopeLabelAddress = null;
+    variableScopeLabelUses = null;
+    localVariableTable = null;
+    lineNumberTable = null;
+    exceptions = null;
+    address = null;
+    uses = null;
+  }
+
+  public boolean numberFormatError() {
+    return numberFormatError;
+  }
+
+  public CodeGeneration(ConstantPool constantPool) {
+    this.constantPool = constantPool;
+  }
+
+  public CodeGeneration(ConstantPool constantPool, boolean wideGoto) {
+    this.constantPool = constantPool;
+    this.wideGoto = wideGoto;
+  }
+
+  public ConstantPool constantPool() {
+    return constantPool;
+  }
+
+  public int variableScopeLabel() {
+    return variableScopeLabel++;
+  }
+
+  public void addVariableScopeLabel(int label) {
+    Integer label_object = new Integer(label);
+    variableScopeLabelAddress.put(label_object, new Integer(pos()));
+    // Update all reference to this label.
+    if(variableScopeLabelUses.containsKey(label_object)) {
+      ArrayList array = (ArrayList) variableScopeLabelUses.get(label_object);
+      for(Iterator iter = array.iterator(); iter.hasNext(); ) {
+        LocalVariableEntry e = (LocalVariableEntry)iter.next();
+        e.length = pos() - e.start_pc;
+      }
+    }
+  }
+
+  public void addLocalVariableEntryAtCurrentPC(String name, String typeDescriptor,
+      int localNum, int variableScopeEndLabel) {
+    LocalVariableEntry e = new LocalVariableEntry();
+    e.start_pc = pos();
+    e.length = 0;
+    e.name_index = constantPool().addUtf8(name);
+    e.descriptor_index = constantPool().addUtf8(typeDescriptor);
+    e.index = localNum;
+    localVariableTable.add(e);
+    Integer label_object = new Integer(variableScopeEndLabel);
+    if(!variableScopeLabelUses.containsKey(label_object)) {
+      variableScopeLabelUses.put(label_object, new ArrayList<LocalVariableEntry>());
+    }
+    variableScopeLabelUses.get(label_object).add(e);
+  }
+
+  static class LineNumberEntry {
+    int start_pc;
+    int line_number;
+  }
+
+  public void addLineNumberEntryAtCurrentPC(ASTNode node) {
+    LineNumberEntry e = new LineNumberEntry();
+    e.start_pc = pos();
+    e.line_number = node.sourceLineNumber();
+    if(e.line_number != -1 && e.line_number != 65535) {
+      lineNumberTable.add(e);
+    }
+  }
+
+  /**
+   * Adds an exception handler for the given exception type.
+   * If catch_type is zero then this handler catches any exception.
+   * @param start_lbl
+   * @param end_lbl
+   * @param handler_lbl
+   * @param catch_type
+   */
+  public void addException(int start_lbl, int end_lbl, int handler_lbl, int catch_type) {
+    int start_pc = addressOf(start_lbl);
+    int end_pc = addressOf(end_lbl);
+    if (start_pc != end_pc) {
+      exceptions.add(new ExceptionEntry(
+            start_pc,
+            end_pc,
+            handler_lbl,
+            catch_type));
+    }
+  }
+
   public int maxLocals() {
     return maxLocals+1;
   }
 
-  int maxLocals = 0;
-
-  private HashMap address = new HashMap();
-
-  private HashMap uses = new HashMap();
-
   public void addLabel(int label) {
     Integer label_object = new Integer(label);
     address.put(label_object, new Integer(pos()));
-    // Update all reference to this label
+    // Update all reference to this label.
     if(uses.containsKey(label_object)) {
-      ArrayList array = (ArrayList)uses.get(label_object);
-      for(int i = 0; i < array.size(); i++) {
-        int p = ((Integer)array.get(i)).intValue();
-        if(bytes.get(p) == Bytecode.GOTO_W)
+      Collection<Integer> array = uses.get(label_object);
+      for (int p : array) {
+        if (bytes.get(p) == Bytecode.GOTO_W) {
           setAddress32(p + 1, pos() - p);
-        else
+        } else {
           setAddress(p + 1, pos() -  p);
+        }
       }
     }
   }
@@ -261,12 +275,16 @@ class CodeGeneration {
   }
 
   public void emitInstanceof(TypeDecl type) {
-    int p = constantPool().addClass(type.isArrayDecl() ? type.typeDescriptor() : type.constantPoolName());
+    int p = constantPool().addClass(type.isArrayDecl()
+        ? type.typeDescriptor()
+        : type.constantPoolName());
     bytes.emit(Bytecode.INSTANCEOF).add2(p);
   }
 
   public void emitCheckCast(TypeDecl type) {
-    int p = constantPool().addClass(type.isArrayDecl() ? type.typeDescriptor() : type.constantPoolName());
+    int p = constantPool().addClass(type.isArrayDecl()
+        ? type.typeDescriptor()
+        : type.constantPoolName());
     bytes.emit(Bytecode.CHECKCAST).add2(p);
   }
 
@@ -293,11 +311,12 @@ class CodeGeneration {
 
   public void emitGoto(int label) {
     int p = jump(label);
-    if(wideGoto)
+    if(wideGoto) {
       bytes.emitGoto(Bytecode.GOTO_W).add4(p);
-    else {
-      if(p > Short.MAX_VALUE || p < Short.MIN_VALUE)
+    } else {
+      if (p > Short.MAX_VALUE || p < Short.MIN_VALUE) {
         numberFormatError = true;
+      }
       bytes.emitGoto(Bytecode.GOTO).add2(p);
     }
   }

@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,11 +31,11 @@
 
 aspect GreatestLowerBoundFactory {
 
-  syn nta TypeDecl TypeVariable.toInterface() {
-    // convert var to interface
+  /** Convert var to interface. */
+  syn nta InterfaceDecl TypeVariable.toInterface() {
     InterfaceDecl ITj = new InterfaceDecl();
     ITj.setID("ITj_" + hashCode());
-    // I'm assuming that TypeVariable has no members of it's own.
+    // I'm assuming that TypeVariable has no members of its own.
     // TODO: would it be enough to add only public members of a bound
     // that is TypeVariable or ClassDecl and add other (interface)
     // bounds as superinterfaces to ITj
@@ -63,14 +64,13 @@ aspect GreatestLowerBoundFactory {
 
   public class GLBTypeFactory {
     // TODO add support for array types.
-    public static TypeDecl glb(final ArrayList typeList) {
-      TypeDecl retType = ((TypeDecl) typeList.get(0)).unknownType();
+    public static TypeDecl glb(java.util.List<TypeDecl> typeList) {
+      TypeDecl retType = typeList.get(0).unknownType();
       TypeDecl cls = mostSpecificSuperClass(typeList);
       if (cls != null) {
-        ArrayList intersectInterfaceList = new ArrayList();
-        ArrayList allInterfaceList = new ArrayList();
-        for (Iterator itera = typeList.iterator(); itera.hasNext();) {
-          TypeDecl typeDecl = (TypeDecl) itera.next();
+        ArrayList<InterfaceDecl> intersectInterfaceList = new ArrayList<InterfaceDecl>();
+        ArrayList<InterfaceDecl> allInterfaceList = new ArrayList<InterfaceDecl>();
+        for (TypeDecl typeDecl : typeList) {
           addInterfaces(intersectInterfaceList, allInterfaceList, typeDecl);
         }
 
@@ -82,7 +82,7 @@ aspect GreatestLowerBoundFactory {
             && checkClassInterfaceCompatibility(cls, intersectInterfaceList)) {
           greatestLowerBounds(typeList);
           if (typeList.size() == 1) {
-            retType = (TypeDecl) typeList.iterator().next();
+            retType = typeList.iterator().next();
           } else {
             retType = retType.lookupGLBType(typeList);
           }
@@ -96,7 +96,8 @@ aspect GreatestLowerBoundFactory {
      * @param allInterfaceList
      * @param typeDecl
      */
-    private static void addInterfaces(ArrayList intersectInterfaceList, ArrayList allInterfaceList, TypeDecl typeDecl) {
+    private static void addInterfaces(ArrayList<InterfaceDecl> intersectInterfaceList,
+        ArrayList<InterfaceDecl> allInterfaceList, TypeDecl typeDecl) {
       if (typeDecl.isInterfaceDecl()) {
         intersectInterfaceList.add((InterfaceDecl) typeDecl);
         allInterfaceList.add((InterfaceDecl) typeDecl);
@@ -128,17 +129,17 @@ aspect GreatestLowerBoundFactory {
      * @return the most specific class that all elements in <i>types</i> are a
      *         subtype of. Or null if no such class exists.
      */
-    public final static TypeDecl mostSpecificSuperClass(final ArrayList types) {
-      ArrayList csList = new ArrayList();
-      for (Iterator iter = types.iterator(); iter.hasNext(); ) {
-        csList.add(mostSpecificSuperClass((TypeDecl) iter.next()));
+    public static TypeDecl mostSpecificSuperClass(Collection<TypeDecl> types) {
+      ArrayList<TypeDecl> csList = new ArrayList<TypeDecl>();
+      for (TypeDecl type : types) {
+        csList.add(mostSpecificSuperClass(type));
       }
 
       // Find Tk with Ck.
       greatestLowerBounds(csList);
       if (csList.size() == 1) {
         // OK.
-        return (TypeDecl) csList.get(0);
+        return csList.get(0);
       } else {
         // Ck does not exist.
         return null;
@@ -151,22 +152,22 @@ aspect GreatestLowerBoundFactory {
      * @param t
      * @return most specific superclass of t
      */
-    private final static TypeDecl mostSpecificSuperClass(final TypeDecl t) {
-      HashSet superTypes = new HashSet();
+    private static TypeDecl mostSpecificSuperClass(TypeDecl t) {
+      HashSet<TypeDecl> superTypes = new HashSet<TypeDecl>();
       addSuperClasses(t, superTypes);
 
       if (superTypes.isEmpty()) {
         return t.typeObject();
       }
 
-      ArrayList result = new ArrayList(superTypes.size());
+      ArrayList<TypeDecl> result = new ArrayList<TypeDecl>(superTypes.size());
       result.addAll(superTypes);
       greatestLowerBounds(result);
 
       if (result.size() == 1) {
-        return (TypeDecl) result.get(0);
+        return result.get(0);
       } else {
-        return (TypeDecl) t.typeObject();
+        return t.typeObject();
       }
     }
 
@@ -184,7 +185,7 @@ aspect GreatestLowerBoundFactory {
      * @param t
      * @param result
      */
-    private static final void addSuperClasses(final TypeDecl t, final HashSet result) {
+    private static void addSuperClasses(TypeDecl t, HashSet<TypeDecl> result) {
       if (t == null) {
         return;
       }
@@ -209,20 +210,16 @@ aspect GreatestLowerBoundFactory {
     /**
      * @param ifaceList
      */
-    private static boolean checkInterfaceCompatibility(ArrayList ifaceList) {
+    private static boolean checkInterfaceCompatibility(java.util.List<InterfaceDecl> ifaceList) {
       for (int i = 0; i < ifaceList.size(); i++) {
-        HashSet superISet_i = Constraints
-          .parameterizedSupertypes((TypeDecl) ifaceList.get(i));
-        for (Iterator iter1 = superISet_i.iterator(); iter1.hasNext();) {
-          InterfaceDecl superIface_i = (InterfaceDecl) iter1.next();
-
+        Collection<ParTypeDecl> superISet_i = Constraints.parameterizedSupertypes(ifaceList.get(i));
+        for (ParTypeDecl superIface_i : superISet_i) {
           if (superIface_i instanceof ParInterfaceDecl) {
             ParInterfaceDecl pi = (ParInterfaceDecl) superIface_i;
             for (int j = i + 1; j < ifaceList.size(); j++) {
-              HashSet superISet_j = Constraints.parameterizedSupertypes(
-                  (TypeDecl) ifaceList.get(j));
-              for (Iterator iter2 = superISet_j.iterator(); iter2.hasNext();) {
-                InterfaceDecl superIface_j = (InterfaceDecl) iter2.next();
+              Collection<ParTypeDecl> superISet_j =
+                Constraints.parameterizedSupertypes(ifaceList.get(j));
+              for (ParTypeDecl superIface_j : superISet_j) {
                 if (superIface_j instanceof ParInterfaceDecl) {
                   ParInterfaceDecl pj = (ParInterfaceDecl) superIface_j;
                   if (pi != pj
@@ -244,16 +241,13 @@ aspect GreatestLowerBoundFactory {
      * @param cls
      * @param ifaceList
      */
-    private static boolean checkClassInterfaceCompatibility(TypeDecl cls, ArrayList ifaceList) {
-      HashSet implementedInterfaces = cls.implementedInterfaces();
-      for (Iterator iter1 = implementedInterfaces.iterator(); iter1.hasNext();) {
-        InterfaceDecl impInterface = (InterfaceDecl) iter1.next();
-
+    private static boolean checkClassInterfaceCompatibility(TypeDecl cls,
+        java.util.List<InterfaceDecl> ifaceList) {
+      Collection<InterfaceDecl> implementedInterfaces = cls.implementedInterfaces();
+      for (InterfaceDecl impInterface : implementedInterfaces) {
         if (impInterface instanceof ParInterfaceDecl) {
           ParInterfaceDecl impParIface = (ParInterfaceDecl) impInterface;
-          for (Iterator iter2 = ifaceList.iterator(); iter2.hasNext();) {
-            InterfaceDecl iface = (InterfaceDecl) iter2.next();
-
+          for (InterfaceDecl iface : ifaceList) {
             if (iface instanceof ParInterfaceDecl) {
               ParInterfaceDecl parIface = (ParInterfaceDecl) iface;
               if (parIface != impParIface
@@ -273,11 +267,11 @@ aspect GreatestLowerBoundFactory {
      *
      * @param types
      */
-    public static final void greatestLowerBounds(ArrayList types) {
+    public static void greatestLowerBounds(java.util.List<? extends TypeDecl> types) {
       for (int i = 0; i < types.size(); i++) {
-        TypeDecl U = (TypeDecl) types.get(i);
+        TypeDecl U = types.get(i);
         for (int j = i + 1; j < types.size(); j++) {
-          TypeDecl V = (TypeDecl) types.get(j);
+          TypeDecl V = types.get(j);
           if (U == null || V == null) {
             continue;
           }
@@ -289,18 +283,21 @@ aspect GreatestLowerBoundFactory {
         }
       }
       // Filter nulls.
+      // TODO(joqvist): don't introduce nulls in the list in the first place.
       removeNullValues(types);
     }
 
     /**
-     * Remove null values from the given list
+     * Remove null values from the given list.
      *
      * @param types
      */
-    public static final void removeNullValues(ArrayList types) {
-      ArrayList filter = new ArrayList(1);
-      filter.add(null);
-      types.removeAll(filter);
+    public static <T> void removeNullValues(java.util.List<T> list) {
+      for (Iterator<T> iter = list.iterator(); iter.hasNext(); ) {
+        if (iter.next() == null) {
+          iter.remove();
+        }
+      }
     }
   }
 }

@@ -65,7 +65,7 @@ aspect Generics {
   // Imported types are considered raw types by the name resolver
   // here we replace them by their generic counter parts.
   refine TypeScopePropagation eq CompilationUnit.getChild().lookupType(String name) {
-    SimpleSet result = SimpleSet.emptySet;
+    SimpleSet<TypeDecl> result = emptySet();
     for (Iterator iter = refined(name).iterator(); iter.hasNext(); ) {
       TypeDecl typeDecl = (TypeDecl) iter.next();
       if (typeDecl instanceof ParTypeDecl) {
@@ -304,8 +304,8 @@ aspect Generics {
     syn boolean isParameterizedType();
     syn boolean isRawType();
     public String typeName();
-    SimpleSet localFields(String name);
-    Map<String,SimpleSet> localMethodsSignatureMap();
+    SimpleSet<Variable> localFields(String name);
+    Map<String, SimpleSet<MethodDecl>> localMethodsSignatureMap();
   }
 
   ParClassDecl implements ParTypeDecl;
@@ -469,13 +469,13 @@ aspect GenericsTypeCheck {
     }
 
     // Check if a method has same signature as another in a supertype but does not override it.
-    Map<String,SimpleSet> map = erasedAncestorMethodsMap();
+    Map<String, SimpleSet<MethodDecl>> map = erasedAncestorMethodsMap();
     for (Iterator iter1 = localMethodsIterator(); iter1.hasNext(); ) {
       MethodDecl localMethod = (MethodDecl) iter1.next();
 
       String signature = localMethod.signature();
 
-      SimpleSet set = map.get(signature);
+      SimpleSet<MethodDecl> set = map.get(signature);
       if (set != null) {
         for (Iterator i2 = set.iterator(); i2.hasNext(); ) {
           MethodDecl decl = (MethodDecl) i2.next();
@@ -489,12 +489,12 @@ aspect GenericsTypeCheck {
     }
   }
 
-  syn lazy Map<String,SimpleSet> TypeDecl.erasedAncestorMethodsMap() =
+  syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.erasedAncestorMethodsMap() =
       original().localMethodsSignatureMap();
 
   eq ClassDecl.erasedAncestorMethodsMap() {
-    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
+    Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
     if (hasSuperclass()) {
       for (Iterator<MethodDecl> iter = superclass().localMethodsIterator(); iter.hasNext(); ) {
         MethodDecl m = iter.next();
@@ -517,8 +517,8 @@ aspect GenericsTypeCheck {
   }
 
   eq InterfaceDecl.erasedAncestorMethodsMap() {
-    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
+    Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
     for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl) iter.next();
       if (m.accessibleFrom(this) && m.erasedMethod() != m) {
@@ -547,11 +547,12 @@ aspect GenericsTypeCheck {
    * @param dest destination map
    * @param src source map
    */
-  protected void TypeDecl.mergeMap(Map<String,SimpleSet> dest, Map<String,SimpleSet> src) {
-    for (Map.Entry<String,SimpleSet> entry: src.entrySet()) {
+  protected void TypeDecl.mergeMap(Map<String, SimpleSet<MethodDecl>> dest,
+      Map<String, SimpleSet<MethodDecl>> src) {
+    for (Map.Entry<String, SimpleSet<MethodDecl>> entry : src.entrySet()) {
       String signature = entry.getKey();
-      for (Iterator iter = entry.getValue().iterator(); iter.hasNext(); ) {
-        putSimpleSetElement(dest, signature, (SimpleSet) iter.next());
+      for (Iterator<MethodDecl> iter = entry.getValue().iterator(); iter.hasNext(); ) {
+        putSimpleSetElement(dest, signature, iter.next());
       }
     }
   }
@@ -564,17 +565,17 @@ aspect GenericsTypeCheck {
       // JLS SE7 8.4.8.4
       // Check for duplicate methods inherited from parameterized supertype.
       if (superclass().isParameterizedType()) {
-        Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-        Map<String,SimpleSet> methodMap = superclass().localMethodsSignatureMap();
-        for (Map.Entry<String,SimpleSet> entry: methodMap.entrySet()) {
+        Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+        Map<String, SimpleSet<MethodDecl>> methodMap = superclass().localMethodsSignatureMap();
+        for (Map.Entry<String, SimpleSet<MethodDecl>> entry: methodMap.entrySet()) {
           String signature = entry.getKey();
           if (!localMap.containsKey(signature)) {
             // Not locally overridden.
-            SimpleSet set = entry.getValue();
-            Iterator iter = set.iterator();
+            SimpleSet<MethodDecl> set = entry.getValue();
+            Iterator<MethodDecl> iter = set.iterator();
             iter.next();
             while (iter.hasNext()) {
-              MethodDecl m = (MethodDecl) iter.next();
+              MethodDecl m = iter.next();
               errorf("method with signature %s is multiply declared when inherited from %s",
                   signature, superclass().typeName());
             }
@@ -607,10 +608,10 @@ aspect GenericsTypeCheck {
     return true;
   }
 
-  syn lazy HashSet<InterfaceDecl> TypeDecl.implementedInterfaces() = new HashSet<InterfaceDecl>();
+  syn lazy Collection<InterfaceDecl> TypeDecl.implementedInterfaces() = Collections.emptySet();
 
   eq ClassDecl.implementedInterfaces() {
-    HashSet set = new HashSet();
+    Collection<InterfaceDecl> set = new HashSet<InterfaceDecl>();
     if (hasSuperclass()) {
       set.addAll(superclass().implementedInterfaces());
     }
@@ -706,7 +707,7 @@ aspect GenericsNameBinding {
   eq GenericInterfaceDecl.getTypeParameter().isNestedType() = true;
   eq GenericInterfaceDecl.getTypeParameter().enclosingType() = this;
 
-  public SimpleSet GenericTypeDecl.addTypeVariables(SimpleSet c, String name) {
+  public SimpleSet<TypeDecl> GenericTypeDecl.addTypeVariables(SimpleSet<TypeDecl> c, String name) {
     GenericTypeDecl original = (GenericTypeDecl) original();
     for (int i = 0; i < original.getNumTypeParameter(); i++) {
       TypeVariable p = original.getTypeParameter(i);
@@ -718,22 +719,22 @@ aspect GenericsNameBinding {
   }
 
   eq GenericInterfaceDecl.getSuperInterface().lookupType(String name) {
-    SimpleSet c = addTypeVariables(SimpleSet.emptySet, name);
-    return !c.isEmpty() ? c : lookupType(name);
+    SimpleSet<TypeDecl> result = addTypeVariables(ASTNode.<TypeDecl>emptySet(), name);
+    return !result.isEmpty() ? result : lookupType(name);
   }
 
   eq GenericClassDecl.getSuperClass().lookupType(String name) {
-    SimpleSet c = addTypeVariables(SimpleSet.emptySet, name);
-    return !c.isEmpty() ? c : lookupType(name);
+    SimpleSet<TypeDecl> result = addTypeVariables(ASTNode.<TypeDecl>emptySet(), name);
+    return !result.isEmpty() ? result : lookupType(name);
   }
 
   eq GenericClassDecl.getImplements().lookupType(String name) {
-    SimpleSet c = addTypeVariables(SimpleSet.emptySet, name);
-    return !c.isEmpty() ? c : lookupType(name);
+    SimpleSet<TypeDecl> result = addTypeVariables(ASTNode.<TypeDecl>emptySet(), name);
+    return !result.isEmpty() ? result : lookupType(name);
   }
 
   eq GenericTypeDecl.getTypeParameter().lookupType(String name) {
-    SimpleSet c = memberTypes(name);
+    SimpleSet<TypeDecl> c = memberTypes(name);
     c = addTypeVariables(c, name);
     if (!c.isEmpty()) {
       return c;
@@ -756,7 +757,7 @@ aspect GenericsNameBinding {
   }
 
   eq GenericTypeDecl.getBodyDecl(int index).lookupType(String name) {
-    SimpleSet c = memberTypes(name);
+    SimpleSet<TypeDecl> c = memberTypes(name);
     if (getBodyDecl(index).visibleTypeParameters()) {
       c = addTypeVariables(c, name);
     }
@@ -1261,8 +1262,8 @@ aspect LookupParTypeDecl {
   eq WildcardSuperType.usesTypeVariable() = getAccess().type().usesTypeVariable();
   eq ArrayDecl.usesTypeVariable() = elementType().usesTypeVariable();
 
-  syn lazy final Map<String,SimpleSet> MemberSubstitutor.localMethodsSignatureMap() {
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
+  syn lazy final Map<String, SimpleSet<MethodDecl>> MemberSubstitutor.localMethodsSignatureMap() {
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
     for (Iterator<MethodDecl> iter = original().localMethodsIterator(); iter.hasNext(); ) {
       MethodDecl decl = iter.next();
 
@@ -1279,8 +1280,8 @@ aspect LookupParTypeDecl {
   syn nta BodyDecl BodyDeclList.localMethodSignatureCopy(MethodDecl originalMethod,
       MemberSubstitutor m) = originalMethod.substitutedBodyDecl(m);
 
-  syn lazy final SimpleSet MemberSubstitutor.localFields(String name) {
-    SimpleSet set = SimpleSet.emptySet;
+  syn lazy final SimpleSet<Variable> MemberSubstitutor.localFields(String name) {
+    SimpleSet<Variable> set = emptySet();
     for (Iterator iter = original().localFields(name).iterator(); iter.hasNext(); ) {
       FieldDeclaration f = (FieldDeclaration) iter.next();
 
@@ -1298,9 +1299,9 @@ aspect LookupParTypeDecl {
       originalDecl.substitutedBodyDecl(m);
 
   // TODO(ES): add NTA for copies like above.
-  syn lazy final SimpleSet MemberSubstitutor.localTypeDecls(String name)
-      circular [SimpleSet.emptySet] {
-    SimpleSet set = SimpleSet.emptySet;
+  syn lazy final SimpleSet<TypeDecl> MemberSubstitutor.localTypeDecls(String name)
+      circular [emptySet()] {
+    SimpleSet<TypeDecl> set = emptySet();
     for (Iterator iter = original().localTypeDecls(name).iterator(); iter.hasNext(); ) {
       TypeDecl t = (TypeDecl) iter.next();
 
@@ -1444,7 +1445,7 @@ aspect LookupParTypeDecl {
       (Modifiers) getModifiers().treeCopyNoTransform(),
       getID(),
       getSuperInterfaceList().substitute(parTypeDecl),
-      new List(), // delegates TypeParameter lookup to original
+      new List(), // Delegates TypeParameter lookup to original.
       this
     );
   }
@@ -1505,13 +1506,13 @@ aspect LookupParTypeDecl {
 
   syn TypeDecl TypeDecl.asWildcardSuper() = lookupWildcardSuper(this);
 
-  syn nta LUBType WildcardsCompilationUnit.lookupLUBType(Collection bounds) = createLUBType(bounds);
+  syn nta LUBType WildcardsCompilationUnit.lookupLUBType(Collection<TypeDecl> bounds) =
+      createLUBType(bounds);
 
-  public static LUBType WildcardsCompilationUnit.createLUBType(Collection bounds) {
-    List boundList = new List();
+  public static LUBType WildcardsCompilationUnit.createLUBType(Collection<TypeDecl> bounds) {
+    List<Access> boundList = new List<Access>();
     StringBuilder name = new StringBuilder();
-    for (Iterator iter = bounds.iterator(); iter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl) iter.next();
+    for (TypeDecl typeDecl : bounds) {
       boundList.add(typeDecl.createBoundAccess());
       name.append("& " + typeDecl.typeName());
     }
@@ -1524,9 +1525,10 @@ aspect LookupParTypeDecl {
     return decl;
   }
 
-  inh LUBType TypeDecl.lookupLUBType(Collection bounds);
+  inh LUBType TypeDecl.lookupLUBType(Collection<TypeDecl> bounds);
 
-  eq Program.getChild().lookupLUBType(Collection bounds) = wildcards().lookupLUBType(bounds);
+  eq Program.getChild().lookupLUBType(Collection<TypeDecl> bounds) =
+      wildcards().lookupLUBType(bounds);
 
   syn String LUBType.typeName() {
     if (getNumTypeBound() == 0) {
@@ -1540,19 +1542,18 @@ aspect LookupParTypeDecl {
     return sb.toString();
   }
 
-  public HashSet LUBType.implementedInterfaces(){
-       HashSet ret = new HashSet();
-       for (int i = 0; i < getNumTypeBound(); i++) {
-           ret.addAll(getTypeBound(i).type().implementedInterfaces());
-       }
-       return ret;
-   }
+  public Collection<InterfaceDecl> LUBType.implementedInterfaces() {
+    Collection<InterfaceDecl> ret = new HashSet<InterfaceDecl>();
+    for (int i = 0; i < getNumTypeBound(); i++) {
+      ret.addAll(getTypeBound(i).type().implementedInterfaces());
+    }
+    return ret;
+  }
 
-  syn nta GLBType WildcardsCompilationUnit.lookupGLBType(ArrayList bounds) {
-    List boundList = new List();
+  syn nta GLBType WildcardsCompilationUnit.lookupGLBType(Collection<TypeDecl> bounds) {
+    List<Access> boundList = new List<Access>();
     StringBuilder name = new StringBuilder();
-    for (Iterator iter = bounds.iterator(); iter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl) iter.next();
+    for (TypeDecl typeDecl : bounds) {
       boundList.add(typeDecl.createBoundAccess());
       name.append("& " + typeDecl.typeName());
     }
@@ -1565,9 +1566,10 @@ aspect LookupParTypeDecl {
     return decl;
   }
 
-  inh GLBType TypeDecl.lookupGLBType(ArrayList bounds);
+  inh GLBType TypeDecl.lookupGLBType(Collection<TypeDecl> bounds);
 
-  eq Program.getChild().lookupGLBType(ArrayList bounds) = wildcards().lookupGLBType(bounds);
+  eq Program.getChild().lookupGLBType(Collection<TypeDecl> bounds) =
+      wildcards().lookupGLBType(bounds);
 
   syn String GLBType.typeName() {
     if (getNumTypeBound() == 0) {
@@ -1581,8 +1583,8 @@ aspect LookupParTypeDecl {
     return sb.toString();
   }
 
-  public HashSet GLBType.implementedInterfaces(){
-    HashSet ret = new HashSet();
+  public Collection<InterfaceDecl> GLBType.implementedInterfaces() {
+    Collection<InterfaceDecl> ret = new HashSet<InterfaceDecl>();
     for (int i = 0; i < getNumTypeBound(); i++) {
       ret.addAll(getTypeBound(i).type().implementedInterfaces());
     }

@@ -34,21 +34,21 @@ aspect VariableScope {
   /**
    * Finds the variables in the current scope with the given name.
    */
-  inh lazy SimpleSet TypeDecl.lookupVariable(String name);
-  inh lazy SimpleSet BodyDecl.lookupVariable(String name);
-  inh SimpleSet Stmt.lookupVariable(String name);
-  inh lazy SimpleSet Block.lookupVariable(String name);
-  inh lazy SimpleSet ForStmt.lookupVariable(String name);
-  inh SimpleSet Expr.lookupVariable(String name);
-  inh lazy SimpleSet CatchClause.lookupVariable(String name);
-  inh SimpleSet VariableDeclaration.lookupVariable(String name);
-  inh SimpleSet ParameterDeclaration.lookupVariable(String name);
+  inh lazy SimpleSet<Variable> TypeDecl.lookupVariable(String name);
+  inh lazy SimpleSet<Variable> BodyDecl.lookupVariable(String name);
+  inh SimpleSet<Variable> Stmt.lookupVariable(String name);
+  inh lazy SimpleSet<Variable> Block.lookupVariable(String name);
+  inh lazy SimpleSet<Variable> ForStmt.lookupVariable(String name);
+  inh SimpleSet<Variable> Expr.lookupVariable(String name);
+  inh lazy SimpleSet<Variable> CatchClause.lookupVariable(String name);
+  inh SimpleSet<Variable> VariableDeclaration.lookupVariable(String name);
+  inh SimpleSet<Variable> ParameterDeclaration.lookupVariable(String name);
 
-  eq Program.getChild().lookupVariable(String name) = SimpleSet.emptySet;
+  eq Program.getChild().lookupVariable(String name) = emptySet();
 
   // 6.5.6.1
   eq TypeDecl.getBodyDecl(int i).lookupVariable(String name) {
-    SimpleSet list = memberFields(name);
+    SimpleSet<Variable> list = memberFields(name);
     if (!list.isEmpty()) {
       return list;
     }
@@ -61,7 +61,7 @@ aspect VariableScope {
 
   // The scope of a parameter of a method is the entire body of the method.
   eq MethodDecl.getBlock().lookupVariable(String name) {
-    SimpleSet set = parameterDeclaration(name);
+    SimpleSet<Variable> set = parameterDeclaration(name);
     // A declaration of a method parameter name shadows any other variable declarations.
     if (!set.isEmpty()) {
       return set;
@@ -75,7 +75,7 @@ aspect VariableScope {
   eq MethodDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
   eq ConstructorDecl.getBlock().lookupVariable(String name) {
-    SimpleSet set = parameterDeclaration(name);
+    SimpleSet<Variable> set = parameterDeclaration(name);
     if (!set.isEmpty()) {
       return set;
     }
@@ -83,7 +83,7 @@ aspect VariableScope {
   }
 
   eq ConstructorDecl.getParsedConstructorInvocation().lookupVariable(String name) {
-    SimpleSet set = parameterDeclaration(name);
+    SimpleSet<Variable> set = parameterDeclaration(name);
     if (!set.isEmpty()) {
       return set;
     }
@@ -97,7 +97,7 @@ aspect VariableScope {
   }
 
   eq ConstructorDecl.getImplicitConstructorInvocation().lookupVariable(String name) {
-    SimpleSet set = parameterDeclaration(name);
+    SimpleSet<Variable> set = parameterDeclaration(name);
     if (!set.isEmpty()) {
       return set;
     }
@@ -137,7 +137,7 @@ aspect VariableScope {
   // The scope of the parameter of an exception handler that is declared in a
   // catch clause of a try statement is the entire block associated with the catch
   eq CatchClause.getBlock().lookupVariable(String name) {
-    SimpleSet set = parameterDeclaration(name);
+    SimpleSet<Variable> set = parameterDeclaration(name);
     if (!set.isEmpty()) {
       return set;
     }
@@ -148,10 +148,14 @@ aspect VariableScope {
   // The scope of a local variable declared in the ForInit part of the for
   // statement includes all of the following:
   eq ForStmt.getInitStmt().lookupVariable(String name) = localLookup(name);
+
   eq ForStmt.getCondition().lookupVariable(String name) = localLookup(name);
+
   eq ForStmt.getUpdateStmt().lookupVariable(String name) = localLookup(name);
+
   eq ForStmt.getStmt().lookupVariable(String name) = localLookup(name);
-  syn lazy SimpleSet ForStmt.localLookup(String name) {
+
+  syn lazy SimpleSet<Variable> ForStmt.localLookup(String name) {
     VariableDeclaration v = localVariableDeclaration(name);
     if (v != null) {
       return v;
@@ -160,29 +164,30 @@ aspect VariableScope {
   }
 
   /** @return the first variable declaration with the given name. */
-  syn lazy SimpleSet MethodDecl.parameterDeclaration(String name) {
+  syn lazy SimpleSet<Variable> MethodDecl.parameterDeclaration(String name) {
     for (int i = 0; i < getNumParameter(); i++) {
       if (getParameter(i).name().equals(name)) {
         return (ParameterDeclaration) getParameter(i);
       }
     }
-    return SimpleSet.emptySet;
+    return emptySet();
   }
 
-  syn lazy SimpleSet ConstructorDecl.parameterDeclaration(String name) {
+  syn lazy SimpleSet<Variable> ConstructorDecl.parameterDeclaration(String name) {
     for (int i = 0; i < getNumParameter(); i++) {
       if (getParameter(i).name().equals(name)) {
         return (ParameterDeclaration) getParameter(i);
       }
     }
-    return SimpleSet.emptySet;
+    return emptySet();
   }
 
-  syn lazy SimpleSet CatchClause.parameterDeclaration(String name) = SimpleSet.emptySet;
+  syn lazy SimpleSet<Variable> CatchClause.parameterDeclaration(String name) = emptySet();
+
   eq BasicCatch.parameterDeclaration(String name) =
       getParameter().name().equals(name)
       ? getParameter()
-      : SimpleSet.emptySet;
+      : ASTNode.<Variable>emptySet();
 
   syn lazy VariableDeclaration Block.localVariableDeclaration(String name) {
     for (Stmt stmt: getStmtList()) {
@@ -218,49 +223,56 @@ aspect VariableScope {
   syn boolean VariableDeclaration.declaresVariable(String name) = getID().equals(name);
 
   eq MethodAccess.getArg().lookupVariable(String name) = unqualifiedScope().lookupVariable(name);
+
   eq ConstructorAccess.getArg().lookupVariable(String name) =
       unqualifiedScope().lookupVariable(name);
+
   eq SuperConstructorAccess.getArg().lookupVariable(String name) =
       unqualifiedScope().lookupVariable(name);
+
   eq ArrayAccess.getExpr().lookupVariable(String name) =
       unqualifiedScope().lookupVariable(name);
+
   eq ArrayTypeWithSizeAccess.getExpr().lookupVariable(String name) =
       unqualifiedScope().lookupVariable(name);
+
   eq ClassInstanceExpr.getArg().lookupVariable(String name) =
       unqualifiedScope().lookupVariable(name);
 
   eq AbstractDot.getRight().lookupVariable(String name) = getLeft().qualifiedLookupVariable(name);
 
-  eq ParseName.qualifiedLookupVariable(String name) = SimpleSet.emptySet;
+  eq ParseName.qualifiedLookupVariable(String name) = emptySet();
 
   // Access control specifies the part of a program where a declared entity can
   // be referred to by a qualified name, field access expression, method
   // invocation expression without a simple name.
-  syn SimpleSet Expr.qualifiedLookupVariable(String name) {
+  syn SimpleSet<Variable> Expr.qualifiedLookupVariable(String name) {
     if (type().accessibleFrom(hostType())) {
       return keepAccessibleFields(type().memberFields(name));
     }
-    return SimpleSet.emptySet;
+    return emptySet();
   }
-  eq PackageAccess.qualifiedLookupVariable(String name) = SimpleSet.emptySet;
+
+  eq PackageAccess.qualifiedLookupVariable(String name) = emptySet();
+
   eq TypeAccess.qualifiedLookupVariable(String name) {
     if (type().accessibleFrom(hostType())) {
-      SimpleSet c = type().memberFields(name);
+      SimpleSet<Variable> c = type().memberFields(name);
       c = keepAccessibleFields(c);
       if (type().isClassDecl() && c.size() == 1) {
         c = removeInstanceVariables(c);
       }
       return c;
     }
-    return SimpleSet.emptySet;
+    return emptySet();
   }
 
   /**
    * Remove fields that are not accessible when using this Expr as qualifier
    * @return a set containing the accessible fields
    */
-  public SimpleSet Expr.keepAccessibleFields(SimpleSet oldSet) {
-    SimpleSet newSet = SimpleSet.emptySet;
+  public SimpleSet<Variable> Expr.keepAccessibleFields(SimpleSet<Variable> oldSet) {
+    SimpleSet<Variable> newSet = emptySet();
     for (Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
       Variable v = (Variable) iter.next();
       if (v instanceof FieldDeclaration) {
@@ -273,8 +285,8 @@ aspect VariableScope {
     return newSet;
   }
 
-  public SimpleSet ASTNode.removeInstanceVariables(SimpleSet oldSet) {
-    SimpleSet newSet = SimpleSet.emptySet;
+  public SimpleSet<Variable> ASTNode.removeInstanceVariables(SimpleSet<Variable> oldSet) {
+    SimpleSet<Variable> newSet = emptySet();
     for (Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
       Variable v = (Variable) iter.next();
       if (!v.isInstanceVariable()) {
@@ -325,7 +337,7 @@ aspect VariableScope {
 
 aspect VariableScopePropagation {
   interface VariableScope {
-    public SimpleSet lookupVariable(String name);
+    public SimpleSet<Variable> lookupVariable(String name);
   }
 
   CatchClause implements VariableScope;
@@ -335,24 +347,24 @@ aspect VariableScopePropagation {
 
   inh Variable Access.unknownField();
 
-  syn lazy SimpleSet VarAccess.decls() {
-    SimpleSet set = lookupVariable(name());
+  syn lazy SimpleSet<Variable> VarAccess.decls() {
+    SimpleSet<Variable> set = lookupVariable(name());
     if (set.size() == 1) {
       Variable v = (Variable) set.iterator().next();
       if (!isQualified() && inStaticContext()) {
         if (v.isInstanceVariable() && !hostType().memberFields(v.name()).isEmpty()) {
-          return SimpleSet.emptySet;
+          return emptySet();
         }
       } else if (isQualified() && qualifier().staticContextQualifier()) {
         if (v.isInstanceVariable()) {
-          return SimpleSet.emptySet;
+          return emptySet();
         }
       }
     }
     return set;
   }
   syn lazy Variable VarAccess.decl() {
-    SimpleSet decls = decls();
+    SimpleSet<Variable> decls = decls();
     if (decls.size() == 1) {
       return (Variable) decls.iterator().next();
     }
@@ -362,19 +374,19 @@ aspect VariableScopePropagation {
 
 aspect Fields {
 
-  syn lazy SimpleSet TypeDecl.localFields(String name) =
+  syn lazy SimpleSet<Variable> TypeDecl.localFields(String name) =
       localFieldsMap().containsKey(name)
-      ? (SimpleSet) localFieldsMap().get(name)
-      : SimpleSet.emptySet;
+      ? localFieldsMap().get(name)
+      : ASTNode.<Variable>emptySet();
 
-  syn lazy HashMap TypeDecl.localFieldsMap() {
-    HashMap map = new HashMap();
+  syn lazy Map<String, SimpleSet<Variable>> TypeDecl.localFieldsMap() {
+    Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>();
     for (int i = 0; i < getNumBodyDecl(); i++) {
       if (getBodyDecl(i) instanceof FieldDeclaration) {
         FieldDeclaration decl = (FieldDeclaration) getBodyDecl(i);
-        SimpleSet fields = (SimpleSet) map.get(decl.name());
+        SimpleSet<Variable> fields = map.get(decl.name());
         if (fields == null) {
-          fields = SimpleSet.emptySet;
+          fields = ASTNode.<Variable>emptySet();
         }
         fields = fields.add(decl);
         map.put(decl.name(), fields);
@@ -383,23 +395,29 @@ aspect Fields {
     return map;
   }
 
-  syn lazy HashMap TypeDecl.memberFieldsMap() = localFieldsMap();
+  syn lazy Map<String, SimpleSet<Variable>> TypeDecl.memberFieldsMap() = localFieldsMap();
 
   eq ClassDecl.memberFieldsMap() {
-    HashMap map = new HashMap(localFieldsMap());
+    Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>(
+        localFieldsMap());
     if (hasSuperclass()) {
-      for (Iterator iter = superclass().fieldsIterator(); iter.hasNext(); ) {
-        FieldDeclaration decl = (FieldDeclaration) iter.next();
-        if (!decl.isPrivate() && decl.accessibleFrom(this) && !localFieldsMap().containsKey(decl.name())) {
+      Iterator<FieldDeclaration> iter = superclass().fieldsIterator();
+      while (iter.hasNext()) {
+        FieldDeclaration decl = iter.next();
+        if (!decl.isPrivate() && decl.accessibleFrom(this)
+            && !localFieldsMap().containsKey(decl.name())) {
           putSimpleSetElement(map, decl.name(), decl);
         }
       }
     }
-    for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+    Iterator<TypeDecl> outerIter = interfacesIterator();
+    while (outerIter.hasNext()) {
       TypeDecl type = outerIter.next();
-      for (Iterator iter = type.fieldsIterator(); iter.hasNext(); ) {
+      Iterator iter = type.fieldsIterator();
+      while (iter.hasNext()) {
         FieldDeclaration decl = (FieldDeclaration) iter.next();
-        if (!decl.isPrivate() && decl.accessibleFrom(this) && !localFieldsMap().containsKey(decl.name())) {
+        if (!decl.isPrivate() && decl.accessibleFrom(this)
+            && !localFieldsMap().containsKey(decl.name())) {
           putSimpleSetElement(map, decl.name(), decl);
         }
       }
@@ -408,11 +426,14 @@ aspect Fields {
   }
 
   eq InterfaceDecl.memberFieldsMap() {
-    HashMap map = new HashMap(localFieldsMap());
-    for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+    Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>(
+        localFieldsMap());
+    Iterator<TypeDecl> outerIter = interfacesIterator();
+    while (outerIter.hasNext()) {
       TypeDecl typeDecl = outerIter.next();
-      for (Iterator iter = typeDecl.fieldsIterator(); iter.hasNext(); ) {
-        FieldDeclaration f = (FieldDeclaration) iter.next();
+      Iterator<FieldDeclaration> iter = typeDecl.fieldsIterator();
+      while (iter.hasNext()) {
+        FieldDeclaration f = iter.next();
         if (f.accessibleFrom(this) && !f.isPrivate() && !localFieldsMap().containsKey(f.name())) {
           putSimpleSetElement(map, f.name(), f);
         }
@@ -421,42 +442,54 @@ aspect Fields {
     return map;
   }
 
-  public Iterator TypeDecl.fieldsIterator() {
-    return new Iterator() {
-      private Iterator outer = memberFieldsMap().values().iterator();
-      private Iterator inner = null;
+  public Iterator<FieldDeclaration> TypeDecl.fieldsIterator() {
+    return new Iterator<FieldDeclaration>() {
+      private Iterator<SimpleSet<Variable>> outer = memberFieldsMap().values().iterator();
+
+      private Iterator<Variable> inner = null;
+
+      @Override
       public boolean hasNext() {
         if ((inner == null || !inner.hasNext()) && outer.hasNext()) {
-          inner = ((SimpleSet) outer.next()).iterator();
+          inner = outer.next().iterator();
         }
         return inner != null ? inner.hasNext() : false;
       }
-      public Object next() {
-        return inner.next();
+
+      @Override
+      public FieldDeclaration next() {
+        return (FieldDeclaration) inner.next();
       }
-      public void remove() { throw new UnsupportedOperationException(); }
+
+      @Override
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
     };
   }
 
-  syn lazy SimpleSet TypeDecl.memberFields(String name) = localFields(name);
+  syn lazy SimpleSet<Variable> TypeDecl.memberFields(String name) = localFields(name);
 
   // Class member fields.
   eq ClassDecl.memberFields(String name) {
-    SimpleSet fields = localFields(name);
+    SimpleSet<Variable> fields = localFields(name);
     if (!fields.isEmpty()) {
       return fields; // This causes hiding of fields in superclass and interfaces.
     }
     if (hasSuperclass()) {
-      for (Iterator iter = superclass().memberFields(name).iterator(); iter.hasNext(); ) {
+      Iterator<Variable> iter = superclass().memberFields(name).iterator();
+      while (iter.hasNext()) {
         FieldDeclaration decl = (FieldDeclaration) iter.next();
         if (!decl.isPrivate() && decl.accessibleFrom(this)) {
           fields = fields.add(decl);
         }
       }
     }
-    for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
+    Iterator<TypeDecl> outerIter = interfacesIterator();
+    while (outerIter.hasNext()) {
       TypeDecl type = outerIter.next();
-      for (Iterator iter = type.memberFields(name).iterator(); iter.hasNext(); ) {
+      Iterator iter = type.memberFields(name).iterator();
+      while (iter.hasNext()) {
         FieldDeclaration decl = (FieldDeclaration) iter.next();
         if (!decl.isPrivate() && decl.accessibleFrom(this)) {
           fields = fields.add(decl);
@@ -467,7 +500,7 @@ aspect Fields {
   }
 
   eq InterfaceDecl.memberFields(String name) {
-    SimpleSet fields = localFields(name);
+    SimpleSet<Variable> fields = localFields(name);
     if (!fields.isEmpty()) {
       return fields;
     }

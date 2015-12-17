@@ -51,18 +51,12 @@ aspect TryWithResources {
     }
   }
 
-  /*coll Set<TypeDecl> Stmt.uncaughtExceptions()
-    [new HashSet<TypeDecl>()] with add;
-
-  MethodAccess contributes exceptionCollection()
-    to Stmt.uncaughtExceptions();*/
-
   /**
    * Exception error checks.
    */
   public void TryWithResources.exceptionHandling() {
 
-    // Check exception handling of exceptions on auto closing of resource
+    // Check exception handling of exceptions on auto closing of resource.
     for (ResourceDeclaration resource : getResourceList()) {
       MethodDecl close = lookupClose(resource);
       if (close == null) {
@@ -129,15 +123,14 @@ aspect TryWithResources {
         return method;
       }
     }
+    // We should not throw a runtime exception here. If there is no close
+    // method it likely means that the resource type is not a subtype of
+    // java.lang.AutoCloseable and type checking will report this error.
     return null;
-    /* We can't throw a runtime exception here. If there is no close method it
-     * likely means that the resource type is not a subtype of java.lang.AutoCloseable
-     * and type checking will report this error.
-     */
-    //throw new RuntimeException("close() not found for resource type "+resourceType.fullName());
   }
 
   inh lazy TypeDecl TryWithResources.typeError();
+
   inh lazy TypeDecl TryWithResources.typeRuntimeException();
 
   eq TryWithResources.getCatchClause(int childIndex).reachableCatchClause(TypeDecl exceptionType) {
@@ -159,13 +152,15 @@ aspect TryWithResources {
    * Variable lookup attribute.
    */
   eq TryWithResources.getBlock().lookupVariable(String name) = localLookup(name);
-  syn lazy SimpleSet TryWithResources.localLookup(String name) {
+
+  syn lazy SimpleSet<Variable> TryWithResources.localLookup(String name) {
     VariableDeclaration v = localVariableDeclaration(name);
     if (v != null) {
       return v;
     }
     return lookupVariable(name);
   }
+
   syn lazy VariableDeclaration TryWithResources.localVariableDeclaration(String name) {
     for (ResourceDeclaration resource : getResourceList()) {
       if (resource.declaresVariable(name)) {
@@ -176,11 +171,15 @@ aspect TryWithResources {
   }
 
   TryWithResources implements VariableScope;
-  inh lazy SimpleSet TryWithResources.lookupVariable(String name);
+
+  inh lazy SimpleSet<Variable> TryWithResources.lookupVariable(String name);
+
   eq TryWithResources.getResource(int i).outerScope() = this;
 
   inh boolean VariableDeclaration.resourcePreviouslyDeclared(String name);
+
   inh boolean TryWithResources.resourcePreviouslyDeclared(String name);
+
   eq TryWithResources.getResource(int index).resourcePreviouslyDeclared(String name) {
     for (int i = 0; i < index; ++i) {
       if (getResource(i).name().equals(name)) {
@@ -189,17 +188,19 @@ aspect TryWithResources {
     }
     return false;
   }
+
   eq BodyDecl.getChild(int i).resourcePreviouslyDeclared(String name) = false;
+
   eq Program.getChild(int i).resourcePreviouslyDeclared(String name) = false;
 
   public void ResourceDeclaration.nameCheck() {
-    // Special name check for resource specification
+    // Special name check for resource specification.
     if (resourcePreviouslyDeclared(name())) {
       errorf("A resource with the name %s has already been declared in this try statement.",
           name());
     }
 
-    // Do regular name check for variable declaration
+    // Do regular name check for variable declaration.
     super.nameCheck();
   }
 
@@ -221,7 +222,7 @@ aspect TryWithResources {
    */
   protected boolean TryWithResources.reachedException(TypeDecl catchType) {
     boolean found = false;
-    // found is true if the exception type is caught by a catch clause
+    // Found is true if the exception type is caught by a catch clause.
     for (int i = 0; i < getNumCatchClause() && !found; i++) {
       if (getCatchClause(i).handles(catchType)) {
         found = true;

@@ -34,34 +34,46 @@ import java.util.ArrayList;
 
 aspect LookupMethod {
   inh MethodDecl MethodDecl.unknownMethod();
+
   inh MethodDecl MethodAccess.unknownMethod();
 
   syn Expr Access.unqualifiedScope() = isQualified() ? nestedScope() : this;
+
   inh Expr Access.nestedScope();
+
   eq AbstractDot.getRight().nestedScope() = isQualified() ? nestedScope() : this;
+
   eq AbstractDot.getLeft().nestedScope() = isQualified() ? nestedScope() : this;
+
   eq Program.getChild().nestedScope() {
     throw new UnsupportedOperationException();
   }
 
-  inh Collection Expr.lookupMethod(String name);
-  inh Collection Stmt.lookupMethod(String name);
-  inh Collection BodyDecl.lookupMethod(String name);
-  inh lazy Collection TypeDecl.lookupMethod(String name);
+  inh Collection<MethodDecl> Expr.lookupMethod(String name);
+
+  inh Collection<MethodDecl> Stmt.lookupMethod(String name);
+
+  inh Collection<MethodDecl> BodyDecl.lookupMethod(String name);
+
+  inh lazy Collection<MethodDecl> TypeDecl.lookupMethod(String name);
 
   eq MethodAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
+
   eq ConstructorAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
+
   eq ArrayAccess.getExpr().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
+
   eq ArrayTypeWithSizeAccess.getExpr().lookupMethod(String name) =
       unqualifiedScope().lookupMethod(name);
 
   eq Program.getChild().lookupMethod(String name) = Collections.EMPTY_LIST;
+
   eq TypeDecl.getBodyDecl(int i).lookupMethod(String name) = unqualifiedLookupMethod(name);
 
-  syn lazy Collection TypeDecl.unqualifiedLookupMethod(String name) {
-    Collection c = memberMethods(name);
-    if (!c.isEmpty()) {
-      return c;
+  syn lazy Collection<MethodDecl> TypeDecl.unqualifiedLookupMethod(String name) {
+    Collection<MethodDecl> methods = memberMethods(name);
+    if (!methods.isEmpty()) {
+      return methods;
     }
     if (isInnerType()) {
       return lookupMethod(name);
@@ -71,36 +83,34 @@ aspect LookupMethod {
 
   // In explicit constructor invocation.
   eq ConstructorDecl.getParsedConstructorInvocation().lookupMethod(String name) {
-    Collection c = new ArrayList();
-    for (Iterator iter = lookupMethod(name).iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
+    for (MethodDecl m : lookupMethod(name)) {
       if (!hostType().memberMethods(name).contains(m) || m.isStatic()) {
-        c.add(m);
+        methods.add(m);
       }
     }
-    return c;
+    return methods;
   }
 
   eq ConstructorDecl.getImplicitConstructorInvocation().lookupMethod(String name) {
-    Collection c = new ArrayList();
-    for (Iterator iter = lookupMethod(name).iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
+    for (MethodDecl m : lookupMethod(name)) {
       if (!hostType().memberMethods(name).contains(m) || m.isStatic()) {
-        c.add(m);
+        methods.add(m);
       }
     }
-    return c;
+    return methods;
   }
 
-  public static Collection ASTNode.removeInstanceMethods(Collection c) {
-    c = new LinkedList(c);
-    for (Iterator iter = c.iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
-      if (!m.isStatic()) {
+  public static Collection<MethodDecl> ASTNode.removeInstanceMethods(
+      Collection<MethodDecl> methods) {
+    methods = new LinkedList<MethodDecl>(methods);
+    for (Iterator<MethodDecl> iter = methods.iterator(); iter.hasNext(); ) {
+      if (!iter.next().isStatic()) {
         iter.remove();
       }
     }
-    return c;
+    return methods;
   }
 
   eq AbstractDot.getRight().lookupMethod(String name) = getLeft().type().memberMethods(name);
@@ -118,15 +128,14 @@ aspect LookupMethod {
     return result;
   }
 
-  protected SimpleSet MethodAccess.maxSpecific(Collection candidates) {
-    SimpleSet maxSpecific = SimpleSet.emptySet;
-    for (Iterator iter = candidates.iterator(); iter.hasNext(); ) {
-      MethodDecl decl = (MethodDecl) iter.next();
+  protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(Collection<MethodDecl> candidates) {
+    SimpleSet<MethodDecl> maxSpecific = emptySet();
+    for (MethodDecl decl : candidates) {
       if (applicable(decl) && accessible(decl)) {
         if (maxSpecific.isEmpty()) {
           maxSpecific = maxSpecific.add(decl);
         } else {
-          MethodDecl other = (MethodDecl) maxSpecific.iterator().next();
+          MethodDecl other = maxSpecific.iterator().next();
           if (decl.moreSpecificThan(other)) {
             maxSpecific = decl;
           } else if (!other.moreSpecificThan(decl)) {
@@ -138,8 +147,8 @@ aspect LookupMethod {
     return maxSpecific;
   }
 
-  syn lazy SimpleSet MethodAccess.decls() {
-    SimpleSet maxSpecific = maxSpecific(lookupMethod(name()));
+  syn lazy SimpleSet<MethodDecl> MethodAccess.decls() {
+    SimpleSet<MethodDecl> maxSpecific = maxSpecific(lookupMethod(name()));
     if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
       maxSpecific = removeInstanceMethods(maxSpecific);
     }
@@ -147,16 +156,16 @@ aspect LookupMethod {
   }
 
   syn lazy MethodDecl MethodAccess.decl() {
-    SimpleSet decls = decls();
-    if (decls.size() == 1) {
-      return (MethodDecl) decls.iterator().next();
+    SimpleSet<MethodDecl> decls = decls();
+    if (decls.isSingleton()) {
+      return decls.iterator().next();
     }
 
     // Only return the first method in case of multply inherited abstract methods.
     // See JLS section 8.4.6.4.
     boolean allAbstract = true;
-    for (Iterator iter = decls.iterator(); iter.hasNext() && allAbstract; ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    for (Iterator<MethodDecl> iter = decls.iterator(); iter.hasNext() && allAbstract; ) {
+      MethodDecl m = iter.next();
       if (!m.isAbstract() && !m.hostType().isObject()) {
         allAbstract = false;
       }
@@ -166,10 +175,11 @@ aspect LookupMethod {
     }
     return unknownMethod();
   }
-  private static SimpleSet MethodAccess.removeInstanceMethods(SimpleSet c) {
-    SimpleSet set = SimpleSet.emptySet;
-    for (Iterator iter = c.iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+
+  private static SimpleSet<MethodDecl> MethodAccess.removeInstanceMethods(SimpleSet<MethodDecl> c) {
+    SimpleSet<MethodDecl> set = emptySet();
+    for (Iterator<MethodDecl> iter = c.iterator(); iter.hasNext(); ) {
+      MethodDecl m = iter.next();
       if (m.isStatic()) {
         set = set.add(m);
       }
@@ -329,8 +339,8 @@ aspect MemberMethods {
   /**
    * @return map from method name to method declarations
    */
-  syn lazy Map<String,Collection<MethodDecl>> TypeDecl.methodsNameMap() {
-    Map<String,Collection<MethodDecl>> map = new HashMap<String,Collection<MethodDecl>>();
+  syn lazy Map<String, Collection<MethodDecl>> TypeDecl.methodsNameMap() {
+    Map<String, Collection<MethodDecl>> map = new HashMap<String, Collection<MethodDecl>>();
     for (Iterator<MethodDecl> iter = methodsIterator(); iter.hasNext(); ) {
       MethodDecl m = iter.next();
       Collection<MethodDecl> methods = map.get(m.name());
@@ -349,34 +359,44 @@ aspect MemberMethods {
    */
   public Iterator<MethodDecl> TypeDecl.localMethodsIterator() {
     return new Iterator<MethodDecl>() {
-      private Iterator<SimpleSet> outer = localMethodsSignatureMap().values().iterator();
+      private Iterator<SimpleSet<MethodDecl>> outer =
+          localMethodsSignatureMap().values().iterator();
       private Iterator inner = null;
+
+      @Override
       public boolean hasNext() {
         if ((inner == null || !inner.hasNext()) && outer.hasNext()) {
           inner = outer.next().iterator();
         }
         return inner == null ? false : inner.hasNext();
       }
+
+      @Override
       public MethodDecl next() {
         return (MethodDecl) inner.next();
       }
-      public void remove() { throw new UnsupportedOperationException(); }
+
+      @Override
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
     };
   }
 
-  syn SimpleSet TypeDecl.localMethodsSignature(String signature) {
-    SimpleSet set = localMethodsSignatureMap().get(signature);
+  syn SimpleSet<MethodDecl> TypeDecl.localMethodsSignature(String signature) {
+    SimpleSet<MethodDecl> set = localMethodsSignatureMap().get(signature);
     if (set != null) {
       return set;
     }
-    return SimpleSet.emptySet;
+    return emptySet();
   }
 
   /**
    * @return a mapping of method signature to method declaration
    */
-  syn lazy Map<String,SimpleSet> TypeDecl.localMethodsSignatureMap() {
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(getNumBodyDecl());
+  syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.localMethodsSignatureMap() {
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(
+        getNumBodyDecl());
     for (int i = 0; i < getNumBodyDecl(); i++) {
       if (getBodyDecl(i) instanceof MethodDecl) {
         MethodDecl decl = (MethodDecl) getBodyDecl(i);
@@ -392,44 +412,53 @@ aspect MemberMethods {
    */
   public Iterator<MethodDecl> TypeDecl.interfacesMethodsIterator() {
     return new Iterator<MethodDecl>() {
-      private Iterator<SimpleSet> outer = interfacesMethodsSignatureMap().values().iterator();
+      private Iterator<SimpleSet<MethodDecl>> outer =
+          interfacesMethodsSignatureMap().values().iterator();
       private Iterator inner = null;
+
+      @Override
       public boolean hasNext() {
         if ((inner == null || !inner.hasNext()) && outer.hasNext()) {
           inner = outer.next().iterator();
         }
         return inner == null ? false : inner.hasNext();
       }
+
+      @Override
       public MethodDecl next() {
         return (MethodDecl) inner.next();
       }
-      public void remove() { throw new UnsupportedOperationException(); }
+
+      @Override
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
     };
   }
 
-  syn SimpleSet ClassDecl.interfacesMethodsSignature(String signature) {
-    SimpleSet set = interfacesMethodsSignatureMap().get(signature);
+  syn SimpleSet<MethodDecl> ClassDecl.interfacesMethodsSignature(String signature) {
+    SimpleSet<MethodDecl> set = interfacesMethodsSignatureMap().get(signature);
     if (set != null) {
       return set;
     } else {
-      return SimpleSet.emptySet;
+      return emptySet();
     }
   }
 
   /**
    * Map signature to set of method declarations.
    */
-  syn lazy Map<String,SimpleSet> TypeDecl.interfacesMethodsSignatureMap() {
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>();
+  syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.interfacesMethodsSignatureMap() {
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
     for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
       InterfaceDecl iface = (InterfaceDecl) iter.next();
       for (Iterator<MethodDecl> i2 = iface.localMethodsIterator(); i2.hasNext(); ) {
         MethodDecl m = i2.next();
         putSimpleSetElement(map, m.signature(), m);
       }
-      for (SimpleSet set: iface.interfacesMethodsSignatureMap().values()) {
-        for (Iterator i2 = set.iterator(); i2.hasNext(); ) {
-          MethodDecl m = (MethodDecl) i2.next();
+      for (SimpleSet<MethodDecl> set : iface.interfacesMethodsSignatureMap().values()) {
+        for (Iterator<MethodDecl> i2 = set.iterator(); i2.hasNext(); ) {
+          MethodDecl m = i2.next();
           putSimpleSetElement(map, m.signature(), m);
         }
       }
@@ -443,35 +472,44 @@ aspect MemberMethods {
    */
   public Iterator<MethodDecl> TypeDecl.methodsIterator() {
     return new Iterator<MethodDecl>() {
-      private Iterator<SimpleSet> outer = methodsSignatureMap().values().iterator();
+      private Iterator<SimpleSet<MethodDecl>> outer = methodsSignatureMap().values().iterator();
       private Iterator inner = null;
+
+      @Override
       public boolean hasNext() {
         if ((inner == null || !inner.hasNext()) && outer.hasNext()) {
           inner = outer.next().iterator();
         }
         return inner != null ? inner.hasNext() : false;
       }
+
+      @Override
       public MethodDecl next() {
         return (MethodDecl) inner.next();
       }
-      public void remove() { throw new UnsupportedOperationException(); }
+
+      @Override
+      public void remove() {
+        throw new UnsupportedOperationException();
+      }
     };
   }
 
-  syn SimpleSet TypeDecl.methodsSignature(String signature) {
-    SimpleSet set = (SimpleSet) methodsSignatureMap().get(signature);
+  syn SimpleSet<MethodDecl> TypeDecl.methodsSignature(String signature) {
+    SimpleSet<MethodDecl> set = methodsSignatureMap().get(signature);
     if (set != null) {
       return set;
     }
-    return SimpleSet.emptySet;
+    return emptySet();
   }
 
-  // Maps signature String to SimpleSet.
-  syn lazy Map<String,SimpleSet> TypeDecl.methodsSignatureMap() = localMethodsSignatureMap();
+  /** Maps signature String to SimpleSet. */
+  syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.methodsSignatureMap() =
+      localMethodsSignatureMap();
 
   eq ClassDecl.methodsSignatureMap() {
-    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
+    Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
     if (hasSuperclass()) {
       for (Iterator<MethodDecl> iter = superclass().methodsIterator(); iter.hasNext(); ) {
         MethodDecl m = iter.next();
@@ -483,7 +521,7 @@ aspect MemberMethods {
     for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl m = iter.next();
       if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-        if (allMethodsAbstract((SimpleSet) map.get(m.signature()))) {
+        if (allMethodsAbstract((SimpleSet<MethodDecl>) map.get(m.signature()))) {
           putSimpleSetElement(map, m.signature(), m);
         }
       }
@@ -492,8 +530,8 @@ aspect MemberMethods {
   }
 
   eq InterfaceDecl.methodsSignatureMap() {
-    Map<String,SimpleSet> localMap = localMethodsSignatureMap();
-    Map<String,SimpleSet> map = new HashMap<String,SimpleSet>(localMap);
+    Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
     for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl m = (MethodDecl) iter.next();
       if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
@@ -510,23 +548,23 @@ aspect MemberMethods {
   }
 
   /**
-   * Utility method to put a SimpleSet-item in a signature map.
+   * Utility method to add a single item in a SimpleSet based signature map.
    */
-  protected static void ASTNode.putSimpleSetElement(Map<String,SimpleSet> map, String key,
-      SimpleSet value) {
-    SimpleSet set = map.get(key);
+  protected static <E> void ASTNode.putSimpleSetElement(Map<String, SimpleSet<E>> map,
+      String key, E value) {
+    SimpleSet<E> set = map.get(key);
     if (set == null) {
-      set = SimpleSet.emptySet;
+      set = emptySet();
     }
     map.put(key, set.add(value));
   }
 
-  protected boolean TypeDecl.allMethodsAbstract(SimpleSet set) {
+  protected boolean TypeDecl.allMethodsAbstract(SimpleSet<MethodDecl> set) {
     if (set == null) {
       return true;
     }
-    for (Iterator iter = set.iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    for (Iterator<MethodDecl> iter = set.iterator(); iter.hasNext(); ) {
+      MethodDecl m = iter.next();
       if (!m.isAbstract()) {
         return false;
       }
@@ -541,14 +579,14 @@ aspect AncestorMethods {
    * when checking correct overriding, hiding, and implementation of abstract
    * methods.
    */
-  syn lazy SimpleSet TypeDecl.ancestorMethods(String signature) = SimpleSet.emptySet;
+  syn lazy SimpleSet<MethodDecl> TypeDecl.ancestorMethods(String signature) = emptySet();
 
   eq ClassDecl.ancestorMethods(String signature) {
-    SimpleSet set = SimpleSet.emptySet;
+    SimpleSet<MethodDecl> set = emptySet();
     if (hasSuperclass()) {
-      Iterator iter = superclass().localMethodsSignature(signature).iterator();
+      Iterator<MethodDecl> iter = superclass().localMethodsSignature(signature).iterator();
       while (iter.hasNext()) {
-        MethodDecl m = (MethodDecl) iter.next();
+        MethodDecl m = iter.next();
         if (!m.isPrivate()) {
           set = set.add(m);
         }
@@ -586,17 +624,15 @@ aspect AncestorMethods {
   }
 
   eq InterfaceDecl.ancestorMethods(String signature) {
-    SimpleSet set = SimpleSet.emptySet;
+    SimpleSet<MethodDecl> set = emptySet();
     for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
       TypeDecl typeDecl = outerIter.next();
-      for (Iterator iter = typeDecl.methodsSignature(signature).iterator(); iter.hasNext(); ) {
-        MethodDecl m = (MethodDecl) iter.next();
+      for (MethodDecl m : typeDecl.methodsSignature(signature)) {
         set = set.add(m);
       }
     }
     if (!interfacesIterator().hasNext()) {
-      for (Iterator iter = typeObject().methodsSignature(signature).iterator(); iter.hasNext(); ) {
-        MethodDecl m = (MethodDecl) iter.next();
+      for (MethodDecl m : typeObject().methodsSignature(signature)) {
         if (m.isPublic()) {
           set = set.add(m);
         }
