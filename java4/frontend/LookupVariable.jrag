@@ -61,10 +61,10 @@ aspect VariableScope {
 
   // The scope of a parameter of a method is the entire body of the method.
   eq MethodDecl.getBlock().lookupVariable(String name) {
-    SimpleSet<Variable> set = parameterDeclaration(name);
+    SimpleSet<Variable> result = parameterDeclaration(name);
     // A declaration of a method parameter name shadows any other variable declarations.
-    if (!set.isEmpty()) {
-      return set;
+    if (!result.isEmpty()) {
+      return result;
     }
     // Delegate to other declarations in scope.
     return lookupVariable(name);
@@ -75,39 +75,37 @@ aspect VariableScope {
   eq MethodDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
 
   eq ConstructorDecl.getBlock().lookupVariable(String name) {
-    SimpleSet<Variable> set = parameterDeclaration(name);
-    if (!set.isEmpty()) {
-      return set;
+    SimpleSet<Variable> result = parameterDeclaration(name);
+    if (!result.isEmpty()) {
+      return result;
     }
     return lookupVariable(name);
   }
 
   eq ConstructorDecl.getParsedConstructorInvocation().lookupVariable(String name) {
-    SimpleSet<Variable> set = parameterDeclaration(name);
-    if (!set.isEmpty()) {
-      return set;
+    SimpleSet<Variable> result = parameterDeclaration(name);
+    if (!result.isEmpty()) {
+      return result;
     }
-    for (Iterator iter = lookupVariable(name).iterator(); iter.hasNext(); ) {
-      Variable v = (Variable) iter.next();
+    for (Variable v : lookupVariable(name)) {
       if (!hostType().memberFields(name).contains(v) || v.isStatic()) {
-        set = set.add(v);
+        result = result.add(v);
       }
     }
-    return set;
+    return result;
   }
 
   eq ConstructorDecl.getImplicitConstructorInvocation().lookupVariable(String name) {
-    SimpleSet<Variable> set = parameterDeclaration(name);
-    if (!set.isEmpty()) {
-      return set;
+    SimpleSet<Variable> result = parameterDeclaration(name);
+    if (!result.isEmpty()) {
+      return result;
     }
-    for (Iterator iter = lookupVariable(name).iterator(); iter.hasNext(); ) {
-      Variable v = (Variable) iter.next();
+    for (Variable v : lookupVariable(name)) {
       if (!hostType().memberFields(name).contains(v) || v.isStatic()) {
-        set = set.add(v);
+        result = result.add(v);
       }
     }
-    return set;
+    return result;
   }
 
   eq ConstructorDecl.getParameter().lookupVariable(String name) = parameterDeclaration(name);
@@ -137,9 +135,9 @@ aspect VariableScope {
   // The scope of the parameter of an exception handler that is declared in a
   // catch clause of a try statement is the entire block associated with the catch
   eq CatchClause.getBlock().lookupVariable(String name) {
-    SimpleSet<Variable> set = parameterDeclaration(name);
-    if (!set.isEmpty()) {
-      return set;
+    SimpleSet<Variable> result = parameterDeclaration(name);
+    if (!result.isEmpty()) {
+      return result;
     }
     return lookupVariable(name);
   }
@@ -271,10 +269,9 @@ aspect VariableScope {
    * Remove fields that are not accessible when using this Expr as qualifier
    * @return a set containing the accessible fields
    */
-  public SimpleSet<Variable> Expr.keepAccessibleFields(SimpleSet<Variable> oldSet) {
+  public SimpleSet<Variable> Expr.keepAccessibleFields(SimpleSet<Variable> fields) {
     SimpleSet<Variable> newSet = emptySet();
-    for (Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
-      Variable v = (Variable) iter.next();
+    for (Variable v : fields) {
       if (v instanceof FieldDeclaration) {
         FieldDeclaration f = (FieldDeclaration) v;
         if (mayAccess(f)) {
@@ -285,10 +282,9 @@ aspect VariableScope {
     return newSet;
   }
 
-  public SimpleSet<Variable> ASTNode.removeInstanceVariables(SimpleSet<Variable> oldSet) {
+  public SimpleSet<Variable> ASTNode.removeInstanceVariables(SimpleSet<Variable> vars) {
     SimpleSet<Variable> newSet = emptySet();
-    for (Iterator iter = oldSet.iterator(); iter.hasNext(); ) {
-      Variable v = (Variable) iter.next();
+    for (Variable v : vars) {
       if (!v.isInstanceVariable()) {
         newSet = newSet.add(v);
       }
@@ -348,9 +344,9 @@ aspect VariableScopePropagation {
   inh Variable Access.unknownField();
 
   syn lazy SimpleSet<Variable> VarAccess.decls() {
-    SimpleSet<Variable> set = lookupVariable(name());
-    if (set.size() == 1) {
-      Variable v = (Variable) set.iterator().next();
+    SimpleSet<Variable> result = lookupVariable(name());
+    if (result.isSingleton()) {
+      Variable v = result.iterator().next();
       if (!isQualified() && inStaticContext()) {
         if (v.isInstanceVariable() && !hostType().memberFields(v.name()).isEmpty()) {
           return emptySet();
@@ -361,12 +357,13 @@ aspect VariableScopePropagation {
         }
       }
     }
-    return set;
+    return result;
   }
+
   syn lazy Variable VarAccess.decl() {
     SimpleSet<Variable> decls = decls();
-    if (decls.size() == 1) {
-      return (Variable) decls.iterator().next();
+    if (decls.isSingleton()) {
+      return decls.iterator().next();
     }
     return unknownField();
   }
@@ -505,8 +502,9 @@ aspect Fields {
       return fields;
     }
     for (Iterator<TypeDecl> outerIter = interfacesIterator(); outerIter.hasNext(); ) {
-      TypeDecl typeDecl = (TypeDecl) outerIter.next();
-      for (Iterator iter = typeDecl.memberFields(name).iterator(); iter.hasNext(); ) {
+      TypeDecl typeDecl = outerIter.next();
+      Iterator<Variable> iter = typeDecl.memberFields(name).iterator();
+      while (iter.hasNext()) {
         FieldDeclaration f = (FieldDeclaration) iter.next();
         if (f.accessibleFrom(this) && !f.isPrivate()) {
           fields = fields.add(f);

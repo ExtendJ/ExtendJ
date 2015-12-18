@@ -37,8 +37,7 @@ aspect Java8NameCheck {
 
   public void InferredParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
-    for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
-      Variable var = (Variable) iter.next();
+    for (Variable var : decls) {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
@@ -71,8 +70,7 @@ aspect Java8NameCheck {
   refine MultiCatch
   public void CatchParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
-    for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
-      Variable var = (Variable) iter.next();
+    for (Variable var : decls) {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
@@ -105,8 +103,7 @@ aspect Java8NameCheck {
   refine MultiCatch
   public void ParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
-    for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
-      Variable var = (Variable) iter.next();
+    for (Variable var : decls) {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
@@ -139,8 +136,7 @@ aspect Java8NameCheck {
   refine MultiCatch
   public void VariableDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
-    for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
-      Variable var = (Variable) iter.next();
+    for (Variable var : decls) {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl != this && decl.enclosingBodyDecl() == enclosingBodyDecl()) {
@@ -184,13 +180,13 @@ aspect Java8NameCheck {
           || qualifier().isPackageAccess())) {
       errorf("no field named %s is accessible", name());
     }
+
     if (decls().size() > 1) {
       StringBuffer sb = new StringBuffer();
       sb.append("several fields named " + name());
-      for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-        Variable v = (Variable) iter.next();
-        sb.append("\n    " + v.type().typeName() + "." + v.name() + " declared in "
-            + v.hostType().typeName());
+      for (Variable var : decls()) {
+        sb.append("\n    " + var.type().typeName() + "." + var.name() + " declared in "
+            + var.hostType().typeName());
       }
       error(sb.toString());
     }
@@ -202,9 +198,9 @@ aspect Java8NameCheck {
           name());
     }
 
-    Variable v = decl();
-    if (!v.isClassVariable() && !v.isInstanceVariable() && v.hostType() != hostType()
-        && !v.isEffectivelyFinal()) {
+    Variable var = decl();
+    if (!var.isClassVariable() && !var.isInstanceVariable() && var.hostType() != hostType()
+        && !var.isEffectivelyFinal()) {
       error("A parameter/variable used but not declared in an inner class must be"
           + " final or effectively final");
     }
@@ -219,33 +215,33 @@ aspect Java8NameCheck {
       }
     }
 
-    if (!v.isClassVariable() && !v.isInstanceVariable() && enclosingLambda() != null) {
-      if (v instanceof ParameterDeclaration) {
-        ParameterDeclaration decl = (ParameterDeclaration) v;
+    if (!var.isClassVariable() && !var.isInstanceVariable() && enclosingLambda() != null) {
+      if (var instanceof ParameterDeclaration) {
+        ParameterDeclaration decl = (ParameterDeclaration) var;
         if (decl.enclosingLambda() != enclosingLambda()) {
           // 15.27.2
           if (!decl.isEffectivelyFinal()) {
-            errorf("Parameter %s must be effectively final", v.name());
+            errorf("Parameter %s must be effectively final", var.name());
           }
         }
-      } else if (v instanceof InferredParameterDeclaration) {
-        InferredParameterDeclaration decl = (InferredParameterDeclaration) v;
+      } else if (var instanceof InferredParameterDeclaration) {
+        InferredParameterDeclaration decl = (InferredParameterDeclaration) var;
         if (decl.enclosingLambda() != enclosingLambda()) {
           // 15.27.2
           if (!decl.isEffectivelyFinal()) {
-            errorf("Parameter %s must be effectively final", v.name());
+            errorf("Parameter %s must be effectively final", var.name());
           }
         }
-      } else if (v instanceof VariableDeclaration) {
-        VariableDeclaration decl = (VariableDeclaration) v;
+      } else if (var instanceof VariableDeclaration) {
+        VariableDeclaration decl = (VariableDeclaration) var;
         if (decl.enclosingLambda() != enclosingLambda()) {
           // 15.27.2
           if (!decl.isEffectivelyFinal()) {
-            errorf("Variable %s must be effectively final", v.name());
+            errorf("Variable %s must be effectively final", var.name());
           }
           // 15.27.2
           if (!enclosingLambda().assignedBefore(decl)) {
-            errorf("Variable %s must be definitely assigned before used in a lambda", v.name());
+            errorf("Variable %s must be definitely assigned before used in a lambda", var.name());
           }
         }
       }
@@ -311,20 +307,15 @@ aspect Java8NameCheck {
   refine TypeHierarchyCheck
   public void ClassDecl.nameCheck() {
     refined();
-    for (Iterator<SimpleSet<MethodDecl>> iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
-      SimpleSet<MethodDecl> set = iter.next();
+    for (SimpleSet<MethodDecl> set : methodsSignatureMap().values()) {
       if (set.size() > 1) {
-        Iterator i2 = set.iterator();
         boolean foundClassAbstract = false;
         MethodDecl foundNonAbstract = null;
-        while (i2.hasNext()) {
-          MethodDecl m = (MethodDecl) i2.next();
+        for (MethodDecl m : set) {
           if (!m.isAbstract()) {
             foundNonAbstract = m;
-          } else {
-            if (m.hostType().isClassDecl() && m.hostType() != this) {
-              foundClassAbstract = true;
-            }
+          } else if (m.hostType().isClassDecl() && m.hostType() != this) {
+            foundClassAbstract = true;
           }
         }
         // 8.4.8.1
@@ -355,8 +346,7 @@ aspect Java8NameCheck {
         }
       }
     }
-    for (Iterator<SimpleSet<MethodDecl>> iter = methodsSignatureMap().values().iterator(); iter.hasNext(); ) {
-      SimpleSet<MethodDecl> set = iter.next();
+    for (SimpleSet<MethodDecl> set : methodsSignatureMap().values()) {
       if (set.size() > 1) {
         Iterator i2 = set.iterator();
         MethodDecl m = (MethodDecl) i2.next();

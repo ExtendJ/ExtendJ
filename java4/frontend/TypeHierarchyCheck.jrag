@@ -78,17 +78,16 @@ aspect TypeHierarchyCheck {
     }
     if (decls().size() > 1) {
       boolean allAbstract = true;
-      for (Iterator iter = decls().iterator(); iter.hasNext() && allAbstract; ) {
-         MethodDecl m = (MethodDecl) iter.next();
+      for (MethodDecl m : decls()) {
         if (!m.isAbstract() && !m.hostType().isObject()) {
           allAbstract = false;
+          break;
         }
       }
       if (!allAbstract && validArgs()) {
         StringBuilder sb = new StringBuilder();
         sb.append("several most specific methods for " + this.prettyPrint() + "\n");
-        for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-          MethodDecl m = (MethodDecl) iter.next();
+        for (MethodDecl m : decls()) {
           sb.append("    " + m.fullSignature() + " in " + m.hostType().typeName() + "\n");
         }
         error(sb.toString());
@@ -217,8 +216,7 @@ aspect TypeHierarchyCheck {
       MethodDecl m = (MethodDecl) iter1.next();
       ASTNode target = m.hostType() == this ? (ASTNode) m : (ASTNode) this;
 
-      for (Iterator i2 = ancestorMethods(m.signature()).iterator(); i2.hasNext(); ) {
-        MethodDecl decl = (MethodDecl) i2.next();
+      for (MethodDecl decl : ancestorMethods(m.signature())) {
         if (m.overrides(decl)) {
           // 8.4.6.1
           if (!m.isStatic() && decl.isStatic()) {
@@ -332,11 +330,8 @@ aspect TypeHierarchyCheck {
     // Check if methods from superclass are incompatible with interface methods.
     for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl decl = iter.next();
-      SimpleSet<MethodDecl> set = localMethodsSignature(decl.signature());
-      Iterator i2 = set.iterator();
       boolean overridden = false;
-      while (i2.hasNext()) {
-        MethodDecl m = (MethodDecl) i2.next();
+      for (MethodDecl m : localMethodsSignature(decl.signature())) {
         // Regardless of overriding.
         // 8.4.6.3
         if (m.overrideCandidate(decl)) {
@@ -350,11 +345,8 @@ aspect TypeHierarchyCheck {
         }
       }
       if (!overridden) {
-        set = ancestorMethods(decl.signature());
-        for (i2 = set.iterator(); i2.hasNext(); ) {
-          MethodDecl m = (MethodDecl) i2.next();
-          if (!m.isAbstract() && m.overrideCandidate(decl) &&
-              !m.mayOverride(decl)) {
+        for (MethodDecl m : ancestorMethods(decl.signature())) {
+          if (!m.isAbstract() && m.overrideCandidate(decl) && !m.mayOverride(decl)) {
             errorf("the return type of method %s in %s does not match the return type of"
                 + " method %s in %s and may thus not be overridden",
                 m.fullSignature(), m.hostType().typeName(), decl.fullSignature(),
@@ -473,14 +465,12 @@ aspect TypeHierarchyCheck {
         }
       }
     }
-    Iterator<SimpleSet<MethodDecl>> iter = methodsSignatureMap().values().iterator();
-    while (iter.hasNext()) {
-      SimpleSet<MethodDecl> set = iter.next();
+    for (SimpleSet<MethodDecl> set : methodsSignatureMap().values()) {
       if (set.size() > 1) {
-        Iterator i2 = set.iterator();
-        MethodDecl m = (MethodDecl) i2.next();
-        while (i2.hasNext()) {
-          MethodDecl n = (MethodDecl) i2.next();
+        Iterator<MethodDecl> iter = set.iterator();
+        MethodDecl m = iter.next();
+        while (iter.hasNext()) {
+          MethodDecl n = iter.next();
           checkAbstractMethodDecls(m, n);
         }
       }

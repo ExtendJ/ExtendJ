@@ -67,8 +67,7 @@ aspect Enums {
   */
   public void EnumDecl.typeCheck() {
     super.typeCheck();
-    for (Iterator iter = memberMethods("finalize").iterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
+    for (MethodDecl m : memberMethods("finalize")) {
       if (m.getNumParameter() == 0 && m.hostType() == this) {
         error("an enum may not declare a finalizer");
       }
@@ -324,8 +323,7 @@ aspect Enums {
   */
 
   eq EnumDecl.isFinal() {
-    for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
-      EnumConstant c = (EnumConstant) iter.next();
+    for (EnumConstant c : enumConstants()) {
       ClassInstanceExpr e = (ClassInstanceExpr) c.getInit();
       if (e.hasTypeDecl()) {
         return false;
@@ -336,11 +334,11 @@ aspect Enums {
 
   eq EnumDecl.getModifiers().mayBeFinal() = false;
 
-  syn lazy Collection<BodyDecl> EnumDecl.enumConstants() {
-    Collection<BodyDecl> list = new ArrayList<BodyDecl>();
+  syn lazy Collection<EnumConstant> EnumDecl.enumConstants() {
+    Collection<EnumConstant> list = new ArrayList<EnumConstant>();
     for (int i = 0; i < getNumBodyDecl(); i++) {
       if (getBodyDecl(i).isEnumConstant()) {
-        list.add(getBodyDecl(i));
+        list.add((EnumConstant) getBodyDecl(i));
       }
     }
     return list;
@@ -356,8 +354,7 @@ aspect Enums {
   private void EnumDecl.addValues() {
     int numConstants = enumConstants().size();
     List initValues = new List();
-    for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
-      EnumConstant c = (EnumConstant) iter.next();
+    for (EnumConstant c : enumConstants()) {
       initValues.add(c.createBoundFieldAccess());
     }
     FieldDeclaration values = new FieldDeclaration(
@@ -671,16 +668,15 @@ aspect Enums {
     for (Iterator iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl method = (MethodDecl) iter.next();
       SimpleSet<MethodDecl> set = localMethodsSignature(method.signature());
-      if (set.size() == 1) {
-        MethodDecl n = (MethodDecl) set.iterator().next();
+      if (set.isSingleton()) {
+        MethodDecl n = set.iterator().next();
         if (!n.isAbstract()) {
           continue;
         }
       }
       boolean implemented = false;
       set = ancestorMethods(method.signature());
-      for (Iterator i2 = set.iterator(); i2.hasNext(); ) {
-        MethodDecl n = (MethodDecl) i2.next();
+      for (MethodDecl n : set) {
         if (!n.isAbstract()) {
           implemented = true;
           break;
@@ -705,8 +701,8 @@ aspect Enums {
         continue;
       }
       boolean missing = false;
-      for (Iterator iter = enumConstants().iterator(); iter.hasNext(); ) {
-        if (!((EnumConstant) iter.next()).implementsMethod(method)) {
+      for (EnumConstant c : enumConstants()) {
+        if (!c.implementsMethod(method)) {
           missing = true;
           break;
         }
@@ -728,8 +724,7 @@ aspect Enums {
       StringBuilder sb = new StringBuilder();
       sb.append("" + name() + " lacks implementations in one or more "
           + "enum constants for the following methods:\n");
-      for (Iterator iter = unimplementedMethods().iterator(); iter.hasNext(); ) {
-        MethodDecl m = (MethodDecl) iter.next();
+      for (MethodDecl m : unimplementedMethods()) {
         sb.append("  " + m.signature() + " in " + m.hostType().typeName() + "\n");
       }
       error(sb.toString());
@@ -758,9 +753,9 @@ aspect Enums {
   }
 
   syn boolean EnumConstant.implementsMethod(MethodDecl method) {
-    SimpleSet<MethodDecl> set = localMethodsSignature(method.signature());
-    if (set.size() == 1) {
-      MethodDecl n = (MethodDecl) set.iterator().next();
+    SimpleSet<MethodDecl> methods = localMethodsSignature(method.signature());
+    if (methods.isSingleton()) {
+      MethodDecl n = methods.iterator().next();
       if (!n.isAbstract()) {
         return true;
       }

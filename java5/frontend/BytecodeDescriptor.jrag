@@ -96,20 +96,17 @@ aspect BytecodeDescriptor {
           f.setInit(attributes.constantValue().expr());
         }
       }
-
       if (attributes.annotations != null) {
-        for (Iterator iter = attributes.annotations.iterator(); iter.hasNext(); ) {
-          f.getModifiersNoTransform().addModifier((Modifier) iter.next());
+        for (Annotation annotation : attributes.annotations) {
+          f.getModifiersNoTransform().addModifier(annotation);
         }
       }
-
       return f;
     }
 
     public boolean isSynthetic() {
       return attributes.isSynthetic();
     }
-
   }
 
   class MethodDescriptor {
@@ -126,13 +123,14 @@ aspect BytecodeDescriptor {
       }
       int pos = descriptor.indexOf(')');
       parameterDescriptors = descriptor.substring(1, pos);
-      typeDescriptor = descriptor.substring(pos+1, descriptor.length());
+      typeDescriptor = descriptor.substring(pos + 1, descriptor.length());
     }
 
     public List parameterList() {
       TypeDescriptor d = new TypeDescriptor(p, parameterDescriptors);
       return d.parameterList();
     }
+
     public List parameterListSkipFirst() {
       TypeDescriptor d = new TypeDescriptor(p, parameterDescriptors);
       return d.parameterListSkipFirst();
@@ -176,12 +174,12 @@ aspect BytecodeDescriptor {
       if (isConstructor() && p.isInnerClass) {
         parameterList = methodDescriptor.parameterListSkipFirst();
         if (s != null) {
-          Iterator iter = s.parameterTypes().iterator();
+          Iterator<Access> iter = s.parameterTypes().iterator();
           if (iter.hasNext()) {
             iter.next();
           }
           for (int i = 0; iter.hasNext(); i++) {
-            Access a = (Access) iter.next();
+            Access a = iter.next();
             ((ParameterDeclaration) parameterList.getChildNoTransform(i)).setTypeAccess(a);
           }
         }
@@ -189,9 +187,8 @@ aspect BytecodeDescriptor {
         parameterList = methodDescriptor.parameterList();
         if (s != null) {
           int i = 0;
-          for (Iterator iter = s.parameterTypes().iterator(); iter.hasNext(); i++) {
-            Access a = (Access) iter.next();
-            ((ParameterDeclaration) parameterList.getChildNoTransform(i)).setTypeAccess(a);
+          for (Access a : s.parameterTypes()) {
+            ((ParameterDeclaration) parameterList.getChildNoTransform(i++)).setTypeAccess(a);
           }
         }
       }
@@ -215,9 +212,8 @@ aspect BytecodeDescriptor {
       if (attributes.parameterAnnotations != null) {
         for (int i = 0; i < attributes.parameterAnnotations.length; i++) {
           ParameterDeclaration p = (ParameterDeclaration) parameterList.getChildNoTransform(i);
-          for (Iterator iter = attributes.parameterAnnotations[i].iterator(); iter.hasNext(); ) {
-            Modifier m = (Modifier) iter.next();
-            p.getModifiersNoTransform().addModifier(m);
+          for (Annotation annotation : attributes.parameterAnnotations[i]) {
+            p.getModifiersNoTransform().addModifier(annotation);
           }
         }
       }
@@ -238,11 +234,11 @@ aspect BytecodeDescriptor {
             name, parameterList, exceptionList, new Opt(new Block()));
       }
       if (attributes.annotations != null) {
-        for (Iterator iter = attributes.annotations.iterator(); iter.hasNext(); ) {
+        for (Annotation annotation : attributes.annotations) {
           if (b instanceof MethodDecl) {
-            ((MethodDecl) b).getModifiers().addModifier((Modifier) iter.next());
+            ((MethodDecl) b).getModifiers().addModifier(annotation);
           } else if (b instanceof ConstructorDecl) {
-            ((ConstructorDecl) b).getModifiers().addModifier((Modifier) iter.next());
+            ((ConstructorDecl) b).getModifiers().addModifier(annotation);
           }
         }
       }
@@ -364,14 +360,16 @@ aspect BytecodeDescriptor {
         case 'L':
           int pos = s.indexOf(';');
           String s1 = s.substring(1, pos);
-          String s2 = s.substring(pos+1, s.length());
+          String s2 = s.substring(pos + 1, s.length());
           l.add(new ParameterDeclaration(new Modifiers(),
                 BytecodeParser.fromClassName(s1),
                 "p" + l.getNumChildNoTransform()));
           return s2;
         case '[':
           int i = 1;
-          while (s.charAt(i) == '[') i++;
+          while (s.charAt(i) == '[') {
+            i++;
+          }
           // Dummy name is replaced later.
           ArrayTypeAccess bottom = new ArrayTypeAccess(new ParseName(""));
           ArrayTypeAccess top = bottom;
@@ -416,7 +414,7 @@ aspect BytecodeDescriptor {
         case 'L':
           int pos = s.indexOf(';');
           String s1 = s.substring(1, pos);
-          String s2 = s.substring(pos+1, s.length());
+          String s2 = s.substring(pos + 1, s.length());
           typeAccess.setAccess(BytecodeParser.fromClassName(s1));
           return s2;
         default:

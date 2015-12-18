@@ -33,11 +33,8 @@ aspect NameCheck {
   public void ASTNode.nameCheck() {
   }
 
-  public TypeDecl ASTNode.extractSingleType(SimpleSet<TypeDecl> c) {
-    if (c.size() != 1) {
-      return null;
-    }
-    return c.iterator().next();
+  public TypeDecl ASTNode.extractSingleType(SimpleSet<TypeDecl> types) {
+    return types.isSingleton() ? types.iterator().next() : null;
   }
 
   public void SingleTypeImportDecl.nameCheck() {
@@ -50,6 +47,7 @@ aspect NameCheck {
   }
 
   inh SimpleSet<TypeDecl> ImportDecl.allImportedTypes(String name);
+
   eq CompilationUnit.getImportDecl().allImportedTypes(String name) = importedTypes(name);
 
   public void TypeImportOnDemandDecl.nameCheck() {
@@ -64,12 +62,8 @@ aspect NameCheck {
     for (int i = 0; i < getNumImportDecl(); i++) {
       ImportDecl decl = getImportDecl(i);
       if (!decl.isOnDemand()) {
-        Iterator importIter = decl.importedTypes().iterator();
-        while (importIter.hasNext()) {
-          TypeDecl importedType = (TypeDecl) importIter.next();
-          Iterator iter = localLookupType(importedType.name()).iterator();
-          while (iter.hasNext()) {
-            TypeDecl local = (TypeDecl) iter.next();
+        for (TypeDecl importedType : decl.importedTypes()) {
+          for (TypeDecl local : localLookupType(importedType.name())) {
             if (local != importedType) {
               errorf("imported type %s conflicts with visible type", decl.typeName());
             }
@@ -158,8 +152,8 @@ aspect NameCheck {
         errorf("no constructor matches %s", this.prettyPrint());
       } else if (decls().size() > 1 && validArgs()) {
         errorf("several most specific constructors for %s", this.prettyPrint());
-        for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-          errorf("         %s", ((ConstructorDecl) iter.next()).signature());
+        for (ConstructorDecl cons : decls()) {
+          errorf("         %s", cons.signature());
         }
       }
     }
@@ -190,8 +184,8 @@ aspect NameCheck {
           type().typeName());
     } else if (decls().size() > 1 && validArgs()) {
       error("several most specific constructors found");
-      for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-        errorf("         %s", ((ConstructorDecl) iter.next()).signature());
+      for (ConstructorDecl cons : decls()) {
+        errorf("         %s", cons.signature());
       }
     } else if (!hasTypeDecl()) {
       // Check if the constructor is accessible (stricter when not in a class
@@ -221,8 +215,7 @@ aspect NameCheck {
     if (decls().size() > 1) {
       StringBuilder sb = new StringBuilder();
       sb.append("several types named " + name() + ":");
-      for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-        TypeDecl t = (TypeDecl) iter.next();
+      for (TypeDecl t : decls()) {
         sb.append(" " + t.typeName());
       }
       error(sb.toString());
@@ -244,8 +237,7 @@ aspect NameCheck {
     if (decls().size() > 1) {
       StringBuffer sb = new StringBuffer();
       sb.append("several fields named " + name());
-      for (Iterator iter = decls().iterator(); iter.hasNext(); ) {
-        Variable v = (Variable) iter.next();
+      for (Variable v : decls()) {
         sb.append("\n    " + v.type().typeName() + "." + v.name() + " declared in "
             + v.hostType().typeName());
       }
@@ -362,13 +354,11 @@ aspect NameCheck {
   public void FieldDeclaration.nameCheck() {
     super.nameCheck();
     // 8.3
-    for (Iterator iter = hostType().memberFields(name()).iterator(); iter.hasNext(); ) {
-      Variable v = (Variable) iter.next();
+    for (Variable v : hostType().memberFields(name())) {
       if (v != this && v.hostType() == hostType()) {
         errorf("field named %s is multiply declared in type %s", name(), hostType().typeName());
       }
     }
-
   }
 
   inh VariableScope ParameterDeclaration.outerScope();
@@ -391,8 +381,7 @@ aspect NameCheck {
 
   public void VariableDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
-    for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
-      Variable var = (Variable) iter.next();
+    for (Variable var : decls) {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl != this && decl.enclosingBodyDecl() == enclosingBodyDecl()) {
@@ -422,8 +411,7 @@ aspect NameCheck {
 
   public void ParameterDeclaration.nameCheck() {
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
-    for (Iterator iter = decls.iterator(); iter.hasNext(); ) {
-      Variable var = (Variable) iter.next();
+    for (Variable var : decls) {
       if (var instanceof VariableDeclaration) {
         VariableDeclaration decl = (VariableDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
