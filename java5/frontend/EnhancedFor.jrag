@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <joqvist@google.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -44,16 +45,16 @@ aspect EnhancedFor {
           getExpr().type().name());
     } else if (getExpr().type().isArrayDecl()
         && !getExpr().type().componentType()
-            .assignConversionTo(getVariableDeclaration().type(), null)) {
+            .assignConversionTo(getTypeAccess().type(), null)) {
       errorf("parameter of type %s can not be assigned an element of type %s",
-          getVariableDeclaration().type().typeName(), getExpr().type().componentType().typeName());
+          getTypeAccess().type().typeName(), getExpr().type().componentType().typeName());
     } else if (getExpr().type().isIterable() && !getExpr().type().isUnknown()) {
       MethodDecl iterator = getExpr().type().memberMethods("iterator").iterator().next();
       MethodDecl next = iterator.type().memberMethods("next").iterator().next();
       TypeDecl componentType = next.type();
-      if (!componentType.assignConversionTo(getVariableDeclaration().type(), null)) {
+      if (!componentType.assignConversionTo(getTypeAccess().type(), null)) {
         errorf("parameter of type %s can not be assigned an element of type %s",
-            getVariableDeclaration().type().typeName(), componentType.typeName());
+            getTypeAccess().type().typeName(), componentType.typeName());
       }
     }
   }
@@ -66,21 +67,21 @@ aspect EnhancedFor {
 
   // Variable lookup.
   inh SimpleSet<Variable> EnhancedForStmt.lookupVariable(String name);
-  eq EnhancedForStmt.getVariableDeclaration().lookupVariable(String name) =
+  eq EnhancedForStmt.getVariableDecl().lookupVariable(String name) =
       localLookupVariable(name);
   eq EnhancedForStmt.getExpr().lookupVariable(String name) = localLookupVariable(name);
   eq EnhancedForStmt.getStmt().lookupVariable(String name) = localLookupVariable(name);
 
-  eq EnhancedForStmt.getVariableDeclaration().nameType() = NameType.TYPE_NAME;
+  eq EnhancedForStmt.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
   EnhancedForStmt implements VariableScope;
-  eq EnhancedForStmt.getVariableDeclaration().outerScope() = this;
+  eq EnhancedForStmt.getVariableDecl().outerScope() = this;
   eq EnhancedForStmt.getExpr().outerScope() = this;
   eq EnhancedForStmt.getStmt().outerScope() = this;
 
   syn SimpleSet<Variable> EnhancedForStmt.localLookupVariable(String name) {
-    if (getVariableDeclaration().name().equals(name)) {
-      return (SimpleSet<Variable>) getVariableDeclaration();
+    if (getVariableDecl().name().equals(name)) {
+      return (SimpleSet<Variable>) getVariableDecl();
     }
     return lookupVariable(name);
   }
@@ -88,9 +89,9 @@ aspect EnhancedFor {
   // Pretty printing.
   public void EnhancedForStmt.prettyPrint(PrettyPrinter out) {
     out.print("for (");
-    out.print(getVariableDeclaration().getModifiers());
-    out.print(getVariableDeclaration().getTypeAccess());
-    out.print(" " + getVariableDeclaration().name());
+    out.print(getModifiers());
+    out.print(getTypeAccess());
+    out.print(" " + getVariableDecl().name());
     out.print(" : ");
     out.print(getExpr());
     out.print(") ");
@@ -107,9 +108,13 @@ aspect EnhancedFor {
   }
 
   // Some attributes for the parameter.
-  eq EnhancedForStmt.getVariableDeclaration().isMethodParameter() = false;
-  eq EnhancedForStmt.getVariableDeclaration().isConstructorParameter() = false;
-  eq EnhancedForStmt.getVariableDeclaration().isExceptionHandlerParameter() = false;
+  eq EnhancedForStmt.getVariableDecl().isMethodParameter() = false;
+  eq EnhancedForStmt.getVariableDecl().isConstructorParameter() = false;
+  eq EnhancedForStmt.getVariableDecl().isExceptionHandlerParameter() = false;
+
+  eq EnhancedForStmt.getVariableDecl().declarationModifiers() = getModifiers();
+
+  eq EnhancedForStmt.getVariableDecl().declarationType() = getTypeAccess();
 
   // Unreachable Statements
   eq EnhancedForStmt.canCompleteNormally() = reachable();
@@ -124,7 +129,7 @@ aspect EnhancedFor {
   }
 
   eq EnhancedForStmt.getExpr().assignedBefore(Variable v) =
-      v == getVariableDeclaration() || assignedBefore(v);
+      v == getVariableDecl() || assignedBefore(v);
 
   eq EnhancedForStmt.getStmt().assignedBefore(Variable v) = getExpr().assignedAfter(v);
 
@@ -141,7 +146,7 @@ aspect EnhancedFor {
   }
 
   eq EnhancedForStmt.getExpr().unassignedBefore(Variable v) =
-      v != getVariableDeclaration() && unassignedBefore(v);
+      v != getVariableDecl() && unassignedBefore(v);
 
   eq EnhancedForStmt.getStmt().unassignedBefore(Variable v) = getExpr().unassignedAfter(v);
 

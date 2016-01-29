@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,26 +30,26 @@
  */
 
 aspect Variables {
-  VariableDeclaration implements Variable;
+  VariableDecl implements Variable;
 
-  syn boolean VariableDeclaration.isParameter() = false;
+  syn boolean VariableDecl.isParameter() = false;
 
   // 4.5.3
-  syn boolean VariableDeclaration.isClassVariable() = false;
-  syn boolean VariableDeclaration.isInstanceVariable() = false;
-  syn boolean VariableDeclaration.isMethodParameter() = false;
-  syn boolean VariableDeclaration.isConstructorParameter() = false;
-  syn boolean VariableDeclaration.isExceptionHandlerParameter() = false;
-  syn boolean VariableDeclaration.isLocalVariable() = true;
+  syn boolean VariableDecl.isClassVariable() = false;
+  syn boolean VariableDecl.isInstanceVariable() = false;
+  syn boolean VariableDecl.isMethodParameter() = false;
+  syn boolean VariableDecl.isConstructorParameter() = false;
+  syn boolean VariableDecl.isExceptionHandlerParameter() = false;
+  syn boolean VariableDecl.isLocalVariable() = true;
   // 4.5.4
-  syn boolean VariableDeclaration.isFinal() = getModifiers().isFinal();
-  syn boolean VariableDeclaration.isVolatile() = getModifiers().isVolatile();
-  syn boolean VariableDeclaration.isBlank() = !hasInit();
-  syn boolean VariableDeclaration.isStatic() = false;
+  syn boolean VariableDecl.isFinal() = getModifiers().isFinal();
+  syn boolean VariableDecl.isVolatile() = getModifiers().isVolatile();
+  syn boolean VariableDecl.isBlank() = !hasInit();
+  syn boolean VariableDecl.isStatic() = false;
 
-  syn String VariableDeclaration.name() = getID();
+  syn String VariableDecl.name() = getID();
 
-  syn lazy Constant VariableDeclaration.constant() = type().cast(getInit().constant());
+  syn lazy Constant VariableDecl.constant() = type().cast(getInit().constant());
 
   FieldDeclaration implements Variable;
   syn boolean FieldDeclaration.isParameter() = false;
@@ -101,11 +101,12 @@ aspect Variables {
   syn String ParameterDeclaration.name() = getID();
 
   syn boolean ParameterDeclaration.hasInit() = false;
-  syn Expr ParameterDeclaration.getInit() { throw new UnsupportedOperationException(); }
-  syn Constant ParameterDeclaration.constant() { throw new UnsupportedOperationException(); }
-
-  syn String VariableDecl.name() = getID();
-
+  syn Expr ParameterDeclaration.getInit() {
+    throw new UnsupportedOperationException();
+  }
+  syn Constant ParameterDeclaration.constant() {
+    throw new UnsupportedOperationException();
+  }
 }
 
 aspect VariableDeclarationTransformation {
@@ -126,7 +127,8 @@ aspect VariableDeclarationTransformation {
   rewrite FieldDecl {
     when(getNumVariableDecl() == 1)
     to FieldDeclaration {
-      FieldDeclaration decl = getVariableDecl(0).createFieldDeclarationFrom(getModifiers(), getTypeAccess());
+      FieldDeclaration decl = getVariableDecl(0).createFieldDeclarationFrom(getModifiers(),
+          getTypeAccess());
       decl.setStart(start); // copy location information
       decl.setEnd(end); // copy location information
       return decl;
@@ -163,32 +165,6 @@ aspect VariableDeclarationTransformation {
     }
   }
 
-  syn lazy List<VariableDeclaration> VarDeclStmt.getSingleDeclList() {
-    List<VariableDeclaration> decls = new List<VariableDeclaration>();
-    for (int i = 0; i < getNumVariableDecl(); ++i) {
-      VariableDecl varDecl = getVariableDecl(i);
-      VariableDeclaration decl = varDecl.createVariableDeclarationFrom(getModifiers(),
-          getTypeAccess());
-      decls.add(decl);
-    }
-    return decls;
-  }
-
-  public VariableDeclaration VariableDecl.createVariableDeclarationFrom(Modifiers modifiers,
-      Access type) {
-    // TODO(joqvist): should treeCopy modifiers init opt etc?
-    VariableDeclaration decl = new VariableDeclaration(
-        modifiers,
-        type.addArrayDims(getDimsList()),
-        getID(),
-        getInitOpt());
-    decl.setStart(start); // Copy location information.
-    decl.setEnd(end); // Copy location information.
-    decl.IDstart = IDstart;
-    decl.IDend = IDend;
-    return decl;
-  }
-
   public FieldDeclaration VariableDecl.createFieldDeclarationFrom(Modifiers modifiers,
       Access type) {
     // TODO(joqvist) should treeCopy modifiers init opt etc?
@@ -203,4 +179,24 @@ aspect VariableDeclarationTransformation {
     decl.IDend = IDend;
     return decl;
   }
+
+  /** Modifiers are copied from the parent declaration (e.g. VarDeclStmt). */
+  syn lazy Modifiers VariableDecl.getModifiers() = declarationModifiers().treeCopy();
+
+  /** Inherited attribute computing the modifiers of the parent declaration. */
+  inh lazy Modifiers VariableDecl.declarationModifiers();
+
+  eq VarDeclStmt.getVariableDecl(int index).declarationModifiers() = getModifiers();
+
+  eq FieldDecl.getVariableDecl(int index).declarationModifiers() = getModifiers();
+
+  /** Type access is copied from the parent declaration, with added array dimensions. */
+  syn lazy Access VariableDecl.getTypeAccess() = declarationType().addArrayDims(getDimsList());
+
+  /** Inherited attribute computing the type access of the parent declaration. */
+  inh lazy Access VariableDecl.declarationType();
+
+  eq VarDeclStmt.getVariableDecl(int index).declarationType() = getTypeAccess();
+
+  eq FieldDecl.getVariableDecl(int index).declarationType() = getTypeAccess();
 }

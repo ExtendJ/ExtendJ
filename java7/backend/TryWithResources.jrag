@@ -38,7 +38,7 @@ aspect TryWithResources {
    */
   syn nta Stmt TryWithResources.getTransformed() {
     if (getNumCatchClause() == 0 && !hasNonEmptyFinally()) {
-      // transform to BasicTWR
+      // Transform to BasicTWR.
       Block block;
       if (getNumResource() == 1) {
         block = (Block) getBlock().treeCopyNoTransform();
@@ -60,7 +60,7 @@ aspect TryWithResources {
           getResource(0).treeCopyNoTransform(),
           block);
     } else {
-      // transform to surrounding try stmt
+      // Transform to surrounding try stmt.
       Block block = new Block();
       block.addStmt(new TryWithResources(
             (List<ResourceDeclaration>)
@@ -180,7 +180,7 @@ aspect TryWithResources {
     int primaryIndex = resourceIndex+resourceType.variableSize();
     int suppressedIndex = primaryIndex+throwableType.variableSize();
 
-    // store the resource in local
+    // Store the resource in local.
     gen.addLabel(resourceBeginLbl);
     resource.createBCode(gen);
     gen.addLabel(resourceEndLbl);
@@ -192,7 +192,7 @@ aspect TryWithResources {
     gen.emitGoto(outerFinallyLbl);
 
     // If there was an exception when initializing the resource
-    // we need to directly rethrow the exception
+    // we need to directly rethrow the exception.
     gen.addLabel(resourceExceptionLbl);
     gen.emitThrow();
     gen.addException(
@@ -203,12 +203,12 @@ aspect TryWithResources {
 
     if (gen.addressOf(blockBeginLbl) != gen.addressOf(blockEndLbl)) {
 
-      // catch primary exception
+      // Catch primary exception:
       // operand stack: .., #primary
       gen.addLabel(catchPrimaryLbl);
       throwableType.emitStoreLocal(gen, primaryIndex);
 
-      // try-close resource
+      // Try-close resource:
       gen.addLabel(tryCloseBeginLbl);
       {
         // if resource != null
@@ -220,7 +220,7 @@ aspect TryWithResources {
       gen.addLabel(tryCloseEndLbl);
       gen.emitGoto(innerFinallyLbl);
 
-      // catch suppressed exception
+      // Catch suppressed exception:
       // operand stack: .., #primary, #suppressed
       gen.addLabel(catchSuppressedLbl);
       throwableType.emitStoreLocal(gen, suppressedIndex);
@@ -228,14 +228,14 @@ aspect TryWithResources {
       throwableType.emitLoadLocal(gen, suppressedIndex);
       addSuppressedMethod().emitInvokeMethod(gen, throwableType);
 
-      // inner finally
+      // Inner finally:
       // operand stack: .., #primary
       gen.addLabel(innerFinallyLbl);
       throwableType.emitLoadLocal(gen, primaryIndex);
       gen.emitThrow();
 
       // If there was an exception during the block of the try
-      // statement, then we should try to close the resource
+      // statement, then we should try to close the resource.
       gen.addException(
         blockBeginLbl,
         blockEndLbl,
@@ -251,7 +251,7 @@ aspect TryWithResources {
         CodeGeneration.ExceptionEntry.CATCH_ALL);
     }
 
-    // outer finally
+    // Outer finally.
     gen.addLabel(outerFinallyLbl);
     {
       // if resource != null
@@ -316,4 +316,8 @@ aspect TryWithResources {
       getResource().localNum()
       + getResource().type().variableSize()
       + 2 * lookupType("java.lang", "Throwable").variableSize();
+
+  eq BasicTWR.getResource().declarationModifiers() = getResource().getModifiers();
+
+  eq BasicTWR.getResource().declarationType() = getResource().getResourceType();
 }

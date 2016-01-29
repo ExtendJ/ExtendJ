@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2015, Jesper Öqvist <joqvist@google.com>
+ *               2015-2016, Jesper Öqvist <joqvist@google.com>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,8 +59,7 @@ aspect DefiniteAssignment {
   eq ArrayTypeWithSizeAccess.getExpr().isSource() = true;
 
   eq FieldDeclaration.getInit().isSource() = true;
-  eq VariableDeclaration.getInit().isSource() = true;
-  eq VariableDecl.getInit().isSource() = true; // TODO(joqvist): is this needed?
+  eq VariableDecl.getInit().isSource() = true;
   eq ArrayInit.getInit().isSource() = true;
 
   eq Unary.getOperand().isSource() = true;
@@ -72,7 +71,7 @@ aspect DefiniteAssignment {
   eq Program.getChild().isIncOrDec() = false;
   eq CompilationUnit.getTypeDecl().isIncOrDec() = false;
   eq Block.getStmt().isIncOrDec() = false;
-  eq VarDeclStmt.getSingleDecl().isIncOrDec() = false;
+  eq VarDeclStmt.getVariableDecl().isIncOrDec() = false;
   eq PostfixExpr.getOperand().isIncOrDec() = true;
   eq PreIncExpr.getOperand().isIncOrDec() = true;
   eq PreDecExpr.getOperand().isIncOrDec() = true;
@@ -110,17 +109,16 @@ aspect DefiniteAssignment {
     }
   }
 
-  // Final variables with a constant initializer are considered values and not variables.
-  syn boolean VariableDeclaration.isBlankFinal() =
-      isFinal() && (!hasInit() || !getInit().isConstant());
+  // TODO(joqvist): Why test (!getInit().isConstant()) here? Shouldn't it just be (!hasInit())?
+  syn boolean VariableDecl.isBlankFinal() = isFinal() && (!hasInit() || !getInit().isConstant());
 
-  syn boolean VariableDeclaration.isValue() =
-      isFinal() && hasInit() && getInit().isConstant();
+  // Final variables with a constant initializer are considered values and not variables.
+  syn boolean VariableDecl.isValue() = isFinal() && hasInit() && getInit().isConstant();
 
   public void VarAccess.definiteAssignment() {
     if (isSource()) {
-      if (decl() instanceof VariableDeclaration) {
-        VariableDeclaration v = (VariableDeclaration) decl();
+      if (decl() instanceof VariableDecl) {
+        VariableDecl v = (VariableDecl) decl();
         if (v.isValue()) {
         } else if (v.isBlankFinal()) {
           if (!assignedBefore(v)) {
@@ -148,9 +146,9 @@ aspect DefiniteAssignment {
       } else if (v.isFinal() && isQualified()
           && (!qualifier().isThisAccess() || ((Access) qualifier()).isQualified())) {
         errorf("the blank final field %s may only be assigned by simple name", v.name());
-      } else if (v instanceof VariableDeclaration) {
+      } else if (v instanceof VariableDecl) {
         // Local variable or parameter.
-        VariableDeclaration var = (VariableDeclaration) v;
+        VariableDecl var = (VariableDecl) v;
         if (!var.isValue() && var.getParent().getParent().getParent() instanceof SwitchStmt
             && var.isFinal()) {
           if (!unassignedBefore(var)) {
@@ -257,7 +255,7 @@ aspect DefiniteAssignment {
 
   inh boolean Stmt.assignedBefore(Variable v);
 
-  inh boolean VariableDeclaration.assignedBefore(Variable v);
+  inh boolean VariableDecl.assignedBefore(Variable v);
 
   /**
    * @return {@code true} if the given variable is definitely assigned after
@@ -564,8 +562,8 @@ aspect DefiniteAssignment {
   eq Block.getStmt(int index).assignedBefore(Variable v) =
       index == 0 ? assignedBefore(v) : getStmt(index - 1).assignedAfter(v);
 
-  eq VarDeclStmt.getSingleDecl(int index).assignedBefore(Variable v) =
-      index == 0 ? assignedBefore(v) : getSingleDecl(index - 1).assignedAfter(v);
+  eq VarDeclStmt.getVariableDecl(int index).assignedBefore(Variable v) =
+      index == 0 ? assignedBefore(v) : getVariableDecl(index - 1).assignedAfter(v);
 
   // 16.2.2 8th, 9th, 10th bullet
   syn boolean Block.unassignedEverywhere(Variable v) = unassignedBefore(v) && checkDUeverywhere(v);
@@ -627,16 +625,18 @@ aspect DefiniteAssignment {
 
   eq LocalClassDeclStmt.assignedAfter(Variable v) = assignedBefore(v);
 
-  eq VarDeclStmt.assignedAfter(Variable v) = getSingleDecl(getNumSingleDecl()-1).assignedAfter(v);
+  eq VarDeclStmt.assignedAfter(Variable v) =
+      getVariableDecl(getNumVariableDecl() - 1).assignedAfter(v);
 
-  syn boolean VariableDeclaration.assignedAfter(Variable v) circular [true] {
+  syn boolean VariableDecl.assignedAfter(Variable v) circular [true] {
     if (v == this) {
       return hasInit();
+    } else {
+      return hasInit() ? getInit().assignedAfter(v) : assignedBefore(v);
     }
-    return hasInit() ? getInit().assignedAfter(v) : assignedBefore(v);
   }
 
-  eq VariableDeclaration.getInit().assignedBefore(Variable v) = assignedBefore(v);
+  eq VariableDecl.getInit().assignedBefore(Variable v) = assignedBefore(v);
 
   eq ArrayInit.assignedAfter(Variable v) =
       getNumInit() == 0
@@ -885,7 +885,7 @@ aspect DefiniteAssignment {
 aspect DefiniteUnassignment {
   inh boolean Stmt.unassignedBefore(Variable v);
 
-  inh boolean VariableDeclaration.unassignedBefore(Variable v);
+  inh boolean VariableDecl.unassignedBefore(Variable v);
 
   /**
    * @return {@code true} if the given variable is definitely unassigned after
@@ -1166,15 +1166,15 @@ aspect DefiniteUnassignment {
   eq Block.getStmt(int index).unassignedBefore(Variable v) =
       index == 0 ? unassignedBefore(v) : getStmt(index - 1).unassignedAfter(v);
 
-  eq VarDeclStmt.getSingleDecl(int index).unassignedBefore(Variable v) =
-      index == 0 ? unassignedBefore(v) : getSingleDecl(index - 1).unassignedAfter(v);
+  eq VarDeclStmt.getVariableDecl(int index).unassignedBefore(Variable v) =
+      index == 0 ? unassignedBefore(v) : getVariableDecl(index - 1).unassignedAfter(v);
 
   eq LocalClassDeclStmt.unassignedAfter(Variable v) = unassignedBefore(v);
 
   eq VarDeclStmt.unassignedAfter(Variable v) =
-      getSingleDecl(getNumSingleDecl()-1).unassignedAfter(v);
+      getVariableDecl(getNumVariableDecl() - 1).unassignedAfter(v);
 
-  syn boolean VariableDeclaration.unassignedAfter(Variable v) circular [true] {
+  syn boolean VariableDecl.unassignedAfter(Variable v) circular [true] {
     if (v == this) {
       return !hasInit();
     } else {
@@ -1182,7 +1182,7 @@ aspect DefiniteUnassignment {
     }
   }
 
-  eq VariableDeclaration.getInit().unassignedBefore(Variable v) = unassignedBefore(v);
+  eq VariableDecl.getInit().unassignedBefore(Variable v) = unassignedBefore(v);
 
   eq ArrayInit.unassignedAfter(Variable v) =
       getNumInit() == 0 ? unassignedBefore(v) : getInit(getNumInit()-1).unassignedAfter(v);
