@@ -7,7 +7,7 @@ License & Copyright
 -------------------
 
 * Copyright (c) 2005-2008, Torbj&ouml;rn Ekman
-* Copyright (c) 2005-2013, ExtendJ Committers
+* Copyright (c) 2005-2016, ExtendJ Committers
 
 All rights reserved.
 
