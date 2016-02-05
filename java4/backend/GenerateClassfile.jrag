@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -73,8 +74,7 @@ aspect GenerateClassfile {
       for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); numInterfaces++) {
         cp.addClass(iter.next().constantPoolName());
       }
-      for (Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
-        FieldDeclaration field = (FieldDeclaration) iter.next();
+      for (FieldDeclaration field : fieldDeclarations()) {
         cp.addUtf8(field.name());
         cp.addUtf8(field.type().typeDescriptor());
         field.attributes();
@@ -84,7 +84,7 @@ aspect GenerateClassfile {
         cp.addUtf8(enclosing().typeDescriptor());
         cp.addUtf8("Synthetic");
       }
-      for (BodyDecl method : bcMethods()) {
+      for (BodyDecl method : methodsAndConstructors()) {
         method.touchMethod(cp);
       }
       if (hasClinit()) {
@@ -118,7 +118,7 @@ aspect GenerateClassfile {
       for (Iterator<TypeDecl> iter = interfacesIterator(); iter.hasNext(); ) {
         out.writeChar(cp.addClass(iter.next().constantPoolName()));
       }
-      Collection<FieldDeclaration> fields = bcFields();
+      Collection<FieldDeclaration> fields = fieldDeclarations();
       out.writeChar(fields.size() + (needsEnclosing() ? 1 : 0));
       for (FieldDeclaration field : fields) {
         out.writeChar(field.flags());
@@ -137,7 +137,7 @@ aspect GenerateClassfile {
         new SyntheticAttribute(cp).emit(out);
       }
 
-      Collection<BodyDecl> methods = bcMethods();
+      Collection<BodyDecl> methods = methodsAndConstructors();
       out.writeChar(methods.size() + (hasClinit() ? 1 : 0));
       for (BodyDecl b : methods) {
         b.generateMethod(out, cp);
@@ -176,13 +176,12 @@ aspect GenerateClassfile {
       for (int i = 0; i < getNumSuperInterface(); i++) {
         cp.addClass(getSuperInterface(i).type().constantPoolName());
       }
-      for (Iterator iter = bcFields().iterator(); iter.hasNext(); ) {
-        FieldDeclaration field = (FieldDeclaration) iter.next();
+      for (FieldDeclaration field : fieldDeclarations()) {
         cp.addUtf8(field.name());
         cp.addUtf8(field.type().typeDescriptor());
         field.attributes();
       }
-      for (BodyDecl obj : bcMethods()) {
+      for (BodyDecl obj : methodsAndConstructors()) {
         if (obj instanceof MethodDecl) {
           MethodDecl method = (MethodDecl) obj;
           cp.addUtf8(method.name());
@@ -232,7 +231,7 @@ aspect GenerateClassfile {
           out.writeChar(cp.addClass(typeDecl.constantPoolName()));
         }
       }
-      Collection<FieldDeclaration> fields = bcFields();
+      Collection<FieldDeclaration> fields = fieldDeclarations();
       out.writeChar(fields.size());
       for (FieldDeclaration field : fields) {
         out.writeChar(field.flags());
@@ -243,7 +242,7 @@ aspect GenerateClassfile {
           attribute.emit(out);
         }
       }
-      Collection<BodyDecl> methods = bcMethods();
+      Collection<BodyDecl> methods = methodsAndConstructors();
       out.writeChar(methods.size() + (hasClinit() ? 1 : 0));
       for (BodyDecl b : methods) {
         b.generateMethod(out, cp);
@@ -306,46 +305,48 @@ aspect GenerateClassfile {
     attributes();
   }
 
-  syn lazy Collection<FieldDeclaration> TypeDecl.bcFields() = new ArrayList<FieldDeclaration>();
+  /** @return a collection of the fields declared in this type. */
+  syn lazy Collection<FieldDeclaration> TypeDecl.fieldDeclarations() = Collections.emptyList();
 
-  eq ReferenceType.bcFields() {
+  eq ReferenceType.fieldDeclarations() {
     Collection<FieldDeclaration> fields = new ArrayList<FieldDeclaration>();
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      if (getBodyDecl(i).isBytecodeField()) {
-        fields.add((FieldDeclaration) getBodyDecl(i));
+    for (BodyDecl decl : getBodyDeclList()) {
+      if (decl.isField()) {
+        fields.add((FieldDeclaration) decl);
       }
     }
     return fields;
   }
 
-  syn Collection<BodyDecl> ReferenceType.bcMethods() {
+  /** @return a collection of the methods and constructors declared in this type. */
+  syn Collection<BodyDecl> ReferenceType.methodsAndConstructors() {
     Collection<BodyDecl> methods = new ArrayList<BodyDecl>();
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      if (getBodyDecl(i).isBytecodeMethod()) {
-        methods.add(getBodyDecl(i));
+    for (BodyDecl decl : getBodyDeclList()) {
+      if (decl.isMethodOrConstructor()) {
+        methods.add(decl);
       }
     }
     return methods;
   }
 
-  eq ClassDecl.bcMethods() {
+  eq ClassDecl.methodsAndConstructors() {
     Collection<BodyDecl> methods = new ArrayList<BodyDecl>();
     if (hasImplicitConstructor()) {
       methods.add(getImplicitConstructor());
     }
-    methods.addAll(super.bcMethods());
+    methods.addAll(super.methodsAndConstructors());
     return methods;
   }
 
-  syn boolean BodyDecl.isBytecodeField() = false;
+  syn boolean BodyDecl.isField() = false;
 
-  eq FieldDeclaration.isBytecodeField() = true;
+  eq FieldDeclaration.isField() = true;
 
-  syn boolean BodyDecl.isBytecodeMethod() = false;
+  syn boolean BodyDecl.isMethodOrConstructor() = false;
 
-  eq MethodDecl.isBytecodeMethod() = true;
+  eq MethodDecl.isMethodOrConstructor() = true;
 
-  eq ConstructorDecl.isBytecodeMethod() = true;
+  eq ConstructorDecl.isMethodOrConstructor() = true;
 
   // Remove method bodies and cached attributes after the class file has been generated.
   public boolean ASTNode.clear() {

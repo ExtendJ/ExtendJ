@@ -79,7 +79,7 @@ aspect CreateBCode {
   private void TypeDecl.generateBytecodes(CodeGeneration gen) {
     for (int i = 0; i < getNumBodyDecl(); i++) {
       BodyDecl b = getBodyDecl(i);
-      if (b instanceof FieldDeclaration && b.isBytecodeField()) {
+      if (b.isField()) {
         FieldDeclaration f = (FieldDeclaration) b;
         f.emitStaticInitializer(gen, this);
       } else if (b instanceof StaticInitializer) {
@@ -110,7 +110,7 @@ aspect CreateBCode {
       paramLength += 1;
       gen.addLocalVariableEntryAtCurrentPC("this", hostType().typeDescriptor(), 0, label);
     }
-    for (ParameterDeclaration p: getParameterList()) {
+    for (ParameterDeclaration p : getParameterList()) {
       paramLength += p.type().variableSize();
       if (paramLength > 255) {
         throw new Error("parameter list too large");
@@ -145,7 +145,7 @@ aspect CreateBCode {
     int label = gen.variableScopeLabel();
     int paramLength = 1;
     gen.addLocalVariableEntryAtCurrentPC("this", hostType().typeDescriptor(), 0, label);
-    for (ParameterDeclaration p: getParameterList()) {
+    for (ParameterDeclaration p : getParameterList()) {
       paramLength += p.type().variableSize();
       if (paramLength > 255) {
         throw new Error("parameter list too large");
@@ -214,7 +214,7 @@ aspect CreateBCode {
         TypeDecl typeDecl = hostType();
         for (int i = 0; i < typeDecl.getNumBodyDecl(); i++) {
           BodyDecl b = typeDecl.getBodyDecl(i);
-          if (b instanceof FieldDeclaration && b.isBytecodeField()) {
+          if (b.isField()) {
             FieldDeclaration f = (FieldDeclaration) b;
             f.emitInstanceInitializer(gen, hostType());
           } else if (b instanceof InstanceInitializer) {
@@ -231,7 +231,7 @@ aspect CreateBCode {
   }
 
   public void ASTNode.createBCode(CodeGeneration gen) {
-    for (int i=0; i<getNumChild(); i++) {
+    for (int i = 0; i < getNumChild(); i++) {
       getChild(i).createBCode(gen);
     }
   }
@@ -266,8 +266,7 @@ aspect CreateBCode {
   syn boolean Expr.isVarAccessWithAccessor() = false;
   eq ParExpr.isVarAccessWithAccessor() = getExpr().isVarAccessWithAccessor();
   eq AbstractDot.isVarAccessWithAccessor() = lastAccess().isVarAccessWithAccessor();
-  eq VarAccess.isVarAccessWithAccessor() =
-      decl() instanceof FieldDeclaration && decl().isInstanceVariable() && requiresAccessor();
+  eq VarAccess.isVarAccessWithAccessor() = decl().isInstanceVariable() && requiresAccessor();
 
   public void VarDeclStmt.createBCode(CodeGeneration gen) {
     gen.addLineNumberEntryAtCurrentPC(this); // Generate line number entry.
@@ -1688,8 +1687,8 @@ aspect CreateBCode {
 
   public void ForStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
-    for (int i=0; i<getNumInitStmt(); i++) {
-      getInitStmt(i).createBCode(gen);
+    for (Stmt stmt : getInitStmtList()) {
+      stmt.createBCode(gen);
     }
     gen.addLabel(cond_label());
     if (!getCondition().isConstant()) {
@@ -1699,8 +1698,8 @@ aspect CreateBCode {
       gen.addLabel(begin_label());
       getStmt().createBCode(gen);
       gen.addLabel(update_label());
-      for (int i=0; i<getNumUpdateStmt(); i++) {
-        getUpdateStmt(i).createBCode(gen);
+      for (Stmt stmt : getUpdateStmtList()) {
+        stmt.createBCode(gen);
       }
       gen.emitGoto(cond_label());
     }
@@ -1990,8 +1989,7 @@ aspect CreateBCode {
    * Generate bytecode for the monitor exit call.
    */
   public void MonitorExit.createBCode(CodeGeneration gen) {
-    gen.monitorRangeEnd(monitor.monitorId,
-        hostType().constantPool().newLabel());
+    gen.monitorRangeEnd(monitor.monitorId, hostType().constantPool().newLabel());
   }
 
   /**
