@@ -169,8 +169,17 @@ aspect CreateBCode {
         throw new Error("parameter list too large");
       }
       gen.addLocalVariableEntryAtCurrentPC(
-        p.name(), p.type().typeDescriptor(), p.localNum(), label
-      );
+          p.name(), p.type().typeDescriptor(), p.localNum(), label);
+    }
+    int nextLocal = offsetFirstEnclosingVariable();
+    for (Variable var : hostType().enclosingVariables()) {
+      paramLength += var.type().variableSize();
+      if (paramLength > 255) {
+        throw new Error("parameter list too large, not enough room for enclosing variables");
+      }
+      gen.addLocalVariableEntryAtCurrentPC(
+          "val$" + var.name(), var.type().typeDescriptor(), nextLocal, label);
+      nextLocal += var.type().variableSize();
     }
     createBCode(gen);
     gen.emitReturn();
@@ -202,7 +211,6 @@ aspect CreateBCode {
           if (!expr.isSuperConstructorAccess()) {
             needsInit = false;
           }
-
         }
       }
 
@@ -218,14 +226,14 @@ aspect CreateBCode {
 
       int localIndex = offsetFirstEnclosingVariable();
       for (Variable v : hostType().enclosingVariables()) {
-          gen.emitLoadReference(0);
-          v.type().emitLoadLocal(gen, localIndex);
-          String classname = hostType().constantPoolName();
-          String desc = v.type().typeDescriptor();
-          String name = "val$" + v.name();
-          int index = gen.constantPool().addFieldref(classname, name, desc);
-          gen.emit(Bytecode.PUTFIELD, -1 - v.type().variableSize()).add2(index);
-          localIndex += v.type().variableSize();
+        gen.emitLoadReference(0);
+        v.type().emitLoadLocal(gen, localIndex);
+        String classname = hostType().constantPoolName();
+        String desc = v.type().typeDescriptor();
+        String name = "val$" + v.name();
+        int index = gen.constantPool().addFieldref(classname, name, desc);
+        gen.emit(Bytecode.PUTFIELD, -1 - v.type().variableSize()).add2(index);
+        localIndex += v.type().variableSize();
       }
 
       if (needsInit) {
@@ -442,7 +450,7 @@ aspect CreateBCode {
   }
 
   public void VarAccess.createAssignSimpleLoadDest(CodeGeneration gen) {
-    createLoadQualifier(gen);
+    createLoadQualifier(gen, decl());
   }
 
   public void ArrayAccess.createAssignSimpleLoadDest(CodeGeneration gen) {
@@ -484,7 +492,7 @@ aspect CreateBCode {
   }
 
   public void VarAccess.createAssignLoadDest(CodeGeneration gen) {
-    createLoadQualifier(gen);
+    createLoadQualifier(gen, decl());
     Variable v = decl();
     if (v.isInstanceVariable()) {
       gen.emitDup();
@@ -566,16 +574,22 @@ aspect CreateBCode {
   }
 
   public void VarAccess.createBCode(CodeGeneration gen) {
-    Variable v = decl();
+    emitLoadVariable(gen, decl());
+  }
+
+  /**
+   * Generate bytecode to load a field, local variable, or parameter.
+   */
+  protected void Access.emitLoadVariable(CodeGeneration gen, Variable v) {
     if (v instanceof VariableDeclarator) {
       VariableDeclarator var = (VariableDeclarator) v;
       if (var.hostType() == hostType()) {
         var.type().emitLoadLocal(gen, var.localNum());
       } else {
-        emitLoadLocalInNestedClass(gen, var);
+        emitLoadLocalInNestedClass(gen, v);
       }
     } else if (v.isField()) {
-      createLoadQualifier(gen);
+      createLoadQualifier(gen, v);
       if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
         if (!v.isStatic()) {
           fieldQualifierType().emitPop(gen);
@@ -591,7 +605,7 @@ aspect CreateBCode {
       if (decl.hostType() == hostType()) {
         decl.type().emitLoadLocal(gen, decl.localNum());
       } else {
-        emitLoadLocalInNestedClass(gen, decl);
+        emitLoadLocalInNestedClass(gen, v);
       }
     }
   }
@@ -608,7 +622,7 @@ aspect CreateBCode {
 
   inh boolean Access.inExplicitConstructorInvocation();
 
-  public void Access.emitLoadLocalInNestedClass(CodeGeneration gen, Variable v) {
+  protected void Access.emitLoadLocalInNestedClass(CodeGeneration gen, Variable v) {
     if (inExplicitConstructorInvocation() && enclosingBodyDecl() instanceof ConstructorDecl) {
       ConstructorDecl c = (ConstructorDecl) enclosingBodyDecl();
       v.type().emitLoadLocal(gen, c.localIndexOfEnclosingVariable(v));
@@ -622,8 +636,10 @@ aspect CreateBCode {
     }
   }
 
-  protected void VarAccess.createLoadQualifier(CodeGeneration gen) {
-    Variable v = decl();
+  /**
+   * Generate bytecode to push on the stack the qualifier to access the variable v.
+   */
+  protected void Access.createLoadQualifier(CodeGeneration gen, Variable v) {
     if (v.isField()) {
       if (hasPrevExpr()) {
         // Load explicit qualifier.
@@ -735,37 +751,41 @@ aspect CreateBCode {
   }
 
   public void ConstructorAccess.createBCode(CodeGeneration gen) {
-    ConstructorDecl c = decl();
+    ConstructorDecl decl = decl();
     int index = 0;
     // Push this argument.
     gen.emitLoadReference(index++);
     // Push this$0 argument.
-    if (c.needsEnclosing()) {
+    if (decl.needsEnclosing()) {
       gen.emitLoadReference(index++);
     }
-    if (c.needsSuperEnclosing()) {
+    if (decl.needsSuperEnclosing()) {
       gen.emitLoadReference(index++);
     }
     // Push formal arguments.
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
-      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // MethodInvocationConversion
+      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type()); // MethodInvocationConversion
     }
-    if (decl().isPrivate() && decl().hostType() != hostType()) {
+    // Push enclosing variable arguments.
+    for (Variable var : decl.hostType().enclosingVariables()) {
+      emitLoadVariable(gen, var);
+    }
+    if (decl.isPrivate() && decl.hostType() != hostType()) {
       gen.emit(Bytecode.ACONST_NULL);
-      decl().createAccessor().emitInvokeConstructor(gen);
+      decl.createAccessor().emitInvokeConstructor(gen);
     } else {
-      decl().emitInvokeConstructor(gen);
+      decl.emitInvokeConstructor(gen);
     }
   }
 
   public void SuperConstructorAccess.createBCode(CodeGeneration gen) {
-    ConstructorDecl c = decl();
+    ConstructorDecl decl = decl();
 
     // Push this argument.
     gen.emit(Bytecode.ALOAD_0);
 
-    if (c.needsEnclosing()) {
+    if (decl.needsEnclosing()) {
       if (hasPrevExpr() && !prevExpr().isTypeAccess()) {
         prevExpr().createBCode(gen);
         gen.emitDup();
@@ -781,7 +801,7 @@ aspect CreateBCode {
             gen.emit(Bytecode.ALOAD_1);
           }
         } else {
-          emitThis(gen, superConstructorQualifier(c.hostType().enclosingType()));
+          emitThis(gen, superConstructorQualifier(decl.hostType().enclosingType()));
         }
       }
     }
@@ -790,13 +810,17 @@ aspect CreateBCode {
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // Method invocation conversion:
-      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type());
+      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type());
     }
-    if (decl().isPrivate() && decl().hostType() != hostType()) {
+    // Push enclosing variable arguments.
+    for (Variable var : decl.hostType().enclosingVariables()) {
+      emitLoadVariable(gen, var);
+    }
+    if (decl.isPrivate() && decl.hostType() != hostType()) {
       gen.emit(Bytecode.ACONST_NULL);
-      decl().createAccessor().emitInvokeConstructor(gen);
+      decl.createAccessor().emitInvokeConstructor(gen);
     } else {
-      decl().emitInvokeConstructor(gen);
+      decl.emitInvokeConstructor(gen);
     }
   }
 
@@ -859,17 +883,24 @@ aspect CreateBCode {
       emitInnerMemberEnclosing(gen, type());
     }
 
+    ConstructorDecl decl = decl();
+
+    // Push formal arguments.
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // Method invocation conversion:
-      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type());
+      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type());
+    }
+    // Push enclosing variable arguments.
+    for (Variable var : decl.hostType().enclosingVariables()) {
+      emitLoadVariable(gen, var);
     }
 
-    if (decl().isPrivate() && type() != hostType()) {
+    if (decl.isPrivate() && type() != hostType()) {
       gen.emit(Bytecode.ACONST_NULL);
-      decl().createAccessor().emitInvokeConstructor(gen);
+      decl.createAccessor().emitInvokeConstructor(gen);
     } else {
-      decl().emitInvokeConstructor(gen);
+      decl.emitInvokeConstructor(gen);
     }
   }
 

@@ -391,12 +391,12 @@ aspect CodeGeneration {
 
   /** Generate bytecode to load this field. */
   protected static void ASTNode.emitLoadField(CodeGeneration gen, Variable field,
-      TypeDecl typeDecl) {
+      TypeDecl hostType) {
     if (field.hostType().isArrayDecl() && field.name().equals("length")) {
       gen.emit(Bytecode.ARRAYLENGTH);
       return;
     }
-    String classname = typeDecl.constantPoolName();
+    String classname = hostType.constantPoolName();
     String desc = field.type().typeDescriptor();
     String name = field.name();
     int index = gen.constantPool().addFieldref(classname, name, desc);
@@ -618,7 +618,6 @@ aspect CodeGeneration {
     gen.emit(Bytecode.POP2);
   }
 
-
   public void MethodDecl.emitInvokeMethod(CodeGeneration gen, TypeDecl hostType) {
     if (hostType.isInterfaceDecl()) {
       String classname = hostType.constantPoolName();
@@ -667,6 +666,9 @@ aspect CodeGeneration {
     for (int i = 0; i < getNumParameter(); i++) {
       stackChange -= getParameter(i).type().variableSize();
     }
+    for (Variable var : hostType().enclosingVariables()) {
+      stackChange -= var.type().variableSize();
+    }
     if (hostType().needsEnclosing()) {
       stackChange -= 1;
     }
@@ -685,6 +687,7 @@ aspect CodeGeneration {
     gen.emit(Bytecode.NEW).add2(index);
   }
 }
+
 aspect CodeGenerationConversions {
   void TypeDecl.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {
     if (!type.isIntegralType() || !isIntegralType() || type.isLong()) {

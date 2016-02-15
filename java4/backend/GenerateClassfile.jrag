@@ -79,6 +79,11 @@ aspect GenerateClassfile {
         cp.addUtf8(field.type().typeDescriptor());
         field.attributes();
       }
+      // Add fields to store enclosing variables.
+      for (Variable var : enclosingVariables()) {
+        cp.addUtf8("val$" + var.name());
+        cp.addUtf8(var.type().typeDescriptor());
+      }
       if (needsEnclosing()) {
         cp.addUtf8("this$0");
         cp.addUtf8(enclosing().typeDescriptor());
@@ -155,7 +160,7 @@ aspect GenerateClassfile {
   /** Generate bytecode attributes for the fields in this type. */
   protected void TypeDecl.generateFields(DataOutputStream out, ConstantPool cp) throws IOException {
     Collection<FieldDeclarator> fields = fieldDeclarations();
-    out.writeChar(fields.size() + (needsEnclosing() ? 1 : 0));
+    out.writeChar(fields.size() + (needsEnclosing() ? 1 : 0) + enclosingVariables().size());
     for (FieldDeclarator field : fields) {
       out.writeChar(field.flags());
       out.writeChar(cp.addUtf8(field.name()));
@@ -164,6 +169,13 @@ aspect GenerateClassfile {
       for (Attribute attribute : field.attributes()) {
         attribute.emit(out);
       }
+    }
+    // Add fields to store enclosing variables.
+    for (Variable var : enclosingVariables()) {
+      out.writeChar(Modifiers.ACC_FINAL | Modifiers.ACC_SYNTHETIC);
+      out.writeChar(cp.addUtf8("val$" + var.name()));
+      out.writeChar(cp.addUtf8(var.type().typeDescriptor()));
+      out.writeChar(0);
     }
   }
 

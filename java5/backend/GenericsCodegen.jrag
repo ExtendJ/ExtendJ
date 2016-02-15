@@ -87,7 +87,7 @@ aspect GenericsCodegen {
   refine CreateBCode public void VarAccess.createAssignLoadDest(CodeGeneration gen) {
     Variable v = decl();
     if (v.isField()) {
-      createLoadQualifier(gen);
+      createLoadQualifier(gen, v);
       if (v.isInstanceVariable()) {
         gen.emitDup();
       }
@@ -104,13 +104,13 @@ aspect GenericsCodegen {
     }
   }
 
-  refine CreateBCode public void VarAccess.createBCode(CodeGeneration gen) {
-    Variable v = decl();
+  refine CreateBCode
+  protected void Access.emitLoadVariable(CodeGeneration gen, Variable v) {
     if (v.isField()) {
       if (v instanceof FieldDeclarator) {
         v = ((FieldDeclarator) v).erasedField();
       }
-      createLoadQualifier(gen);
+      createLoadQualifier(gen, v);
       if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
         if (!v.isStatic()) {
           fieldQualifierType().emitPop(gen);
@@ -121,11 +121,19 @@ aspect GenericsCodegen {
       } else {
         emitLoadField(gen, v, fieldQualifierType());
       }
-      if (v.type() != decl().type()) {
-        gen.emitCheckCast(decl().type());
-      }
+      emitCheckCast(gen, v);
     } else {
-      refined(gen);
+      refined(gen, v);
+    }
+  }
+
+  /** Generate a checked cast if needed. */
+  protected void Access.emitCheckCast(CodeGeneration gen, Variable v) {
+  }
+
+  protected void VarAccess.emitCheckCast(CodeGeneration gen, Variable v) {
+    if (v.type() != decl().type()) {
+      gen.emitCheckCast(decl().type());
     }
   }
 

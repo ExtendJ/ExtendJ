@@ -55,7 +55,12 @@ aspect InnerClasses {
     return false;
   }
 
-  private TypeDecl VarAccess.fieldQualifierType() {
+  protected TypeDecl Access.fieldQualifierType() {
+    throw new Error("Can not evaluate fieldQualifierType() on node of type "
+        + getClass().getSimpleName());
+  }
+
+  protected TypeDecl VarAccess.fieldQualifierType() {
     if (hasPrevExpr()) {
       return prevExpr().type();
     }
@@ -200,6 +205,7 @@ aspect InnerClasses {
       getChild(i).collectEnclosingVariables(vars, typeDecl);
     }
   }
+
   public void VarAccess.collectEnclosingVariables(Collection<Variable> vars, TypeDecl typeDecl) {
     Variable v = decl();
     if (!v.isInstanceVariable() && !v.isClassVariable() && v.hostType() == typeDecl) {
@@ -207,7 +213,6 @@ aspect InnerClasses {
     }
     super.collectEnclosingVariables(vars, typeDecl);
   }
-
 
   public int TypeDecl.accessorCounter = 0;
 
@@ -419,6 +424,11 @@ aspect InnerClasses {
     return isStatic() ? fieldAccess : new VarAccess("that").qualifiesAccess(fieldAccess);
   }
 
+  syn boolean Access.requiresAccessor() {
+    throw new Error("Can not evaluate requiresAccessor() on node of type "
+        + getClass().getSimpleName());
+  }
+
   syn boolean VarAccess.requiresAccessor() {
     Variable v = decl();
     if (!(v instanceof FieldDeclarator)) {
@@ -511,76 +521,11 @@ aspect InnerClasses {
   syn TypeDecl ConstructorDecl.enclosing() = hostType().enclosing();
   syn TypeDecl ConstructorDecl.superEnclosing() = hostType().superEnclosing();
 
-  // Add val$name as fields to the class.
-  private boolean TypeDecl.addEnclosingVariables = true;
-
-  public void TypeDecl.addEnclosingVariables() {
-    if (!addEnclosingVariables) {
-      return;
-    }
-    addEnclosingVariables = false;
-    for (Variable v : enclosingVariables()) {
-      Modifiers m = new Modifiers();
-      m.addModifier(new Modifier("public"));
-      m.addModifier(new Modifier("synthetic"));
-      m.addModifier(new Modifier("final"));
-      FieldDeclarator decl = new FieldDeclarator(
-          "val$" + v.name(), new List<Dims>(), new Opt<Expr>());
-      addMemberField(new FieldDecl(
-          m,
-          v.type().createQualifiedAccess(),
-          new List<FieldDeclarator>(decl)));
-    }
-  }
-
-  // Add val$name as parameters to the constructor.
-  protected boolean ConstructorDecl.addEnclosingVariables = true;
-
-  public void ConstructorDecl.addEnclosingVariables() {
-    if (!addEnclosingVariables) {
-      return;
-    }
-    addEnclosingVariables = false;
-    hostType().addEnclosingVariables();
-    for (Variable v : hostType().enclosingVariables()) {
-      getParameterList().add(new ParameterDeclaration(v.type(), "val$" + v.name()));
-    }
-  }
-
-  // Add val$name as arguments to the constructor.
-  protected boolean ConstructorAccess.addEnclosingVariables = true;
-  public void ConstructorAccess.addEnclosingVariables() {
-    if (!addEnclosingVariables) {
-      return;
-    }
-    addEnclosingVariables = false;
-    decl().addEnclosingVariables();
-    for (Variable v : decl().hostType().enclosingVariables()) {
-      getArgList().add(new VarAccess("val$" + v.name()));
-    }
-  }
-
-  // Add val$name as arguments to the constructor.
-  protected boolean ClassInstanceExpr.addEnclosingVariables = true;
-  public void ClassInstanceExpr.addEnclosingVariables() {
-    if (!addEnclosingVariables) {
-      return;
-    }
-    addEnclosingVariables = false;
-    decl().addEnclosingVariables();
-    for (Variable v : decl().hostType().enclosingVariables()) {
-      getArgList().add(new VarAccess(v.name()));
-    }
-  }
-
   public ConstructorDecl ConstructorDecl.createAccessor() {
-    ConstructorDecl c = (ConstructorDecl) hostType().getAccessor(this, "constructor");
-    if (c != null) {
-      return c;
+    ConstructorDecl accessor = (ConstructorDecl) hostType().getAccessor(this, "constructor");
+    if (accessor != null) {
+      return accessor;
     }
-
-    // Make sure enclosing varibles are added as parameters prior to building accessor.
-    addEnclosingVariables();
 
     Modifiers modifiers = new Modifiers(new List<Modifier>(new Modifier("synthetic")));
 
@@ -596,25 +541,17 @@ aspect InnerClasses {
     for (int i = 0; i < parameters.getNumChildNoTransform() - 1; i++) {
       args.add(new VarAccess(((ParameterDeclaration) parameters.getChildNoTransform(i)).name()));
     }
-    ConstructorAccess access = new ConstructorAccess("this", args);
-    access.addEnclosingVariables = false;
-
-    c = new ConstructorDecl(
+    accessor = new ConstructorDecl(
       modifiers,
       name(),
       parameters,
       exceptionList,
-      new Opt(
-        new ExprStmt(
-          access
-        )
-      ),
+      new Opt<Stmt>(new ExprStmt(new ConstructorAccess("this", args))),
       new Block()
     );
-    c = hostType().addConstructor(c);
-    c.addEnclosingVariables = false;
-    hostType().addAccessor(this, "constructor", c);
-    return c;
+    accessor = hostType().addConstructor(accessor);
+    hostType().addAccessor(this, "constructor", accessor);
+    return accessor;
   }
 
   protected List<ParameterDeclaration> ConstructorDecl.createAccessorParameters() {
