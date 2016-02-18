@@ -64,147 +64,139 @@ aspect EnumsCodegen {
     return flags;
   }
 
-  // Transform enum switch statements into integer indexed switch statements.
-  public void SwitchStmt.transformation() {
-    if (getExpr().type().isEnumDecl()) {
-      TypeDecl type = getExpr().type();
-      hostType().createEnumArray(type);
-      hostType().createEnumMethod(type);
-      setExpr(
-        hostType().createEnumMethod(type).createBoundAccess(new List()).qualifiesAccess(
-        new ArrayAccess(
-            ((Expr) getExpr().treeCopyNoTransform()).qualifiesAccess(
-                new MethodAccess("ordinal", new List())))));
+  refine GenerateClassfile
+  eq ReferenceType.fieldDeclarations() {
+    Collection<FieldDeclarator> fields = refined();
+    // Add enum index fields:
+    for (SwitchStmt enumSwitch : enumSwitchStatements()) {
+      fields.add(enumArrayDecl(enumSwitch));
     }
-    super.transformation();
+    return fields;
   }
 
-  public void ConstCase.transformation() {
-    if (getValue() instanceof VarAccess && getValue().varDecl() instanceof EnumConstant) {
-      int i = hostType().createEnumIndex((EnumConstant) getValue().varDecl());
-      setValue(Literal.buildIntegerLiteral(i));
+  refine GenerateClassfile
+  eq ReferenceType.methodsAndConstructors() {
+    Collection<BodyDecl> methods = refined();
+    // Add enum index methods:
+    // TODO(joqvist): generate an anonymous class with initializer instead.
+    for (SwitchStmt enumSwitch : enumSwitchStatements()) {
+      methods.add(createEnumMethod(enumSwitch));
     }
-    super.transformation();
+    return methods;
   }
 
-  protected MethodDecl TypeDecl.enumMethod = null;
+  /** Collects the switch statements in this type which use an enum expression. */
+  coll LinkedList<SwitchStmt> TypeDecl.enumSwitchStatements() root TypeDecl;
 
-  // TODO(joqvist): Remove side effects by using collection to collect enum index methods.
-  protected MethodDecl TypeDecl.createEnumMethod(TypeDecl enumDecl) {
-    if (enumMethod != null) {
-      return enumMethod;
+  SwitchStmt contributes this
+      when getExpr().type().isEnumDecl()
+      to TypeDecl.enumSwitchStatements()
+      for hostType();
+
+  /**
+   * This is the expression used during code generation to access the enum index field
+   * and compute the jump target.
+   */
+  syn nta Expr SwitchStmt.enumIndexExpr() =
+      hostType().createEnumMethod(this).createBoundAccess(new List())
+          .qualifiesAccess(
+              new ArrayAccess(((Expr) getExpr().treeCopyNoTransform())
+                  .qualifiesAccess(new MethodAccess("ordinal", new List()))));
+
+  /** @return a collection of the constant cases in this switch statement. */
+  syn Collection<ConstCase> SwitchStmt.constCases() {
+    Collection<ConstCase> cases = new LinkedList<ConstCase>();
+    for (Stmt stmt : getBlock().getStmtList()) {
+      if (stmt instanceof ConstCase) {
+        cases.add((ConstCase) stmt);
+      }
     }
-    MethodDecl m = new MethodDecl(
-      new Modifiers(new List<Modifier>(
-          new Modifier("static"),
-          new Modifier("final"),
-          new Modifier("private"))),
-      typeInt().arrayType().createQualifiedAccess(),
-      "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
-      new List(),
-      new List(),
-      new Opt<Block>(
-        new Block(
-          new List<Stmt>(
-            new IfStmt(
-              new EQExpr(
-                createEnumArray(enumDecl).createBoundAccess(),
-                new NullLiteral("null")
-              ),
-              AssignExpr.asStmt(
-                createEnumArray(enumDecl).createBoundAccess(),
-                new ArrayCreationExpr(
-                  new ArrayTypeWithSizeAccess(
-                    typeInt().createQualifiedAccess(),
-                    enumDecl.createQualifiedAccess().qualifiesAccess(
-                        new MethodAccess("values", new List())).qualifiesAccess(
-                        new VarAccess("length"))
-                  ),
-                  new Opt()
-                )
-              ),
-              new Opt()
-            ),
-            new ReturnStmt(
-              createEnumArray(enumDecl).createBoundAccess()
-            )
-          )
-        )
-      )
-    );
-    // Add method declaration as a body declaration.
-    getBodyDeclList().insertChild(m, 1);
-    // Trigger possible rewrites.
-    enumMethod = (MethodDecl) getBodyDeclList().getChild(1);
-    return enumMethod;
+    return cases;
   }
 
-  // Compute index of enum constants.
-  private HashMap TypeDecl.createEnumIndexMap = null;
-
-  syn lazy int TypeDecl.createEnumIndex(EnumConstant e) {
-    if (createEnumIndexMap == null) {
-      createEnumIndexMap = new HashMap();
+  /**
+   * Should only be evaluated on switch statements that have enum constants as
+   * the switch cases.
+   */
+  syn lazy Map<EnumConstant, Integer> SwitchStmt.enumIndices() {
+    Map<EnumConstant, Integer> indexMap = new HashMap<EnumConstant, Integer>();
+    int next = 1;
+    for (ConstCase cc : constCases()) {
+      indexMap.put((EnumConstant) cc.getValue().varDecl(), next);
+      next += 1;
     }
-    if (!createEnumIndexMap.containsKey(e.hostType())) {
-      createEnumIndexMap.put(e.hostType(), new Integer(0));
-    }
-    Integer i = (Integer) createEnumIndexMap.get(e.hostType());
-    i = new Integer(i.intValue() + 1);
-    createEnumIndexMap.put(e.hostType(), i);
+    return indexMap;
+  }
 
-    MethodDecl m = createEnumMethod(e.hostType());
-    List list = m.getBlock().getStmtList();
-    list.insertChild(
-      new TryStmt(
-        new Block(
-          new List().add(
+  /**
+   * Generates a method to initialize the enum switch index map.
+   * @param enumSwitch the switch statement to generate an enum index map for.
+   */
+  syn nta MethodDecl TypeDecl.createEnumMethod(SwitchStmt enumSwitch) {
+    TypeDecl enumDecl = enumSwitch.getExpr().type();
+    List<Stmt> stmts = new List<Stmt>();
+    stmts.add(
+        new IfStmt(
+            new EQExpr(enumArrayDecl(enumSwitch).createBoundAccess(), new NullLiteral("null")),
             AssignExpr.asStmt(
-              createEnumArray(e.hostType()).createBoundAccess().qualifiesAccess(
-                new ArrayAccess(
-                  e.createBoundAccess().qualifiesAccess(
-                      new MethodAccess("ordinal", new List()))
-                )
-              ),
-              Literal.buildIntegerLiteral(i.intValue())
-            )
-          )
-        ),
-        new List().add(
-          new BasicCatch(
-            new ParameterDeclaration(
-              lookupType("java.lang", "NoSuchFieldError").createQualifiedAccess(),
-              "e"
-            ),
-            new Block(
-              new List()
-            )
-          )
-        ),
-        new Opt()
-      ),
-      list.getNumChild() - 1
-    );
-    return i.intValue();
-  }
-
-  // Static field with array contents..
-  syn lazy FieldDeclarator TypeDecl.createEnumArray(TypeDecl enumDecl) {
-    FieldDeclarator decl = new FieldDeclarator(
-        "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
-        new List<Dims>(),
-        new Opt<Expr>());
-    FieldDecl f = new FieldDecl(
+                enumArrayDecl(enumSwitch).createBoundAccess(),
+                new ArrayCreationExpr(
+                    new ArrayTypeWithSizeAccess(
+                        typeInt().createQualifiedAccess(),
+                        enumDecl.createQualifiedAccess()
+                            .qualifiesAccess(new MethodAccess("values", new List()))
+                            .qualifiesAccess(new VarAccess("length"))),
+                    new Opt())),
+            new Opt()));
+    for (Map.Entry<EnumConstant, Integer> entry : enumSwitch.enumIndices().entrySet()) {
+      EnumConstant enumConstant = entry.getKey();
+      int index = entry.getValue();
+      stmts.add(
+          new TryStmt(
+              new Block(
+                new List().add(
+                  AssignExpr.asStmt(
+                    enumArrayDecl(enumSwitch).createBoundAccess()
+                        .qualifiesAccess(new ArrayAccess(enumConstant.createBoundAccess()
+                            .qualifiesAccess(new MethodAccess("ordinal", new List())))),
+                    Literal.buildIntegerLiteral(index)))),
+              new List<CatchClause>(
+                new BasicCatch(
+                  new ParameterDeclaration(
+                    lookupType("java.lang", "NoSuchFieldError").createQualifiedAccess(), "e"),
+                  new Block(new List<Stmt>()))),
+              new Opt()));
+    }
+    stmts.add(new ReturnStmt(enumArrayDecl(enumSwitch).createBoundAccess()));
+    return new MethodDecl(
         new Modifiers(new List<Modifier>(
             new Modifier("static"),
             new Modifier("final"),
             new Modifier("private"))),
         typeInt().arrayType().createQualifiedAccess(),
+        "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
+        new List(),
+        new List(),
+        new Opt<Block>(new Block(stmts)));
+  }
+
+  syn FieldDeclarator TypeDecl.enumArrayDecl(SwitchStmt enumSwitch) =
+      createEnumArrayField(enumSwitch).getDeclarator(0);
+
+  /** Inserts a new field declaration in this type to store enum switch indices. */
+  syn nta FieldDecl TypeDecl.createEnumArrayField(SwitchStmt enumSwitch) {
+    TypeDecl enumDecl = enumSwitch.getExpr().type();
+    FieldDeclarator decl = new FieldDeclarator(
+        "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
+        new List<Dims>(),
+        new Opt<Expr>());
+    return new FieldDecl(
+        new Modifiers(new List<Modifier>(
+            new Modifier("static"),
+            new Modifier("final"),
+            new Modifier("synthetic"))),
+        typeInt().arrayType().createQualifiedAccess(),
         new List<FieldDeclarator>(decl));
-    // Add field declaration as a body declaration.
-    getBodyDeclList().insertChild(f, 0);
-    // Trigger possible rewrites.
-    return decl;
   }
 
   @Override

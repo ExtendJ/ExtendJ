@@ -28,8 +28,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * Refines code generation to use Java 5 autoboxing conversions.
+ */
 aspect AutoBoxingCodegen {
-    // Code generation for Boxing Conversion
   refine CodeGenerationConversions void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type) {
     if (type.unboxed() == this || type.isObject()) {
       boxed().emitBoxingOperation(gen);
@@ -179,10 +181,13 @@ aspect AutoBoxingCodegen {
   }
 
   // 14.11 Switch
+  // Refine swithch code generation to handle autoboxing and enum types.
   refine CreateBCode public void SwitchStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     int cond_label = gen.constantPool().newLabel();
     int switch_label = gen.constantPool().newLabel();
+
+    TreeMap<Integer, ConstCase> caseMap = new TreeMap<Integer, ConstCase>();
 
     gen.emitGoto(cond_label);
     getBlock().createBCode(gen);
@@ -190,24 +195,26 @@ aspect AutoBoxingCodegen {
       gen.emitGoto(end_label());
     }
     gen.addLabel(cond_label);
-    getExpr().createBCode(gen);
-    if (getExpr().type().isReferenceType()) {
-      getExpr().type().emitUnboxingOperation(gen);
-    }
-
-    TreeMap<Integer, ConstCase> map = new TreeMap<Integer, ConstCase>();
-    for (int i = 0; i < getBlock().getNumStmt(); i++) {
-      if (getBlock().getStmt(i) instanceof ConstCase) {
-        ConstCase ca = (ConstCase) getBlock().getStmt(i);
-        map.put(new Integer(ca.getValue().constant().intValue()), ca);
+    if (getExpr().type().isEnumDecl()) {
+      enumIndexExpr().createBCode(gen);
+      for (ConstCase cc : constCases()) {
+        caseMap.put(enumIndices().get((EnumConstant) cc.getValue().varDecl()), cc);
+      }
+    } else {
+      getExpr().createBCode(gen);
+      if (getExpr().type().isReferenceType()) {
+        getExpr().type().emitUnboxingOperation(gen);
+      }
+      for (ConstCase cc : constCases()) {
+        caseMap.put(cc.getValue().constant().intValue(), cc);
       }
     }
 
-    long low = map.isEmpty() ? 0 : map.firstKey();
-    long high = map.isEmpty() ? 0 : map.lastKey();
+    long low = caseMap.isEmpty() ? 0 : caseMap.firstKey();
+    long high = caseMap.isEmpty() ? 0 : caseMap.lastKey();
 
     long tableSwitchSize = 8L + (high - low + 1L) * 4L;
-    long lookupSwitchSize = 4L + map.size() * 8L;
+    long lookupSwitchSize = 4L + caseMap.size() * 8L;
 
     gen.addLabel(switch_label);
     if (tableSwitchSize < lookupSwitchSize) {
@@ -221,9 +228,9 @@ aspect AutoBoxingCodegen {
       gen.add4((int) low);
       gen.add4((int) high);
       for (long i = low; i <= high; i++) {
-        ConstCase ca = map.get((int) i);
-        if (ca != null) {
-          int offset = gen.addressOf(ca.label())
+        ConstCase cc = caseMap.get((int) i);
+        if (cc != null) {
+          int offset = gen.addressOf(cc.label())
             - gen.addressOf(switch_label);
           gen.add4(offset);
         } else {
@@ -238,10 +245,10 @@ aspect AutoBoxingCodegen {
         defaultOffset = 1 + pad + 4 + 4 + 8 * numCase();
       }
       gen.add4(defaultOffset);
-      gen.add4(map.size());
-      for (ConstCase ca : map.values()) {
-        gen.add4(ca.getValue().constant().intValue());
-        int offset = gen.addressOf(ca.label()) - gen.addressOf(switch_label);
+      gen.add4(caseMap.size());
+      for (Map.Entry<Integer, ConstCase> entry : caseMap.entrySet()) {
+        gen.add4(entry.getKey());
+        int offset = gen.addressOf(entry.getValue().label()) - gen.addressOf(switch_label);
         gen.add4(offset);
       }
     }
