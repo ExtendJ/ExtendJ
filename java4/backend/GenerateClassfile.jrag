@@ -41,7 +41,6 @@ aspect GenerateClassfile {
     if (fromSource()) {
       for (int i = 0; i < getNumTypeDecl(); i++) {
         getTypeDecl(i).generateClassfile();
-        getTypeDecl(i).clear();
       }
     }
   }
@@ -457,96 +456,4 @@ aspect GenerateClassfile {
   eq MethodDecl.isMethodOrConstructor() = true;
 
   eq ConstructorDecl.isMethodOrConstructor() = true;
-
-  // Remove method bodies and cached attributes after the class file has been generated.
-  public boolean ASTNode.clear() {
-    boolean empty = true;
-    for (int i = 0; i < getNumChild(); i++) {
-      ASTNode child = getChild(i);
-      if (!child.clear()) {
-        empty = false;
-      } else {
-        if (child instanceof List) {
-          ((ASTNode) this).setChild(new List(), i);
-        } else if (child instanceof Opt) {
-          ((ASTNode) this).setChild(new Opt(), i);
-        }
-      }
-    }
-    if (empty) {
-      setParent(null);
-    }
-    if (flush()) {
-      flushCache();
-    }
-    return empty;
-  }
-
-  syn boolean ASTNode.flush() = true;
-
-  eq TypeDecl.flush() = false;
-  eq LocalClassDeclStmt.flush() = true;
-  eq AnonymousDecl.flush() = true;
-
-  eq MethodDecl.flush() = false;
-  eq Declarator.flush() = false;
-  eq ConstructorDecl.flush() = false;
-
-  public boolean TypeDecl.clear() {
-    bytecodes(constantPool()).clearCodeGeneration();
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      getBodyDecl(i).clear();
-    }
-    attributes_computed = false;
-    attributes_value = null;
-    clinit_attributes_computed = false;
-    clinit_attributes_value = null;
-    constantPool_computed = false;
-    constantPool_value = null;
-    bytecodes_ConstantPool_values = null;
-    return false;
-  }
-
-  public boolean LocalClassDeclStmt.clear() {
-    for (int i = 0; i < getNumChild(); i++) {
-      getChild(i).clear();
-    }
-    setParent(null);
-    flushCache();
-    return true;
-  }
-
-  public boolean AnonymousDecl.clear() {
-    for (int i = 0; i < getNumChild(); i++) {
-      getChild(i).clear();
-    }
-    setParent(null);
-    flushCache();
-    return true;
-  }
-
-  public boolean MethodDecl.clear() {
-    if (hasBlock()) {
-      getBlock().clear();
-      setBlock(new Block(new List()));
-    }
-    bytecodes_ConstantPool_values = null;
-    return false;
-  }
-
-  public boolean Declarator.clear() {
-    return false;
-  }
-
-  public boolean FieldDecl.clear() {
-    // Avoid flushing so that we keep modifiers during code gen.
-    return false;
-  }
-
-  public boolean ConstructorDecl.clear() {
-    getBlock().clear();
-    setBlock(new Block(new List()));
-    bytecodes_ConstantPool_values = null;
-    return false;
-  }
 }

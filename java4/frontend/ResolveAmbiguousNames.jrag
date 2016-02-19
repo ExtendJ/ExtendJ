@@ -174,6 +174,9 @@ aspect QualifiedNames {
 
   syn boolean Access.hasPrevExpr() = isRightChildOfDot();
 
+  // Part of cycle (rewrite ParseName -> hasPrev() -> isRightChildOfDot() -> getRight() -> rewrite):
+  uncache Access.hasPrevExpr();
+
   public Dot Dot.lastDot() {
     Dot node = this;
     while (node.getRightNoTransform() instanceof Dot) {
@@ -254,9 +257,14 @@ aspect QualifiedNames {
 
 aspect NameResolution {
 
+  syn boolean Expr.isParseName() = false;
+
+  eq ParseName.isParseName() = true;
+
   // Replace the parsed name with a name reclassified according to context.
   // This is done upon first access to a name node.
   rewrite ParseName {
+    when (!hasPrevExpr() || !prevExpr().isParseName()) // Ensure rewrites happen left-to-right.
     to Access {
       switch (nameType()) {
         case PACKAGE_NAME:
@@ -271,7 +279,7 @@ aspect NameResolution {
           }
         case AMBIGUOUS_NAME:
           if (!lookupVariable(name()).isEmpty()) {
-            return new VarAccess(name(), start(), end());
+              return new VarAccess(name(), start(), end());
           } else {
             if (lookupType(name()).isEmpty()) {
               return new PackageAccess(name(), start(), end());
@@ -299,9 +307,10 @@ aspect NameResolution {
     to Access {
       PackageAccess left = (PackageAccess) leftSide();
       PackageAccess right = (PackageAccess) rightSide();
-      left.setPackage(left.getPackage() + "." + right.getPackage());
-      left.setEnd(right.end());
-      return qualifyTailWith(left);
+      PackageAccess result = new PackageAccess(left.getPackage() + "." + right.getPackage());
+      result.setStart(left.start());
+      result.setEnd(right.end());
+      return qualifyTailWith(result);
     }
 
     // Collapse package with type access.
@@ -310,9 +319,10 @@ aspect NameResolution {
     to Access {
       PackageAccess left = (PackageAccess) leftSide();
       TypeAccess right = (TypeAccess) rightSide();
-      right.setPackage(left.getPackage());
-      right.setStart(left.start());
-      return qualifyTailWith(right);
+      TypeAccess result = new TypeAccess(left.getPackage(), right.getID());
+      result.setStart(left.start());
+      result.setEnd(right.end());
+      return qualifyTailWith(result);
     }
   }
 
