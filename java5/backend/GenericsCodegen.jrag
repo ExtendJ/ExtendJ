@@ -76,7 +76,7 @@ aspect GenericsCodegen {
         v = ((FieldDeclarator) v).erasedField();
       }
       if (requiresAccessor()) {
-        createFieldAccessorWrite(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+        fieldWriteAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
       } else {
         emitStoreField(gen, v, fieldQualifierType());
       }
@@ -96,7 +96,7 @@ aspect GenericsCodegen {
         v = ((FieldDeclarator) v).erasedField();
       }
       if (requiresAccessor()) {
-        createFieldAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+        fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
       } else {
         emitLoadField(gen, v, fieldQualifierType());
       }
@@ -118,7 +118,7 @@ aspect GenericsCodegen {
         }
         v.constant().createBCode(gen);
       } else if (requiresAccessor()) {
-        createFieldAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+        fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
       } else {
         emitLoadField(gen, v, fieldQualifierType());
       }
@@ -138,7 +138,13 @@ aspect GenericsCodegen {
     }
   }
 
-  refine CreateBCode public void MethodAccess.createBCode(CodeGeneration gen) {
+  refine CreateBCode
+  public void MethodAccess.createBCode(CodeGeneration gen) {
+    if (transformed() != this) {
+      // Ensure bytecode is generated for the transformed access.
+      transformed().createBCode(gen);
+      return;
+    }
     MethodDecl decl = decl().erasedMethod();
     createLoadQualifier(gen);
 
@@ -171,15 +177,9 @@ aspect GenericsCodegen {
       getArg(i).type().emitCastTo(gen, decl().getParameter(i).type()); // Invocation conversion.
     }
 
-    if (!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()) {
-      if (!hostType().instanceOf(prevExpr().type())) {
-        // TODO(joqvist): investigate the comment below.
-        /* Should this be decl instead? possible copy/paste error? */
-        decl().createSuperAccessor(superAccessorTarget()).emitInvokeMethod(gen,
-            superAccessorTarget());
-      } else {
-        decl.emitInvokeSpecialMethod(gen, methodQualifierType());
-      }
+    if (!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()
+        || isSuperAccessor) {
+      decl.emitInvokeSpecialMethod(gen, methodQualifierType());
     } else {
       decl.emitInvokeMethod(gen, methodQualifierType());
     }
@@ -189,21 +189,33 @@ aspect GenericsCodegen {
     }
   }
 
-  refine InnerClasses protected TypeDecl MethodAccess.methodQualifierType() {
+  refine InnerClasses
+  eq MethodAccess.methodQualifierType() {
     TypeDecl typeDecl = refined();
     if (typeDecl == null) {
       return null;
     }
     typeDecl = typeDecl.erasure();
-    MethodDecl m = decl().sourceMethodDecl();
-    Collection<MethodDecl> methods = typeDecl.memberMethods(m.name());
-    if (!methods.contains(decl()) && !methods.contains(m)) {
-      return m.hostType();
+    Collection<MethodDecl> methods = typeDecl.memberMethods(name());
+    if (!methods.contains(decl()) && !methods.contains(decl().sourceMethodDecl())) {
+      return decl().hostType();
     }
-    return typeDecl.erasure();
+    return typeDecl;
   }
 
-  refine InnerClasses protected TypeDecl VarAccess.fieldQualifierType() {
+  refine InnerClasses
+  eq MethodAccess.requiresAccessor() {
+    MethodDecl decl = decl();
+    if (decl.isPrivate() && decl.hostType().original() != hostType().original()) {
+      return true;
+    }
+    return decl.isProtected()
+        && !decl.hostPackage().equals(hostPackage())
+        && !hostType().hasMethod(decl);
+  }
+
+  refine InnerClasses
+  eq VarAccess.fieldQualifierType() {
     TypeDecl typeDecl = refined();
     return typeDecl == null ? null : typeDecl.erasure();
   }
@@ -223,10 +235,6 @@ aspect GenericsCodegen {
   eq TypeVariable.constantPoolName() = erasure().constantPoolName();
   eq ParClassDecl.constantPoolName() = genericDecl().constantPoolName();
   eq ParInterfaceDecl.constantPoolName() = genericDecl().constantPoolName();
-
-  public void BridgeMethodDecl.transformation() { }
-  public void MethodDeclSubstituted.transformation() { }
-  public void ParMethodDecl.transformation() { }
 
   public static final int Modifiers.ACC_BRIDGE = 0x0040;
 
@@ -327,16 +335,6 @@ aspect GenericsCodegen {
         parameters,
         decl.getExceptionList().treeCopyNoTransform(),
         new Opt<Block>(new Block(new List<Stmt>(stmt))));
-  }
-
-  public void ParTypeDecl.transformation() {
-  }
-
-  refine Transformations public void TypeAccess.transformation() {
-    super.transformation();
-    if (type().elementType().isNestedType() && hostType() != null) {
-      hostType().addUsedNestedType(type().elementType().erasure().sourceTypeDecl());
-    }
   }
 
   // Add Signature Attribute.

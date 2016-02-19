@@ -503,7 +503,7 @@ aspect CreateBCode {
       var.type().emitLoadLocal(gen, var.localNum());
     } else if (v.isField()) {
       if (requiresAccessor()) {
-        createFieldAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+        fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
       } else {
         emitLoadField(gen, v, fieldQualifierType());
       }
@@ -571,7 +571,11 @@ aspect CreateBCode {
   }
 
   public void AbstractDot.createBCode(CodeGeneration gen) {
-    lastAccess().createBCode(gen);
+    if (transformed() != this) {
+      transformed().createBCode(gen);
+    } else {
+      getRight().createBCode(gen);
+    }
   }
 
   public void VarAccess.createBCode(CodeGeneration gen) {
@@ -597,7 +601,7 @@ aspect CreateBCode {
         }
         v.constant().createBCode(gen);
       } else if (requiresAccessor()) {
-        createFieldAccessor(v, fieldQualifierType()).emitInvokeMethod(gen, fieldQualifierType());
+        fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
       } else {
         emitLoadField(gen, v, fieldQualifierType());
       }
@@ -657,6 +661,11 @@ aspect CreateBCode {
   }
 
   public void MethodAccess.createBCode(CodeGeneration gen) {
+    if (transformed() != this) {
+      // Ensure bytecode is generated for the transformed access.
+      transformed().createBCode(gen);
+      return;
+    }
     createLoadQualifier(gen);
 
     if (program().options().hasOption("-debug")) {
@@ -682,18 +691,15 @@ aspect CreateBCode {
       }
     }
 
+    // Perform method invocation conversions.
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
-      // Method invocation conversion:
       getArg(i).type().emitCastTo(gen, decl().getParameter(i).type());
     }
 
-    if (!decl().isStatic() && isQualified() && prevExpr().isSuperAccess()) {
-      if (!hostType().instanceOf(prevExpr().type())) {
-        decl().createSuperAccessor(superAccessorTarget()).emitInvokeMethod(gen, superAccessorTarget());
-      } else {
-        decl().emitInvokeSpecialMethod(gen, methodQualifierType());
-      }
+    if (!decl().isStatic() && isQualified() && prevExpr().isSuperAccess()
+        || isSuperAccessor) {
+      decl().emitInvokeSpecialMethod(gen, methodQualifierType());
     } else {
       decl().emitInvokeMethod(gen, methodQualifierType());
     }
@@ -724,6 +730,7 @@ aspect CreateBCode {
   public void ThisAccess.createBCode(CodeGeneration gen) {
     emitThis(gen, decl());
   }
+
   public void SuperAccess.createBCode(CodeGeneration gen) {
     emitThis(gen, decl());
   }
@@ -752,6 +759,12 @@ aspect CreateBCode {
   }
 
   public void ConstructorAccess.createBCode(CodeGeneration gen) {
+    if (transformed() != this) {
+      // Ensure bytecode is generated for the transformed access.
+      transformed().createBCode(gen);
+      return;
+    }
+
     ConstructorDecl decl = decl();
     int index = 0;
     // Push this argument.
@@ -854,6 +867,12 @@ aspect CreateBCode {
   }
 
   public void ClassInstanceExpr.createBCode(CodeGeneration gen) {
+    if (transformed() != this) {
+      // Ensure bytecode is generated for the transformed access.
+      transformed().createBCode(gen);
+      return;
+    }
+
     type().emitNew(gen);
     type().emitDup(gen);
 

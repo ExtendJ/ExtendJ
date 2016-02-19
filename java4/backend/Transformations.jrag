@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *               2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,112 +30,48 @@
  */
 
 aspect Transformations {
-  // Generic traversal of the AST.
-  // TODO(joqvist): this should be removed in the future.
-  public void ASTNode.transformation() {
-    for (int i = 0; i < getNumChild(); i++) {
-        getChild(i).transformation();
-    }
-  }
-
-  public void CompilationUnit.transformation() {
-    if (fromSource()) {
-      for (int i = 0; i < getNumTypeDecl(); i++) {
-        getTypeDecl(i).transformation();
-      }
-    }
-  }
-
-  // Remote collection.
-  public void TypeDecl.transformation() {
-    super.transformation();
-    if (isNestedType()) {
-      enclosingType().addNestedType(this);
-    }
-  }
-
-  public void ClassDecl.transformation() {
-    super.transformation();
-    if (hasImplicitConstructor()) {
-      getImplicitConstructor().transformation();
-    }
-  }
-
-  // Remote collection.
-  public void TypeAccess.transformation() {
-    super.transformation();
-    if (type().elementType().isNestedType() && hostType() != null) {
-      hostType().addUsedNestedType(type().elementType());
-    }
-  }
-
-  // Remote collection / demand driven creation of accessor.
-  public void MethodAccess.transformation() {
-    MethodDecl m = decl();
-
+  syn lazy Access MethodAccess.transformed() {
     if (requiresAccessor()) {
-      /* Access to private methods in enclosing types:
-      The original MethodAccess is replaced with an access to an accessor method
-      built by createAccessor(). This method is built lazily and differs from
-      normal MethodDeclarations in the following ways:
-      1) The method in the class file should always be static and the signature
-         is thus changed to include a possible this reference as the first argument.
-      2) The method is always invoked using INVOKESTATIC
-      3) The flags must indicate that the method is static and package private
-      */
-      super.transformation();
-      this.replaceWith(decl().createAccessor(methodQualifierType()).createBoundAccess(getArgList()));
-      return;
-    } else if (!m.isStatic() && isQualified() && prevExpr().isSuperAccess() && !hostType().instanceOf(prevExpr().type())) {
-      decl().createSuperAccessor(superAccessorTarget());
+      return transformedQualified();
+    } else {
+      return this;
     }
-    super.transformation();
   }
 
-  // TODO(joqvist): use collection attribute for this.
-  // Remote collection / demand driven creation of accessor.
-  public void VarAccess.transformation() {
-    Variable v = decl();
-    if (v.isField()) {
-      if (requiresAccessor()) {
-        TypeDecl typeDecl = fieldQualifierType();
-        if (isSource()) {
-          createFieldAccessor(v, typeDecl);
-        }
-        if (isDest()) {
-          createFieldAccessorWrite(v, typeDecl);
-        }
-      }
+  syn nta Access MethodAccess.transformedQualified() =
+      methodQualifierType().methodAccessor(decl())
+      .createBoundAccess(getArgList().treeCopyNoTransform());
+
+  syn lazy Access AbstractDot.transformed() {
+    if (requiresSuperAccessor()) {
+      return transformedSuperAccessor();
+    } else {
+      return this;
     }
-    super.transformation();
   }
 
-  // Remote collection / demand driven creation of accessor.
-  public void ClassInstanceExpr.transformation() {
-    // Touch accessorIndex to force creation of private constructorAccessor.
-    if (decl().isPrivate() && type() != hostType()) {
-      decl().createAccessor();
+  /**
+   * Builds a transformed version of this expression that calls
+   * a generated super accessor method.
+   */
+  syn nta Access AbstractDot.transformedSuperAccessor() {
+    MethodAccess method = (MethodAccess) rightSide();
+    List<Expr> args = new List<Expr>();
+    if (isQualified()) {
+      args.add(qualifier().treeCopyNoTransform().qualifiesAccess(new ThisAccess()));
+    } else {
+      args.add(new ThisAccess());
     }
-    super.transformation();
+    for (Expr arg : method.getArgList()) {
+      args.add(arg.treeCopyNoTransform());
+    }
+    return ((SuperAccess) leftSide()).superAccessorTarget()
+        .superAccessor(superAccessorTargetMethod()).createBoundAccess(args);
   }
 
-  // Remote collection / demand driven creation of accessor.
-  public void ConstructorAccess.transformation() {
-    // Touch accessorIndex to force creation of private constructorAccessor.
-    if (decl().isPrivate() && decl().hostType() != hostType()) {
-      decl().createAccessor();
-    }
-    super.transformation();
-  }
+  syn ConstructorAccess ConstructorAccess.transformed() = this;
 
-  // Remote collection / demand driven creation of accessor.
-  public void SuperConstructorAccess.transformation() {
-    // Touch accessorIndex to force creation of private constructorAccessor.
-    if (decl().isPrivate() && decl().hostType() != hostType()) {
-      decl().createAccessor();
-    }
-    super.transformation();
-  }
+  syn ClassInstanceExpr ClassInstanceExpr.transformed() = this;
 
   /**
    * The assert statement is transformed to an if-statement that throws an

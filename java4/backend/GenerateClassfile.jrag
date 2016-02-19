@@ -47,7 +47,7 @@ aspect GenerateClassfile {
   }
 
   public void TypeDecl.generateClassfile() {
-    for (TypeDecl typeDecl : nestedTypes) {
+    for (TypeDecl typeDecl : nestedTypes()) {
       typeDecl.generateClassfile();
     }
   }
@@ -339,6 +339,32 @@ aspect GenerateClassfile {
   }
 
   /**
+   * A collection of accessor methods and constructors that should be generated
+   * in this type declaration. Accessors are used by inner classes to
+   * read/write/call protected or private fields/methods/constructors in this
+   * type or its supertypes.
+   */
+  coll HashSet<BodyDecl> TypeDecl.accessors() root CompilationUnit;
+
+  VarAccess contributes
+      fieldQualifierType().fieldAccessor(decl())
+      when requiresFieldAccessor()
+      to TypeDecl.accessors()
+      for fieldQualifierType();
+
+  syn boolean VarAccess.requiresFieldAccessor() =
+      requiresAccessor() && isSource();
+
+  VarAccess contributes
+      fieldQualifierType().fieldWriteAccessor(decl())
+      when requiresFieldWriteAccessor()
+      to TypeDecl.accessors()
+      for fieldQualifierType();
+
+  syn boolean VarAccess.requiresFieldWriteAccessor() =
+      requiresAccessor() && isDest();
+
+  /**
    * @return all fields declared in this body decl
    */
   syn Collection<FieldDeclarator> BodyDecl.fieldDeclarations() = Collections.emptyList();
@@ -351,6 +377,56 @@ aspect GenerateClassfile {
     return fields;
   }
 
+  MethodAccess contributes
+      methodQualifierType().methodAccessor(decl())
+      when requiresAccessor()
+      to TypeDecl.accessors()
+      for methodQualifierType();
+
+  ConstructorAccess contributes
+      decl().createAccessor()
+      when decl().isPrivate() && type() != hostType()
+      to TypeDecl.accessors()
+      for decl().hostType();
+
+  ClassInstanceExpr contributes
+      decl().createAccessor()
+      when decl().isPrivate() && type() != hostType()
+      to TypeDecl.accessors()
+      for decl().hostType();
+
+  // TODO(joqvist): replace this when JastAdd supports controlling the collection tree traversal.
+  protected void ClassDecl.collect_contributors_TypeDecl_accessors(CompilationUnit _root,
+      java.util.Map<ASTNode, java.util.Set<ASTNode>> _map) {
+    if (hasImplicitConstructor()) {
+      getImplicitConstructor().collect_contributors_TypeDecl_accessors(_root, _map);
+    }
+    super.collect_contributors_TypeDecl_accessors(_root, _map);
+  }
+
+  Dot contributes
+      ((SuperAccess) leftSide()).superAccessorTarget()
+          .superAccessor(superAccessorTargetMethod())
+      when requiresSuperAccessor()
+      to TypeDecl.accessors()
+      for ((SuperAccess) leftSide()).superAccessorTarget();
+
+  /** @return {@code true} if this is a method call that requires a super accessor. */
+  syn boolean AbstractDot.requiresSuperAccessor() =
+      leftSide().isSuperAccess()
+      && rightSide().isInstanceMethodAccess()
+      && !hostType().instanceOf(leftSide().type());
+
+  syn MethodDecl AbstractDot.superAccessorTargetMethod() =
+      ((MethodAccess) rightSide()).decl();
+
+  /**
+   * @return {@code true} if this access is a method call of a non-static method.
+   */
+  syn boolean Access.isInstanceMethodAccess() = false;
+
+  eq MethodAccess.isInstanceMethodAccess() = !decl().isStatic();
+
   /** @return a collection of the methods and constructors declared in this type. */
   syn Collection<BodyDecl> ReferenceType.methodsAndConstructors() {
     Collection<BodyDecl> methods = new ArrayList<BodyDecl>();
@@ -359,6 +435,7 @@ aspect GenerateClassfile {
         methods.add(decl);
       }
     }
+    methods.addAll(accessors());
     return methods;
   }
 

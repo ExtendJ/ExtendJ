@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,76 +35,112 @@ aspect VariableArityParametersCodegen {
   not correspond to the formal parameters preceding the variable arity parameter
   will be evaluated and the results stored into an array that will be passed to
   the method invocation (§15.12.4.2)*/
-  refine Transformations public void MethodAccess.transformation() {
+  /*refine Transformations
+  eq MethodAccess.transformed() {
     if (decl().isVariableArity() && !invokesVariableArityAsArray()) {
-      // Arguments to normal parameters.
-      List list = new List();
-      for (int i = 0; i < decl().getNumParameter() - 1; i++) {
-        list.add(getArg(i).treeCopyNoTransform());
-      }
-      // Arguments to variable arity parameters.
-      List last = new List();
-      for (int i = decl().getNumParameter() - 1; i < getNumArg(); i++) {
-        last.add(getArg(i).treeCopyNoTransform());
-      }
-      // Build an array holding arguments.
-      Access typeAccess = decl().lastParameter().type().elementType().createQualifiedAccess();
-      for (int i = 0; i < decl().lastParameter().type().dimension(); i++) {
-        typeAccess = new ArrayTypeAccess(typeAccess);
-      }
-      list.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
-      // Replace argument list with augemented argument list.
-      setArgList(list);
+      return transformedVariableArity();
+    } else {
+      return refined();
     }
-    refined();
+  }*/
+
+  ConstructorAccess contributes
+      decl().createAccessor()
+      when decl().isPrivate() && type() != hostType()
+      to TypeDecl.accessors()
+      for decl().hostType().original();
+
+  ClassInstanceExpr contributes
+      decl().createAccessor()
+      when decl().isPrivate() && type() != hostType()
+      to TypeDecl.accessors()
+      for decl().hostType().original();
+
+  refine GenerateClassfile
+  eq AbstractDot.superAccessorTargetMethod() =
+      ((MethodAccess) rightSide()).decl().erasedMethod();
+
+  syn nta MethodAccess MethodAccess.transformedVariableArity() {
+    MethodDecl decl = decl();
+    // Copy regular arguments.
+    List<Expr> args = new List<Expr>();
+    for (int i = 0; i < decl.getNumParameter() - 1; i++) {
+      args.add(getArg(i).treeCopyNoTransform());
+    }
+    // Compress arguments to the variable arity parameter.
+    List<Expr> last = new List<Expr>();
+    for (int i = decl.getNumParameter() - 1; i < getNumArg(); i++) {
+      last.add(getArg(i).treeCopyNoTransform());
+    }
+    // Build an array holding arguments.
+    Access typeAccess = decl.lastParameter().type().elementType().createQualifiedAccess();
+    for (int i = 0; i < decl.lastParameter().type().dimension(); i++) {
+      typeAccess = new ArrayTypeAccess(typeAccess);
+    }
+    args.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
+    return new MethodAccess(getID(), args);
   }
 
-  refine Transformations public void ClassInstanceExpr.transformation() {
+  refine Transformations
+  eq ClassInstanceExpr.transformed() {
     if (decl().isVariableArity() && !invokesVariableArityAsArray()) {
-      // Arguments to normal parameters.
-      List list = new List();
-      for (int i = 0; i < decl().getNumParameter() - 1; i++) {
-        list.add(getArg(i).treeCopyNoTransform());
-      }
-      // Arguments to variable arity parameters.
-      List last = new List();
-      for (int i = decl().getNumParameter() - 1; i < getNumArg(); i++) {
-        last.add(getArg(i).treeCopyNoTransform());
-      }
-      // Build an array holding arguments.
-      Access typeAccess = decl().lastParameter().type().elementType().createQualifiedAccess();
-      for (int i = 0; i < decl().lastParameter().type().dimension(); i++) {
-        typeAccess = new ArrayTypeAccess(typeAccess);
-      }
-      list.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
-      // Replace argument list with augemented argument list.
-      setArgList(list);
+      return transformedVariableArity();
+    } else {
+      return refined();
     }
-    refined();
   }
 
-  refine Transformations public void ConstructorAccess.transformation() {
-    if (decl().isVariableArity() && !invokesVariableArityAsArray()) {
-      // Arguments to normal parameters.
-      List list = new List();
-      for (int i = 0; i < decl().getNumParameter() - 1; i++) {
-        list.add(getArg(i).treeCopyNoTransform());
-      }
-      // Arguments to variable arity parameters.
-      List last = new List();
-      for (int i = decl().getNumParameter() - 1; i < getNumArg(); i++) {
-        last.add(getArg(i).treeCopyNoTransform());
-      }
-      // Build an array holding arguments.
-      Access typeAccess = decl().lastParameter().type().elementType().createQualifiedAccess();
-      for (int i = 0; i < decl().lastParameter().type().dimension(); i++) {
-        typeAccess = new ArrayTypeAccess(typeAccess);
-      }
-      list.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
-      // Replace argument list with augemented argument list.
-      setArgList(list);
+  syn nta ClassInstanceExpr ClassInstanceExpr.transformedVariableArity() {
+    ConstructorDecl decl = decl();
+    // Arguments to normal parameters.
+    List<Expr> args = new List<Expr>();
+    for (int i = 0; i < decl.getNumParameter() - 1; i++) {
+      args.add(getArg(i).treeCopyNoTransform());
     }
-    refined();
+    // Arguments to variable arity parameters.
+    List<Expr> last = new List<Expr>();
+    for (int i = decl.getNumParameter() - 1; i < getNumArg(); i++) {
+      last.add(getArg(i).treeCopyNoTransform());
+    }
+    // Build an array holding arguments.
+    Access typeAccess = decl.lastParameter().type().elementType().createQualifiedAccess();
+    for (int i = 0; i < decl.lastParameter().type().dimension(); i++) {
+      typeAccess = new ArrayTypeAccess(typeAccess);
+    }
+    args.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
+    // Replace argument list with augemented argument list.
+    return new ClassInstanceExpr(getAccess().treeCopyNoTransform(), args,
+        getTypeDeclOpt().treeCopyNoTransform());
+  }
+
+  refine Transformations
+  eq ConstructorAccess.transformed() {
+    if (decl().isVariableArity() && !invokesVariableArityAsArray()) {
+      return transformedVariableArity();
+    } else {
+      return refined();
+    }
+  }
+
+  syn nta ConstructorAccess ConstructorAccess.transformedVariableArity() {
+    ConstructorDecl decl = decl();
+    // Arguments to normal parameters.
+    List<Expr> args = new List<Expr>();
+    for (int i = 0; i < decl.getNumParameter() - 1; i++) {
+      args.add(getArg(i).treeCopyNoTransform());
+    }
+    // Arguments to variable arity parameters.
+    List<Expr> last = new List<Expr>();
+    for (int i = decl.getNumParameter() - 1; i < getNumArg(); i++) {
+      last.add(getArg(i).treeCopyNoTransform());
+    }
+    // Build an array holding arguments.
+    Access typeAccess = decl.lastParameter().type().elementType().createQualifiedAccess();
+    for (int i = 0; i < decl.lastParameter().type().dimension(); i++) {
+      typeAccess = new ArrayTypeAccess(typeAccess);
+    }
+    args.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
+    return new ConstructorAccess(getID(), args);
   }
 
   public static final int Modifiers.ACC_VARARGS = 0x0080;

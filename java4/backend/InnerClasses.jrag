@@ -30,8 +30,7 @@
  */
 
 aspect InnerClasses {
-  // Not an attribute since needed in phases when the AST has been modified.
-  public boolean TypeDecl.hasField(String name) {
+  syn boolean TypeDecl.hasField(String name) {
     if (!memberFields(name).isEmpty()) {
       return true;
     }
@@ -46,7 +45,7 @@ aspect InnerClasses {
     return false;
   }
 
-  public boolean FieldDecl.hasField(String name) {
+  syn boolean FieldDecl.hasField(String name) {
     for (FieldDeclarator decl : getDeclaratorList()) {
       if (decl.name().equals(name)) {
         return true;
@@ -55,12 +54,12 @@ aspect InnerClasses {
     return false;
   }
 
-  protected TypeDecl Access.fieldQualifierType() {
+  syn TypeDecl Access.fieldQualifierType() {
     throw new Error("Can not evaluate fieldQualifierType() on node of type "
         + getClass().getSimpleName());
   }
 
-  protected TypeDecl VarAccess.fieldQualifierType() {
+  eq VarAccess.fieldQualifierType() {
     if (hasPrevExpr()) {
       return prevExpr().type();
     }
@@ -74,37 +73,34 @@ aspect InnerClasses {
     return decl().hostType();
   }
 
-  public boolean TypeDecl.hasMethod(String id) {
-    if (!memberMethods(id).isEmpty()) {
-      return true;
-    }
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      if (getBodyDecl(i) instanceof MethodDecl) {
-        MethodDecl decl = (MethodDecl) getBodyDecl(i);
-        if (decl.name().equals(id)) {
-          return true;
-        }
-      }
-    }
-    return false;
+  syn boolean TypeDecl.hasMethod(MethodDecl decl) {
+    String name = decl.name();
+    String signature = decl.signature();
+    return !memberMethods(name).isEmpty();
   }
 
-  private TypeDecl MethodAccess.methodQualifierType() {
+  eq ClassDecl.hasMethod(MethodDecl decl) =
+      super.hasMethod(decl) || hasSuperclass() && superclass().hasMethod(decl);
+
+  syn TypeDecl MethodAccess.methodQualifierType() {
     if (hasPrevExpr()) {
       return prevExpr().type();
     }
     TypeDecl typeDecl = hostType();
-    while (typeDecl != null && !typeDecl.hasMethod(name())) {
-      typeDecl = typeDecl.enclosingType();
-    }
-    if (typeDecl != null) {
-      return typeDecl;
+    // Find closest type that has the target method.
+    while (typeDecl != null) {
+      if (typeDecl.hasMethod(decl())) {
+        return typeDecl;
+      } else {
+        typeDecl = typeDecl.enclosingType();
+      }
     }
     return decl().hostType();
   }
 
+  eq BoundMethodAccess.methodQualifierType() = methodDecl.hostType();
 
-  // Helpers for arrays.
+  // Helpers attributes for arrays:
   inh TypeDecl ArrayInit.expectedType();
 
   eq Program.getChild().expectedType() = null;
@@ -114,13 +110,13 @@ aspect InnerClasses {
   eq ArrayInit.getInit().expectedType() = expectedType().componentType();
 
   syn lazy int ArrayCreationExpr.numArrays() {
-    int i = type().dimension();
+    int dims = type().dimension();
     Access a = getTypeAccess();
     while (a instanceof ArrayTypeAccess && !(a instanceof ArrayTypeWithSizeAccess)) {
-      i--;
+      dims -= 1;
       a = ((ArrayTypeAccess) a).getAccess();
     }
-    return i;
+    return dims;
   }
 
   syn TypeDecl TypeDecl.stringPromotion() = this;
@@ -135,7 +131,8 @@ aspect InnerClasses {
   syn boolean AddExpr.firstStringAddPart() = type().isString() && !getLeftOperand().isStringAdd();
   syn boolean AddExpr.lastStringAddPart() = !getParent().isStringAdd();
 
-  protected TypeDecl Access.superConstructorQualifier(TypeDecl targetEnclosingType) {
+  // TODO(joqvist): This could be an inherited attribute.
+  syn TypeDecl Access.superConstructorQualifier(TypeDecl targetEnclosingType) {
     TypeDecl enclosing = hostType();
     while (!enclosing.instanceOf(targetEnclosingType)) {
       enclosing = enclosing.enclosingType();
@@ -143,8 +140,10 @@ aspect InnerClasses {
     return enclosing;
   }
 
-  public TypeDecl MethodAccess.superAccessorTarget() {
-    TypeDecl targetDecl = prevExpr().type();
+  // TODO(joqvist): This could be an inherited attribute.
+  /** @return the host type that needs an implicit super accessor for this super access. */
+  syn TypeDecl SuperAccess.superAccessorTarget() {
+    TypeDecl targetDecl = type();
     TypeDecl enclosing = hostType();
     do {
       enclosing = enclosing.enclosingType();
@@ -152,21 +151,42 @@ aspect InnerClasses {
     return enclosing;
   }
 
-  // The set of TypeDecls that has this TypeDecl as their directly enclosing TypeDecl.
-  // I.e., NestedTypes, InnerTypes, AnonymousClasses, LocalClasses.
-  public Collection<TypeDecl> TypeDecl.nestedTypes = new RobustLinkedList<TypeDecl>();
+  /** The set of nested types that has this TypeDecl as their directly enclosing type. */
+  coll LinkedList<TypeDecl> TypeDecl.nestedTypes() root CompilationUnit;
 
-  public void TypeDecl.addNestedType(TypeDecl typeDecl) {
-    if (typeDecl != this) {
-      nestedTypes.add(typeDecl);
+  TypeDecl contributes this
+      when isNestedType()
+      to TypeDecl.nestedTypes()
+      for enclosingType();
+
+  // TODO(joqvist): replace this when JastAdd supports controlling the collection tree traversal.
+  protected void MethodAccess.collect_contributors_TypeDecl_nestedTypes(CompilationUnit _root,
+      java.util.Map<ASTNode, java.util.Set<ASTNode>> _map) {
+    if (transformed() != this) {
+      transformed().collect_contributors_TypeDecl_nestedTypes(_root, _map);
+    } else {
+      super.collect_contributors_TypeDecl_nestedTypes(_root, _map);
     }
   }
 
-  // The set of nested TypeDecls that are accessed in this TypeDecl.
-  public Collection<TypeDecl> TypeDecl.usedNestedTypes = new RobustLinkedList<TypeDecl>();
+  // TODO(joqvist): replace this when JastAdd supports controlling the collection tree traversal.
+  protected void ConstructorAccess.collect_contributors_TypeDecl_nestedTypes(CompilationUnit _root,
+      java.util.Map<ASTNode, java.util.Set<ASTNode>> _map) {
+    if (transformed() != this) {
+      transformed().collect_contributors_TypeDecl_nestedTypes(_root, _map);
+    } else {
+      super.collect_contributors_TypeDecl_nestedTypes(_root, _map);
+    }
+  }
 
-  public void TypeDecl.addUsedNestedType(TypeDecl typeDecl) {
-    usedNestedTypes.add(typeDecl);
+  // TODO(joqvist): replace this when JastAdd supports controlling the collection tree traversal.
+  protected void ClassInstanceExpr.collect_contributors_TypeDecl_nestedTypes(CompilationUnit _root,
+      java.util.Map<ASTNode, java.util.Set<ASTNode>> _map) {
+    if (transformed() != this) {
+      transformed().collect_contributors_TypeDecl_nestedTypes(_root, _map);
+    } else {
+      super.collect_contributors_TypeDecl_nestedTypes(_root, _map);
+    }
   }
 
   // TODO(joqvist): convert to collection attribute.
@@ -201,93 +221,60 @@ aspect InnerClasses {
     super.collectEnclosingVariables(vars, typeDecl);
   }
 
-  public int TypeDecl.accessorCounter = 0;
+  // Unique IDs for accessor methods are generated using an atomic counter to
+  // ensure no duplicate IDs are generated.
+  private java.util.concurrent.atomic.AtomicInteger TypeDecl.nextUniqueId =
+      new java.util.concurrent.atomic.AtomicInteger(0);
 
-  private HashMap<ArrayList<Object>, ASTNode> TypeDecl.accessorMap = null;
-
-  public ASTNode TypeDecl.getAccessor(Object source, String name) {
-    ArrayList<Object> key = new ArrayList<Object>(2);
-    key.add(source);
-    key.add(name);
-    if (accessorMap == null || !accessorMap.containsKey(key)) {
-      return null;
-    }
-    return accessorMap.get(key);
+  private int TypeDecl.uniqueId() {
+    return nextUniqueId.getAndIncrement();
   }
 
-  public void TypeDecl.addAccessor(Object source, String name, ASTNode accessor) {
-    ArrayList<Object> key = new ArrayList<Object>(2);
-    key.add(source);
-    key.add(name);
-    if (accessorMap == null) {
-      accessorMap = new HashMap<ArrayList<Object>, ASTNode>();
-    }
-    accessorMap.put(key, accessor);
-  }
-
-  public ASTNode TypeDecl.getAccessorSource(ASTNode accessor) {
-    for (Map.Entry<ArrayList<Object>, ASTNode> entry : accessorMap.entrySet()) {
-      if (entry.getValue() == accessor) {
-        return (ASTNode) entry.getKey().get(0);
-      }
-    }
-    return null;
-  }
-
-  public MethodDecl MethodDecl.createAccessor(TypeDecl methodQualifier) {
-    MethodDecl m = (MethodDecl) methodQualifier.getAccessor(this, "method");
-    if (m != null) {
-      return m;
-    }
-
-    int accessorIndex = methodQualifier.accessorCounter++;
-
-    List parameterList = new List();
-    for (int i = 0; i < getNumParameter(); i++) {
+  /**
+   * Creates a synthetic public method to access a private or protected
+   * method from another class.
+   *
+   * <p>The method is stored as an NTA in order to not modify the body
+   * declaration list of this type.
+   */
+  syn nta MethodDecl TypeDecl.methodAccessor(MethodDecl decl) {
+    List<ParameterDeclaration> parameterList = new List<ParameterDeclaration>();
+    for (ParameterDeclaration param : decl.getParameterList()) {
+      // We need to create a qualified access in case the
+      // method we are generating an access for is not declared
+      // in the methodQualifier type.
       parameterList.add(new ParameterDeclaration(
-            // We need to create a qualified access in case the
-            // method we are generating an access for is not declared
-            // in the methodQualifier type.
-            getParameter(i).type().createQualifiedAccess(),
-            getParameter(i).name()));
+          param.type().createQualifiedAccess(),
+          param.name()));
     }
-    List exceptionList = new List();
-    for (int i = 0; i < getNumException(); i++) {
-      exceptionList.add((Access) getException(i).treeCopyNoTransform());
+
+    List<Access> exceptionList = new List<Access>();
+    for (Access exception : decl.getExceptionList()) {
+      exceptionList.add((Access) exception.treeCopyNoTransform());
     }
 
     // Add synthetic flag to modifiers.
-    Modifiers modifiers = new Modifiers(new List());
-    if (getModifiers().isStatic()) {
+    Modifiers modifiers = new Modifiers(new List<Modifier>(
+        new Modifier("synthetic"),
+        new Modifier("public")));
+    if (decl.getModifiers().isStatic()) {
       modifiers.addModifier(new Modifier("static"));
     }
-    modifiers.addModifier(new Modifier("synthetic"));
-    modifiers.addModifier(new Modifier("public"));
 
     // Build accessor declaration.
-    m = new MethodDecl(
-      modifiers,
-      getTypeAccess().type().createQualifiedAccess(),
-      name() + "$access$" + accessorIndex,
-      parameterList,
-      exceptionList,
-      new Opt(
-        new Block(
-          new List().add(
-            createAccessorStmt()
-          )
-        )
-      )
-    );
-    m = methodQualifier.addMemberMethod(m);
-    methodQualifier.addAccessor(this, "method", m);
-    return m;
+    return new MethodDecl(
+        modifiers,
+        decl.getTypeAccess().type().createQualifiedAccess(),
+        name() + "$access$" + uniqueId(),
+        parameterList,
+        exceptionList,
+        new Opt<Block>(new Block(new List<Stmt>(decl.createAccessorStmt()))));
   }
 
-  private Stmt MethodDecl.createAccessorStmt() {
-    List argumentList = new List();
-    for (int i = 0; i < getNumParameter(); i++) {
-      argumentList.add(new VarAccess(getParameter(i).name()));
+  protected Stmt MethodDecl.createAccessorStmt() {
+    List<Access> argumentList = new List<Access>();
+    for (ParameterDeclaration param : getParameterList()) {
+      argumentList.add(new VarAccess(param.name()));
     }
     Access access = new BoundMethodAccess(name(), argumentList, this);
     if (!isStatic()) {
@@ -296,51 +283,63 @@ aspect InnerClasses {
     return isVoid() ? (Stmt) new ExprStmt(access) : new ReturnStmt(new Opt(access));
   }
 
-  public MethodDecl MethodDecl.createSuperAccessor(TypeDecl methodQualifier) {
-    MethodDecl m = (MethodDecl) methodQualifier.getAccessor(this, "method_super");
-    if (m != null) {
-      return m;
-    }
+  private boolean MethodAccess.isSuperAccessor = false;
 
-    int accessorIndex = methodQualifier.accessorCounter++;
-    List parameters = new List();
-    List args = new List();
-    for (int i = 0; i < getNumParameter(); i++) {
-      parameters.add(new ParameterDeclaration(getParameter(i).type(), getParameter(i).name()));
-      args.add(new VarAccess(getParameter(i).name()));
-    }
-    Stmt stmt;
-    if (type().isVoid()) {
-      stmt = new ExprStmt(new SuperAccess("super").qualifiesAccess(new MethodAccess(name(), args)));
-    } else {
-      stmt = new ReturnStmt(new Opt(new SuperAccess("super")
-            .qualifiesAccess(new MethodAccess(name(), args))));
-    }
-    m = new MethodDecl(
-      new Modifiers(new List().add(new Modifier("synthetic"))),
-      type().createQualifiedAccess(),
-      name() + "$access$" + accessorIndex,
-      parameters,
-      new List(),
-      new Opt(
-        new Block(
-          new List().add(stmt)
-        )
-      )
-    );
-    m = methodQualifier.addMemberMethod(m);
-    methodQualifier.addAccessor(this, "method_super", m);
-    return m;
+  /**
+   * Flags this method access as a call that should be done with invokespecial.
+   */
+  protected MethodAccess MethodAccess.setSuperAccessor() {
+    isSuperAccessor = true;
+    return this;
   }
 
-  /** Adds an accessor method for this field. */
-  protected static MethodDecl ASTNode.createFieldAccessor(Variable field, TypeDecl fieldQualifier) {
-    MethodDecl m = (MethodDecl) fieldQualifier.getAccessor(field, "field_read");
-    if (m != null) {
-      return m;
+  /** Create a static super accessor binding. */
+  public Access MethodDecl.createBoundSuperAccessor(List<Expr> args) {
+    if (isStatic()) {
+      return hostType().createQualifiedAccess().qualifiesAccess(
+          new BoundMethodAccess(name(), args, this)
+          .setSuperAccessor());
+    } else {
+      return new BoundMethodAccess(name(), args, this)
+          .setSuperAccessor();
     }
+  }
 
-    int accessorIndex = fieldQualifier.accessorCounter++;
+  /**
+   * Builds a super accessor for a target method declaration.
+   *
+   * <p>Super accessors are static methods used to call a non-static method in an
+   * enclosing type via a super access.
+   */
+  syn nta MethodDecl TypeDecl.superAccessor(MethodDecl decl) {
+    List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
+    List<Expr> args = new List<Expr>();
+    parameters.add(new ParameterDeclaration(this, "this$0$super"));
+    for (ParameterDeclaration param : decl.getParameterList()) {
+      parameters.add(new ParameterDeclaration(param.type(), param.name()));
+      args.add(new VarAccess(param.name()));
+    }
+    Stmt stmt;
+    if (decl.type().isVoid()) {
+      stmt = new ExprStmt(new VarAccess("this$0$super")
+          .qualifiesAccess(decl.createBoundSuperAccessor(args)));
+    } else {
+      stmt = new ReturnStmt(new Opt<Expr>(new VarAccess("this$0$super")
+          .qualifiesAccess(decl.createBoundSuperAccessor(args))));
+    }
+    return new MethodDecl(
+        new Modifiers(new List<Modifier>(
+            new Modifier("synthetic"),
+            new Modifier("static"))),
+        decl.type().createQualifiedAccess(),
+        decl.name() + "$access$" + uniqueId(),
+        parameters,
+        new List(),
+        new Opt<Block>(new Block(new List<Stmt>(stmt))));
+  }
+
+  /** On demand construction of an accessor method for the given field. */
+  syn nta MethodDecl TypeDecl.fieldAccessor(Variable field) {
     Modifiers modifiers = new Modifiers(new List<Modifier>(
         new Modifier("static"),
         new Modifier("synthetic"),
@@ -348,30 +347,25 @@ aspect InnerClasses {
 
     List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
     if (!field.isStatic()) {
-      parameters.add(new ParameterDeclaration(fieldQualifier.createQualifiedAccess(), "that"));
+      parameters.add(new ParameterDeclaration(createQualifiedAccess(), "that"));
     }
 
-    m = new MethodDecl(
-      modifiers,
-      field.type().createQualifiedAccess(),
-      "get$" + field.name() + "$access$" + accessorIndex,
-      parameters,
-      new List<Access>(),
-      new Opt<Block>(new Block(new List<Stmt>(new ReturnStmt(createAccess(field))))));
-    m = fieldQualifier.addMemberMethod(m);
-    fieldQualifier.addAccessor(field, "field_read", m);
-    return m;
+    return new MethodDecl(
+        modifiers,
+        field.type().createQualifiedAccess(),
+        "get$" + field.name() + "$access$" + uniqueId(),
+        parameters,
+        new List<Access>(),
+        new Opt<Block>(new Block(new List<Stmt>(new ReturnStmt(createAccess(field))))));
   }
 
   /** Adds an accessor method to write this field. */
-  protected static MethodDecl ASTNode.createFieldAccessorWrite(Variable field,
-      TypeDecl fieldQualifier) {
-    MethodDecl m = (MethodDecl) fieldQualifier.getAccessor(field, "field_write");
-    if (m != null) {
-      return m;
-    }
+  syn MethodDecl VarAccess.fieldWriteAccessor(Variable field,
+      TypeDecl fieldQualifier) =
+      fieldQualifier.fieldWriteAccessor(field);
 
-    int accessorIndex = fieldQualifier.accessorCounter++;
+  /** On demand construction of an accessor method for the given field. */
+  syn nta MethodDecl TypeDecl.fieldWriteAccessor(Variable field) {
     Modifiers modifiers = new Modifiers(new List<Modifier>(
         new Modifier("static"),
         new Modifier("synthetic"),
@@ -379,23 +373,20 @@ aspect InnerClasses {
 
     List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
     if (!field.isStatic()) {
-      parameters.add(new ParameterDeclaration(fieldQualifier.createQualifiedAccess(), "that"));
+      parameters.add(new ParameterDeclaration(createQualifiedAccess(), "that"));
     }
     parameters.add(new ParameterDeclaration(field.type().createQualifiedAccess(), "value"));
 
-    m = new MethodDecl(
+    return new MethodDecl(
       modifiers,
       field.type().createQualifiedAccess(),
-      "set$" + field.name() + "$access$" + accessorIndex,
+      "set$" + field.name() + "$access$" + uniqueId(),
       parameters,
       new List<Access>(),
       new Opt<Block>(
-        new Block(new List<Stmt>(
-            new ExprStmt(new AssignSimpleExpr(createAccess(field), new VarAccess("value"))),
-            new ReturnStmt(new Opt<Expr>(new VarAccess("value")))))));
-    m = fieldQualifier.addMemberMethod(m);
-    fieldQualifier.addAccessor(field, "field_write", m);
-    return m;
+          new Block(new List<Stmt>(
+              new ExprStmt(new AssignSimpleExpr(createAccess(field), new VarAccess("value"))),
+              new ReturnStmt(new Opt<Expr>(new VarAccess("value")))))));
   }
 
   protected static Access ASTNode.createAccess(Variable var) {
@@ -433,15 +424,13 @@ aspect InnerClasses {
   }
 
   syn boolean MethodAccess.requiresAccessor() {
-    MethodDecl m = decl();
-    if (m.isPrivate() && m.hostType() != hostType()) {
+    MethodDecl decl = decl();
+    if (decl.isPrivate() && decl.hostType() != hostType()) {
       return true;
     }
-    if (m.isProtected() && !m.hostPackage().equals(hostPackage())
-        && !hostType().hasMethod(m.name())) {
-      return true;
-    }
-    return false;
+    return decl.isProtected()
+        && !decl.hostPackage().equals(hostPackage())
+        && !hostType().hasMethod(decl);
   }
 
   syn boolean ClassInstanceExpr.isAnonymousInNonStaticContext() {
@@ -508,43 +497,37 @@ aspect InnerClasses {
   syn TypeDecl ConstructorDecl.enclosing() = hostType().enclosing();
   syn TypeDecl ConstructorDecl.superEnclosing() = hostType().superEnclosing();
 
-  public ConstructorDecl ConstructorDecl.createAccessor() {
-    ConstructorDecl accessor = (ConstructorDecl) hostType().getAccessor(this, "constructor");
-    if (accessor != null) {
-      return accessor;
-    }
+  syn ConstructorDecl ConstructorDecl.createAccessor() =
+      hostType().getAccessor(this);
 
+  syn nta ConstructorDecl TypeDecl.getAccessor(ConstructorDecl decl) {
     Modifiers modifiers = new Modifiers(new List<Modifier>(new Modifier("synthetic")));
 
-    List<ParameterDeclaration> parameters = createAccessorParameters();
+    List<ParameterDeclaration> parameters = decl.createAccessorParameters();
 
-    List exceptionList = new List();
-    for (int i = 0; i < getNumException(); i++) {
-      exceptionList.add(getException(i).type().createQualifiedAccess());
+    List<Access> exceptionList = new List<Access>();
+    for (Access exception : decl.getExceptionList()) {
+      exceptionList.add(exception.type().createQualifiedAccess());
     }
 
     // Add all parameters as arguments except for the dummy parameter.
-    List args = new List();
+    List<Expr> args = new List<Expr>();
     for (int i = 0; i < parameters.getNumChildNoTransform() - 1; i++) {
       args.add(new VarAccess(((ParameterDeclaration) parameters.getChildNoTransform(i)).name()));
     }
-    accessor = new ConstructorDecl(
-      modifiers,
-      name(),
-      parameters,
-      exceptionList,
-      new Opt<Stmt>(new ExprStmt(new ConstructorAccess("this", args))),
-      new Block()
-    );
-    accessor = hostType().addConstructor(accessor);
-    hostType().addAccessor(this, "constructor", accessor);
-    return accessor;
+    return new ConstructorDecl(
+        modifiers,
+        name(),
+        parameters,
+        exceptionList,
+        new Opt<Stmt>(new ExprStmt(new ConstructorAccess("this", args))),
+        new Block());
   }
 
   protected List<ParameterDeclaration> ConstructorDecl.createAccessorParameters() {
     List<ParameterDeclaration> parameters = new List();
-    for (int i = 0; i < getNumParameter(); i++) {
-      parameters.add(new ParameterDeclaration(getParameter(i).type(), getParameter(i).name()));
+    for (ParameterDeclaration param : getParameterList()) {
+      parameters.add(new ParameterDeclaration(param.type(), param.name()));
     }
     parameters.add(new ParameterDeclaration(
         hostType().createBoundAccess(),
