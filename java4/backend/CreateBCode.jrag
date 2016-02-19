@@ -1981,26 +1981,12 @@ aspect CreateBCode {
       Variable f = fields.iterator().next();
       emitLoadField(gen, f, typeDecl);
     } else {
-      FieldDecl field = hostType().topLevelType().createStaticClassField(prevExpr().type().referenceClassFieldName());
-      FieldDeclarator f = field.getDeclarator(0);
-      // Add method to perform lookup as a side-effect.
-      MethodDecl m = hostType().topLevelType().createStaticClassMethod();
-
-      int next_label = gen.constantPool().newLabel();
-      int end_label = gen.constantPool().newLabel();
-      emitLoadField(gen, f, hostType());
-      gen.emitBranchNonNull(next_label);
-
-      // Emit string literal.
-      StringLiteral.push(gen, prevExpr().type().jvmName());
-      m.emitInvokeMethod(gen, hostType());
-      gen.emitDup();
-      emitStoreField(gen, f, hostType());
-      gen.emitGoto(end_label);
-      gen.addLabel(next_label);
-      gen.changeStackDepth(-1);
-      emitLoadField(gen, f, hostType());
-      gen.addLabel(end_label);
+      int index = gen.constantPool().addClass(prevExpr().type().jvmName());
+      if (index < 256) {
+        gen.emit(Bytecode.LDC).add(index);
+      } else {
+        gen.emit(Bytecode.LDC_W).add2(index);
+      }
     }
   }
 
