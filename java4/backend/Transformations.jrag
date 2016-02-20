@@ -136,11 +136,14 @@ aspect Transformations {
     super.transformation();
   }
 
-  public void AssertStmt.transformation() {
-    super.transformation();
-    FieldDeclarator assertionsDisabled = hostType().createAssertionsDisabled();
+  /**
+   * The assert statement is transformed to an if-statement that throws an
+   * AssertError if assertions are enabled and the assert condition is false.
+   */
+  syn nta Stmt AssertStmt.transformed() {
+    FieldDeclarator assertionsDisabled = hostType().assertionsDisabled();
     Expr condition = (Expr) getCondition().treeCopyNoTransform();
-    List args = new List();
+    List<Expr> args = new List<Expr>();
     if (hasMessage()) {
       if (getMessage().type().isString()) {
         args.add(new CastExpr(new TypeAccess("java.lang", "Object"),
@@ -149,27 +152,17 @@ aspect Transformations {
         args.add(getMessage().treeCopyNoTransform());
       }
     }
-    Stmt stmt = new IfStmt(
+    return new IfStmt(
         new LogNotExpr(
-          new ParExpr(
             new OrLogicalExpr(
-              new BoundFieldAccess(assertionsDisabled),
-              condition
-            )
-          )
-        ),
+                new BoundFieldAccess(assertionsDisabled),
+                condition)),
         new ThrowStmt(
-          new ClassInstanceExpr(
-            lookupType("java.lang", "AssertionError").createQualifiedAccess(),
-            args,
-            new Opt()
-          )
-        ),
-        new Opt()
-      );
-
-    this.replaceWith(stmt);
-    stmt.transformation();
+            new ClassInstanceExpr(
+                lookupType("java.lang", "AssertionError").createQualifiedAccess(),
+                args,
+                new Opt())),
+        new Opt());
   }
 
   /**

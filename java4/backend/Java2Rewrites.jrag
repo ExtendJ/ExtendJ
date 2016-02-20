@@ -73,6 +73,7 @@ aspect Java2Rewrites {
     throw new Error("primitiveClassName not supported for "
         + name() + " of type " + getClass().getName());
   }
+
   eq ByteType.primitiveClassName() = "Byte";
   eq CharType.primitiveClassName() = "Character";
   eq ShortType.primitiveClassName() = "Short";
@@ -83,41 +84,50 @@ aspect Java2Rewrites {
   eq BooleanType.primitiveClassName() = "Boolean";
   eq VoidType.primitiveClassName() = "Void";
 
-  // Lazily build a static field for assertionsDisabled.
-  private FieldDeclarator TypeDecl.createAssertionsDisabled = null;
-
-  public FieldDeclarator TypeDecl.createAssertionsDisabled() {
-    if (createAssertionsDisabled != null) {
-      return createAssertionsDisabled;
+  /** @return {@code true} if this type uses an assert statement. */
+  syn lazy boolean TypeDecl.hasAssertStatement() {
+    for (ASTNode child : astChildren()) {
+      if (child.hasAssertStatementRecursive()) {
+        return true;
+      }
     }
-    createAssertionsDisabled = new FieldDeclarator(
+    return false;
+  }
+
+  syn boolean ASTNode.hasAssertStatementRecursive() {
+    for (ASTNode child : astChildren()) {
+      if (child.hasAssertStatementRecursive()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  eq TypeDecl.hasAssertStatementRecursive() = false;
+
+  eq AssertStmt.hasAssertStatementRecursive() = true;
+
+  syn FieldDeclarator TypeDecl.assertionsDisabled() =
+      assertionsDisabledField().getDeclarator(0);
+
+  syn nta FieldDecl TypeDecl.assertionsDisabledField() {
+    Access desiredAssertionStatus =
+        topLevelType()
+        .createQualifiedAccess()
+        .qualifiesAccess(new ClassAccess()
+            .qualifiesAccess(new MethodAccess(
+                "desiredAssertionStatus",
+                new List<Expr>())));
+    FieldDeclarator assertionDisabled = new FieldDeclarator(
         "$assertiosDisabled",
         new List<Dims>(),
-        new Opt<Expr>(
-          new LogNotExpr(
-            topLevelType().createQualifiedAccess().qualifiesAccess(
-              new ClassAccess().qualifiesAccess(
-                new MethodAccess(
-                  "desiredAssertionStatus",
-                  new List()
-                  )
-                )
-              )
-            )
-          ));
-    FieldDecl decl = new FieldDecl(
+        new Opt<Expr>(new LogNotExpr(desiredAssertionStatus)));
+    return new FieldDecl(
         new Modifiers(new List<Modifier>(
-            new Modifier("public"),
             new Modifier("static"),
-            new Modifier("final"))),
+            new Modifier("final"),
+            new Modifier("synthetic"))),
         new PrimitiveTypeAccess("boolean"),
-        new List<FieldDeclarator>(createAssertionsDisabled));
-    getBodyDeclList().insertChild(decl, 0);
-    // TODO(joqvist): remove this!
-    // Explicit read to trigger possible rewrites.
-    decl = (FieldDecl) getBodyDeclList().getChild(0);
-    // Transform the generated initalization, e.g., the ClassAccess construct.
-    decl.transformation();
-    return createAssertionsDisabled;
+        new List<FieldDeclarator>(assertionDisabled));
   }
 }
