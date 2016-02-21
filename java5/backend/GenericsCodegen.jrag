@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -236,7 +237,24 @@ aspect GenericsCodegen {
     return res;
   }
 
-  syn SimpleSet<MethodDecl> TypeDecl.bridgeCandidates(String signature) = emptySet();
+  /**
+   * Collects bridge methods that should be generated for polymorphism
+   * to work correctly with raw types.
+   *
+   * Note: this collection attribute does not have CompilationUnit as the root
+   * because sometimes we need to collect the bridge methods of an NTA
+   * anonymous class, and that fails if we use CompilationUnit as the root,
+   * since the anonymous class NTA is skipped in the collection survey.  This
+   * is relevant for the Java 8 extension.
+   */
+  coll HashSet<MethodDecl> TypeDecl.bridgeMethods() root TypeDecl;
+
+  MethodDecl contributes
+      each hostType().bridgeMethods(this)
+      when !hostType().bridgeMethods(this).isEmpty()
+      to TypeDecl.bridgeMethods();
+
+  syn lazy SimpleSet<MethodDecl> TypeDecl.bridgeCandidates(String signature) = emptySet();
 
   eq InterfaceDecl.bridgeCandidates(String signature) = ancestorMethods(signature);
 
@@ -248,70 +266,66 @@ aspect GenericsCodegen {
     return set;
   }
 
-  public void MethodDecl.transformation() {
-    super.transformation();
+  syn lazy Collection<MethodDecl> TypeDecl.bridgeMethods(MethodDecl decl) {
+    Collection<MethodDecl> bridgeMethods = new LinkedList<MethodDecl>();
     Collection<String> processed = new HashSet<String>();
-    for (MethodDecl m : hostType().bridgeCandidates(signature())) {
-      if (this.overrides(m)) {
+    for (MethodDecl m : bridgeCandidates(decl.signature())) {
+      if (decl.overrides(m)) {
         MethodDecl erased = m.erasedMethod();
-        if (!erased.signature().equals(signature())
-            || erased.type().erasure() != type().erasure()) {
+        if (!erased.signature().equals(decl.signature())
+            || erased.type().erasure() != decl.type().erasure()) {
           StringBuilder keyBuffer = new StringBuilder();
-          for (int i = 0; i < getNumParameter(); i++) {
-            keyBuffer.append(erased.getParameter(i).type().erasure().fullName());
+          for (ParameterDeclaration param : erased.getParameterList()) {
+            keyBuffer.append(param.type().erasure().fullName());
           }
           keyBuffer.append(erased.type().erasure().fullName());
           String key = keyBuffer.toString();
           if (!processed.contains(key)) {
             processed.add(key);
-
-            List args = new List();
-            List parameters = new List();
-            for (int i = 0; i < getNumParameter(); i++) {
-              args.add(new CastExpr(getParameter(i).type().erasure().createBoundAccess(),
-                  new VarAccess("p" + i)));
-              parameters.add(
-                  new ParameterDeclaration(erased.getParameter(i).type().erasure(), "p" + i));
-            }
-            Stmt stmt;
-            if (type().isVoid()) {
-              stmt = new ExprStmt(
-                  createBoundAccess(
-                    args
-                    )
-                  );
-            } else {
-              stmt = new ReturnStmt(
-                  createBoundAccess(
-                    args
-                    )
-                  );
-            }
-            List modifiersList = new List();
-            if (isPublic()) {
-              modifiersList.add(new Modifier("public"));
-            } else if (isProtected()) {
-              modifiersList.add(new Modifier("protected"));
-            } else if (isPrivate()) {
-              modifiersList.add(new Modifier("private"));
-            }
-            MethodDecl bridge = new BridgeMethodDecl(
-                new Modifiers(modifiersList),
-                erased.type().erasure().createBoundAccess(),
-                erased.name(),
-                parameters,
-                (List) getExceptionList().treeCopyNoTransform(),
-                new Opt(
-                  new Block(
-                    new List().add(stmt)
-                    )
-                  )
-                );
-            hostType().addBodyDecl(bridge);
+            bridgeMethods.add(bridgeMethod(decl, erased));
           }
         }
       }
     }
+    return bridgeMethods;
+  }
+
+  /**
+   * Builds a bridge method, bridging from the erased method to the
+   * overriding method decl.
+   * @param decl the overriding method declaration
+   * @param erased the erased method that needs a matching bridge method
+   * @return bridge method declaration
+   */
+  syn nta MethodDecl TypeDecl.bridgeMethod(MethodDecl decl, MethodDecl erased) {
+    List<Expr> args = new List<Expr>();
+    List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
+    for (int i = 0; i < decl.getNumParameter(); i++) {
+      args.add(new CastExpr(decl.getParameter(i).type().erasure().createBoundAccess(),
+          new VarAccess("p" + i)));
+      parameters.add(new ParameterDeclaration(erased.getParameter(i).type().erasure(), "p" + i));
+    }
+    Stmt stmt;
+    if (decl.type().isVoid()) {
+      stmt = new ExprStmt(decl.createBoundAccess(args));
+    } else {
+      stmt = new ReturnStmt(decl.createBoundAccess(args));
+    }
+    List<Modifier> modifiers = new List<Modifier>();
+    if (decl.isPublic()) {
+      modifiers.add(new Modifier("public"));
+    } else if (decl.isProtected()) {
+      modifiers.add(new Modifier("protected"));
+    } else if (decl.isPrivate()) {
+      modifiers.add(new Modifier("private"));
+    }
+    return new BridgeMethodDecl(
+        new Modifiers(modifiers),
+        erased.type().erasure().createBoundAccess(),
+        erased.name(),
+        parameters,
+        decl.getExceptionList().treeCopyNoTransform(),
+        new Opt<Block>(new Block(new List<Stmt>(stmt))));
   }
 
   public void ParTypeDecl.transformation() {
