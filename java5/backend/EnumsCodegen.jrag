@@ -76,7 +76,16 @@ aspect EnumsCodegen {
 
   refine GenerateClassfile
   eq ReferenceType.methodsAndConstructors() {
-    Collection<BodyDecl> methods = refined();
+    Collection<BodyDecl> original = refined();
+    Collection<BodyDecl> methods = new ArrayList<BodyDecl>();
+    for (BodyDecl decl : original) {
+      if (decl instanceof ConstructorDecl) {
+        ConstructorDecl constructor = (ConstructorDecl) decl;
+        methods.add(constructor.transformed());
+      } else {
+        methods.add(decl);
+      }
+    }
     // Add enum index methods:
     // TODO(joqvist): generate an anonymous class with initializer instead.
     for (SwitchStmt enumSwitch : enumSwitchStatements()) {
@@ -261,5 +270,15 @@ aspect EnumsCodegen {
     // Don't clear this node because it resets the parent pointer and prevents
     // things using this node as a variable declaration from working.
     return false;
+  }
+
+  // Refine ConstructorDecl code generation to use the transformed version if needed.
+  refine CreateBCode
+  public void ConstructorDecl.createBCode(CodeGeneration gen) {
+    if (transformed() != this) {
+      transformed().createBCode(gen);
+    } else {
+      refined(gen);
+    }
   }
 }

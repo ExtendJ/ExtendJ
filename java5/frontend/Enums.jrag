@@ -104,7 +104,7 @@ aspect Enums {
 
   eq ParameterDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
-  // TODO Remove
+  // TODO(joqivst): Remove these side effects.
   private boolean EnumDecl.done = false;
   private boolean EnumDecl.done() {
     if (done) {
@@ -114,96 +114,106 @@ aspect Enums {
     return false;
   }
 
-  // TODO Remove
+  // TODO(joqivst): Remove these side effects.
   rewrite EnumDecl {
     when (!done())
     to EnumDecl {
-      transformEnumConstructors();
       addValues(); // Add the values() and getValue(String s) methods
       return this;
     }
   }
 
+  /**
+   * Implicit constructor for enum type.
+   */
   syn lazy Opt<ConstructorDecl> EnumDecl.getImplicitConstructorOpt() {
     if (needsImplicitConstructor()) {
-      List parameterList = new List();
-      parameterList.add(
-          new ParameterDeclaration(new TypeAccess("java.lang", "String"), "p0")
-      );
-      parameterList.add(
-          new ParameterDeclaration(new TypeAccess("int"), "p1")
-      );
+      List<ParameterDeclaration> parameters = new List<ParameterDeclaration>(
+          new ParameterDeclaration(new TypeAccess("java.lang", "String"), "p0"),
+          new ParameterDeclaration(new TypeAccess("int"), "p1"));
       ConstructorDecl constructor = new ConstructorDecl(
           new Modifiers(new List<Modifier>(new Modifier("synthetic"))),
           name(),
-          parameterList,
-          new List(),
-          new Opt(
-            new ExprStmt(
+          parameters,
+          new List<Access>(),
+          new Opt<Stmt>(new ExprStmt(
               new SuperConstructorAccess(
-                "super",
-                new List()
-                .add(new VarAccess("p0"))
-                .add(new VarAccess("p1"))
-                )
-              )
-            ),
-          new Block(new List())
-          );
+                  "super",
+                  new List<Expr>(
+                      new VarAccess("p0"),
+                      new VarAccess("p1"))))),
+          new Block());
       return new Opt<ConstructorDecl>(constructor);
     } else {
       return new Opt<ConstructorDecl>();
     }
   }
 
-  protected void ASTNode.transformEnumConstructors() {
-    for (int i = 0; i < getNumChildNoTransform(); i++) {
-      ASTNode child = getChildNoTransform(i);
-      if (child != null) {
-        child.transformEnumConstructors();
+  inh boolean ConstructorDecl.isOriginalEnumConstructor();
+
+  eq EnumDecl.getBodyDecl().isOriginalEnumConstructor() = true;
+
+  eq EnumDecl.getImplicitConstructor().isOriginalEnumConstructor() = false;
+
+  // The transformed constructor is a child of ConstructorDecl.
+  eq BodyDecl.getChild().isOriginalEnumConstructor() = false;
+
+  eq CompilationUnit.getChild().isOriginalEnumConstructor() = false;
+
+  syn lazy ConstructorDecl ConstructorDecl.transformed() {
+    if (isOriginalEnumConstructor()) {
+      return transformedEnumConstructor();
+    } else {
+      return this;
+    }
+  }
+
+  syn nta ConstructorDecl ConstructorDecl.transformedEnumConstructor() {
+    List<ParameterDeclaration> parameters = new List<ParameterDeclaration>();
+    parameters.add(new ParameterDeclaration(new TypeAccess("java.lang", "String"), "@p0"));
+    parameters.add(new ParameterDeclaration(new TypeAccess("int"), "@p1"));
+    for (ParameterDeclaration param : getParameterList()) {
+      parameters.add(param.treeCopyNoTransform());
+    }
+    ConstructorAccess constructorInvocation;
+    List<Expr> args = new List<Expr>();
+    args.add(new VarAccess("@p0"));
+    args.add(new VarAccess("@p1"));
+    if (hasParsedConstructorInvocation()) {
+      ExprStmt invocation = (ExprStmt) getParsedConstructorInvocation();
+      ConstructorAccess access = (ConstructorAccess) invocation.getExpr();
+      for (Expr arg : access.getArgList()) {
+        args.add(arg.treeCopyNoTransform());
       }
-    }
-  }
-
-  refine LookupConstructor
-  eq ConstructorDecl.getConstructorInvocation() {
-    if (!isSynthetic() && hostType().isEnumDecl()) {
-      return getImplicitConstructorInvocation();
-    }
-    return refined();
-  }
-
-  refine LookupConstructor
-  eq ConstructorDecl.getImplicitConstructorInvocation() {
-    if (hostType().isEnumDecl()) {
-      ConstructorAccess newAccess;
-      if (hasParsedConstructorInvocation()) {
-        ExprStmt stmt = (ExprStmt) getParsedConstructorInvocation();
-        ConstructorAccess access = (ConstructorAccess) stmt.getExpr();
-        newAccess = (ConstructorAccess) access.treeCopyNoTransform();
+      if (access instanceof SuperConstructorAccess) {
+        constructorInvocation = new SuperConstructorAccess("super", args);
       } else {
-        newAccess = new SuperConstructorAccess("super", new List());
+        constructorInvocation = new ConstructorAccess(access.getID(), args);
       }
-      if (!hostType().original().typeName().equals("java.lang.Enum")) {
-        // java.lang.Enum calls the java.lang.Object constructor, with no extra arguments.
-        newAccess.getArgList().insertChild(new VarAccess("@p0"),0);
-        newAccess.getArgList().insertChild(new VarAccess("@p1"),1);
-      }
-      return new ExprStmt(newAccess);
+    } else {
+      constructorInvocation = new SuperConstructorAccess("super", args);
     }
-    return refined();
+    return new ConstructorDecl(
+        getModifiers().treeCopyNoTransform(),
+        getID(),
+        parameters,
+        getExceptionList().treeCopyNoTransform(),
+        new Opt<Stmt>(new ExprStmt(constructorInvocation)),
+        getBlock().treeCopyNoTransform());
   }
 
-  protected void ConstructorDecl.transformEnumConstructors() {
-    super.transformEnumConstructors();
-    getParameterList().insertChild(
-      new ParameterDeclaration(new TypeAccess("java.lang", "String"), "@p0"),
-      0
-    );
-    getParameterList().insertChild(
-      new ParameterDeclaration(new TypeAccess("int"), "@p1"),
-      1
-    );
+  // Refine to add transformed constructors to constructor lookup.
+  // Both the old and new implicit constructors need to be present.
+  refine LookupConstructor
+  eq ClassDecl.constructors() {
+    Collection<ConstructorDecl> constructors = refined();
+    Collection<ConstructorDecl> transformed = new ArrayList<ConstructorDecl>(constructors);
+    for (ConstructorDecl decl : constructors) {
+      if (decl.transformed() != decl) {
+        transformed.add(decl.transformed());
+      }
+    }
+    return transformed;
   }
 
   /*
