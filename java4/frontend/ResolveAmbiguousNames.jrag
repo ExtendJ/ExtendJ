@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2015-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -75,8 +75,85 @@ aspect AccessTypes {
 }
 
 aspect QualifiedNames {
-  syn boolean Expr.isLeftChildOfDot() = hasParentDot() && parentDot().getLeft() == this;
-  syn boolean Expr.isRightChildOfDot() = hasParentDot() && parentDot().getRight() == this;
+  inh boolean Expr.isLeftChildOfDot();
+
+  //eq ASTNode.getChild().isLeftChildOfDot() = false;
+  eq Dot.getLeft().isLeftChildOfDot() = true;
+  eq Dot.getRight().isLeftChildOfDot() = false;
+
+  eq Access.getChild().isLeftChildOfDot() = false;
+  eq Expr.getChild().isLeftChildOfDot() = false;
+  eq Stmt.getChild().isLeftChildOfDot() = false;
+  eq Declarator.getChild().isLeftChildOfDot() = false;
+  eq BodyDecl.getChild().isLeftChildOfDot() = false;
+  eq TypeDecl.getChild().isLeftChildOfDot() = false;
+  eq ImportDecl.getChild().isLeftChildOfDot() = false;
+  eq ElementValue.getChild().isLeftChildOfDot() = false;
+  eq Annotation.getChild().isLeftChildOfDot() = false;
+
+  inh boolean Expr.isRightChildOfDot();
+
+  //eq ASTNode.getChild().isLeftChildOfDot() = false;
+  eq Dot.getLeft().isRightChildOfDot() = isRightChildOfDot();
+  eq Dot.getRight().isRightChildOfDot() = true;
+
+  eq Access.getChild().isRightChildOfDot() = false;
+  eq Expr.getChild().isRightChildOfDot() = false;
+  eq Stmt.getChild().isRightChildOfDot() = false;
+  eq Declarator.getChild().isRightChildOfDot() = false;
+  eq BodyDecl.getChild().isRightChildOfDot() = false;
+  eq TypeDecl.getChild().isRightChildOfDot() = false;
+  eq ImportDecl.getChild().isRightChildOfDot() = false;
+  eq ElementValue.getChild().isRightChildOfDot() = false;
+  eq Annotation.getChild().isRightChildOfDot() = false;
+
+  inh Expr Expr.prevExpr();
+
+  eq Dot.getLeft().prevExpr() = prevExpr();
+  eq Dot.getRight().prevExpr() = getLeft();
+
+  eq MethodAccess.getArg().prevExpr() = prevExprError();
+  eq MethodAccess.getChild().prevExpr() = prevExpr();
+  eq Access.getChild().prevExpr() = prevExprError();
+  eq Expr.getChild().prevExpr() = prevExprError();
+  eq Stmt.getChild().prevExpr() = prevExprError();
+  eq Declarator.getChild().prevExpr() = prevExprError();
+  eq BodyDecl.getChild().prevExpr() = prevExprError();
+  eq TypeDecl.getChild().prevExpr() = prevExprError();
+  eq ImportDecl.getChild().prevExpr() = prevExprError();
+  eq ElementValue.getChild().prevExpr() = prevExprError();
+  eq Annotation.getChild().prevExpr() = prevExprError();
+
+  /**
+   * Helper method to throw an error when prevExpr is evaluated somewhere where
+   * the attribute can not be evaluated.
+   */
+  protected Expr ASTNode.prevExprError() {
+    throw new Error("prevExpr can not be evaluated outside of the right side of a Dot access.");
+  }
+
+  inh Access Expr.nextAccess();
+
+  eq Dot.getLeft().nextAccess() = getRight();
+  eq Dot.getRight().nextAccess() = nextAccessError();
+
+  eq Access.getChild().nextAccess() = nextAccessError();
+  eq Expr.getChild().nextAccess() = nextAccessError();
+  eq Stmt.getChild().nextAccess() = nextAccessError();
+  eq Declarator.getChild().nextAccess() = nextAccessError();
+  eq BodyDecl.getChild().nextAccess() = nextAccessError();
+  eq TypeDecl.getChild().nextAccess() = nextAccessError();
+  eq ImportDecl.getChild().nextAccess() = nextAccessError();
+  eq ElementValue.getChild().nextAccess() = nextAccessError();
+  eq Annotation.getChild().nextAccess() = nextAccessError();
+
+  /**
+   * Helper method to throw an error when nextAccess is evaluated somewhere
+   * where the attribute can not be evaluated.
+   */
+  protected Access ASTNode.nextAccessError() {
+    throw new Error("nextAccess can not be evaluated outside of the left side of a Dot access.");
+  }
 
   syn boolean Access.isQualified() = hasPrevExpr();
   eq AbstractDot.isQualified() = hasParentDot();
@@ -84,6 +161,7 @@ aspect QualifiedNames {
   syn Expr Access.qualifier() = prevExpr();
 
   syn Expr AbstractDot.leftSide() = getLeft();
+
   syn Access AbstractDot.rightSide() = getRight() instanceof AbstractDot ?
     (Access)((AbstractDot) getRight()).getLeft() : (Access) getRight();
 
@@ -94,34 +172,9 @@ aspect QualifiedNames {
     (AbstractDot) getParent() : null;
   syn boolean Expr.hasParentDot() = parentDot() != null;
 
-  syn Access Expr.nextAccess() = parentDot().nextAccess();
   syn boolean Expr.hasNextAccess() = isLeftChildOfDot();
 
-  syn Access AbstractDot.nextAccess() = rightSide();
-
-  syn Expr AbstractDot.prevExpr() = leftSide();
-  syn lazy Expr Access.prevExpr() {
-    if (isLeftChildOfDot()) {
-      if (parentDot().isRightChildOfDot()) {
-        return parentDot().parentDot().leftSide();
-      }
-    } else if (isRightChildOfDot()) {
-      return parentDot().leftSide();
-    }
-    throw new Error(this + " does not have a previous expression");
-  }
-
-  syn boolean AbstractDot.hasPrevExpr() = true;
-  syn lazy boolean Access.hasPrevExpr() {
-    if (isLeftChildOfDot()) {
-      if (parentDot().isRightChildOfDot()) {
-        return true;
-      }
-    } else if (isRightChildOfDot()) {
-      return true;
-    }
-    return false;
-  }
+  syn boolean Access.hasPrevExpr() = isRightChildOfDot();
 
   public Dot Dot.lastDot() {
     Dot node = this;
