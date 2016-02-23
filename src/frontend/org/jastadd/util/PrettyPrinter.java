@@ -80,8 +80,8 @@ public class PrettyPrinter {
    * @return The indentation string for the given indentation level
    */
   private final String getIndentation(int level) {
-    while (ind.size() < (level+1)) {
-      ind.add(ind.get(ind.size()-1) + indentation);
+    while (ind.size() < (level + 1)) {
+      ind.add(ind.get(ind.size() - 1) + indentation);
     }
     return ind.get(level);
   }
@@ -113,18 +113,26 @@ public class PrettyPrinter {
   }
 
   /**
+   * Increase the indentation of the next printed object by the given number of
+   * indentation levels. Only takes effect after calling pushIndentation().
    * @param level
    */
   public void indent(int level) {
     currentIndent = level;
   }
 
-  private void pushIndentation() {
+  /**
+   * Store the current indentation level while printing something.
+   */
+  public void pushIndentation() {
     indentStack.push(currentIndent + indentStack.peek());
     currentIndent = 0;
   }
 
-  private void popIndentation() {
+  /**
+   * Restore the previous indentation level.
+   */
+  public void popIndentation() {
     currentIndent = indentStack.pop();
     currentIndent -= indentStack.peek();
   }

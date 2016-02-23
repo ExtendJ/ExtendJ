@@ -372,6 +372,24 @@ aspect Enums {
     throw new ArrayIndexOutOfBoundsException(i);
   }
 
+  // Helper method for accessing the body decls of this enum constant.
+  public boolean EnumConstant.hasBodyDecl() {
+    ClassInstanceExpr init = (ClassInstanceExpr) getInit();
+    if (init.hasTypeDecl()) {
+      return init.getTypeDecl().hasBodyDecl();
+    }
+    return false;
+  }
+
+  // Helper method for accessing the body decls of this enum constant.
+  public List<BodyDecl> EnumConstant.getBodyDeclList() {
+    ClassInstanceExpr init = (ClassInstanceExpr) getInit();
+    if (init.hasTypeDecl()) {
+      return init.getTypeDecl().getBodyDeclList();
+    }
+    throw new Error("Enum has no body decl list.");
+  }
+
   /*
     7) It is a compile-time error for the class body of an enum constant to declare
     an abstract method.
@@ -682,6 +700,10 @@ aspect Enums {
     }
   }
 
+  /**
+   * Not implemented using generated pretty-print code because we have to separate
+   * enum constants and enum body declarations.
+   */
   public void EnumDecl.prettyPrint(PrettyPrinter out) {
     if (!docComment.isEmpty()) {
       out.print(docComment);
@@ -698,43 +720,31 @@ aspect Enums {
       });
     }
     out.print(" {");
+    out.println();
+    out.indent(1);
+    out.pushIndentation();
+    boolean inConstantList = true;
     for (int i = 0; i < getNumBodyDecl(); i++) {
       BodyDecl d = getBodyDecl(i);
-      out.print(d);
       if (d instanceof EnumConstant) {
-        if (i + 1 < getNumBodyDecl() && !(getBodyDecl(i + 1) instanceof EnumConstant)) {
+        if (i > 0) {
+          out.print(",");
+          out.println();
+        }
+      } else if (!d.isSynthetic()) {
+        if (inConstantList) {
           out.println();
           out.print(";");
+          inConstantList = false;
         }
+        out.println();
+        out.println();
       }
+      out.print(d);
     }
+    out.popIndentation();
     out.println();
     out.print("}");
-  }
-
-  public void EnumConstant.prettyPrint(PrettyPrinter out) {
-    out.println();
-    out.print(getModifiers());
-    out.print(getID());
-    out.print("(");
-    if (getNumArg() > 0) {
-      out.join(getArgList(), new PrettyPrinter.Joiner() {
-        @Override
-        public void printSeparator(PrettyPrinter out) {
-          out.print(", ");
-        }
-      });
-    }
-    out.print(")");
-    if (getNumBodyDecl() > 0) {
-      out.print(" {");
-      for (int i=0; i < getNumBodyDecl(); i++) {
-        BodyDecl d = getBodyDecl(i);
-        out.print(d);
-      }
-      out.print("}");
-    }
-    out.print(",");
   }
 
   /**
