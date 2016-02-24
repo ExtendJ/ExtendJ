@@ -104,25 +104,6 @@ aspect Enums {
 
   eq ParameterDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
-  // TODO(joqivst): Remove these side effects.
-  private boolean EnumDecl.done = false;
-  private boolean EnumDecl.done() {
-    if (done) {
-      return true;
-    }
-    done = true;
-    return false;
-  }
-
-  // TODO(joqivst): Remove these side effects.
-  rewrite EnumDecl {
-    when (!done())
-    to EnumDecl {
-      addValues(); // Add the values() and getValue(String s) methods
-      return this;
-    }
-  }
-
   /**
    * Implicit constructor for enum type.
    */
@@ -276,19 +257,18 @@ aspect Enums {
     return tts;
   }
 
-  syn lazy Map<String, SimpleSet<Variable>> EnumDecl.localFieldsMap() {
+  /**
+   * Adds enum constants as local fields.
+   */
+  eq EnumDecl.localFieldsMap() {
     Map<String, SimpleSet<Variable>> map = super.localFieldsMap();
     for (BodyDecl decl : getBodyDeclList()) {
       if (decl instanceof EnumConstant) {
-        EnumConstant field = (EnumConstant) decl;
-        SimpleSet<Variable> fields = map.get(field.name());
-        if (fields == null) {
-          fields = ASTNode.<Variable>emptySet();
-        }
-        fields = fields.add(field);
-        map.put(field.name(), fields);
+        EnumConstant constant = (EnumConstant) decl;
+        putSimpleSetElement(map, constant.name(), constant);
       }
     }
+    putSimpleSetElement(map, "$VALUES", valuesFieldDeclarator());
     return map;
   }
 
@@ -461,7 +441,17 @@ aspect Enums {
       public static E valueOf(String name);
   */
 
-  private void EnumDecl.addValues() {
+  eq EnumDecl.methodsNameMap() {
+    Map<String, Collection<MethodDecl>> map = super.methodsNameMap();
+    addMethodToMap(implicitValuesMethod(), map);
+    addMethodToMap(implicitValueOfMethod(), map);
+    return map;
+  }
+
+  syn lazy FieldDeclarator EnumDecl.valuesFieldDeclarator() =
+      implicitValuesField().getDeclarator(0);
+
+  syn nta FieldDecl EnumDecl.implicitValuesField() {
     int numConstants = enumConstants().size();
     List initValues = new List();
     for (EnumConstant c : enumConstants()) {
@@ -478,7 +468,7 @@ aspect Enums {
               new Opt(
                 new ArrayInit(
                   initValues)))));
-    FieldDecl decl = new FieldDecl(
+    return new FieldDecl(
         new Modifiers(new List<Modifier>(
             new Modifier("private"),
             new Modifier("static"),
@@ -487,9 +477,11 @@ aspect Enums {
         arrayType().createQualifiedAccess(),
         new List<FieldDeclarator>(values)
     );
-    addBodyDecl(decl);
-    // public static final Test[] values() { return (Test[])$VALUES.clone(); }
-    addBodyDecl(
+  }
+
+  // public static final Test[] values() { return (Test[])$VALUES.clone(); }
+  syn nta MethodDecl EnumDecl.implicitValuesMethod() {
+    return
       new MethodDecl(
         new Modifiers(new List().add(
           new Modifier("public")).add(
@@ -508,7 +500,7 @@ aspect Enums {
                 new Opt(
                   new CastExpr(
                     arrayType().createQualifiedAccess(),
-                    values.createBoundAccess().qualifiesAccess(
+                    valuesFieldDeclarator().createBoundAccess().qualifiesAccess(
                       new MethodAccess(
                         "clone",
                         new List()
@@ -520,10 +512,12 @@ aspect Enums {
             )
           )
         )
-      )
-    );
-    // public static Test valueOf(String s) { return (Test) java.lang.Enum.valueOf(Test.class, s); }
-    addBodyDecl(
+      );
+  }
+
+  // public static Test valueOf(String s) { return (Test) java.lang.Enum.valueOf(Test.class, s); }
+  syn nta MethodDecl EnumDecl.implicitValueOfMethod() {
+    return
       new MethodDecl(
         new Modifiers(new List().add(
           new Modifier("public")).add(
@@ -565,8 +559,7 @@ aspect Enums {
             )
           )
         )
-      )
-    );
+      );
   }
 
   inh TypeDecl EnumDecl.typeString();
@@ -850,6 +843,13 @@ aspect Enums {
         putSimpleSetElement(map, decl.signature(), decl);
       }
     }
+    return map;
+  }
+
+  eq EnumDecl.localMethodsSignatureMap() {
+    Map<String, SimpleSet<MethodDecl>> map = super.localMethodsSignatureMap();
+    putSimpleSetElement(map, implicitValuesMethod().signature(), implicitValuesMethod());
+    putSimpleSetElement(map, implicitValueOfMethod().signature(), implicitValueOfMethod());
     return map;
   }
 
