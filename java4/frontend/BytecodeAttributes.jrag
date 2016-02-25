@@ -34,7 +34,7 @@ aspect BytecodeAttributes {
   class Attributes {
     private AbstractClassfileParser p;
 
-    private List exceptionList;
+    private List<Access> exceptionList;
 
     private boolean isSynthetic;
 
@@ -47,20 +47,19 @@ aspect BytecodeAttributes {
     public Attributes(AbstractClassfileParser parser, TypeDecl typeDecl, TypeDecl outerTypeDecl,
         Program classPath) throws IOException {
       p = parser;
-      exceptionList = new List();
+      exceptionList = new List<Access>();
       isSynthetic = false;
 
       int attributes_count = p.u2();
       if (AbstractClassfileParser.VERBOSE) {
-        p.println("    " + attributes_count + " attributes:");
+        p.format("    %d attributes:%n", attributes_count);
       }
       for (int j = 0; j < attributes_count; j++) {
         int attribute_name_index = p.u2();
         int attribute_length = p.u4();
         String attribute_name = p.getCONSTANT_Utf8_Info(attribute_name_index).string();
         if (AbstractClassfileParser.VERBOSE) {
-          p.println("    Attribute: " + attribute_name + ", length: "
-              + attribute_length);
+          p.format("    Attribute: %s, length: %d%n", attribute_name, attribute_length);
         }
         if (attribute_name.equals("Exceptions")) {
           exceptions();
@@ -84,11 +83,11 @@ aspect BytecodeAttributes {
         throws IOException {
       int number_of_classes = p.u2();
       if (AbstractClassfileParser.VERBOSE) {
-        p.println("    Number of classes: " + number_of_classes);
+        p.format("    Number of classes: %d%n", number_of_classes);
       }
       for (int i = 0; i < number_of_classes; i++) {
         if (AbstractClassfileParser.VERBOSE) {
-          p.print("      " + i + "(" + number_of_classes + ")" +  ":");
+          p.format("      %d(%d):", i, number_of_classes);
         }
         int inner_class_info_index = p.u2();
         int outer_class_info_index = p.u2();
@@ -102,7 +101,7 @@ aspect BytecodeAttributes {
           String outer_class_name = outer_class_info.name();
 
           if (AbstractClassfileParser.VERBOSE) {
-            p.println("      inner: " + inner_class_name + ", outer: " + outer_class_name);
+            p.format("      inner: %s, outer: %s%n", inner_class_name, outer_class_name);
           }
 
           if (inner_name_index != 0) {
@@ -113,7 +112,7 @@ aspect BytecodeAttributes {
 
           if (inner_class_info.name().equals(p.classInfo.name())) {
             if (AbstractClassfileParser.VERBOSE) {
-              p.println("      Class " + inner_class_name + " is inner");
+              p.format("      Class %s is inner%n", inner_class_name);
             }
             typeDecl.setID(inner_name);
             typeDecl.setModifiers(
@@ -134,11 +133,11 @@ aspect BytecodeAttributes {
           }
           if (outer_class_info.name().equals(p.classInfo.name())) {
             if (AbstractClassfileParser.VERBOSE) {
-              p.println("      Class " + p.classInfo.name()
-                  + " has inner class: " + inner_class_name);
+              p.format("      Class %s has inner class: %s%n",
+                  p.classInfo.name(), inner_class_name);
             }
             if (AbstractClassfileParser.VERBOSE) {
-              p.println("Begin processing: " + inner_class_name);
+              p.format("Begin processing: %s%n", inner_class_name);
             }
             try {
               java.io.InputStream is = classPath.getInputStream(inner_class_name);
@@ -147,18 +146,16 @@ aspect BytecodeAttributes {
                 p2.parse(typeDecl, outer_class_info, classPath);
                 is.close();
               } else {
-                System.err.println("Error: ClassFile " + inner_class_name
-                    + " not found");
+                System.err.format("Error: ClassFile %s not found%n", inner_class_name);
               }
             } catch (FileNotFoundException e) {
-              System.err.println("Error: " + inner_class_name
-                  + " not found");
+              System.err.format("Error: %s not found%n", inner_class_name);
             } catch (Exception e) {
               e.printStackTrace();
               System.exit(1);
             }
             if (AbstractClassfileParser.VERBOSE) {
-              p.println("End processing: " + inner_class_name);
+              p.format("End processing: %s%n", inner_class_name);
             }
           }
         }
@@ -172,8 +169,8 @@ aspect BytecodeAttributes {
     private void removeEnclosingThis(ASTNode node) {
       if (node instanceof ConstructorDecl) {
         ConstructorDecl d = (ConstructorDecl) node;
-        List list = new List();
-        List old = d.getParameterListNoTransform();
+        List<ParameterDeclaration> list = new List<ParameterDeclaration>();
+        List<ParameterDeclaration> old = d.getParameterListNoTransform();
         for (int j = 1; j < old.getNumChildNoTransform(); j++) {
           list.add(old.getChildNoTransform(j));
         }
@@ -191,12 +188,12 @@ aspect BytecodeAttributes {
     private void exceptions() throws IOException {
       int number_of_exceptions = p.u2();
       if (AbstractClassfileParser.VERBOSE) {
-        p.println("      " + number_of_exceptions + " exceptions:");
+        p.format("      %d exceptions:%n", number_of_exceptions);
       }
       for (int i = 0; i < number_of_exceptions; i++) {
         CONSTANT_Class_Info exception = p.getCONSTANT_Class_Info(p.u2());
         if (AbstractClassfileParser.VERBOSE) {
-          p.println("        exception " + exception.name());
+          p.format("        exception %s%n", exception.name());
         }
         exceptionList.add(exception.access());
       }
