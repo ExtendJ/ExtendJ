@@ -38,25 +38,29 @@ aspect EnhancedFor {
   eq EnhancedForStmt.getChild().branchTarget(Stmt branch) =
       branch.canBranchTo(this) ? this : branchTarget(branch);
 
-  // Type checking.
-  public void EnhancedForStmt.typeCheck() {
+  EnhancedForStmt contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> EnhancedForStmt.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getExpr().type().isArrayDecl() && !getExpr().type().isIterable()) {
-      errorf("type %s of expression in foreach is neither array type nor java.lang.Iterable",
-          getExpr().type().name());
+      problems.add(errorf(
+          "type %s of expression in foreach is neither array type nor java.lang.Iterable",
+          getExpr().type().name()));
     } else if (getExpr().type().isArrayDecl()
         && !getExpr().type().componentType()
             .assignConversionTo(getTypeAccess().type(), null)) {
-      errorf("parameter of type %s can not be assigned an element of type %s",
-          getTypeAccess().type().typeName(), getExpr().type().componentType().typeName());
+      problems.add(errorf("parameter of type %s can not be assigned an element of type %s",
+          getTypeAccess().type().typeName(), getExpr().type().componentType().typeName()));
     } else if (getExpr().type().isIterable() && !getExpr().type().isUnknown()) {
       MethodDecl iterator = getExpr().type().memberMethods("iterator").iterator().next();
       MethodDecl next = iterator.type().memberMethods("next").iterator().next();
       TypeDecl componentType = next.type();
       if (!componentType.assignConversionTo(getTypeAccess().type(), null)) {
-        errorf("parameter of type %s can not be assigned an element of type %s",
-            getTypeAccess().type().typeName(), componentType.typeName());
+        problems.add(errorf("parameter of type %s can not be assigned an element of type %s",
+            getTypeAccess().type().typeName(), componentType.typeName()));
       }
     }
+    return problems;
   }
 
   /**

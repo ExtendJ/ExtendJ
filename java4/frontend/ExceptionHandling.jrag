@@ -88,17 +88,18 @@ aspect ExceptionHandling {
   inh lazy boolean MethodDecl.handlesException(TypeDecl exceptionType);
   inh boolean ClassInstanceExpr.handlesException(TypeDecl exceptionType);
 
-  public void ASTNode.exceptionHandling() {
-  }
+  MethodAccess contributes each exceptionHandlingProblems() to CompilationUnit.problems();
 
-  public void MethodAccess.exceptionHandling() {
+  syn Collection<Problem> MethodAccess.exceptionHandlingProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     for (TypeDecl exceptionType : exceptionCollection()) {
       if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
-        errorf("%s.%s invoked in %s may throw uncaught exception %s",
+        problems.add(errorf("%s.%s invoked in %s may throw uncaught exception %s",
             decl().hostType().fullName(), this.name(),
-            hostType().fullName(), exceptionType.fullName());
+            hostType().fullName(), exceptionType.fullName()));
       }
     }
+    return problems;
   }
 
   syn lazy Collection<TypeDecl> MethodAccess.exceptionCollection() {
@@ -138,35 +139,49 @@ aspect ExceptionHandling {
     return exceptions;
   }
 
-  public void ConstructorAccess.exceptionHandling() {
+  ConstructorAccess contributes each exceptionHandlingProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ConstructorAccess.exceptionHandlingProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     for (Access exception : decl().getExceptionList()) {
       TypeDecl exceptionType = exception.type();
       if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
-        errorf("%s may throw uncaught exception %s",
-            this.prettyPrint(), exceptionType.fullName());
+        problems.add(errorf("%s may throw uncaught exception %s",
+            this.prettyPrint(), exceptionType.fullName()));
       }
     }
+    return problems;
   }
 
-  public void ClassInstanceExpr.exceptionHandling() {
+  ClassInstanceExpr contributes each exceptionHandlingProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ClassInstanceExpr.exceptionHandlingProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     for (Access exception : decl().getExceptionList()) {
       TypeDecl exceptionType = exception.type();
       if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
-        errorf("%s may throw uncaught exception %s; it must be caught or declared as being thrown",
-            this.prettyPrint(), exceptionType.fullName());
+        problems.add(errorf(
+            "%s may throw uncaught exception %s; it must be caught or declared as being thrown",
+            this.prettyPrint(), exceptionType.fullName()));
       }
     }
+    return problems;
   }
 
-  public void ThrowStmt.exceptionHandling() {
+  ThrowStmt contributes each exceptionHandlingProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ThrowStmt.exceptionHandlingProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl exceptionType = getExpr().type();
     if (exceptionType == typeNull()) {
       exceptionType = typeNullPointerException();
     }
     // 8.4.4
     if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
-      errorf("%s throws uncaught exception %s", this.prettyPrint(), exceptionType.fullName());
+      problems.add(errorf("%s throws uncaught exception %s",
+          this.prettyPrint(), exceptionType.fullName()));
     }
+    return problems;
   }
 
   eq Program.getChild().handlesException(TypeDecl exceptionType) {

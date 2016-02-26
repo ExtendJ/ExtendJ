@@ -44,11 +44,13 @@ aspect StringsInSwitch {
    *
    * <p>In JSR 334 a switch statement may use an expression of type String.
    */
-  refine Enums public void SwitchStmt.typeCheck() {
+  refine Enums eq SwitchStmt.typeProblems() {
     TypeDecl type = getExpr().type();
     if ((!type.isIntegralType() || type.isLong()) && !type.isEnumDecl() && !type.isString()) {
-      error("Switch expression must be of type char, byte, short, int, enum, or string");
+      return Collections.singletonList(
+          error("Switch expression must be of type char, byte, short, int, enum, or string"));
     }
+    return Collections.emptyList();
   }
 
   /* Type checking for case labels need not be changed as it
@@ -88,20 +90,22 @@ aspect StringsInSwitch {
   /**
    * Improve the type checking error messages given for case labels.
    */
-  refine Enums public void ConstCase.typeCheck() {
+  refine Enums eq ConstCase.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     boolean isEnumConstant = getValue().isEnumConstant();
     TypeDecl switchType = switchType();
     TypeDecl type = getValue().type();
     if (switchType.isEnumDecl() && !isEnumConstant) {
-      error("Unqualified enumeration constant required");
+      problems.add(error("Unqualified enumeration constant required"));
     }
     if (!type.assignConversionTo(switchType, getValue())) {
-      errorf("Case label has incompatible type %s, expected type compatible with %s",
-          switchType.name(), type.name());
+      problems.add(errorf("Case label has incompatible type %s, expected type compatible with %s",
+          switchType.name(), type.name()));
     }
     if (!getValue().isConstant() && !getValue().type().isUnknown() && !isEnumConstant) {
-      error("Case label must have constant expression");
+      problems.add(error("Case label must have constant expression"));
     }
+    return problems;
   }
 
 }

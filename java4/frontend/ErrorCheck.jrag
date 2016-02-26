@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2015-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -91,10 +91,6 @@ aspect ErrorCheck {
   public String ASTNode.warningPrefix() {
     return sourceFile() + ":" + location() + ":\n" + "  *** WARNING: ";
   }
-
-  protected Collection<Problem> CompilationUnit.errors = new LinkedList<Problem>();
-
-  protected Collection<Problem> CompilationUnit.warnings = new LinkedList<Problem>();
 
   public Collection<Problem> CompilationUnit.parseErrors() {
     return parseErrors;
@@ -240,11 +236,11 @@ aspect ErrorCheck {
     }
   }
 
-  public void ASTNode.errorf(String messagefmt, Object... args) {
-    error(String.format(messagefmt, args));
+  public Problem ASTNode.errorf(String messagefmt, Object... args) {
+    return error(String.format(messagefmt, args));
   }
 
-  public void ASTNode.error(String message) {
+  public Problem ASTNode.error(String message) {
     ASTNode node = this;
     while (node != null && !(node instanceof CompilationUnit)) {
       node = node.getParent();
@@ -255,67 +251,59 @@ aspect ErrorCheck {
       int column = getColumn(getStart());
       int endLine = getLine(getEnd());
       int endColumn = getColumn(getEnd());
-      cu.errors.add(new Problem(sourceFile(), message, line, column, endLine, endColumn,
-          Problem.Severity.ERROR, Problem.Kind.SEMANTIC));
+      return new Problem(sourceFile(), message, line, column, endLine, endColumn,
+          Problem.Severity.ERROR, Problem.Kind.SEMANTIC);
     } else {
-      cu.errors.add(new Problem(sourceFile(), message, lineNumber(), Problem.Severity.ERROR,
-          Problem.Kind.SEMANTIC));
+      return new Problem(sourceFile(), message, lineNumber(), Problem.Severity.ERROR,
+          Problem.Kind.SEMANTIC);
     }
   }
 
-  public void ASTNode.warning(String message) {
+  public Problem ASTNode.warning(String message) {
     ASTNode node = this;
     while (node != null && !(node instanceof CompilationUnit)) {
       node = node.getParent();
     }
     CompilationUnit cu = (CompilationUnit) node;
-    cu.warnings.add(new Problem(sourceFile(), message, lineNumber(),
-        Problem.Severity.WARNING, Problem.Kind.SEMANTIC));
-  }
-
-  /** Search for semantic errors in the AST through imperative traversal. */
-  public void ASTNode.collectErrors() {
-    nameCheck();
-    typeCheck();
-    accessControl();
-    exceptionHandling();
-    checkUnreachableStmt();
-    definiteAssignment();
-    checkModifiers();
-    for (int i = 0; i < getNumChild(); i++) {
-      getChild(i).collectErrors();
-    }
-  }
-
-  public void ClassDecl.collectErrors() {
-    super.collectErrors();
-    if (hasImplicitConstructor()) {
-      getImplicitConstructor().collectErrors();
-    }
-  }
-
-  public void VarDeclStmt.collectErrors() {
-    // Check reachability of the multi-declaration.
-    checkUnreachableStmt();
-
-    getModifiers().collectErrors();
-    getTypeAccess().collectErrors();
-
-    // Delegate other error checks to NTA single variable declarations.
-    getDeclaratorList().collectErrors();
+    return new Problem(sourceFile(), message, lineNumber(),
+        Problem.Severity.WARNING, Problem.Kind.SEMANTIC);
   }
 
   /**
-   * @return collection of semantic errors
+   * Collects semantic errors in the AST.
+   *
+   * <p>Separate error checks are added using individual contribution statements.
    */
-  public Collection<Problem> CompilationUnit.errors() {
+  coll LinkedList<Problem> CompilationUnit.problems() root CompilationUnit;
+
+  syn Collection<Problem> CompilationUnit.errors() {
+    Collection<Problem> errors = new LinkedList<Problem>();
+    for (Problem problem : problems()) {
+      if (problem.severity() == Problem.Severity.ERROR) {
+        errors.add(problem);
+      }
+    }
     return errors;
   }
 
-  /**
-   * @return collection of semantic warnings
-   */
-  public Collection<Problem> CompilationUnit.warnings() {
+  syn Collection<Problem> CompilationUnit.warnings() {
+    Collection<Problem> warnings = new LinkedList<Problem>();
+    for (Problem problem : problems()) {
+      if (problem.severity() == Problem.Severity.WARNING) {
+        warnings.add(problem);
+      }
+    }
     return warnings;
+  }
+
+  // Hack to get the implicit constructor errors collected.
+  // TODO(joqvist): replace this when JastAdd supports custom collection traversal!
+  protected void ReferenceType.collect_contributors_CompilationUnit_problems(CompilationUnit _root,
+      java.util.Map<ASTNode, java.util.Set<ASTNode>> _map) {
+    if ((this instanceof ClassDecl) && !(this instanceof EnumDecl)
+        && ((ClassDecl) this).hasImplicitConstructor()) {
+      ((ClassDecl) this).getImplicitConstructor().collect_contributors_CompilationUnit_problems(_root, _map);
+    }
+    super.collect_contributors_CompilationUnit_problems(_root, _map);
   }
 }

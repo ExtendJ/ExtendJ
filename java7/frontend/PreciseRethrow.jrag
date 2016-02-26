@@ -241,7 +241,8 @@ aspect PreciseRethrow {
   }
 
   refine ExceptionHandling
-  public void ThrowStmt.exceptionHandling() {
+  eq ThrowStmt.exceptionHandlingProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     Collection<TypeDecl> exceptionTypes = getExpr().throwTypes();
     for (TypeDecl exceptionType : exceptionTypes) {
       if (exceptionType == typeNull()) {
@@ -249,9 +250,11 @@ aspect PreciseRethrow {
       }
       // 8.4.4
       if (exceptionType.isCheckedException() && !handlesException(exceptionType)) {
-        errorf("%s throws uncaught exception %s", this.prettyPrint(), exceptionType.fullName());
+        problems.add(errorf("%s throws uncaught exception %s",
+            this.prettyPrint(), exceptionType.fullName()));
       }
     }
+    return problems;
   }
 
   refine ExceptionHandling
@@ -277,17 +280,15 @@ aspect PreciseRethrow {
   inh boolean CatchClause.reportUnreachable();
   eq CatchClause.getBlock().reportUnreachable() = false;
 
-  void BasicCatch.checkUnreachableStmt() {
-    if (!getBlock().reachable() && reportUnreachable()) {
+  BasicCatch contributes
       errorf("the exception %s is not thrown in the body of the try statement",
-          getParameter().type().fullName());
-    }
-  }
+          getParameter().type().fullName())
+      when !getBlock().reachable() && reportUnreachable()
+      to CompilationUnit.problems();
 
-  void MultiCatch.checkUnreachableStmt() {
-    if (!getBlock().reachable() && reportUnreachable()) {
+  MultiCatch contributes
       errorf("the exception %s is not thrown in the body of the try statement",
-          getParameter().type().fullName());
-    }
-  }
+          getParameter().type().fullName())
+      when !getBlock().reachable() && reportUnreachable()
+      to CompilationUnit.problems();
 }

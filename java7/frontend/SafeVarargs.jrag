@@ -84,11 +84,12 @@ aspect SafeVarargs {
   eq MethodDecl.hasIllegalAnnotationSafeVarargs() =
       hasAnnotationSafeVarargs() && (!isVariableArity() || (!isFinal() && !isStatic()));
 
-  public void MethodAccess.checkWarnings() {
+  MethodAccess contributes each uncheckedWarnings() to CompilationUnit.problems();
 
+  syn Collection<Problem> MethodAccess.uncheckedWarnings() {
     MethodDecl decl = decl();
     if (decl.getNumParameter() == 0 || decl.getNumParameter() > getNumArg()) {
-      return;
+      return Collections.emptyList();
     }
 
     ParameterDeclaration param = decl.getParameter(decl.getNumParameter()-1);
@@ -96,33 +97,29 @@ aspect SafeVarargs {
         && !decl.hasAnnotationSafeVarargs()
         && param.isVariableArity()
         && !param.type().isReifiable()) {
-      warning("unchecked array creation for variable " + "arity parameter of " + decl().name());
+      return Collections.singletonList(
+          warning("unchecked array creation for variable arity parameter of " + decl().name()));
     }
+    return Collections.emptyList();
   }
 
   /**
    * We must report illegal uses of the SafeVarargs annotation.
    * It is only allowed on variable arity method and constructor declarations.
    */
-  public void BodyDecl.checkWarnings() {
-    if (hasIllegalAnnotationSafeVarargs()) {
-      error("@SafeVarargs is only allowed for variable arity method and constructor declarations");
-    }
-  }
+  BodyDecl contributes
+      error("@SafeVarargs is only allowed for variable arity method and constructor declarations")
+      when hasIllegalAnnotationSafeVarargs()
+      to CompilationUnit.problems();
 
   /**
    * Check if the method is missing a SafeVarargs annotation.
    */
-  public void MethodDecl.checkWarnings() {
-    // Check for illegal use of @SafeVarargs.
-    super.checkWarnings();
-
-    if (!suppressWarnings("unchecked")
-        && !hasAnnotationSafeVarargs()
-        && isVariableArity()
-        && !getParameter(getNumParameter()-1).type().isReifiable()) {
-      warning("possible heap pollution for "
-          + "variable arity parameter");
-    }
-  }
+  MethodDecl contributes
+      warning("possible heap pollution for variable arity parameter")
+      when !suppressWarnings("unchecked")
+          && !hasAnnotationSafeVarargs()
+          && isVariableArity()
+          && !getParameter(getNumParameter()-1).type().isReifiable()
+      to CompilationUnit.problems();
 }

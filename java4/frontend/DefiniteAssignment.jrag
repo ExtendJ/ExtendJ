@@ -31,9 +31,6 @@
 
 aspect DefiniteAssignment {
 
-  public void ASTNode.definiteAssignment() {
-  }
-
   inh boolean Expr.isDest();
   eq Program.getChild().isDest() = false;
   eq AssignSimpleExpr.getDest().isDest() = true;
@@ -82,32 +79,26 @@ aspect DefiniteAssignment {
   eq VarAccess.varDecl() = decl();
   eq ParExpr.varDecl() = getExpr().varDecl();
 
-  public void PostfixExpr.definiteAssignment() {
-    if (getOperand().isVariable()) {
-      Variable v = getOperand().varDecl();
-      if (v != null && v.isFinal()) {
-        error("++ and -- can not be applied to final variable " + v);
-      }
-    }
-  }
+  PostfixExpr contributes
+      error("++ and -- can not be applied to final variable " + getOperand().varDecl().name())
+      when getOperand().isVariable()
+          && getOperand().varDecl() != null
+          && getOperand().varDecl().isFinal()
+      to CompilationUnit.problems();
 
-  public void PreIncExpr.definiteAssignment() {
-    if (getOperand().isVariable()) {
-      Variable v = getOperand().varDecl();
-      if (v != null && v.isFinal()) {
-        error("++ and -- can not be applied to final variable " + v);
-      }
-    }
-  }
+  PreIncExpr contributes
+      error("++ and -- can not be applied to final variable " + getOperand().varDecl().name())
+      when getOperand().isVariable()
+          && getOperand().varDecl() != null
+          && getOperand().varDecl().isFinal()
+      to CompilationUnit.problems();
 
-  public void PreDecExpr.definiteAssignment() {
-    if (getOperand().isVariable()) {
-      Variable v = getOperand().varDecl();
-      if (v != null && v.isFinal()) {
-        error("++ and -- can not be applied to final variable " + v);
-      }
-    }
-  }
+  PreDecExpr contributes
+      error("++ and -- can not be applied to final variable " + getOperand().varDecl().name())
+      when getOperand().isVariable()
+          && getOperand().varDecl() != null
+          && getOperand().varDecl().isFinal()
+      to CompilationUnit.problems();
 
   // TODO(joqvist): Why test (!getInit().isConstant()) here? Shouldn't it just be (!hasInit())?
   syn boolean Declarator.isBlankFinal() = isFinal() && (!hasInit() || !getInit().isConstant());
@@ -115,25 +106,28 @@ aspect DefiniteAssignment {
   // Final variables with a constant initializer are considered values and not variables.
   syn boolean Declarator.isValue() = isFinal() && hasInit() && getInit().isConstant();
 
-  public void VarAccess.definiteAssignment() {
+  VarAccess contributes each definiteAssignmentProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> VarAccess.definiteAssignmentProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (isSource()) {
       if (decl() instanceof Declarator) {
         Declarator v = (Declarator) decl();
         if (v.isField()) {
           if (v.isFinal() && !v.hasInit() && !isQualified() && !assignedBefore(v)) {
-            errorf("Final field %s is not assigned before used", v.name());
+            problems.add(errorf("Final field %s is not assigned before used", v.name()));
           }
         } else if (!v.isValue()) {
           if (v.isBlankFinal()) {
             if (!assignedBefore(v)) {
-              errorf("Final variable %s is not assigned before used", v.name());
+              problems.add(errorf("Final variable %s is not assigned before used", v.name()));
             }
           } else {
             // We can not use v.hasInit() here as a quick test for assignedness, because
             // v is a variable and the initialization may not have been reached from the
             // current access, e.g., if declared in a previous switch branch.
             if (!assignedBefore(v)) {
-              errorf("Local variable %s is not assigned before used", v.name());
+              problems.add(errorf("Local variable %s is not assigned before used", v.name()));
             }
           }
         }
@@ -143,11 +137,12 @@ aspect DefiniteAssignment {
       Variable v = decl();
       if (v.isFinal() && v.isBlank() && !hostType().instanceOf(v.hostType())) {
         // Blank final field.
-        error("The final variable is not a blank final in this context, "
-            + "so it may not be assigned.");
+        problems.add(error("The final variable is not a blank final in this context, "
+            + "so it may not be assigned."));
       } else if (v.isFinal() && isQualified()
           && (!qualifier().isThisAccess() || ((Access) qualifier()).isQualified())) {
-        errorf("the blank final field %s may only be assigned by simple name", v.name());
+        problems.add(errorf("the blank final field %s may only be assigned by simple name",
+              v.name()));
       } else if (v instanceof VariableDeclarator) {
         // Local variable.
         VariableDeclarator var = (VariableDeclarator) v;
@@ -156,46 +151,51 @@ aspect DefiniteAssignment {
             && var.getParent().getParent().getParent() instanceof SwitchStmt
             && var.isFinal()) {
           if (!unassignedBefore(var)) {
-            errorf("Final variable %s may only be assigned once", var.name());
+            problems.add(errorf("Final variable %s may only be assigned once", var.name()));
           }
         } else if (var.isValue()) {
           if (var.hasInit() || !unassignedBefore(var)) {
-            errorf("Final variable %s may only be assigned once", var.name());
+            problems.add(errorf("Final variable %s may only be assigned once", var.name()));
           }
         } else if (var.isBlankFinal()) {
           if (var.hasInit() || !unassignedBefore(var)) {
-            errorf("Final variable %s may only be assigned once", var.name());
+            problems.add(errorf("Final variable %s may only be assigned once", var.name()));
           }
         }
       } else if (v.isField()) {
         // Field.
         if (v.isFinal()) {
           if (v.hasInit()) {
-            errorf("already initialized final field %s can not be assigned", v.name());
+            problems.add(errorf("already initialized final field %s can not be assigned",
+                  v.name()));
           } else {
             BodyDecl bodyDecl = enclosingBodyDecl();
             if (!(bodyDecl instanceof ConstructorDecl)
                 && !(bodyDecl instanceof InstanceInitializer)
                 && !(bodyDecl instanceof StaticInitializer)
                 && !(bodyDecl instanceof FieldDecl)) {
-              errorf("final field %s may only be assigned in constructors and initializers",
-                  v.name());
+              problems.add(errorf(
+                  "final field %s may only be assigned in constructors and initializers",
+                  v.name()));
             } else if (!unassignedBefore(v)) {
-              errorf("blank final field %s may only be assigned once", v.name());
+              problems.add(errorf("blank final field %s may only be assigned once", v.name()));
             }
           }
         }
       } else if (v.isParameter()) {
         // 8.4.1
         if (v.isFinal()) {
-          errorf("Final parameter %s may not be assigned", v.name());
+          problems.add(errorf("Final parameter %s may not be assigned", v.name()));
         }
       }
     }
+    return problems;
   }
 
-  public void FieldDeclarator.definiteAssignment() {
-    super.definiteAssignment();
+  FieldDeclarator contributes each definiteAssignmentProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> FieldDeclarator.definiteAssignmentProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (isBlank() && isFinal() && isClassVariable()) {
       boolean found = false;
       TypeDecl typeDecl = hostType();
@@ -213,8 +213,8 @@ aspect DefiniteAssignment {
         }
       }
       if (!found) {
-        errorf("blank final class variable %s in %s is not definitely assigned "
-            + "in static initializer", name(), hostType().typeName());
+        problems.add(errorf("blank final class variable %s in %s is not definitely assigned "
+            + "in static initializer", name(), hostType().typeName()));
       }
     }
     if (isBlank() && isFinal() && isInstanceVariable()) {
@@ -236,16 +236,18 @@ aspect DefiniteAssignment {
       if (!found) {
         for (ConstructorDecl cons : typeDecl.constructors()) {
           if (!cons.assignedAfter(this)) {
-            errorf("blank final instance variable %s in %s is not definitely assigned after %s",
-                name(), hostType().typeName(), cons.signature());
+            problems.add(errorf(
+                "blank final instance variable %s in %s is not definitely assigned after %s",
+                name(), hostType().typeName(), cons.signature()));
           }
         }
       }
     }
     if (isBlank() && hostType().isInterfaceDecl()) {
-      errorf("variable  %s in %s which is an interface must have an initializer",
-          name(), hostType().typeName());
+      problems.add(errorf("variable  %s in %s which is an interface must have an initializer",
+          name(), hostType().typeName()));
     }
+    return problems;
   }
 
   syn lazy boolean ConditionalExpr.booleanOperator() =

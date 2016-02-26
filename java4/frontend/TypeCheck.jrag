@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,9 +30,6 @@
  */
 
 aspect TypeCheck {
-  public void ASTNode.typeCheck() {
-  }
-
   syn boolean Expr.isVariable() = false;
   eq AbstractDot.isVariable() = lastAccess().isVariable();
   eq VarAccess.isVariable() = true;
@@ -39,110 +37,121 @@ aspect TypeCheck {
   eq ParExpr.isVariable() = getExpr().isVariable();
 
   // JLS section 5.2.
-  public void VariableDeclarator.typeCheck() {
+  VariableDeclarator contributes
+      errorf("can not assign variable %s of type %s a value of type %s",
+          name(), type().typeName(), getInit().type().typeName())
+      when hasInit() && !getInit().type().assignConversionTo(type(), getInit())
+      to CompilationUnit.problems();
+
+  // JLS section 5.2.
+  FieldDeclarator contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> FieldDeclarator.typeProblems() {
     if (hasInit()) {
       TypeDecl source = getInit().type();
       TypeDecl dest = type();
       if (!source.assignConversionTo(dest, getInit())) {
-        errorf("can not assign variable %s of type %s a value of type %s",
-            name(), dest.typeName(), source.typeName());
+        return Collections.singletonList(errorf(
+            "can not assign field %s of type %s a value of type %s",
+            name(), dest.typeName(), source.typeName()));
       }
     }
-  }
-
-  // JLS section 5.2.
-  public void FieldDecl.typeCheck() { // TODO(joqvist): declare on FieldDeclarator instead.
-    for (FieldDeclarator decl : getDeclaratorList()) {
-      if (decl.hasInit()) {
-        TypeDecl source = decl.getInit().type();
-        TypeDecl dest = decl.type();
-        if (!source.assignConversionTo(dest, decl.getInit())) {
-          errorf("can not assign field %s of type %s a value of type %s",
-              decl.name(), dest.typeName(), source.typeName());
-        }
-      }
-    }
+    return Collections.emptyList();
   }
 
   // JLS section 5.2:  Assignment Conversion.
-  public void AssignSimpleExpr.typeCheck() {
+  eq AssignSimpleExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getDest().isVariable()) {
-      error("left hand side is not a variable");
+      problems.add(error("left hand side is not a variable"));
     } else if (!getSource().type().assignConversionTo(getDest().type(), getSource())
         && !getSource().type().isUnknown()) {
-      errorf("can not assign %s of type %s a value of type %s",
-          getDest().prettyPrint(), getDest().type().typeName(), getSource().type().typeName());
+      problems.add(errorf("can not assign %s of type %s a value of type %s",
+          getDest().prettyPrint(), getDest().type().typeName(), getSource().type().typeName()));
     }
+    return problems;
   }
 
-  public void AssignExpr.typeCheck() {
+  AssignExpr contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> AssignExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getDest().isVariable()) {
-      error("left hand side is not a variable");
+      return Collections.singletonList((error("left hand side is not a variable")));
     } else {
       TypeDecl source = getSource().type();
       TypeDecl dest = getDest().type();
       if (getSource().type().isPrimitive() && getDest().type().isPrimitive()) {
-        return;
+        return Collections.emptyList();
       }
-      errorf("can not assign %s of type %s a value of type %s",
-          getDest().prettyPrint(), getDest().type().typeName(), getSource().type().typeName());
+      return Collections.singletonList(errorf("can not assign %s of type %s a value of type %s",
+          getDest().prettyPrint(), getDest().type().typeName(), getSource().type().typeName()));
     }
   }
 
-  public void AssignMultiplicativeExpr.typeCheck() {
+  eq AssignMultiplicativeExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>(super.typeProblems());
     if (getSource().type().isBoolean() || getDest().type().isBoolean()) {
-      error("Multiplicative operators do not operate on boolean types");
+      problems.add(error("Multiplicative operators do not operate on boolean types"));
     }
-    super.typeCheck();
+    return problems;
   }
 
-  public void AssignPlusExpr.typeCheck() {
+  eq AssignPlusExpr.typeProblems() {
     if (!getDest().isVariable()) {
-      error("left hand side is not a variable");
+      return Collections.singletonList(error("left hand side is not a variable"));
     } else if (getSource().type().isUnknown() || getDest().type().isUnknown()) {
-      return;
+      return Collections.emptyList();
     } else if (getDest().type().isString() && !(getSource().type().isVoid())) {
-      return;
+      return Collections.emptyList();
     } else if (getSource().type().isBoolean() || getDest().type().isBoolean()) {
-      error("Operator + does not operate on boolean types");
+      return Collections.singletonList(error("Operator + does not operate on boolean types"));
     } else if (getSource().type().isPrimitive() && getDest().type().isPrimitive()) {
-      return;
-    } else
-      errorf("can not assign %s of type %s a value of type %s",
-          getDest().prettyPrint(), getDest().type().typeName(), getSource().type().typeName());
+      return Collections.emptyList();
+    } else {
+      return Collections.singletonList(errorf("can not assign %s of type %s a value of type %s",
+          getDest().prettyPrint(), getDest().type().typeName(), getSource().type().typeName()));
+    }
   }
-  public void AssignMinusExpr.typeCheck() {
+
+  eq AssignMinusExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>(super.typeProblems());
     if (getSource().type().isBoolean() || getDest().type().isBoolean()) {
-      error("Operator - does not operate on boolean types");
+      problems.add(error("Operator - does not operate on boolean types"));
     }
-    super.typeCheck();
+    return problems;
   }
 
-  public void AssignShiftExpr.typeCheck() {
+  eq AssignShiftExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>(super.typeProblems());
     if (!getSource().type().isIntegralType() || !getDest().type().isIntegralType()) {
-      error("Shift operators only operate on integral types");
+      problems.add(error("Shift operators only operate on integral types"));
     }
-    super.typeCheck();
+    return problems;
   }
 
-  public void AssignBitwiseExpr.typeCheck() {
+  syn Collection<Problem> AssignBitwiseExpr.typeProblems() {
     TypeDecl source = getSource().type();
     TypeDecl dest = getDest().type();
     if (source.isIntegralType() && dest.isIntegralType()) {
-      super.typeCheck();
+      return super.typeProblems();
     } else if (source.isBoolean() && dest.isBoolean()) {
-      super.typeCheck();
+      return super.typeProblems();
     } else {
-      error("Operator only operates on integral and boolean types");
+      return Collections.singletonList(
+          error("Operator only operates on integral and boolean types"));
     }
   }
 
   // 5.3 Method Invocation Conversion
-  public void MethodAccess.typeCheck() {
+  MethodAccess contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> MethodAccess.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     for (int i = 0; i < getNumArg(); ++i) {
       if (getArg(i).type().isVoid()) {
-        errorf("expression '%s' has type void and is not a valid method argument",
-            getArg(i).prettyPrint());
+        problems.add(errorf("expression '%s' has type void and is not a valid method argument",
+            getArg(i).prettyPrint()));
       }
     }
     for (int i = 0; i < decl().getNumParameter(); i++) {
@@ -150,323 +159,374 @@ aspect TypeCheck {
       TypeDecl parmType = decl().getParameter(i).type();
       if (!exprType.methodInvocationConversionTo(parmType)
           && !exprType.isUnknown() && !parmType.isUnknown()) {
-        errorf("argument '%s' of type %s is not compatible with the method parameter type %s",
-            getArg(i).prettyPrint(), exprType.typeName(), parmType.typeName());
+        problems.add(errorf(
+            "argument '%s' of type %s is not compatible with the method parameter type %s",
+            getArg(i).prettyPrint(), exprType.typeName(), parmType.typeName()));
       }
     }
+    return problems;
   }
 
   // 15.13
-  public void ArrayAccess.typeCheck() {
+  ArrayAccess contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ArrayAccess.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (isQualified() && !qualifier().type().isArrayDecl() && !qualifier().type().isUnknown()) {
-      errorf("the type %s of the indexed element is not an array", qualifier().type().name());
+      problems.add(errorf("the type %s of the indexed element is not an array",
+            qualifier().type().name()));
     }
     if (!getExpr().type().unaryNumericPromotion().isInt() || !getExpr().type().isIntegralType()) {
-      errorf("array index must be int after unary numeric promotion which %s is not",
-          getExpr().type().typeName());
+      problems.add(errorf("array index must be int after unary numeric promotion which %s is not",
+          getExpr().type().typeName()));
     }
+    return problems;
   }
 
-  public void ArrayInit.typeCheck() {
+  ArrayInit contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ArrayInit.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl initializerType = declType().componentType();
     if (initializerType.isUnknown()) {
-      error("the dimension of the initializer is larger than the expected dimension");
+      problems.add(error("the dimension of the initializer is larger than the expected dimension"));
     }
     for (int i = 0; i < getNumInit(); i++) {
       Expr e = getInit(i);
       if (!e.type().assignConversionTo(initializerType, e)) {
-        errorf("the type %s of the initializer is not compatible with %s",
-            e.type().name(), initializerType.name());
+        problems.add(errorf("the type %s of the initializer is not compatible with %s",
+            e.type().name(), initializerType.name()));
       }
     }
+    return problems;
   }
+
+  MultiplicativeExpr contributes each typeProblems() to CompilationUnit.problems();
 
   // 15.17
-  public void MultiplicativeExpr.typeCheck() {
+  syn Collection<Problem> MultiplicativeExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getLeftOperand().type().isNumericType()) {
-      errorf("%s is not numeric", getLeftOperand().type().typeName());
+      problems.add(errorf("%s is not numeric", getLeftOperand().type().typeName()));
     }
     if (!getRightOperand().type().isNumericType()) {
-      errorf("%s is not numeric", getRightOperand().type().typeName());
+      problems.add(errorf("%s is not numeric", getRightOperand().type().typeName()));
     }
+    return problems;
+  }
+
+  AdditiveExpr contributes each typeProblems() to CompilationUnit.problems();
+
+  // 15.18
+  syn Collection<Problem> AdditiveExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
+    if (!getLeftOperand().type().isNumericType()) {
+      problems.add(errorf("%s is not numeric", getLeftOperand().type().typeName()));
+    }
+    if (!getRightOperand().type().isNumericType()) {
+      problems.add(errorf("%s is not numeric", getRightOperand().type().typeName()));
+    }
+    return problems;
   }
 
   // 15.18
-  public void AdditiveExpr.typeCheck() {
-    if (!getLeftOperand().type().isNumericType()) {
-      errorf("%s is not numeric", getLeftOperand().type().typeName());
-    }
-    if (!getRightOperand().type().isNumericType()) {
-      errorf("%s is not numeric", getRightOperand().type().typeName());
-    }
-  }
-
-  // 15.18
-  public void AddExpr.typeCheck() {
+  eq AddExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
     if (!left.isString() && !right.isString()) {
-      super.typeCheck();
+      return super.typeProblems();
     } else if (left.isVoid()) {
-      error("The type void of the left hand side is not numeric");
+      problems.add(error("The type void of the left hand side is not numeric"));
     } else if (right.isVoid()) {
-      error("The type void of the right hand side is not numeric");
+      problems.add(error("The type void of the right hand side is not numeric"));
     }
+    return problems;
   }
 
+  ShiftExpr contributes each typeProblems() to CompilationUnit.problems();
+
   // 15.19
-  public void ShiftExpr.typeCheck() {
+  syn Collection<Problem> ShiftExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getLeftOperand().type().isIntegralType()) {
-      errorf("%s is not integral", getLeftOperand().type().typeName());
+      problems.add(errorf("%s is not integral", getLeftOperand().type().typeName()));
     }
     if (!getRightOperand().type().isIntegralType()) {
-      errorf("%s is not integral", getRightOperand().type().typeName());
+      problems.add(errorf("%s is not integral", getRightOperand().type().typeName()));
     }
+    return problems;
   }
 
   // 15.22
-  public void BitwiseExpr.typeCheck() {
+  BitwiseExpr contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> BitwiseExpr.typeProblems() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
     if (left.isIntegralType() && right.isIntegralType()) {
-      return;
+      return Collections.emptyList();
     } else if (left.isBoolean() && right.isBoolean()) {
-      return;
+      return Collections.emptyList();
     } else {
-      errorf("%s is not compatible with %s", left.typeName(), right.typeName());
+      return Collections.singletonList(errorf("%s is not compatible with %s",
+          left.typeName(), right.typeName()));
     }
   }
+
+  RelationalExpr contributes each typeProblems() to CompilationUnit.problems();
 
   // 15.20
-  public void RelationalExpr.typeCheck() {
+  syn Collection<Problem> RelationalExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getLeftOperand().type().isNumericType()) {
-      errorf("%s is not numeric", getLeftOperand().type().typeName());
+      problems.add(errorf("%s is not numeric", getLeftOperand().type().typeName()));
     }
     if (!getRightOperand().type().isNumericType()) {
-      errorf("%s is not numeric", getRightOperand().type().typeName());
+      problems.add(errorf("%s is not numeric", getRightOperand().type().typeName()));
     }
+    return problems;
   }
 
+  LogicalExpr contributes each typeProblems() to CompilationUnit.problems();
+
   // 15.23, 15.24
-  public void LogicalExpr.typeCheck() {
+  syn Collection<Problem> LogicalExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getLeftOperand().type().isBoolean()) {
-      errorf("%s is not boolean", getLeftOperand().type().typeName());
+      problems.add(errorf("%s is not boolean", getLeftOperand().type().typeName()));
     }
     if (!getRightOperand().type().isBoolean()) {
-      errorf("%s is not boolean", getRightOperand().type().typeName());
+      problems.add(errorf("%s is not boolean", getRightOperand().type().typeName()));
     }
+    return problems;
   }
 
   // 15.21
-  public void EqualityExpr.typeCheck() {
+  eq EqualityExpr.typeProblems() {
     TypeDecl left = getLeftOperand().type();
     TypeDecl right = getRightOperand().type();
     if (left.isNumericType() && right.isNumericType()) {
-      return;
+      return Collections.emptyList();
     } else if (left.isBoolean() && right.isBoolean()) {
-      return;
+      return Collections.emptyList();
     } else if ((left.isReferenceType() || left.isNull())
         && (right.isReferenceType() || right.isNull())) {
       if (left.castingConversionTo(right) || right.castingConversionTo(left)) {
-        return;
+        return Collections.emptyList();
       }
     }
-    errorf("%s can not be compared to %s", left.typeName(), right.typeName());
+    return Collections.singletonList(errorf("%s can not be compared to %s",
+        left.typeName(), right.typeName()));
   }
 
   // 15.20.2
-  public void InstanceOfExpr.typeCheck() {
+  InstanceOfExpr contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> InstanceOfExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl relationalExpr = getExpr().type();
     TypeDecl referenceType = getTypeAccess().type();
     if (!relationalExpr.isUnknown()) {
       if (!relationalExpr.isReferenceType() && !relationalExpr.isNull()) {
-        error("The relational expression in instance of must be reference or null type");
+        problems.add(error(
+            "The relational expression in instance of must be reference or null type"));
       }
       if (!referenceType.isReferenceType()) {
-        error("The reference expression in instance of must be reference type");
+        problems.add(error("The reference expression in instance of must be reference type"));
       }
       if (!relationalExpr.castingConversionTo(referenceType)) {
-        errorf("The type %s of the relational expression %s can not be cast into the type %s",
-            relationalExpr.typeName(), getExpr().prettyPrint(), referenceType.typeName());
+        problems.add(errorf(
+            "The type %s of the relational expression %s can not be cast into the type %s",
+            relationalExpr.typeName(), getExpr().prettyPrint(), referenceType.typeName()));
       }
       if (getExpr().isTypeAccess()) {
-        errorf("The relational expression %s must not be a type name", getExpr().prettyPrint());
+        problems.add(errorf(
+            "The relational expression %s must not be a type name", getExpr().prettyPrint()));
       }
     }
+    return problems;
   }
 
   // 15.16
-  public void CastExpr.typeCheck() {
+  CastExpr contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> CastExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl expr = getExpr().type();
     TypeDecl type = getTypeAccess().type();
     if (!expr.isUnknown()) {
       if (!expr.castingConversionTo(type)) {
-        errorf("%s can not be cast into %s", expr.typeName(), type.typeName());
+        problems.add(errorf("%s can not be cast into %s", expr.typeName(), type.typeName()));
       }
       if (!getTypeAccess().isTypeAccess()) {
-        errorf("%s is not a type access in cast expression", getTypeAccess().prettyPrint());
+        problems.add(errorf("%s is not a type access in cast expression",
+            getTypeAccess().prettyPrint()));
       }
     }
+    return problems;
   }
 
-  public void ParExpr.typeCheck() {
-    if (getExpr().isTypeAccess()) {
+  ParExpr contributes
       errorf("%s is a type and may not be used in parenthesized expression",
-          getExpr().prettyPrint());
-    }
-  }
+          getExpr().prettyPrint())
+      when getExpr().isTypeAccess()
+      to CompilationUnit.problems();
 
   // 15.15.3
-  public void PlusExpr.typeCheck() {
-    if (!getOperand().type().isNumericType()) {
-      error("unary plus only operates on numeric types");
-    }
-  }
+  PlusExpr contributes
+      error("unary plus only operates on numeric types")
+      when !getOperand().type().isNumericType()
+      to CompilationUnit.problems();
 
   // 15.15.4
-  public void MinusExpr.typeCheck() {
-    if (!getOperand().type().isNumericType()) {
-      error("unary minus only operates on numeric types");
-    }
-  }
+  MinusExpr contributes
+      error("unary minus only operates on numeric types")
+      when !getOperand().type().isNumericType()
+      to CompilationUnit.problems();
 
   // 15.15.5
-  public void BitNotExpr.typeCheck() {
-    if (!getOperand().type().isIntegralType()) {
-      error("unary ~ only operates on integral types");
-    }
-  }
+  BitNotExpr contributes
+      error("unary ~ only operates on integral types")
+      when !getOperand().type().isIntegralType()
+      to CompilationUnit.problems();
 
   // 15.15.6
-  public void LogNotExpr.typeCheck() {
-    if (!getOperand().type().isBoolean()) {
-      error("unary ! only operates on boolean types");
-    }
-  }
+  LogNotExpr contributes
+      error("unary ! only operates on boolean types")
+      when !getOperand().type().isBoolean()
+      to CompilationUnit.problems();
 
   // 15.14
-  public void PostfixExpr.typeCheck() {
-    if (!getOperand().isVariable()) {
-      error("postfix expressions only work on variables");
-    } else if (!getOperand().type().isNumericType()) {
-      error("postfix expressions only operates on numeric types");
-    }
-  }
+  PostfixExpr contributes
+      error("postfix expression only works on variables")
+      when !getOperand().isVariable()
+      to CompilationUnit.problems();
+
+  PostfixExpr contributes
+      error("postfix expression only operates on numeric types")
+      when !getOperand().type().isNumericType()
+      to CompilationUnit.problems();
 
   // 15.15.1
-  public void PreIncExpr.typeCheck() {
-    if (!getOperand().isVariable()) {
-      error("prefix increment expression only work on variables");
-    } else if (!getOperand().type().isNumericType()) {
-      error("unary increment only operates on numeric types");
-    }
-  }
+  PreIncExpr contributes
+      error("prefix increment expression only works on variables")
+      when !getOperand().isVariable()
+      to CompilationUnit.problems();
+
+  PreIncExpr contributes
+      error("unary increment only operates on numeric types")
+      when !getOperand().type().isNumericType()
+      to CompilationUnit.problems();
 
   // 15.15.2
-  public void PreDecExpr.typeCheck() {
-    if (!getOperand().isVariable()) {
-      error("prefix decrement expression only work on variables");
-    } else if (!getOperand().type().isNumericType()) {
-      error("unary decrement only operates on numeric types");
-    }
-  }
+  PreDecExpr contributes
+      error("prefix decrement expression only works on variables")
+      when !getOperand().isVariable()
+      to CompilationUnit.problems();
 
-  public void IfStmt.typeCheck() {
-    TypeDecl cond = getCondition().type();
-    if (!cond.isBoolean()) {
-      errorf("the type of \"%s\" is %s which is not boolean",
-          getCondition().prettyPrint(), cond.name());
-    }
-  }
-  public void WhileStmt.typeCheck() {
-    TypeDecl cond = getCondition().type();
-    if (!cond.isBoolean()) {
-      errorf("the type of \"%s\" is %s which is not boolean",
-          getCondition().prettyPrint(), cond.name());
-    }
-  }
-  public void DoStmt.typeCheck() {
-    TypeDecl cond = getCondition().type();
-    if (!cond.isBoolean()) {
-      errorf("the type of \"%s\" is %s which is not boolean",
-          getCondition().prettyPrint(), cond.name());
-    }
-  }
-  public void ForStmt.typeCheck() {
-    if (hasCondition()) {
-      TypeDecl cond = getCondition().type();
-      if (!cond.isBoolean()) {
-        errorf("the type of \"%s\" is %s which is not boolean",
-            getCondition().prettyPrint(), cond.name());
-      }
-    }
-  }
+  PreDecExpr contributes
+      error("unary decrement only operates on numeric types")
+      when !getOperand().type().isNumericType()
+      to CompilationUnit.problems();
 
-  public void SwitchStmt.typeCheck() {
+  IfStmt contributes
+      errorf("the type of \"%s\" is %s which is not boolean",
+          getCondition().prettyPrint(), getCondition().type().name())
+      when !getCondition().type().isBoolean()
+      to CompilationUnit.problems();
+
+  WhileStmt contributes
+      errorf("the type of \"%s\" is %s which is not boolean",
+          getCondition().prettyPrint(), getCondition().type().name())
+      when !getCondition().type().isBoolean()
+      to CompilationUnit.problems();
+
+  DoStmt contributes
+      errorf("the type of \"%s\" is %s which is not boolean",
+          getCondition().prettyPrint(), getCondition().type().name())
+      when !getCondition().type().isBoolean()
+      to CompilationUnit.problems();
+
+  ForStmt contributes
+      errorf("the type of \"%s\" is %s which is not boolean",
+          getCondition().prettyPrint(), getCondition().type().name())
+      when hasCondition() && !getCondition().type().isBoolean()
+      to CompilationUnit.problems();
+
+  SwitchStmt contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> SwitchStmt.typeProblems() {
     TypeDecl type = getExpr().type();
     if (!type.isIntegralType() || type.isLong()) {
-      error("Switch expression must be of char, byte, short, or int");
+      return Collections.singletonList(
+          error("Switch expression must be of char, byte, short, or int"));
     }
+    return Collections.emptyList();
   }
 
-  public void ConstCase.typeCheck() {
-    TypeDecl switchType = switchType();
+  ConstCase contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ConstCase.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl type = getValue().type();
-    if (!type.assignConversionTo(switchType, getValue())) {
-      error("Constant expression must be assignable to Expression");
+    if (!type.assignConversionTo(switchType(), getValue())) {
+      problems.add(error("Constant expression must be assignable to Expression"));
     }
-    if (!getValue().isConstant() && !getValue().type().isUnknown()) {
-      error("Switch expression must be constant");
+    if (!getValue().isConstant() && !type.isUnknown()) {
+      problems.add(error("Switch expression must be constant"));
     }
+    return problems;
   }
 
   inh TypeDecl Case.switchType();
   eq SwitchStmt.getBlock().switchType() = getExpr().type();
   eq Program.getChild().switchType() = unknownType();
 
-  public void SynchronizedStmt.typeCheck() {
-    TypeDecl type = getExpr().type();
-    if (!type.isReferenceType() || type.isNull()) {
-      error("*** The type of the expression must be a reference");
-    }
-  }
+  SynchronizedStmt contributes
+      error("*** The type of the expression must be a reference")
+      when !getExpr().type().isReferenceType() || getExpr().type().isNull()
+      to CompilationUnit.problems();
 
-  public void BasicCatch.typeCheck() {
-    if (!getParameter().type().instanceOf(typeThrowable())) {
-      error("*** The catch variable must extend Throwable");
-    }
-  }
+  BasicCatch contributes
+      error("*** The catch variable must extend Throwable")
+      when !getParameter().type().instanceOf(typeThrowable())
+      to CompilationUnit.problems();
 
-  public void ThrowStmt.typeCheck() {
-    if (!getExpr().type().instanceOf(typeThrowable())) {
-      error("*** The thrown expression must extend Throwable");
-    }
-  }
+  ThrowStmt contributes
+      error("*** The thrown expression must extend Throwable")
+      when !getExpr().type().instanceOf(typeThrowable())
+      to CompilationUnit.problems();
 
-  public void AssertStmt.typeCheck() {
-    // 14.10
-    if (!getCondition().type().isBoolean()) {
-      error("Assert requires boolean condition");
-    }
-    if (hasMessage() && getMessage().type().isVoid()) {
-      error("The detail message of an assert statement may not be void");
-    }
-  }
+  // 14.10
+  AssertStmt contributes
+      error("Assert requires boolean condition")
+      when !getCondition().type().isBoolean()
+      to CompilationUnit.problems();
 
-  public void MethodDecl.typeCheck() {
+  AssertStmt contributes
+      error("The detail message of an assert statement may not be void")
+      when hasMessage() && getMessage().type().isVoid()
+      to CompilationUnit.problems();
+
+  MethodDecl contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> MethodDecl.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     // Thrown vs super class method see MethodDecl.nameCheck.
     // 8.4.4
     TypeDecl exceptionType = typeThrowable();
     for (int i = 0; i < getNumException(); i++) {
       TypeDecl typeDecl = getException(i).type();
       if (!typeDecl.instanceOf(exceptionType)) {
-        errorf("%s throws non throwable type %s", signature(), typeDecl.fullName());
+        problems.add(errorf("%s throws non throwable type %s", signature(), typeDecl.fullName()));
       }
     }
     // Check returns.
     if (!isVoid() && hasBlock() && getBlock().canCompleteNormally()) {
-      error("the body of a non void method may not complete normally");
+      problems.add(error("the body of a non void method may not complete normally"));
     }
+    return problems;
   }
 
   // 14.16
@@ -476,57 +536,69 @@ aspect TypeCheck {
   eq MethodDecl.getBlock().returnType() = type();
   eq Program.getChild().returnType() = typeVoid();
 
-  public void ReturnStmt.typeCheck() {
+  ReturnStmt contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ReturnStmt.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (hasResult() && !returnType().isVoid()) {
       if (!getResult().type().assignConversionTo(returnType(), getResult())) {
-        errorf("return value must be an instance of %s which %s is not",
-            returnType().typeName(), getResult().type().typeName());
+        problems.add(errorf("return value must be an instance of %s which %s is not",
+            returnType().typeName(), getResult().type().typeName()));
       }
     }
     // 8.4.5 8.8.5
     if (returnType().isVoid() && hasResult()) {
-      error("return stmt may not have an expression in void methods");
+      problems.add(error("return stmt may not have an expression in void methods"));
     }
     // 8.4.5
     if (!returnType().isVoid() && !hasResult()) {
-      error("return stmt must have an expression in non void methods");
+      problems.add(error("return stmt must have an expression in non void methods"));
     }
     if (enclosingBodyDecl() instanceof InstanceInitializer
         || enclosingBodyDecl() instanceof StaticInitializer) {
-      error("Initializers may not return");
+      problems.add(error("Initializers may not return"));
     }
-
+    return problems;
   }
 
-  public void ConstructorDecl.typeCheck() {
+  ConstructorDecl contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ConstructorDecl.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     // 8.8.4 (8.4.4)
     TypeDecl exceptionType = typeThrowable();
     for (int i = 0; i < getNumException(); i++) {
       TypeDecl typeDecl = getException(i).type();
       if (!typeDecl.instanceOf(exceptionType)) {
-        errorf("%s throws non throwable type %s", signature(), typeDecl.fullName());
+        problems.add(errorf("%s throws non throwable type %s", signature(), typeDecl.fullName()));
       }
     }
+    return problems;
   }
 
-  public void ClassInstanceExpr.typeCheck() {
+  ClassInstanceExpr contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ClassInstanceExpr.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (isQualified() && qualifier().isTypeAccess() && !qualifier().type().isUnknown()) {
-      error("*** The expression in a qualified class instance expr must not be a type name");
+      problems.add(error(
+          "*** The expression in a qualified class instance expr must not be a type name"));
     }
     // 15.9
     if (isQualified() && !type().isInnerClass()
         && !((ClassDecl) type()).superclass().isInnerClass() && !type().isUnknown()) {
-      error("*** Qualified class instance creation can only instantiate inner "
-          + "classes and their anonymous subclasses");
+      problems.add(error("*** Qualified class instance creation can only instantiate inner "
+          + "classes and their anonymous subclasses"));
     }
     if (!type().isClassDecl()) {
-      errorf("*** Can only instantiate classes, which %s is not", type().typeName());
+      problems.add(errorf("*** Can only instantiate classes, which %s is not", type().typeName()));
     }
-    typeCheckEnclosingInstance();
-    typeCheckAnonymousSuperclassEnclosingInstance();
+    typeCheckEnclosingInstance(problems);
+    typeCheckAnonymousSuperclassEnclosingInstance(problems);
+    return problems;
   }
 
-  public void ClassInstanceExpr.typeCheckEnclosingInstance() {
+  public void ClassInstanceExpr.typeCheckEnclosingInstance(Collection<Problem> problems) {
     TypeDecl C = type();
     if (!C.isInnerClass()) {
       return;
@@ -554,13 +626,13 @@ aspect TypeCheck {
     } else if (C.isMemberType()) {
       if (!isQualified()) {
         if (noEnclosingInstance()) {
-          errorf("No enclosing instance to initialize %s with", C.typeName());
+          problems.add(errorf("No enclosing instance to initialize %s with", C.typeName()));
           enclosing = unknownType();
         } else {
           TypeDecl nest = hostType();
           while (nest != null && !nest.instanceOf(C.enclosingType())) {
             if (nest.isStatic()) {
-              errorf("No enclosing instance to initialize %s with", C.typeName());
+              problems.add(errorf("No enclosing instance to initialize %s with", C.typeName()));
               nest = unknownType();
               break;
             }
@@ -574,16 +646,16 @@ aspect TypeCheck {
     }
     if (enclosing != null) {
       if (enclosing.isUnknown()) {
-        errorf("No enclosing instance to initialize %s with", C.typeName());
+        problems.add(errorf("No enclosing instance to initialize %s with", C.typeName()));
       } else if (!enclosing.instanceOf(C.enclosingType())) {
-        errorf("*** Can not instantiate %s with the enclosing instance %s due to "
+        problems.add(errorf("*** Can not instantiate %s with the enclosing instance %s due to "
             + "incorrect enclosing instance",
-            C.typeName(), enclosing.typeName());
+            C.typeName(), enclosing.typeName()));
       } else if (!isQualified() && C.isMemberType()
           && inExplicitConstructorInvocation() && enclosing == hostType()) {
-        errorf("*** The innermost enclosing instance of type %s is this which is "
+        problems.add(errorf("*** The innermost enclosing instance of type %s is this which is "
             + "not yet initialized here.",
-            enclosing.typeName());
+            enclosing.typeName()));
       }
     }
   }
@@ -618,36 +690,38 @@ aspect TypeCheck {
   syn boolean ClassInstanceExpr.noEnclosingInstance() =
       isQualified() ? qualifier().staticContextQualifier() : inStaticContext();
 
-  public void ClassInstanceExpr.typeCheckAnonymousSuperclassEnclosingInstance() {
+  public void ClassInstanceExpr.typeCheckAnonymousSuperclassEnclosingInstance(
+      Collection<Problem> problems) {
     if (type().isAnonymous() && ((ClassDecl) type()).superclass().isInnerType()) {
       TypeDecl S = ((ClassDecl) type()).superclass();
       if (S.isLocalClass()) {
         if (S.inStaticContext()) {
         } else if (noEnclosingInstance()) {
-          errorf("*** No enclosing instance to class %s due to static context", type().typeName());
+          problems.add(errorf("*** No enclosing instance to class %s due to static context",
+              type().typeName()));
         } else if (inExplicitConstructorInvocation()) {
-          errorf("*** No enclosing instance to superclass %s of %s since this is "
+          problems.add(errorf("*** No enclosing instance to superclass %s of %s since this is "
               + "not initialized yet",
-              S.typeName(), type().typeName());
+              S.typeName(), type().typeName()));
         }
       } else if (S.isMemberType()) {
         if (!isQualified()) {
           // 15.9.2 2nd paragraph
           if (noEnclosingInstance()) {
-            errorf("*** No enclosing instance to class %s due to static context",
-                type().typeName());
+            problems.add(errorf("*** No enclosing instance to class %s due to static context",
+                type().typeName()));
           } else {
             TypeDecl nest = hostType();
             while (nest != null && !nest.instanceOf(S.enclosingType())) {
               nest = nest.enclosingType();
             }
             if (nest == null) {
-              errorf("*** No enclosing instance to superclass %s of %s",
-                  S.typeName(), type().typeName());
+              problems.add(errorf("*** No enclosing instance to superclass %s of %s",
+                  S.typeName(), type().typeName()));
             } else if (inExplicitConstructorInvocation()) {
-              errorf("*** No enclosing instance to superclass %s of %s since this is "
+              problems.add(errorf("*** No enclosing instance to superclass %s of %s since this is "
                   + "not initialized yet",
-                  S.typeName(), type().typeName());
+                  S.typeName(), type().typeName()));
             }
           }
         }
@@ -655,55 +729,60 @@ aspect TypeCheck {
     }
   }
 
-  public void ArrayTypeWithSizeAccess.typeCheck() {
-    super.typeCheck();
-    if (!getExpr().type().unaryNumericPromotion().isInt()) {
-      errorf("%s is not int after unary numeric promotion", getExpr().type().typeName());
-    }
-  }
+  ArrayTypeWithSizeAccess contributes
+      errorf("%s is not int after unary numeric promotion", getExpr().type().typeName())
+      when !getExpr().type().unaryNumericPromotion().isInt()
+      to CompilationUnit.problems();
 
   // 15.25
-  public void ConditionalExpr.typeCheck() {
-    if (!getCondition().type().isBoolean()) {
-      error("The first operand of a conditional expression must be a boolean");
-    }
-    if (type().isUnknown() && !getTrueExpr().type().isUnknown()
-        && !getFalseExpr().type().isUnknown()) {
-      error("The types of the second and third operand in "
-          + "this conditional expression do not match");
-    }
-  }
+  ConditionalExpr contributes
+      error("The first operand of a conditional expression must be a boolean")
+      when !getCondition().type().isBoolean()
+      to CompilationUnit.problems();
 
-  public void IntegerLiteral.typeCheck() {
-    if (constant().error) {
+  ConditionalExpr contributes
+      error("The types of the second and third operand in "
+          + "this conditional expression do not match")
+      when type().isUnknown() && !getTrueExpr().type().isUnknown()
+          && !getFalseExpr().type().isUnknown()
+      to CompilationUnit.problems();
+
+  syn Problem IntegerLiteral.sizeError() =
       error("The value of an int literal must be a decimal value in the range "
           + "-2147483648..2147483647 or a hexadecimal or octal literal that fits in 32 bits.");
-    }
-  }
 
-  public void LongLiteral.typeCheck() {
-    if (constant().error) {
+  IntegerLiteral contributes
+      sizeError()
+      when constant().error
+      to CompilationUnit.problems();
+
+  syn Problem LongLiteral.sizeError() =
       errorf("The value of the long literal %s is not legal", getLITERAL());
-    }
-  }
 
-  public void FloatingPointLiteral.typeCheck() {
-    if (!isZero() && constant().floatValue() == 0.0f) {
-      errorf("It is an error for nonzero floating-point %s to round to zero", getLITERAL());
-    }
-    if (constant().floatValue() == Float.NEGATIVE_INFINITY
-        || constant().floatValue() == Float.POSITIVE_INFINITY) {
-      errorf("the floating-point literal \"%s\" is too large", getLITERAL());
-    }
-  }
+  LongLiteral contributes
+      sizeError()
+      when constant().error
+      to CompilationUnit.problems();
 
-  public void DoubleLiteral.typeCheck() {
-    if (!isZero() && constant().doubleValue() == 0.0f) {
-      errorf("It is an error for nonzero floating-point %s to round to zero", getLITERAL());
-    }
-    if (constant().doubleValue() == Double.NEGATIVE_INFINITY
-        || constant().doubleValue() == Double.POSITIVE_INFINITY) {
-      errorf("the floating-point literal \"%s\" is too large", getLITERAL());
-    }
-  }
+  FloatingPointLiteral contributes
+      errorf("It is an error for nonzero floating-point %s to round to zero", getLITERAL())
+      when !isZero() && constant().floatValue() == 0.0f
+      to CompilationUnit.problems();
+
+  FloatingPointLiteral contributes
+      errorf("the floating-point literal \"%s\" is too large", getLITERAL())
+      when constant().floatValue() == Float.NEGATIVE_INFINITY
+          || constant().floatValue() == Float.POSITIVE_INFINITY
+      to CompilationUnit.problems();
+
+  DoubleLiteral contributes
+      errorf("It is an error for nonzero floating-point %s to round to zero", getLITERAL())
+      when !isZero() && constant().doubleValue() == 0.0f
+      to CompilationUnit.problems();
+
+  DoubleLiteral contributes
+      errorf("the floating-point literal \"%s\" is too large", getLITERAL())
+      when constant().doubleValue() == Double.NEGATIVE_INFINITY
+          || constant().doubleValue() == Double.POSITIVE_INFINITY
+      to CompilationUnit.problems();
 }

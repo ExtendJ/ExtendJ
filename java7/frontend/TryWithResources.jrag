@@ -39,23 +39,29 @@ aspect TryWithResources {
    */
   inh TypeDecl ResourceDeclaration.lookupType(String packageName, String typeName);
 
+  ResourceDeclaration contributes each typeProblems() to CompilationUnit.problems();
+
   /**
    * Type checking for TWR.
    */
-  public void ResourceDeclaration.typeCheck() {
+  syn Collection<Problem> ResourceDeclaration.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl typeAutoCloseable = lookupType("java.lang", "AutoCloseable");
     if (typeAutoCloseable.isUnknown()) {
-      error("java.lang.AutoCloseable not found");
+      problems.add(error("java.lang.AutoCloseable not found"));
     } else if (!getTypeAccess().type().instanceOf(typeAutoCloseable)) {
-      error("Resource specification must declare an AutoCloseable resource");
+      problems.add(error("Resource specification must declare an AutoCloseable resource"));
     }
+    return problems;
   }
+
+  TryWithResources contributes each exceptionHandlingProblems() to CompilationUnit.problems();
 
   /**
    * Exception error checks.
    */
-  public void TryWithResources.exceptionHandling() {
-
+  syn Collection<Problem> TryWithResources.exceptionHandlingProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     // Check exception handling of exceptions on auto closing of resource.
     for (ResourceDeclaration resource : getResourceList()) {
       MethodDecl close = lookupClose(resource);
@@ -65,12 +71,14 @@ aspect TryWithResources {
       for (Access exception : close.getExceptionList()) {
         TypeDecl exceptionType = exception.type();
         if (!twrHandlesException(exceptionType)) {
-          error("automatic closing of resource " + resource.name()
-              + " may raise the uncaught exception " + exceptionType.fullName() + "; "
-              + "it must be caught or declared as being thrown");
+          problems.add(errorf(
+              "automatic closing of resource %s may raise the uncaught exception %s; "
+              + "it must be caught or declared as being thrown",
+              resource.name(), exceptionType.fullName()));
         }
       }
     }
+    return problems;
   }
 
   /**
@@ -193,16 +201,12 @@ aspect TryWithResources {
 
   eq Program.getChild(int i).resourcePreviouslyDeclared(String name) = false;
 
-  public void ResourceDeclaration.nameCheck() {
-    // Special name check for resource specification.
-    if (resourcePreviouslyDeclared(name())) {
+  // Special name check for resource specification.
+  ResourceDeclaration contributes
       errorf("A resource with the name %s has already been declared in this try statement.",
-          name());
-    }
-
-    // Do regular name check for variable declaration.
-    super.nameCheck();
-  }
+          name())
+      when resourcePreviouslyDeclared(name())
+      to CompilationUnit.problems();
 
   // Definite Assignment.
   eq TryWithResources.assignedAfter(Variable v) = getBlock().assignedAfter(v);

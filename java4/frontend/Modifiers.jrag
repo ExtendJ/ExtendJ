@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,9 +30,6 @@
  */
 
 aspect Modifiers {
-  void ASTNode.checkModifiers() {
-  }
-
   syn lazy boolean TypeDecl.hasAbstract() = false;
 
   syn lazy Collection<MethodDecl> TypeDecl.unimplementedMethods() = Collections.emptyList();
@@ -87,22 +85,24 @@ aspect Modifiers {
 
   eq ClassDecl.hasAbstract() = !unimplementedMethods().isEmpty();
 
-  public void TypeDecl.checkModifiers() {
-    super.checkModifiers();
+  TypeDecl contributes each modifierProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> TypeDecl.modifierProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     // 8.1.1
     if (isPublic() && !isTopLevelType() && !isMemberType()) {
-      error("public pertains only to top level types and member types");
+      problems.add(error("public pertains only to top level types and member types"));
     }
 
     // 8.1.1
     if ((isProtected() || isPrivate()) && !(isMemberType() && enclosingType().isClassDecl())) {
-      error("protected and private may only be used on member types within "
-          + "a directly enclosing class declaration");
+      problems.add(error("protected and private may only be used on member types within "
+          + "a directly enclosing class declaration"));
     }
 
     // 8.1.1
     if (isStatic() && !isMemberType()) {
-      error("static pertains only to member types");
+      problems.add(error("static pertains only to member types"));
     }
 
 
@@ -114,129 +114,121 @@ aspect Modifiers {
       for (MethodDecl m : unimplementedMethods()) {
         sb.append("  " + m.signature() + " in " + m.hostType().typeName() + "\n");
       }
-      error(sb.toString());
+      problems.add(error(sb.toString()));
     }
+    return problems;
   }
 
- public void ClassDecl.checkModifiers() {
-    super.checkModifiers();
-    // 8.1.1.2 final Classes
-    TypeDecl typeDecl = superclass();
-    if (!typeDecl.isUnknown() && typeDecl.isFinal()) {
-      errorf("class %s may not extend final class %s", fullName(), typeDecl.fullName());
-    }
+  // 8.1.1.2 final Classes
+  ClassDecl contributes
+      errorf("class %s may not extend final class %s", fullName(), superclass().fullName())
+      when !superclass().isUnknown() && superclass().isFinal()
+      to CompilationUnit.problems();
 
-  }
+  FieldDecl contributes each modifierProblems() to CompilationUnit.problems();
 
-  public void InterfaceDecl.checkModifiers() {
-    super.checkModifiers();
-  }
-
-  public void ConstructorDecl.checkModifiers() {
-    super.checkModifiers();
-  }
-
-  public void FieldDecl.checkModifiers() {
-    super.checkModifiers();
+  syn Collection<Problem> FieldDecl.modifierProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (hostType().isInterfaceDecl()) {
       if (isProtected()) {
-        error("an interface field may not be protected");
+        problems.add(error("an interface field may not be protected"));
       }
       if (isPrivate()) {
-        error("an interface field may not be private");
+        problems.add(error("an interface field may not be private"));
       }
       if (isTransient()) {
-        error("an interface field may not be transient");
+        problems.add(error("an interface field may not be transient"));
       }
       if (isVolatile()) {
-        error("an interface field may not be volatile");
+        problems.add(error("an interface field may not be volatile"));
       }
     }
+    return problems;
   }
 
   // 8.4.3
-  public void MethodDecl.checkModifiers() {
-    super.checkModifiers();
+  MethodDecl contributes each modifierProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> MethodDecl.modifierProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (hostType().isClassDecl()) {
       // 8.4.3.1
       if (isAbstract() && !hostType().isAbstract()) {
-        error("class must be abstract to include abstract methods");
+        problems.add(error("class must be abstract to include abstract methods"));
       }
       // 8.4.3.1
       if (isAbstract() && isPrivate()) {
-        error("method may not be abstract and private");
+        problems.add(error("method may not be abstract and private"));
       }
       // 8.4.3.1
       // 8.4.3.2
       if (isAbstract() && isStatic()) {
-        error("method may not be abstract and static");
+        problems.add(error("method may not be abstract and static"));
       }
       if (isAbstract() && isSynchronized()) {
-        error("method may not be abstract and synchronized");
+        problems.add(error("method may not be abstract and synchronized"));
       }
       // 8.4.3.4
       if (isAbstract() && isNative()) {
-        error("method may not be abstract and native");
+        problems.add(error("method may not be abstract and native"));
       }
       if (isAbstract() && isStrictfp()) {
-        error("method may not be abstract and strictfp");
+        problems.add(error("method may not be abstract and strictfp"));
       }
       if (isNative() && isStrictfp()) {
-        error("method may not be native and strictfp");
+        problems.add(error("method may not be native and strictfp"));
       }
     }
     if (hostType().isInterfaceDecl()) {
       // 9.4
       if (isStatic()) {
-        errorf("interface method %s in %s may not be static", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be static",
+            signature(), hostType().typeName()));
       }
       if (isStrictfp()) {
-        errorf("interface method %s in %s may not be strictfp", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be strictfp",
+            signature(), hostType().typeName()));
       }
       if (isNative()) {
-        errorf("interface method %s in %s may not be native", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be native",
+            signature(), hostType().typeName()));
       }
       if (isSynchronized()) {
-        errorf("interface method %s in %s may not be synchronized", signature(),
-            hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be synchronized",
+            signature(), hostType().typeName()));
       }
       if (isProtected()) {
-        errorf("interface method %s in %s may not be protected", signature(),
-            hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be protected",
+            signature(), hostType().typeName()));
       }
       if (isPrivate()) {
-        errorf("interface method %s in %s may not be private", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be private",
+            signature(), hostType().typeName()));
       } else if (isFinal()) {
-        errorf("interface method %s in %s may not be final", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be final",
+            signature(), hostType().typeName()));
       }
     }
+    return problems;
   }
 
   // 8.1.2
-  public void StaticInitializer.checkModifiers() {
-    super.checkModifiers();
-    if (hostType().isInnerClass()) {
-      error("*** Inner classes may not declare static initializers");
-    }
-  }
+  StaticInitializer contributes
+      error("*** Inner classes may not declare static initializers")
+      when hostType().isInnerClass()
+      to CompilationUnit.problems();
 
   // 8.1.2
-  public void MemberInterfaceDecl.checkModifiers() {
-    super.checkModifiers();
-    if (hostType().isInnerClass()) {
-      error("*** Inner classes may not declare member interfaces");
-    }
-  }
+  MemberInterfaceDecl contributes
+      error("*** Inner classes may not declare member interfaces")
+      when hostType().isInnerClass()
+      to CompilationUnit.problems();
 
-  public void MemberDecl.checkModifiers() {
-    if (!isSynthetic()) {
-      super.checkModifiers();
-      if (isStatic() && hostType().isInnerClass() && !isConstant()) {
-        error("*** Inner classes may not declare static members, "
-            + "unless they are compile-time constant fields");
-      }
-    }
-  }
+  MemberDecl contributes
+      error("*** Inner classes may not declare static members, "
+          + "unless they are compile-time constant fields")
+      when !isSynthetic() && isStatic() && hostType().isInnerClass() && !isConstant()
+      to CompilationUnit.problems();
 
   syn lazy boolean TypeDecl.isPublic() =
       getModifiers().isPublic() || isMemberType() && enclosingType().isInterfaceDecl();
@@ -372,67 +364,68 @@ aspect Modifiers {
   eq TypeDecl.getBodyDecl().mayBeSynchronized() = false;
   eq TypeDecl.getBodyDecl().mayBeNative() = false;
 
-  // 8.4.3
-  public void Modifiers.checkModifiers() {
-    super.checkModifiers();
+  Modifiers contributes each modifierProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> Modifiers.modifierProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (numProtectionModifiers() > 1) {
-      error("only one public, protected, private allowed");
+      problems.add(error("only one public, protected, private allowed"));
     }
     if (numModifier("static") > 1) {
-      error("only one static allowed");
+      problems.add(error("only one static allowed"));
     }
     // 8.4.3.1
     // 8.4.3.2
     // 8.1.1.2
     if (numCompletenessModifiers() > 1) {
-      error("only one of final, abstract, volatile allowed");
+      problems.add(error("only one of final, abstract, volatile allowed"));
     }
     if (numModifier("synchronized") > 1) {
-      error("only one synchronized allowed");
+      problems.add(error("only one synchronized allowed"));
     }
     if (numModifier("transient") > 1) {
-      error("only one transient allowed");
+      problems.add(error("only one transient allowed"));
     }
     if (numModifier("native") > 1) {
-      error("only one native allowed");
+      problems.add(error("only one native allowed"));
     }
     if (numModifier("strictfp") > 1) {
-      error("only one strictfp allowed");
+      problems.add(error("only one strictfp allowed"));
     }
-
     if (isPublic() && !mayBePublic()) {
-      error("modifier public not allowed in this context");
+      problems.add(error("modifier public not allowed in this context"));
     }
     if (isPrivate() && !mayBePrivate()) {
-      error("modifier private not allowed in this context");
+      problems.add(error("modifier private not allowed in this context"));
     }
     if (isProtected() && !mayBeProtected()) {
-      error("modifier protected not allowed in this context");
+      problems.add(error("modifier protected not allowed in this context"));
     }
     if (isStatic() && !mayBeStatic()) {
-      error("modifier static not allowed in this context");
+      problems.add(error("modifier static not allowed in this context"));
     }
     if (isFinal() && !mayBeFinal()) {
-      error("modifier final not allowed in this context");
+      problems.add(error("modifier final not allowed in this context"));
     }
     if (isAbstract() && !mayBeAbstract()) {
-      error("modifier abstract not allowed in this context");
+      problems.add(error("modifier abstract not allowed in this context"));
     }
     if (isVolatile() && !mayBeVolatile()) {
-      error("modifier volatile not allowed in this context");
+      problems.add(error("modifier volatile not allowed in this context"));
     }
     if (isTransient() && !mayBeTransient()) {
-      error("modifier transient not allowed in this context");
+      problems.add(error("modifier transient not allowed in this context"));
     }
     if (isStrictfp() && !mayBeStrictfp()) {
-      error("modifier strictfp not allowed in this context");
+      problems.add(error("modifier strictfp not allowed in this context"));
     }
     if (isSynchronized() && !mayBeSynchronized()) {
-      error("modifier synchronized not allowed in this context");
+      problems.add(error("modifier synchronized not allowed in this context"));
     }
     if (isNative() && !mayBeNative()) {
-      error("modifier native not allowed in this context");
+      problems.add(error("modifier native not allowed in this context"));
     }
+    return problems;
   }
 
   inh TypeDecl Modifiers.hostType();

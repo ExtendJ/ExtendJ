@@ -32,18 +32,18 @@
 aspect GenericMethods {
   eq ParMethodAccess.getTypeArgument().isRightChildOfDot() = false;
 
-  public void ParMethodAccess.typeCheck() {
-    super.typeCheck();
+  syn Collection<Problem> ParMethodAccess.typeProblems() {
     if (!decl().hostType().isUnknown()) {
       // JLS 15.12.2.1 specifically permits type arguments on non-generic method access.
       if (decl() instanceof ParMethodDecl) {
         ParMethodDecl m = (ParMethodDecl) decl();
         if (!(m instanceof RawMethodDecl) && m.numTypeParameter() != getNumTypeArgument()) {
-          errorf("generic method %s requires %s type arguments",
-              m.signature(), m.numTypeParameter());
+          return Collections.singletonList(errorf("generic method %s requires %s type arguments",
+              m.signature(), m.numTypeParameter()));
         }
       }
     }
+    return Collections.emptyList();
   }
 
   syn lazy final MethodDecl GenericMethodDecl.rawMethodDecl() =
@@ -119,10 +119,6 @@ aspect GenericMethods {
 }
 
 aspect TypeCheck {
-  // Disable error checking in instantiated generic methods.
-  public void ParMethodDecl.collectErrors() {
-  }
-
   /**
    * Allows covariant return types.
    * <a href="http://docs.oracle.com/javase/specs/jls/se7/html/jls-8.html#jls-8.4.5">JLSv7 8.4.5</a>
@@ -162,13 +158,14 @@ aspect TypeCheck {
     return true;
   }
 
-  refine TypeHierarchyCheck protected void TypeDecl.checkAbstractMethodDecls(MethodDecl m1,
-      MethodDecl m2) {
+  refine TypeHierarchyCheck
+  protected void TypeDecl.checkAbstractMethodDecls(Collection<Problem> problems,
+      MethodDecl m1, MethodDecl m2) {
     if (!m1.sameSignature(m2)) {
-      errorf("method declarations %s and %s in interface %s are incompatible",
-          m1.fullSignature(), m2.fullSignature(), fullName());
+      problems.add(errorf("method declarations %s and %s in interface %s are incompatible",
+          m1.fullSignature(), m2.fullSignature(), fullName()));
     } else {
-      refined(m1, m2);
+      refined(problems, m1, m2);
     }
   }
 }

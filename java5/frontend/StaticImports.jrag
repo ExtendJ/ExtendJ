@@ -102,28 +102,31 @@ aspect StaticImports {
   // The isOnDemand attribute is used to make non-demand imports shadow demand imports.
   eq StaticImportOnDemandDecl.isOnDemand() = true;
 
+  SingleStaticImportDecl contributes each typeProblems() to CompilationUnit.problems();
+
   /**
    * The TypeName must be the canonical name of a class or interface type
    */
-  public void SingleStaticImportDecl.typeCheck() {
+  syn Collection<Problem> SingleStaticImportDecl.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getAccess().type().typeName().equals(typeName()) &&
         !getAccess().type().isUnknown()) {
-      errorf("Single-type import %s is not the canonical name of type %s",
-          typeName(), getAccess().type().typeName());
+      problems.add(errorf("Single-type import %s is not the canonical name of type %s",
+          typeName(), getAccess().type().typeName()));
     } else if (allImportedTypes(getID()).size() > 1) {
-      errorf("%s is imported multiple times", getID());
+      problems.add(errorf("%s is imported multiple times", getID()));
     }
+    return problems;
   }
 
   /**
    * The TypeName must be the canonical name of a class or interface type
    */
-  public void StaticImportOnDemandDecl.nameCheck() {
-    if (!getAccess().type().typeName().equals(typeName())) {
+  StaticImportOnDemandDecl contributes
       errorf("In on-demand import: %s is not the canonical name of type %s",
-          typeName(), getAccess().type().typeName());
-    }
-  }
+          typeName(), getAccess().type().typeName())
+      when !getAccess().type().typeName().equals(typeName())
+      to CompilationUnit.problems();
 
   /* 7.5.3 A compile-time error occurs if the named type does not exist. The named type must
   be accessible (§6.6) or a compile-time error occurs.
@@ -156,16 +159,15 @@ aspect StaticImports {
   /**
    * Check for single static import errors.
    */
-  public void SingleStaticImportDecl.nameCheck() {
-    if (importedFields(name()).isEmpty()
-        && importedMethods(name()).isEmpty()
-        && importedTypes(name()).isEmpty()
-        && !getAccess().type().isUnknown()) {
+  SingleStaticImportDecl contributes
       errorf("Semantic Error: At least one static member named %s must"
           + " be available in static imported type %s",
-          name(), type().fullName());
-    }
-  }
+          name(), type().fullName())
+      when importedFields(name()).isEmpty()
+          && importedMethods(name()).isEmpty()
+          && importedTypes(name()).isEmpty()
+          && !getAccess().type().isUnknown()
+      to CompilationUnit.problems();
 
   syn String SingleStaticImportDecl.name() = getID();
 
@@ -273,8 +275,8 @@ aspect StaticImports {
   /* If a single-static-import declaration imports a type whose simple name is n,
   and the compilation unit also declares a top level type (§7.6) whose simple
   name is n, a compile-time error occurs.*/
-  refine NameCheck public void CompilationUnit.nameCheck() {
-    refined();
+  refine NameCheck eq CompilationUnit.nameProblems() {
+    Collection<Problem> problems = refined();
     for (int i = 0; i < getNumImportDecl(); i++) {
       if (getImportDecl(i) instanceof SingleStaticImportDecl) {
         SingleStaticImportDecl decl = (SingleStaticImportDecl) getImportDecl(i);
@@ -282,13 +284,15 @@ aspect StaticImports {
         if (!decl.importedTypes(name).isEmpty()) {
           TypeDecl type = decl.importedTypes(name).iterator().next();
           if (localLookupType(name).contains(type)) {
-            decl.errorf("the imported name %s.%s is already declared in this compilation unit",
-                packageName(), name);
+            problems.add(decl.errorf("the imported name %s.%s is already declared in this compilation unit",
+                packageName(), name));
           }
         }
       }
     }
+    return problems;
   }
+
   // Implement additional analyses for new language constructs
 
   // Exception handling

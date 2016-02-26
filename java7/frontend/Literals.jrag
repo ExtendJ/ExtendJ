@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2011-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -143,22 +143,15 @@ aspect Java7Literals {
    * Check for and report literal-out-of-bounds error.
    * If the constant is error-marked, there exists a literal out of bounds error.
    */
-  refine TypeCheck public void IntegerLiteral.typeCheck() {
-    if (constant().error) {
+  refine TypeCheck eq IntegerLiteral.sizeError() =
       errorf("The integer literal \"%s\" is too large for type int.", getLITERAL());
-    }
-
-  }
 
   /**
    * Check for and report literal-out-of-bounds error.
    * If the constant is error-marked, there exists a literal out of bounds error.
    */
-  refine TypeCheck public void LongLiteral.typeCheck() {
-    if (constant().error) {
+  refine TypeCheck eq LongLiteral.sizeError() =
       errorf("The integer literal \"%s\" is too large for type long.", getLITERAL());
-    }
-  }
 
   /**
    * Parse this literal and return a fresh Constant.
@@ -500,15 +493,12 @@ aspect Java7Literals {
    * Error processing for literals.
    * Include the token range from parsing.
    */
-  public void IllegalLiteral.collectErrors() {
-    int line = getLine(LITERALstart);
-    int column = getColumn(LITERALstart);
-    int endLine = getLine(LITERALend);
-    int endColumn = getColumn(LITERALend);
-    compilationUnit().errors.add(new Problem(sourceFile(),
-          getLITERAL(), line, column, endLine, endColumn,
-          Problem.Severity.ERROR, Problem.Kind.LEXICAL));
-  }
+  IllegalLiteral contributes
+      new Problem(sourceFile(),
+          getLITERAL(), getLine(LITERALstart), getColumn(LITERALstart),
+          getLine(LITERALend), getColumn(LITERALend),
+          Problem.Severity.ERROR, Problem.Kind.LEXICAL)
+      to CompilationUnit.problems();
 
   /**
    * The NumericLiteral class is used to parse the "value characters"
@@ -520,13 +510,13 @@ aspect Java7Literals {
    * error is detected in the literal.
    */
   public class NumericLiteral {
-    private StringBuffer buf = new StringBuffer();
+    private StringBuilder buf = new StringBuilder();
     private int idx = 0;
-    private boolean whole;// have whole part?
-    private boolean fraction;// have fraction part?
-    private boolean exponentSpecifier;// have exponent specifier?
-    private boolean exponent;// have exponent part?
-    private boolean floating;// is floating point?
+    private boolean whole; // Have whole part?
+    private boolean fraction; // Have fraction part?
+    private boolean exponentSpecifier; // Have exponent specifier?
+    private boolean exponent; // Have exponent part?
+    private boolean floating; // Is floating point?
     private boolean isFloat;
     private boolean isLong;
 
@@ -618,12 +608,16 @@ aspect Java7Literals {
     /**
      * Parse a literal. If there is a syntax error in the literal,
      * an IllegalLiteral will be returned.
+     *
+     * <p>Synchronized because multiple threads may want to try to rewrite simulataneously.
      */
-    public Literal parse() {
+    public synchronized Literal parse() {
       if (getLITERAL().length() == 0) {
         throw new IllegalStateException("Empty NumericLiteral");
       }
 
+      buf.setLength(0);
+      idx = 0;
       kind = classifyLiteral();
 
       Literal literal;
@@ -648,7 +642,7 @@ aspect Java7Literals {
         return DECIMAL;
       } else if (peek(0) == '0') {
         if (!have(2)) {
-          // the only 1-length string that starts with 0 (obvious!)
+          // This is the only 1-length string that starts with 0!
           return DECIMAL;
         } else if (peek(1) == 'x' || peek(1) == 'X') {
           skip(2);

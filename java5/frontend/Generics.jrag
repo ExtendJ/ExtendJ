@@ -431,36 +431,33 @@ aspect GenericsErasure {
 
 aspect GenericsTypeCheck {
 
-  public void ArrayCreationExpr.typeCheck() {
-    super.typeCheck();
+  ArrayCreationExpr contributes
+      error("can not create array with non-reifiable element type")
+      when !type().isReifiable()
+      to CompilationUnit.problems();
 
-    if (!type().isReifiable()) {
-      error("can not create array with non-reifiable element type");
-    }
-  }
-
-  refine TypeCheck
-  public void InstanceOfExpr.typeCheck() {
-    refined();
+  refine TypeCheck eq InstanceOfExpr.typeProblems() {
+    Collection<Problem> problems = refined();
     if (!getTypeAccess().type().isReifiable()) {
-      error("right-hand side of instanceof expression must denote a reifiable type");
+      problems.add(error("right-hand side of instanceof expression must denote a reifiable type"));
     }
+    return problems;
   }
 
   // Different parameterizations of the same generic interface may not be implemented.
-  refine TypeHierarchyCheck public void TypeDecl.typeCheck() {
-    refined();
+  refine TypeHierarchyCheck eq TypeDecl.typeProblems() {
+    Collection<Problem> problems = refined();
     ArrayList<InterfaceDecl> interfaceList = new ArrayList<InterfaceDecl>();
     interfaceList.addAll(implementedInterfaces());
     for (InterfaceDecl decl: interfaceList) {
       if (decl instanceof ParInterfaceDecl) {
         ParInterfaceDecl p = (ParInterfaceDecl) decl;
-        for (InterfaceDecl decl2: interfaceList) {
+        for (InterfaceDecl decl2 : interfaceList) {
           if (decl2 instanceof ParInterfaceDecl) {
             ParInterfaceDecl q = (ParInterfaceDecl) decl2;
             if (p != q && p.genericDecl() == q.genericDecl() && !p.sameArgument(q)) {
-              errorf("%s cannot be inherited with different type arguments: %s and %s",
-                  p.genericDecl().name(), p.typeName(), q.typeName());
+              problems.add(errorf("%s cannot be inherited with different type arguments: %s and %s",
+                  p.genericDecl().name(), p.typeName(), q.typeName()));
             }
           }
         }
@@ -478,13 +475,14 @@ aspect GenericsTypeCheck {
       if (set != null) {
         for (MethodDecl decl : set) {
           if (!decl.signature().equals(signature)) {
-            localMethod.errorf("method %s in %s has the same erased signature as"
+            problems.add(localMethod.errorf("method %s in %s has the same erased signature as"
                 + " %s declared in %s but does not override it",
-                signature, typeName(), decl.signature(), decl.hostType().typeName());
+                signature, typeName(), decl.signature(), decl.hostType().typeName()));
           }
         }
       }
     }
+    return problems;
   }
 
   syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.erasedAncestorMethodsMap() =
@@ -555,9 +553,8 @@ aspect GenericsTypeCheck {
     }
   }
 
-  refine TypeHierarchyCheck
-  public void ClassDecl.typeCheck() {
-    refined();
+  refine TypeHierarchyCheck eq ClassDecl.typeProblems() {
+    Collection<Problem> problems = refined();
 
     if (hasSuperclass()) {
       // JLS SE7 8.4.8.4
@@ -574,13 +571,15 @@ aspect GenericsTypeCheck {
             iter.next();
             while (iter.hasNext()) {
               iter.next();
-              errorf("method with signature %s is multiply declared when inherited from %s",
-                  signature, superclass().typeName());
+              problems.add(errorf(
+                  "method with signature %s is multiply declared when inherited from %s",
+                  signature, superclass().typeName()));
             }
           }
         }
       }
     }
+    return problems;
   }
 
   syn boolean ParTypeDecl.sameArgument(ParTypeDecl decl) {
@@ -632,63 +631,60 @@ aspect GenericsTypeCheck {
     return set;
   }
 
-  public void GenericClassDecl.typeCheck() {
-    super.typeCheck();
-    if (instanceOf(typeThrowable())) {
+  GenericClassDecl contributes
       errorf("generic class %s may not directly or indirectly inherit java.lang.Throwable",
-          typeName());
-    }
-  }
+          typeName())
+      when instanceOf(typeThrowable())
+      to CompilationUnit.problems();
 
-  public void GenericInterfaceDecl.typeCheck() {
-    super.typeCheck();
-    if (instanceOf(typeThrowable())) {
+  GenericInterfaceDecl contributes
       errorf("generic interface %s may not directly or indirectly inherit java.lang.Throwable",
-          typeName());
-    }
-  }
+          typeName())
+      when instanceOf(typeThrowable())
+      to CompilationUnit.problems();
 
   inh TypeDecl GenericClassDecl.typeThrowable();
   inh TypeDecl GenericInterfaceDecl.typeThrowable();
 
-  public void TypeAccess.typeCheck() {
-    TypeDecl type = type();
-    if (type.isRawType() && type.isNestedType()
-        && type.enclosingType().isParameterizedType()
-        && !type.enclosingType().isRawType()) {
-      error("Can not access a member type of a paramterized type as a raw type");
-    }
-  }
+  TypeAccess contributes
+      error("Can not access a member type of a paramterized type as a raw type")
+      when type().isRawType() && type().isNestedType()
+          && type().enclosingType().isParameterizedType()
+          && !type().enclosingType().isRawType()
+      to CompilationUnit.problems();
 
-  public void ParTypeAccess.typeCheck() {
-    super.typeCheck();
+  ParTypeAccess contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ParTypeAccess.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!genericDecl().isUnknown()) {
       TypeDecl type = type();
       if (!genericDecl().isGenericType()) {
-        errorf("%s is not a generic type but used as one in %s",
-            genericDecl().typeName(), this.prettyPrint());
+        problems.add(errorf("%s is not a generic type but used as one in %s",
+            genericDecl().typeName(), this.prettyPrint()));
       } else if (!type.isRawType() && type.isNestedType() && type.enclosingType().isRawType()) {
-        error("Can not access a member type of a raw type as a parameterized type");
+        problems.add(error("Can not access a member type of a raw type as a parameterized type"));
       } else {
         GenericTypeDecl decl = (GenericTypeDecl) genericDecl();
         GenericTypeDecl original = (GenericTypeDecl) decl.original();
         if (original.getNumTypeParameter() != getNumTypeArgument()) {
-          errorf("%s takes %d type parameters, not %d as used in %s",
+          problems.add(errorf("%s takes %d type parameters, not %d as used in %s",
               decl.typeName(), original.getNumTypeParameter(), getNumTypeArgument(),
-              this.prettyPrint());
+              this.prettyPrint()));
         } else {
           for (int i = 0; i < getNumTypeArgument(); i++) {
             if (!getTypeArgument(i).type().withinBounds(original.getTypeParameter(i),
                 (Parameterization) type())) {
-              errorf("type argument %s is of type %s which is not within"
+              problems.add(errorf("type argument %s is of type %s which is not within"
                   + " the bounds of type parameter %s (%s)",
                   i, getTypeArgument(i).type().typeName(), original.getTypeParameter(i).typeName(),
-                  original.getTypeParameter(i).prettyPrint());
+                  original.getTypeParameter(i).prettyPrint()));
             }
           }
         }
       }
     }
+    return problems;
   }
 
 }
@@ -778,15 +774,6 @@ aspect GenericsNameBinding {
     return topLevelType().lookupType(name); // Fix to search imports.
     // Include type parameters if not static.
   }
-
-  public void ParClassDecl.collectErrors() {
-    // Disable error check for ParClassDecl which is an instanciated GenericClassDecl.
-  }
-
-  public void ParInterfaceDecl.collectErrors() {
-    // Disable error check for ParInterfaceDecl which is an instanciated GenericInterfaceDecl.
-  }
-
 }
 
 aspect LookupParTypeDecl {

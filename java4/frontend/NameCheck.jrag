@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,53 +30,66 @@
  */
 
 aspect NameCheck {
-  public void ASTNode.nameCheck() {
-  }
-
   public TypeDecl ASTNode.extractSingleType(SimpleSet<TypeDecl> types) {
     return types.isSingleton() ? types.singletonValue() : null;
   }
 
-  public void SingleTypeImportDecl.nameCheck() {
+  SingleTypeImportDecl contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> SingleTypeImportDecl.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getAccess().type().typeName().equals(typeName()) && !getAccess().type().isUnknown()) {
-      errorf("Single-type import %s is not the canonical name of type %s",
-          typeName(), getAccess().type().typeName());
+      problems.add(errorf("Single-type import %s is not the canonical name of type %s",
+          typeName(), getAccess().type().typeName()));
     } else if (allImportedTypes(getAccess().type().name()).size() > 1) {
-      errorf("%s is imported multiple times", getAccess().type().name());
+      problems.add(errorf("%s is imported multiple times", getAccess().type().name()));
     }
+    return problems;
   }
 
   inh SimpleSet<TypeDecl> ImportDecl.allImportedTypes(String name);
 
   eq CompilationUnit.getImportDecl().allImportedTypes(String name) = importedTypes(name);
 
-  public void TypeImportOnDemandDecl.nameCheck() {
+  TypeImportOnDemandDecl contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> TypeImportOnDemandDecl.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (getAccess().lastAccess().isTypeAccess()
         && !getAccess().type().typeName().equals(typeName())) {
-      errorf("On demand type import %s.* is not the canonical name of type %s",
-          typeName(), getAccess().type().typeName());
+      problems.add(errorf("On demand type import %s.* is not the canonical name of type %s",
+          typeName(), getAccess().type().typeName()));
     }
+    return problems;
   }
 
-  public void CompilationUnit.nameCheck() {
+  CompilationUnit contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> CompilationUnit.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     for (int i = 0; i < getNumImportDecl(); i++) {
       ImportDecl decl = getImportDecl(i);
       if (!decl.isOnDemand()) {
         for (TypeDecl importedType : decl.importedTypes()) {
           for (TypeDecl local : localLookupType(importedType.name())) {
             if (local != importedType) {
-              errorf("imported type %s conflicts with visible type", decl.typeName());
+              problems.add(errorf("imported type %s conflicts with visible type", decl.typeName()));
             }
           }
         }
       }
     }
+    return problems;
   }
 
-  public void PackageAccess.nameCheck() {
+  PackageAccess contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> PackageAccess.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!hasPackage(packageName())) {
-      errorf("package %s not found", packageName());
+      problems.add(errorf("package %s not found", packageName()));
     }
+    return problems;
   }
 
   syn boolean MethodAccess.validArgs() {
@@ -88,23 +101,28 @@ aspect NameCheck {
     return true;
   }
 
-  public void ConstructorDecl.nameCheck() {
-    super.nameCheck();
+  ConstructorDecl contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ConstructorDecl.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     // 8.8
     if (!hostType().name().equals(name())) {
-      errorf("constructor %s does not have the same name as the simple name of the host class %s",
-          name(), hostType().name());
+      problems.add(errorf(
+          "constructor %s does not have the same name as the simple name of the host class %s",
+          name(), hostType().name()));
     }
 
     // 8.8.2
     if (hostType().lookupConstructor(this) != this) {
-      errorf("constructor with signature %s is multiply declared in type %s", signature(),
-          hostType().typeName());
+      problems.add(errorf("constructor with signature %s is multiply declared in type %s",
+          signature(), hostType().typeName()));
     }
 
     if (circularThisInvocation(this)) {
-      errorf("The constructor %s may not directly or indirectly invoke itself", signature());
+      problems.add(errorf("The constructor %s may not directly or indirectly invoke itself",
+          signature()));
     }
+    return problems;
   }
 
   /**
@@ -124,41 +142,48 @@ aspect NameCheck {
     return false;
   }
 
-  public void MethodDecl.nameCheck() {
+  MethodDecl contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> MethodDecl.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     // 8.4
     // 8.4.2
     if (hostType().methodsSignature(signature()).size() > 1) {
-      errorf("method with signature %s is multiply declared in type %s", signature(),
-          hostType().typeName());
+      problems.add(errorf("method with signature %s is multiply declared in type %s", signature(),
+          hostType().typeName()));
     }
     // 8.4.3.4
     if (isNative() && hasBlock()) {
-      error("native methods must have an empty semicolon body");
+      problems.add(error("native methods must have an empty semicolon body"));
     }
     // 8.4.5
     if (isAbstract() && hasBlock()) {
-      error("abstract methods must have an empty semicolon body");
+      problems.add(error("abstract methods must have an empty semicolon body"));
     }
     // 8.4.5
     if (!hasBlock() && !(isNative() || isAbstract())) {
-      error("only abstract and native methods may have an empty semicolon body");
+      problems.add(error("only abstract and native methods may have an empty semicolon body"));
     }
+    return problems;
   }
 
-  public void ConstructorAccess.nameCheck() {
-    super.nameCheck();
+  ConstructorAccess contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ConstructorAccess.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     ConstructorDecl decl = (ConstructorDecl) enclosingBodyDecl();
     if (((ExprStmt) decl.getConstructorInvocation()).getExpr() == this) {
       // Don't error-check the parsed constructor invocation in case it is not the used one.
       if (decls().isEmpty()) {
-        errorf("no constructor matches %s", this.prettyPrint());
+        problems.add(errorf("no constructor matches %s", this.prettyPrint()));
       } else if (decls().size() > 1 && validArgs()) {
-        errorf("several most specific constructors for %s", this.prettyPrint());
+        problems.add(errorf("several most specific constructors for %s", this.prettyPrint()));
         for (ConstructorDecl cons : decls()) {
-          errorf("         %s", cons.signature());
+          problems.add(errorf("         %s", cons.signature()));
         }
       }
     }
+    return problems;
   }
 
   syn boolean ConstructorAccess.validArgs() {
@@ -179,15 +204,17 @@ aspect NameCheck {
     return true;
   }
 
-  public void ClassInstanceExpr.nameCheck() {
-    super.nameCheck();
+  ClassInstanceExpr contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ClassInstanceExpr.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (decls().isEmpty()) {
-      errorf("can not instantiate %s no matching constructor found in %s", type().typeName(),
-          type().typeName());
+      problems.add(errorf("can not instantiate %s no matching constructor found in %s",
+          type().typeName(), type().typeName()));
     } else if (decls().size() > 1 && validArgs()) {
-      error("several most specific constructors found");
+      problems.add(error("several most specific constructors found"));
       for (ConstructorDecl cons : decls()) {
-        errorf("         %s", cons.signature());
+        problems.add(errorf("         %s", cons.signature()));
       }
     } else if (!hasTypeDecl()) {
       // Check if the constructor is accessible (stricter when not in a class
@@ -196,23 +223,28 @@ aspect NameCheck {
       ConstructorDecl decl = decl();
       if (decl.isProtected() && !hostPackage().equals(decl.hostPackage()) &&
           !hostType().instanceOf(decl.hostType())) {
-        errorf("can not access the constructor %s", this.prettyPrint());
+        problems.add(errorf("can not access the constructor %s", this.prettyPrint()));
       }
     }
+    return problems;
   }
 
-  public void ArrayTypeAccess.nameCheck() {
+  eq ArrayTypeAccess.nameProblems() {
     if (decl().elementType().isUnknown()) {
-      errorf("no type named %s", decl().elementType().typeName());
+      return Collections.singletonList(errorf("no type named %s", decl().elementType().typeName()));
     }
+    return Collections.emptyList();
   }
 
-  public void TypeAccess.nameCheck() {
+  TypeAccess contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> TypeAccess.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
-      errorf("can not access the type named %s in this context", decl().typeName());
+      problems.add(errorf("can not access the type named %s in this context", decl().typeName()));
     }
     if (decls().isEmpty()) {
-      errorf("no visible type named %s", typeName());
+      problems.add(errorf("no visible type named %s", typeName()));
     }
     if (decls().size() > 1) {
       StringBuilder sb = new StringBuilder();
@@ -220,21 +252,24 @@ aspect NameCheck {
       for (TypeDecl t : decls()) {
         sb.append(" " + t.typeName());
       }
-      error(sb.toString());
+      problems.add(error(sb.toString()));
     }
+    return problems;
   }
 
 
-  public void ClassAccess.nameCheck() {
-    if (isQualified() && !qualifier().isTypeAccess()) {
-      error("class literal may only contain type names");
-    }
-  }
+  ClassAccess contributes
+      error("class literal may only contain type names")
+      when isQualified() && !qualifier().isTypeAccess()
+      to CompilationUnit.problems();
 
-  public void VarAccess.nameCheck() {
+  VarAccess contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> VarAccess.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (decls().isEmpty()
         && (!isQualified() || !qualifier().type().isUnknown() || qualifier().isPackageAccess())) {
-      errorf("no field named %s is accessible", name());
+      problems.add(errorf("no field named %s is accessible", name()));
     }
     if (decls().size() > 1) {
       StringBuffer sb = new StringBuffer();
@@ -248,20 +283,22 @@ aspect NameCheck {
       for (String line : fields) {
         sb.append(line);
       }
-      error(sb.toString());
+      problems.add(error(sb.toString()));
     }
 
     // 8.8.5.1
     if (inExplicitConstructorInvocation() && !isQualified()
         && decl().isInstanceVariable() && hostType() == decl().hostType()) {
-      errorf("instance variable %s may not be accessed in an explicit constructor invocation",
-          name());
+      problems.add(errorf(
+          "instance variable %s may not be accessed in an explicit constructor invocation",
+          name()));
     }
 
     Variable v = decl();
     if (!v.isFinal() && !v.isClassVariable()
         && !v.isInstanceVariable() && v.hostType() != hostType()) {
-      error("A parameter/variable used but not declared in an inner class must be declared final");
+      problems.add(error(
+          "A parameter/variable used but not declared in an inner class must be declared final"));
     }
 
     // 8.3.2.3
@@ -269,10 +306,12 @@ aspect NameCheck {
       if (hostType() != null && !declaredBefore(decl())) {
         if (inSameInitializer() && !simpleAssignment() && inDeclaringClass()) {
           BodyDecl b = closestBodyDecl(hostType());
-          errorf("variable %s is used in %s before it is declared", decl().name(), b.prettyPrint());
+          problems.add(errorf(
+              "variable %s is used in %s before it is declared", decl().name(), b.prettyPrint()));
         }
       }
     }
+    return problems;
   }
 
   // Find the bodydecl declared in t in which this construct is nested.
@@ -320,14 +359,18 @@ aspect NameCheck {
   eq InstanceInitializer.getBlock().enclosingBlock() = this;
   eq Program.getChild().enclosingBlock() = null;
 
-  public void TypeDecl.nameCheck() {
+  TypeDecl contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> TypeDecl.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (isTopLevelType() && lookupType(packageName(), name()) != this) {
-      errorf("duplicate type %s in package %s", name(), packageName());
+      problems.add(errorf("duplicate type %s in package %s", name(), packageName()));
     }
 
     if (!isTopLevelType() && !isAnonymous() && !isLocalClass()
         && extractSingleType(enclosingType().memberTypes(name())) != this) {
-      errorf("duplicate member type %s in type %s", name(), enclosingType().typeName());
+      problems.add(errorf("duplicate member type %s in type %s",
+          name(), enclosingType().typeName()));
     }
 
     // 14.3
@@ -335,19 +378,22 @@ aspect NameCheck {
       TypeDecl typeDecl = extractSingleType(lookupType(name()));
       if (typeDecl != null && typeDecl != this && typeDecl.isLocalClass()
           && enclosingBlock() == typeDecl.enclosingBlock()) {
-        errorf("local class named %s may not be redeclared as a local class in the same block",
-            name());
+        problems.add(errorf(
+            "local class named %s may not be redeclared as a local class in the same block",
+            name()));
       }
     }
 
     if (!packageName().equals("") && hasPackage(fullName())) {
-      errorf("type name conflicts with a package using the same name: %s", name());
+      problems.add(errorf("type name conflicts with a package using the same name: %s", name()));
     }
 
     // 8.1 & 9.1
     if (hasEnclosingTypeDecl(name())) {
-      error("type may not have the same simple name as an enclosing type declaration");
+      problems.add(error(
+          "type may not have the same simple name as an enclosing type declaration"));
     }
+    return problems;
   }
 
   syn boolean TypeDecl.hasEnclosingTypeDecl(String name) {
@@ -358,17 +404,17 @@ aspect NameCheck {
     return false;
   }
 
-  public void FieldDecl.nameCheck() {
-    super.nameCheck();
+  FieldDeclarator contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> FieldDeclarator.nameProblems() {
     // 8.3
-    for (FieldDeclarator decl : getDeclaratorList()) {
-      for (Variable v : hostType().memberFields(decl.name())) {
-        if (v != decl && v.hostType() == hostType()) {
-          errorf("field named %s is multiply declared in type %s",
-              decl.name(), hostType().typeName());
-        }
+    for (Variable v : hostType().memberFields(name())) {
+      if (v != this && v.hostType() == hostType()) {
+        return Collections.singletonList(errorf("field named %s is multiply declared in type %s",
+            name(), hostType().typeName()));
       }
     }
+    return Collections.emptyList();
   }
 
   inh VariableScope ParameterDeclaration.outerScope();
@@ -389,20 +435,23 @@ aspect NameCheck {
     throw new UnsupportedOperationException("outerScope() not defined");
   }
 
-  public void VariableDeclarator.nameCheck() {
+  VariableDeclarator contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> VariableDeclarator.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
       if (var instanceof VariableDeclarator) {
         VariableDeclarator decl = (VariableDeclarator) var;
         if (decl != this && decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          errorf("duplicate declaration of local variable %s in enclosing scope", name());
+          problems.add(errorf("duplicate declaration of local variable %s in enclosing scope",
+              name()));
         }
-      }
-      // 8.4.1
-      else if (var instanceof ParameterDeclaration) {
+      } else if (var instanceof ParameterDeclaration) {
+        // 8.4.1
         ParameterDeclaration decl = (ParameterDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          errorf("duplicate declaration of local variable and parameter %s", name());
+          problems.add(errorf("duplicate declaration of local variable and parameter %s", name()));
         }
       }
     }
@@ -412,44 +461,52 @@ aspect NameCheck {
         if (block.getStmt(i) instanceof Variable) {
           Variable v = (Variable) block.getStmt(i);
           if (v.name().equals(name()) && v != this) {
-            errorf("duplicate declaration of local variable %s", name());
+            problems.add(errorf("duplicate declaration of local variable %s", name()));
           }
         }
       }
     }
+    return problems;
   }
 
-  public void ParameterDeclaration.nameCheck() {
+  ParameterDeclaration contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ParameterDeclaration.nameProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     SimpleSet<Variable> decls = outerScope().lookupVariable(name());
     for (Variable var : decls) {
       if (var instanceof VariableDeclarator) {
         VariableDeclarator decl = (VariableDeclarator) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          errorf("duplicate declaration of local variable %s", name());
+          problems.add(errorf("duplicate declaration of local variable %s", name()));
         }
       } else if (var instanceof ParameterDeclaration) {
         ParameterDeclaration decl = (ParameterDeclaration) var;
         if (decl.enclosingBodyDecl() == enclosingBodyDecl()) {
-          errorf("duplicate declaration of local variable %s", name());
+          problems.add(errorf("duplicate declaration of local variable %s", name()));
         }
       }
     }
 
     // 8.4.1
     if (!lookupVariable(name()).contains(this)) {
-      errorf("duplicate declaration of parameter %s", name());
+      problems.add(errorf("duplicate declaration of parameter %s", name()));
     }
+    return problems;
   }
 
   inh BodyDecl ParameterDeclaration.enclosingBodyDecl();
 
-  public void LabeledStmt.nameCheck() {
+  LabeledStmt contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> LabeledStmt.nameProblems() {
     LabeledStmt stmt = lookupLabel(getLabel());
     if (stmt != null) {
       if (stmt.enclosingBodyDecl() == enclosingBodyDecl()) {
-        error("Labels can not shadow labels in the same member");
+        return Collections.singletonList(error("Labels can not shadow labels in the same member"));
       }
     }
+    return Collections.emptyList();
   }
 
   inh boolean BreakStmt.insideLoop();
@@ -466,28 +523,35 @@ aspect NameCheck {
   eq TypeDecl.getBodyDecl(int i).insideSwitch() = false;
   eq SwitchStmt.getBlock().insideSwitch() = true;
 
-  public void BreakStmt.nameCheck() {
+  BreakStmt contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> BreakStmt.nameProblems() {
     if (!hasLabel() && !insideLoop() && !insideSwitch()) {
-      error("break outside switch or loop");
+      return Collections.singletonList(error("break outside switch or loop"));
     } else if (hasLabel()) {
       LabeledStmt label = lookupLabel(getLabel());
       if (label == null) {
-        error("labeled break must have visible matching label");
+        return Collections.singletonList(error("labeled break must have visible matching label"));
       }
     }
+    return Collections.emptyList();
   }
 
-  public void ContinueStmt.nameCheck() {
+  ContinueStmt contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ContinueStmt.nameProblems() {
     if (!insideLoop()) {
-      error("continue outside loop");
+      return Collections.singletonList(error("continue outside loop"));
     } else if (hasLabel()) {
       LabeledStmt label = lookupLabel(getLabel());
       if (label == null) {
-        error("labeled continue must have visible matching label");
+        return Collections.singletonList(
+            error("labeled continue must have visible matching label"));
       } else if (!label.getStmt().continueLabel()) {
-        errorf("%s is not a loop label", getLabel());
+        return Collections.singletonList(errorf("%s is not a loop label", getLabel()));
       }
     }
+    return Collections.emptyList();
   }
 
   syn boolean Stmt.continueLabel() = false;
@@ -495,18 +559,21 @@ aspect NameCheck {
   eq WhileStmt.continueLabel() = true;
   eq DoStmt.continueLabel() = true;
 
-  public void ConstCase.nameCheck() {
+  ConstCase contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> ConstCase.nameProblems() {
     if (getValue().isConstant() && bind(this) != this) {
-      errorf("constant expression %s is multiply declared in two case statements",
-          getValue().prettyPrint());
+      return Collections.singletonList(errorf(
+          "constant expression %s is multiply declared in two case statements",
+          getValue().prettyPrint()));
     }
+    return Collections.emptyList();
   }
 
-  public void DefaultCase.nameCheck() {
-    if (bind(this) != this) {
-      error("only one default case statement allowed");
-    }
-  }
+  DefaultCase contributes
+      error("only one default case statement allowed")
+      when bind(this) != this
+      to CompilationUnit.problems();
 
   inh lazy Case Case.bind(Case c);
 
@@ -567,11 +634,9 @@ aspect NameCheck {
    * Checks that this local class declaration does not conflict with a previous
    * declaration in the local scope.
    */
-  public void LocalClassDeclStmt.nameCheck() {
-    TypeDecl decl = getClassDecl();
-    SimpleSet<TypeDecl> decls = otherLocalClassDecls(decl.name());
-    if (!decls.isEmpty()) {
-      errorf("another local class %s has already been declared in this scope", decl.name());
-    }
-  }
+  LocalClassDeclStmt contributes
+      errorf("another local class %s has already been declared in this scope",
+          getClassDecl().name())
+      when !otherLocalClassDecls(getClassDecl().name()).isEmpty()
+      to CompilationUnit.problems();
 }

@@ -47,10 +47,12 @@ aspect GenericTypeVariables {
     }
   }
 
-  public void TypeVariable.nameCheck() {
-    if (extractSingleType(lookupType(name())) != this) {
-      errorf("*** Semantic Error: type variable %s is multiply declared", name());
-    }
+  eq TypeVariable.nameProblems() {
+      if (extractSingleType(lookupType(name())) != this) {
+        return Collections.singletonList(
+            errorf("*** Semantic Error: type variable %s is multiply declared", name()));
+      }
+      return Collections.emptySet();
   }
 
   syn TypeDecl TypeVariable.lowerBound() = getTypeBound(0).type();
@@ -80,17 +82,20 @@ aspect GenericTypeVariablesMembers {
 
 aspect GenricTypeVariablesTypeAnalysis {
 
-  public void TypeVariable.typeCheck() {
+  TypeVariable contributes each typeProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> TypeVariable.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (!getTypeBound(0).type().isTypeVariable() && !getTypeBound(0).type().isClassDecl()
         && !getTypeBound(0).type().isInterfaceDecl()) {
-      errorf("the first type bound must be either a type variable,"
+      problems.add(errorf("the first type bound must be either a type variable,"
           + " or a class or interface type which %s is not",
-          getTypeBound(0).type().fullName());
+          getTypeBound(0).type().fullName()));
     }
     for (int i = 1; i < getNumTypeBound(); i++) {
       if (!getTypeBound(i).type().isInterfaceDecl()) {
-        errorf("type bound %s must be an interface type which %s is not",
-            i, getTypeBound(i).type().fullName());
+        problems.add(errorf("type bound %s must be an interface type which %s is not",
+            i, getTypeBound(i).type().fullName()));
       }
     }
     Collection<TypeDecl> typeSet = new HashSet<TypeDecl>();
@@ -99,10 +104,10 @@ aspect GenricTypeVariablesTypeAnalysis {
       TypeDecl erasure = type.erasure();
       if (typeSet.contains(erasure)) {
         if (type != erasure) {
-          errorf("the erasure %s of typebound %s is multiply declared in %s",
-              erasure.fullName(), getTypeBound(i).prettyPrint(), this);
+          problems.add(errorf("the erasure %s of typebound %s is multiply declared in %s",
+              erasure.fullName(), getTypeBound(i).prettyPrint(), this));
         } else {
-          errorf("%s is multiply declared", type.fullName());
+          problems.add(errorf("%s is multiply declared", type.fullName()));
         }
       }
       typeSet.add(erasure);
@@ -116,14 +121,15 @@ aspect GenricTypeVariablesTypeAnalysis {
           TypeDecl destType = getTypeBound(j).type();
           for (MethodDecl n : destType.memberMethods(m.name())) {
             if (m.sameSignature(n) && m.type() != n.type()) {
-              errorf("the two bounds, %s and %s, in type variable %s have"
+              problems.add(errorf("the two bounds, %s and %s, in type variable %s have"
                   + " a method %s with conflicting return types %s and %s",
                   type.name(), destType.name(), name(), m.signature(),
-                  m.type().name(), n.type().name());
+                  m.type().name(), n.type().name()));
             }
           }
         }
       }
     }
+    return problems;
   }
 }

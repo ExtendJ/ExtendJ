@@ -38,11 +38,12 @@ aspect Enums {
   syn boolean TypeDecl.isEnumDecl() = false;
   eq EnumDecl.isEnumDecl() = true;
 
-  refine NameCheck public void ClassInstanceExpr.nameCheck() {
+  refine NameCheck
+  eq ClassInstanceExpr.nameProblems() {
     if (getAccess().type().isEnumDecl() && !enclosingBodyDecl().isEnumConstant()) {
-      error("enum types may not be instantiated explicitly");
+      return Collections.singletonList(error("enum types may not be instantiated explicitly"));
     } else {
-      refined();
+      return refined();
     }
   }
 
@@ -69,31 +70,24 @@ aspect Enums {
     12) It is a compile-time error for an enum to declare a finalizer. An instance of
     an enum may never be finalized.
   */
-  public void EnumDecl.typeCheck() {
-    super.typeCheck();
+  eq EnumDecl.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>(super.typeProblems());
     for (MethodDecl m : memberMethods("finalize")) {
       if (m.getNumParameter() == 0 && m.hostType() == this) {
-        error("an enum may not declare a finalizer");
+        problems.add(error("an enum may not declare a finalizer"));
       }
     }
-    checkEnum(this);
+    return problems;
   }
 
   /*
     10) The direct superclass of an enum type named E is Enum<E>.
   */
 
-  syn lazy Opt EnumDecl.getSuperClassOpt() {
-    return new Opt(
-      new ParTypeAccess(
-        new TypeAccess(
-          "java.lang",
-          "Enum"
-        ),
-        new List().add(createQualifiedAccess())
-      )
-    );
-  }
+  syn lazy Opt<Access> EnumDecl.getSuperClassOpt() =
+      new Opt<Access>(new ParTypeAccess(
+          new TypeAccess("java.lang", "Enum"),
+          new List<Access>(createQualifiedAccess())));
 
   /*
     3b) If the enum type has no constructor declarations, a parameterless default
@@ -586,56 +580,51 @@ aspect Enums {
     return false;
   }
 
-  protected void ASTNode.checkEnum(EnumDecl enumDecl) {
-    for (int i = 0; i < getNumChild(); i++) {
-      getChild(i).checkEnum(enumDecl);
-    }
-  }
+  /** Checks if this var access is inside an instance initializer for an enum type. */
+  inh boolean VarAccess.inEnumInitializer();
 
-  protected void EnumDecl.checkEnum(EnumDecl enumDecl) {
-    for (int i = 0; i < getNumBodyDecl(); i++) {
-      if (getBodyDecl(i) instanceof ConstructorDecl) {
-        getBodyDecl(i).checkEnum(enumDecl);
-      } else if (getBodyDecl(i) instanceof InstanceInitializer) {
-        getBodyDecl(i).checkEnum(enumDecl);
-      } else if (getBodyDecl(i) instanceof FieldDecl) {
-        FieldDecl f = (FieldDecl) getBodyDecl(i);
-        if (!f.isStatic()) {
-          f.checkEnum(enumDecl);
-        }
-      }
-    }
-  }
+  eq MethodDecl.getChild().inEnumInitializer() = false;
 
-  protected void TypeDecl.checkEnum(EnumDecl enumDecl) {
-    // Non-EnumDecl types should not check for enum errors.
-  }
+  eq TypeDecl.getChild().inEnumInitializer() = false;
 
-  protected void VarAccess.checkEnum(EnumDecl enumDecl) {
-    super.checkEnum(enumDecl);
-    if (decl().isStatic() && decl().hostType() == enumDecl && !isConstant()) {
-      error("may not reference a static field of an enum type from here");
-    }
-  }
+  eq CompilationUnit.getChild().inEnumInitializer() = false;
+
+  eq ConstructorDecl.getChild().inEnumInitializer() = hostType().isEnumDecl();
+
+  eq InstanceInitializer.getChild().inEnumInitializer() = hostType().isEnumDecl();
+
+  eq FieldDecl.getChild().inEnumInitializer() = !isStatic() && hostType().isEnumDecl();
+
+  VarAccess contributes
+      error("may not reference a static field of an enum type from here")
+      when decl().isStatic()
+          && decl().hostType() == hostType()
+          && !isConstant()
+          && inEnumInitializer()
+      to CompilationUnit.problems();
+
+  ConstructorDecl contributes each enumProblems() to CompilationUnit.problems();
 
   /**
    * Check if the enum constructor has an incorrect access modifier
    */
-  protected void ConstructorDecl.checkEnum(EnumDecl enumDecl) {
-    super.checkEnum(enumDecl);
+  syn Collection<Problem> ConstructorDecl.enumProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
+    if (hostType().isEnumDecl()) {
+      if (isPublic()) {
+        problems.add(error("enum constructors can not be declared public"));
+      } else if (isProtected()) {
+        problems.add(error("enum constructors can not be declared public"));
+      }
 
-    if (isPublic()) {
-      error("enum constructors can not be declared public");
-    } else if (isProtected()) {
-      error("enum constructors can not be declared public");
-    }
-
-    if (hasParsedConstructorInvocation()) {
-      ExprStmt invocation = (ExprStmt) getParsedConstructorInvocation();
-      if (invocation.getExpr() instanceof SuperConstructorAccess) {
-        error("can not call super() in enum constructor");
+      if (hasParsedConstructorInvocation()) {
+        ExprStmt invocation = (ExprStmt) getParsedConstructorInvocation();
+        if (invocation.getExpr() instanceof SuperConstructorAccess) {
+          problems.add(error("can not call super() in enum constructor"));
+        }
       }
     }
+    return problems;
   }
 
   /*
@@ -661,11 +650,14 @@ aspect Enums {
 
   eq EnumConstant.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
-  refine TypeCheck public void SwitchStmt.typeCheck() {
-     TypeDecl type = getExpr().type();
+  refine TypeCheck
+  eq SwitchStmt.typeProblems() {
+    TypeDecl type = getExpr().type();
     if ((!type.isIntegralType() || type.isLong()) && !type.isEnumDecl()) {
-      error("Switch expression must be of char, byte, short, int, or enum type");
+      return Collections.singletonList(
+          error("Switch expression must be of char, byte, short, int, or enum type"));
     }
+    return Collections.emptyList();
   }
 
   eq ConstCase.getValue().lookupVariable(String name) =
@@ -677,22 +669,26 @@ aspect Enums {
 
   eq VarAccess.isEnumConstant() = varDecl() instanceof EnumConstant;
 
-  refine TypeCheck public void ConstCase.typeCheck() {
+  refine TypeCheck
+  eq ConstCase.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     boolean isEnumConstant = getValue().isEnumConstant();
     if (switchType().isEnumDecl() && !isEnumConstant) {
-      error("Unqualified enumeration constant required");
+      problems.add(error("Unqualified enumeration constant required"));
     } else {
-      TypeDecl switchType = switchType();
       TypeDecl type = getValue().type();
-      if (!type.assignConversionTo(switchType, getValue())) {
-        error("Constant expression must be assignable to Expression");
+      if (!type.assignConversionTo(switchType(), getValue())) {
+        problems.add(error("Constant expression must be assignable to Expression"));
       }
-      if (!getValue().isConstant() && !getValue().type().isUnknown() &&
-          !isEnumConstant)
-        error("Switch expression must be constant");
+      if (!getValue().isConstant() && !type.isUnknown() && !isEnumConstant) {
+        problems.add(error("Switch expression must be constant"));
+      }
     }
+    return problems;
   }
-  refine NameCheck eq ConstCase.constValue(Case c) {
+
+  refine NameCheck
+  eq ConstCase.constValue(Case c) {
     if (switchType().isEnumDecl()) {
       if (!(c instanceof ConstCase) || !getValue().isConstant()) {
         return false;
@@ -809,11 +805,12 @@ aspect Enums {
     return unimplemented;
   }
 
+  EnumDecl contributes each modifierProblems() to CompilationUnit.problems();
+
   /**
    * Check that the enum does not contain unimplemented abstract methods.
    */
-  public void EnumDecl.checkModifiers() {
-    super.checkModifiers();
+  syn Collection<Problem> EnumDecl.modifierProblems() {
     if (!unimplementedMethods().isEmpty()) {
       StringBuilder sb = new StringBuilder();
       sb.append("" + name() + " lacks implementations in one or more "
@@ -821,8 +818,9 @@ aspect Enums {
       for (MethodDecl m : unimplementedMethods()) {
         sb.append("  " + m.signature() + " in " + m.hostType().typeName() + "\n");
       }
-      error(sb.toString());
+      return Collections.singletonList(error(sb.toString()));
     }
+    return Collections.emptyList();
   }
 
   syn SimpleSet<MethodDecl> EnumConstant.localMethodsSignature(String signature) {
@@ -864,61 +862,61 @@ aspect Enums {
     return false;
   }
 
-  refine Modifiers
-  public void MethodDecl.checkModifiers() {
-    super.checkModifiers();
+  refine Modifiers eq MethodDecl.modifierProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
     if (hostType().isClassDecl()) {
       // 8.4.3.1
       if (!hostType().isEnumDecl() && isAbstract() && !hostType().isAbstract()) {
-        error("class must be abstract to include abstract methods");
+        problems.add(error("class must be abstract to include abstract methods"));
       }
       // 8.4.3.1
       if (isAbstract() && isPrivate()) {
-        error("method may not be abstract and private");
+        problems.add(error("method may not be abstract and private"));
       }
       // 8.4.3.1
       // 8.4.3.2
       if (isAbstract() && isStatic()) {
-        error("method may not be abstract and static");
+        problems.add(error("method may not be abstract and static"));
       }
       if (isAbstract() && isSynchronized()) {
-        error("method may not be abstract and synchronized");
+        problems.add(error("method may not be abstract and synchronized"));
       }
       // 8.4.3.4
       if (isAbstract() && isNative()) {
-        error("method may not be abstract and native");
+        problems.add(error("method may not be abstract and native"));
       }
       if (isAbstract() && isStrictfp()) {
-        error("method may not be abstract and strictfp");
+        problems.add(error("method may not be abstract and strictfp"));
       }
       if (isNative() && isStrictfp()) {
-        error("method may not be native and strictfp");
+        problems.add(error("method may not be native and strictfp"));
       }
     }
     if (hostType().isInterfaceDecl()) {
       // 9.4
       if (isStatic()) {
-        errorf("interface method %s in %s may not be static", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be static", signature(), hostType().typeName()));
       }
       if (isStrictfp()) {
-        errorf("interface method %s in %s may not be strictfp", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be strictfp", signature(), hostType().typeName()));
       }
       if (isNative()) {
-        errorf("interface method %s in %s may not be native", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be native", signature(), hostType().typeName()));
       }
       if (isSynchronized()) {
-        errorf("interface method %s in %s may not be synchronized", signature(),
-            hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be synchronized", signature(),
+            hostType().typeName()));
       }
       if (isProtected()) {
-        errorf("interface method %s in %s may not be protected", signature(),
-            hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be protected", signature(),
+            hostType().typeName()));
       }
       if (isPrivate()) {
-        errorf("interface method %s in %s may not be private", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be private", signature(), hostType().typeName()));
       } else if (isFinal()) {
-        errorf("interface method %s in %s may not be final", signature(), hostType().typeName());
+        problems.add(errorf("interface method %s in %s may not be final", signature(), hostType().typeName()));
       }
     }
+    return problems;
   }
 }
