@@ -197,8 +197,7 @@ aspect Java7Literals {
   eq FloatingPointLiteral.constant() {
     try {
       return Constant.create(Float.parseFloat(getDigits()));
-    }
-    catch (NumberFormatException e) {
+    } catch (NumberFormatException e) {
       Constant c = Constant.create(0.0f);
       c.error = true;
       return c;
@@ -212,8 +211,7 @@ aspect Java7Literals {
   eq DoubleLiteral.constant() {
     try {
       return Constant.create(Double.parseDouble(getDigits()));
-    }
-    catch (NumberFormatException e) {
+    } catch (NumberFormatException e) {
       Constant c = Constant.create(0.0d);
       c.error = true;
       return c;
@@ -396,7 +394,11 @@ aspect Java7Literals {
   rewrite NumericLiteral {
     when (needsRewrite())
     to Literal {
-      return parse();
+      NumericLiteralParser parser = new NumericLiteralParser(getLITERAL());
+      Literal literal = parser.parse();
+      literal.setStart(LITERALstart);
+      literal.setEnd(LITERALend);
+      return literal;
     }
   }
 
@@ -501,17 +503,20 @@ aspect Java7Literals {
       to CompilationUnit.problems();
 
   /**
-   * The NumericLiteral class is used to parse the "value characters"
-   * from a numeric literal. Value characters are those that have a
+   * The NumericLiteralParser class is used to parse the value characters
+   * of a numeric literal. Value characters are those that have a
    * value in the literal, and are not fillers such as underscore.
    *
-   * NumericLiterals parseLiteral function also does error checking
+   * <p>The parseLiteral method also does error checking
    * on numeric literals and returns an IllegalLiteral if any syntax
    * error is detected in the literal.
    */
-  public class NumericLiteral {
+  public class NumericLiteralParser {
+    private final String literal;
+    private String digits = "";
     private StringBuilder buf = new StringBuilder();
     private int idx = 0;
+    private int kind;
     private boolean whole; // Have whole part?
     private boolean fraction; // Have fraction part?
     private boolean exponentSpecifier; // Have exponent specifier?
@@ -520,22 +525,26 @@ aspect Java7Literals {
     private boolean isFloat;
     private boolean isLong;
 
+    public NumericLiteralParser(String literal) {
+      this.literal = literal;
+    }
+
     /**
-     * @return a readable name to describe this literal.
+     * @return a name describing the literal, used in parsing error messages.
      */
     private String name() {
       String name;
       switch (kind) {
-        case DECIMAL:
+        case NumericLiteral.DECIMAL:
           name = "decimal";
           break;
-        case HEXADECIMAL:
+        case NumericLiteral.HEXADECIMAL:
           name = "hexadecimal";
           break;
-        case OCTAL:
+        case NumericLiteral.OCTAL:
           name = "octal";
           break;
-        case BINARY:
+        case NumericLiteral.BINARY:
         default:
           name = "binary";
           break;
@@ -552,7 +561,7 @@ aspect Java7Literals {
      * push it onto the buffer.
      */
     private void pushChar() {
-      buf.append(getLITERAL().charAt(idx++));
+      buf.append(literal.charAt(idx++));
     }
 
     /**
@@ -567,14 +576,14 @@ aspect Java7Literals {
      * in the literal
      */
     private boolean have(int n) {
-      return getLITERAL().length() >= idx + n;
+      return literal.length() >= idx + n;
     }
 
     /**
      * Look at the n'th next character.
      */
     private char peek(int n) {
-      return getLITERAL().charAt(idx + n);
+      return literal.charAt(idx + n);
     }
 
     /**
@@ -608,27 +617,20 @@ aspect Java7Literals {
     /**
      * Parse a literal. If there is a syntax error in the literal,
      * an IllegalLiteral will be returned.
-     *
-     * <p>Synchronized because multiple threads may want to try to rewrite simulataneously.
      */
-    public synchronized Literal parse() {
-      if (getLITERAL().length() == 0) {
-        throw new IllegalStateException("Empty NumericLiteral");
+    public Literal parse() {
+      if (idx != 0 || buf.length() != 0) {
+        throw new IllegalStateException("Already parsed literal.");
       }
-
-      buf.setLength(0);
-      idx = 0;
+      if (literal.length() == 0) {
+        throw new IllegalStateException("Can't parse empty literal.");
+      }
       kind = classifyLiteral();
-
-      Literal literal;
       if (!floating) {
-        literal = parseDigits();
+        return parseDigits();
       } else {
-        literal = parseFractionPart();
+        return parseFractionPart();
       }
-      literal.setStart(LITERALstart);
-      literal.setEnd(LITERALend);
-      return literal;
     }
 
     /**
@@ -639,22 +641,22 @@ aspect Java7Literals {
     private int classifyLiteral() {
       if (peek(0) == '.') {
         floating = true;
-        return DECIMAL;
+        return NumericLiteral.DECIMAL;
       } else if (peek(0) == '0') {
         if (!have(2)) {
           // This is the only 1-length string that starts with 0!
-          return DECIMAL;
+          return NumericLiteral.DECIMAL;
         } else if (peek(1) == 'x' || peek(1) == 'X') {
           skip(2);
-          return HEXADECIMAL;
+          return NumericLiteral.HEXADECIMAL;
         } else if (peek(1) == 'b' || peek(1) == 'B') {
           skip(2);
-          return BINARY;
+          return NumericLiteral.BINARY;
         } else {
-          return DECIMAL;
+          return NumericLiteral.DECIMAL;
         }
       } else {
-        return DECIMAL;
+        return NumericLiteral.DECIMAL;
       }
     }
 
@@ -666,16 +668,16 @@ aspect Java7Literals {
      */
     private boolean misplacedUnderscore() {
       // first and last characters are never allowed to be an underscore
-      if (idx == 0 || idx+1 == getLITERAL().length()) {
+      if (idx == 0 || idx + 1 == literal.length()) {
         return true;
       }
 
       switch (kind) {
-        case DECIMAL:
+        case NumericLiteral.DECIMAL:
           return !(isDecimalDigit(peek(-1)) && isDecimalDigit(peek(1)));
-        case HEXADECIMAL:
+        case NumericLiteral.HEXADECIMAL:
           return !(isHexadecimalDigit(peek(-1)) && isHexadecimalDigit(peek(1)));
-        case BINARY:
+        case NumericLiteral.BINARY:
           return !(isBinaryDigit(peek(-1)) && isBinaryDigit(peek(1)));
       }
       throw new IllegalStateException("Unexpected literal kind");
@@ -685,8 +687,7 @@ aspect Java7Literals {
      * Report an illegal digit.
      */
     private Literal syntaxError(String msg) {
-      return new IllegalLiteral(
-          String.format("in %s literal \"%s\": %s", name(), getLITERAL(), msg));
+      return new IllegalLiteral(String.format("in %s literal \"%s\": %s", name(), literal, msg));
     }
 
     private Literal unexpectedCharacter(char c) {
@@ -702,28 +703,27 @@ aspect Java7Literals {
     }
 
     /**
-     * Parse and build an IntegerLiteral, LongLiteral,
-     * FloatingPointLiteral or DoubleLiteral. Returns an
-     * IllegalLiteral if the numeric literal can not be
-     * parsed.
+     * Parse and build an IntegerLiteral, LongLiteral, FloatingPointLiteral or
+     * DoubleLiteral. Returns an IllegalLiteral if the numeric literal can not
+     * be parsed.
      *
-     * Note: does not perform bounds checks.
+     * <p>Note: does not perform bounds checks.
      *
      * @return a concrete literal on success, or an IllegalLiteral if there is a syntax error
      */
     private Literal buildLiteral() {
-      NumericLiteral literal;
-      setDigits(buf.toString().toLowerCase());
+      NumericLiteral result;
+      digits = buf.toString().toLowerCase();
 
       if (!floating) {
         if (!whole) {
           return syntaxError("at least one digit is required");
         }
 
-        // check if the literal is octal, and if so report illegal digits
-        if (kind == DECIMAL) {
+        // Check if the literal is octal, and if so report illegal digits.
+        if (kind == NumericLiteral.DECIMAL) {
           if (digits.charAt(0) == '0') {
-            kind = OCTAL;
+            kind = NumericLiteral.OCTAL;
             for (int idx = 1; idx < digits.length(); ++idx) {
               char c = digits.charAt(idx);
               if (c < '0' || c > '7') {
@@ -734,12 +734,12 @@ aspect Java7Literals {
         }
 
         if (isLong) {
-          literal = new LongLiteral(getLITERAL());
+          result = new LongLiteral(literal);
         } else {
-          literal = new IntegerLiteral(getLITERAL());
+          result = new IntegerLiteral(literal);
         }
       } else {
-        if (kind == HEXADECIMAL && !exponent) {
+        if (kind == NumericLiteral.HEXADECIMAL && !exponent) {
           return syntaxError("exponent is missing");
         }
 
@@ -752,25 +752,23 @@ aspect Java7Literals {
               + "either the whole or fraction part");
         }
 
-        if (kind == HEXADECIMAL) {
-          digits = "0x"+digits;// digits parsed with Float or Double
+        if (kind == NumericLiteral.HEXADECIMAL) {
+          digits = "0x" + digits;// Digits parsed with Float or Double.
         }
 
         if (isFloat) {
-          literal = new FloatingPointLiteral(getLITERAL());
+          result = new FloatingPointLiteral(literal);
         } else {
-          literal = new DoubleLiteral(getLITERAL());
+          result = new DoubleLiteral(literal);
         }
       }
-
-      literal.setDigits(getDigits());
-      literal.setKind(getKind());
-      return literal;
+      result.setDigits(digits);
+      result.setKind(kind);
+      return result;
     }
 
     private Literal parseDigits() {
-      // While we have at least one more character/digit
-      while (have(1)) {
+      while (have(1)) { // Continue while there is at least one more character/digit.
         char c = peek(0);
         switch (c) {
           case '_':
@@ -781,7 +779,7 @@ aspect Java7Literals {
             skip(1);
             continue;
           case '.':
-            if (kind != DECIMAL && kind != HEXADECIMAL) {
+            if (kind != NumericLiteral.DECIMAL && kind != NumericLiteral.HEXADECIMAL) {
               return unexpectedCharacter(c);
             }
             return parseFractionPart();
@@ -795,16 +793,16 @@ aspect Java7Literals {
             continue;
           case 'f':
           case 'F':
-            if (kind == BINARY) {
+            if (kind == NumericLiteral.BINARY) {
               return unexpectedCharacter(c);
             }
             isFloat = true;
           case 'd':
           case 'D':
-            if (kind == BINARY) {
+            if (kind == NumericLiteral.BINARY) {
               return unexpectedCharacter(c);
             }
-            if (kind != HEXADECIMAL) {
+            if (kind != NumericLiteral.HEXADECIMAL) {
               if (have(2)) {
                 return syntaxError("extra digits/characters after type suffix " + c);
               }
@@ -818,10 +816,9 @@ aspect Java7Literals {
         }
 
         switch (kind) {
-          case DECIMAL:
+          case NumericLiteral.DECIMAL:
             if (c == 'e' || c == 'E') {
               return parseExponentPart();
-
             } else if (c == 'f' || c == 'F') {
               if (have(2)) {
                 return syntaxError("extra digits/characters after type suffix " + c);
@@ -843,7 +840,7 @@ aspect Java7Literals {
               pushChar();
             }
             continue;
-          case HEXADECIMAL:
+          case NumericLiteral.HEXADECIMAL:
             if (c == 'p' || c == 'P') {
               return parseExponentPart();
             }
@@ -854,7 +851,7 @@ aspect Java7Literals {
             whole = true;
             pushChar();
             continue;
-          case BINARY:
+          case NumericLiteral.BINARY:
             if (!isBinaryDigit(c)) {
               return unexpectedCharacter(c);
             }
@@ -863,7 +860,6 @@ aspect Java7Literals {
             continue;
         }
       }
-
       return buildLiteral();
     }
 
@@ -888,7 +884,7 @@ aspect Java7Literals {
             return syntaxError("multiple decimal periods are not allowed");
         }
 
-        if (kind == DECIMAL) {
+        if (kind == NumericLiteral.DECIMAL) {
           if (c == 'e' || c == 'E') {
             return parseExponentPart();
 
