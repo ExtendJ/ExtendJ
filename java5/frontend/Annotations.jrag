@@ -69,7 +69,9 @@ aspect Annotations {
   annotation.Target, then m must have either an element whose matches the
   annotated declaration, or a compile-time error occurs.*/
   syn Collection<Problem> Annotation.modifierProblems() {
-    Collection<Problem> problems = new LinkedList<Problem>();
+    if (inComplexAnnotation()) {
+      return Collections.emptyList();
+    }
     if (decl() instanceof AnnotationDecl) {
       AnnotationDecl T = (AnnotationDecl) decl();
       Annotation m = T.annotation(lookupType("java.lang.annotation", "Target"));
@@ -77,13 +79,30 @@ aspect Annotations {
           && m.getElementValuePair(0).getName().equals("value")) {
         ElementValue v = m.getElementValuePair(0).getElementValue();
         if (!v.validTarget(this)) {
-          problems.add(errorf("annotation type %s is not applicable to this kind of declaration",
+          return Collections.singletonList(errorf(
+              "annotation type %s is not applicable to this kind of declaration",
               T.typeName()));
         }
       }
     }
-    return problems;
+    return Collections.emptyList();
   }
+
+  /**
+   * @return {@code true} if this annotation is used inside another annotation, i.e. it is
+   * used in a complex annoation.
+   */
+  inh boolean Annotation.inComplexAnnotation();
+
+  eq Annotation.getChild().inComplexAnnotation() = true;
+
+  eq TypeDecl.getChild().inComplexAnnotation() = false;
+
+  eq Stmt.getChild().inComplexAnnotation() = false;
+
+  eq BodyDecl.getChild().inComplexAnnotation() = false;
+
+  eq CompilationUnit.getChild().inComplexAnnotation() = false;
 
   inh TypeDecl Annotation.lookupType(String packageName, String typeName);
 
