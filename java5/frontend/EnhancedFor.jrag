@@ -42,19 +42,18 @@ aspect EnhancedFor {
 
   syn Collection<Problem> EnhancedForStmt.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>();
-    if (!getExpr().type().isArrayDecl() && !getExpr().type().isIterable()) {
+    TypeDecl exprType = getExpr().type();
+    if (!exprType.isArrayDecl() && !exprType.isIterable()) {
       problems.add(errorf(
           "type %s of expression in foreach is neither array type nor java.lang.Iterable",
-          getExpr().type().name()));
-    } else if (getExpr().type().isArrayDecl()
-        && !getExpr().type().componentType()
+          exprType.name()));
+    } else if (exprType.isArrayDecl()
+        && !exprType.componentType()
             .assignConversionTo(getTypeAccess().type(), null)) {
       problems.add(errorf("parameter of type %s can not be assigned an element of type %s",
-          getTypeAccess().type().typeName(), getExpr().type().componentType().typeName()));
-    } else if (getExpr().type().isIterable() && !getExpr().type().isUnknown()) {
-      MethodDecl iterator = getExpr().type().memberMethods("iterator").iterator().next();
-      MethodDecl next = iterator.type().memberMethods("next").iterator().next();
-      TypeDecl componentType = next.type();
+          getTypeAccess().type().typeName(), exprType.componentType().typeName()));
+    } else if (exprType.isIterable() && !exprType.isUnknown()) {
+      TypeDecl componentType = exprType.iterableElementType();
       if (!componentType.assignConversionTo(getTypeAccess().type(), null)) {
         problems.add(errorf("parameter of type %s can not be assigned an element of type %s",
             getTypeAccess().type().typeName(), componentType.typeName()));
@@ -65,14 +64,63 @@ aspect EnhancedFor {
 
   /**
    * True if type is java.lang.Iterable or subtype
-     As long as we use the 1.4 API we check for java.util.Collection instead.
+   * As long as we use the 1.4 API we check for java.util.Collection instead.
    */
   syn lazy boolean TypeDecl.isIterable() = instanceOf(lookupType("java.lang", "Iterable"));
 
+  /**
+   * Computes the element type of a type implementing java.lang.Iterable.
+   * Returns UnknownType if this type does not implement java.lang.Iterable.
+   */
+  syn lazy TypeDecl TypeDecl.iterableElementType() {
+    if (isType("java.lang", "Iterable")) {
+      return firstTypeArgument();
+    } else {
+      return unknownType();
+    }
+  }
+
+  eq InterfaceDecl.iterableElementType() {
+    TypeDecl type = super.iterableElementType();
+    if (!type.isUnknown()) {
+      return type;
+    } else {
+      for (Access iface : getSuperInterfaceList()) {
+        type = iface.type().iterableElementType();
+        if (!type.isUnknown()) {
+          break;
+        }
+      }
+      return type;
+    }
+  }
+
+  eq ClassDecl.iterableElementType() {
+    TypeDecl type = unknownType();
+    for (Access iface : getImplementsList()) {
+      type = iface.type().iterableElementType();
+      if (!type.isUnknown()) {
+        break;
+      }
+    }
+    if (type.isUnknown() && hasSuperclass()) {
+      return superclass().iterableElementType();
+    } else {
+      return type;
+    }
+  }
+
+  /**
+   * Returns the first type argument of this type, if it is parameterized, otherwise returns
+   * java.lang.Object.
+   */
+  syn lazy TypeDecl TypeDecl.firstTypeArgument() = typeObject();
+
+  eq ParTypeDecl.firstTypeArgument() = getArgument(0).type();
+
   // Variable lookup.
   inh SimpleSet<Variable> EnhancedForStmt.lookupVariable(String name);
-  eq EnhancedForStmt.getVariableDecl().lookupVariable(String name) =
-      localLookupVariable(name);
+  eq EnhancedForStmt.getVariableDecl().lookupVariable(String name) = localLookupVariable(name);
   eq EnhancedForStmt.getExpr().lookupVariable(String name) = localLookupVariable(name);
   eq EnhancedForStmt.getStmt().lookupVariable(String name) = localLookupVariable(name);
 
