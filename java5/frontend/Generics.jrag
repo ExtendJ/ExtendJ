@@ -777,13 +777,24 @@ aspect GenericsNameBinding {
 }
 
 aspect LookupParTypeDecl {
-  eq TypeVariable.fullName() {
-    if (getParent().getParent() instanceof TypeDecl) {
-      TypeDecl typeDecl = (TypeDecl) getParent().getParent();
-      return typeDecl.fullName() + "@" + name();
-    }
-    return super.fullName();
-  }
+  /**
+   * Returns a string describing the context of a type variable. If the type
+   * variable is part of a type declaration then the context string is the
+   * qualified name of the type. If the type variable is declared in a method
+   * or constructor declaration then the context string is the qualified
+   * signature of the method or constructor.
+   */
+  inh String TypeVariable.typeVariableContext();
+
+  eq MethodDecl.getChild().typeVariableContext() = hostType().typeName() + "." + signature();
+
+  eq ConstructorDecl.getChild().typeVariableContext() = hostType().typeName() + "." + signature();
+
+  eq TypeDecl.getChild().typeVariableContext() = fullName();
+
+  eq TypeVariable.fullName() = typeVariableContext() + "@" + name();
+
+  eq CompilationUnit.getChild().typeVariableContext() = "";
 
   syn boolean TypeDecl.sameSignature(Access a) {
     if (a instanceof ParTypeAccess) {
@@ -1501,7 +1512,7 @@ aspect LookupParTypeDecl {
   syn nta TypeDecl WildcardsCompilationUnit.lookupWildcardExtends(TypeDecl bound) =
       new WildcardExtendsType(
           new Modifiers(new List().add(new Modifier("public"))),
-          "? extends " + bound.fullName(),
+          "? extends " + bound.typeName(),
           new List(),
           bound.createBoundAccess());
 
@@ -1515,7 +1526,7 @@ aspect LookupParTypeDecl {
   syn nta TypeDecl WildcardsCompilationUnit.lookupWildcardSuper(TypeDecl bound) =
       new WildcardSuperType(
           new Modifiers(new List().add(new Modifier("public"))),
-          "? super " + bound.fullName(),
+          "? super " + bound.typeName(),
           new List(),
           bound.createBoundAccess());
 
