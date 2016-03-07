@@ -76,7 +76,7 @@ aspect LookupMethod {
     if (isInnerType()) {
       return lookupMethod(name);
     }
-    return removeInstanceMethods(lookupMethod(name));
+    return keepStaticMethods(lookupMethod(name));
   }
 
   // In explicit constructor invocation.
@@ -100,15 +100,19 @@ aspect LookupMethod {
     return methods;
   }
 
-  public static Collection<MethodDecl> ASTNode.removeInstanceMethods(
+  /**
+   * Returns a filtered collection of methods, keeping only the static methods
+   * from the input collection.
+   */
+  public static Collection<MethodDecl> ASTNode.keepStaticMethods(
       Collection<MethodDecl> methods) {
-    methods = new LinkedList<MethodDecl>(methods);
-    for (Iterator<MethodDecl> iter = methods.iterator(); iter.hasNext(); ) {
-      if (!iter.next().isStatic()) {
-        iter.remove();
+    Collection<MethodDecl> result = new LinkedList<MethodDecl>();
+    for (MethodDecl method : methods) {
+      if (method.isStatic()) {
+        result.add(method);
       }
     }
-    return methods;
+    return result;
   }
 
   eq AbstractDot.getRight().lookupMethod(String name) = getLeft().type().memberMethods(name);
@@ -147,7 +151,7 @@ aspect LookupMethod {
   syn lazy SimpleSet<MethodDecl> MethodAccess.decls() {
     SimpleSet<MethodDecl> maxSpecific = maxSpecific(lookupMethod(name()));
     if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
-      maxSpecific = removeInstanceMethods(maxSpecific);
+      maxSpecific = keepStaticMethods(maxSpecific);
     }
     return maxSpecific;
   }
@@ -173,7 +177,7 @@ aspect LookupMethod {
     return unknownMethod();
   }
 
-  private static SimpleSet<MethodDecl> MethodAccess.removeInstanceMethods(
+  private static SimpleSet<MethodDecl> MethodAccess.keepStaticMethods(
       SimpleSet<MethodDecl> methods) {
     SimpleSet<MethodDecl> result = emptySet();
     for (MethodDecl method : methods) {
