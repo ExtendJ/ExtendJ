@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *               2015-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -101,7 +102,7 @@ aspect ClassPath {
   }
 
   /**
-   * Iterate over all source files and on-demand loaded compilation units.
+   * Creates an iterator to iterate over compilation units parsed from source files.
    */
   public Iterator<CompilationUnit> Program.compilationUnitIterator() {
     return new Iterator<CompilationUnit>() {
@@ -143,7 +144,7 @@ aspect ClassPath {
     /**
      * Tracks all currently available packages in the program classpath.
      */
-    private Set<String> packages = Collections.newSetFromMap(new HashMap<String, Boolean>());
+    private Set<String> packages = new HashSet<String>();
 
     private boolean pathsInitialized = false;
 
@@ -186,8 +187,8 @@ aspect ClassPath {
         bootclasspaths = System.getProperty("sun.boot.class.path")
             .split(File.pathSeparator);
       }
-      for (int i = 0; i < bootclasspaths.length; i++) {
-        classPaths.add(bootclasspaths[i]);
+      for (String path : bootclasspaths) {
+        classPaths.add(path);
       }
 
       String[] extdirs;
@@ -196,8 +197,8 @@ aspect ClassPath {
       } else {
         extdirs = System.getProperty("java.ext.dirs").split(File.pathSeparator);
       }
-      for (int i = 0; i < extdirs.length; i++) {
-        classPaths.add(extdirs[i]);
+      for (String path : extdirs) {
+        classPaths.add(path);
       }
 
       String[] userClasses = null;
@@ -209,21 +210,21 @@ aspect ClassPath {
         userClasses = new String[] { "." };
       }
       if (!program.options().hasValueForOption("-sourcepath")) {
-        for (int i = 0; i < userClasses.length; i++) {
-          classPaths.add(userClasses[i]);
-          sourcePaths.add(userClasses[i]);
+        for (String path : userClasses) {
+          classPaths.add(path);
+          sourcePaths.add(path);
         }
       } else {
-        for (int i = 0; i < userClasses.length; i++) {
-          classPaths.add(userClasses[i]);
+        for (String path : userClasses) {
+          classPaths.add(path);
         }
         userClasses = program.options().getValueForOption("-sourcepath").split(File.pathSeparator);
-        for (int i = 0; i < userClasses.length; i++) {
-          sourcePaths.add(userClasses[i]);
+        for (String path : userClasses) {
+          sourcePaths.add(path);
         }
       }
 
-      for (String path: classPaths) {
+      for (String path : classPaths) {
         PathPart part = PathPart.createClassPath(path);
         if (part != null) {
           addClassPath(part);
@@ -231,7 +232,7 @@ aspect ClassPath {
           System.out.println("Warning: Could not use " + path + " as class path");
         }
       }
-      for (String path: sourcePaths) {
+      for (String path : sourcePaths) {
         PathPart part = PathPart.createSourcePath(path);
         if (part != null) {
           addSourcePath(part);
@@ -276,21 +277,21 @@ aspect ClassPath {
         initPaths();
         ClassSource sourcePart = ClassSource.NONE;
         ClassSource classPart = ClassSource.NONE;
-        for (PathPart part: sourcePath) {
+        for (PathPart part : sourcePath) {
           sourcePart = part.findSource(typeName);
           if (sourcePart != ClassSource.NONE) {
             break;
           }
         }
-        for (PathPart part: classPath) {
+        for (PathPart part : classPath) {
           classPart = part.findSource(typeName);
           if (classPart != ClassSource.NONE) {
             break;
           }
         }
 
-        if (sourcePart != ClassSource.NONE && (classPart == ClassSource.NONE ||
-              classPart.lastModified() < sourcePart.lastModified())) {
+        if (sourcePart != ClassSource.NONE && (classPart == ClassSource.NONE
+              || classPart.lastModified() < sourcePart.lastModified())) {
           CompilationUnit unit = sourcePart.parseCompilationUnit(program);
           int index = typeName.lastIndexOf('.');
           if (index == -1) {
@@ -313,7 +314,7 @@ aspect ClassPath {
           }
         }
         return defaultCompilationUnit;
-      } catch(IOException e) {
+      } catch (IOException e) {
         // Attributes can't throw checked exceptions, so convert this to an Error.
         throw new Error(e);
       }
@@ -325,7 +326,7 @@ aspect ClassPath {
     public synchronized void addPackage(String packageName) {
       int end = packageName.length();
       while (end > 0 && packages.add(packageName.substring(0, end))) {
-        end = packageName.lastIndexOf('.', end-1);
+        end = packageName.lastIndexOf('.', end - 1);
       }
     }
 
@@ -353,13 +354,13 @@ aspect ClassPath {
       if (packages.contains(packageName)) {
         return true;
       }
-      for (PathPart part: classPath) {
+      for (PathPart part : classPath) {
         if (part.hasPackage(packageName)) {
           addPackage(packageName);
           return true;
         }
       }
-      for (PathPart part: sourcePath) {
+      for (PathPart part : sourcePath) {
         if (part.hasPackage(packageName)) {
           addPackage(packageName);
           return true;
