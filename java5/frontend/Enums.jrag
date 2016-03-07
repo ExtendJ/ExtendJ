@@ -180,7 +180,7 @@ aspect Enums {
   // Refine to add transformed constructors to constructor lookup.
   // Both the old and new implicit constructors need to be present.
   refine LookupConstructor eq ClassDecl.constructors() {
-    Collection<ConstructorDecl> constructors = refined();
+    Collection<ConstructorDecl> constructors = new ArrayList<ConstructorDecl>(refined());
     Collection<ConstructorDecl> transformed = new ArrayList<ConstructorDecl>(constructors);
     for (ConstructorDecl decl : constructors) {
       if (decl.transformed() != decl) {
@@ -254,7 +254,8 @@ aspect Enums {
    * Adds enum constants as local fields.
    */
   eq EnumDecl.localFieldsMap() {
-    Map<String, SimpleSet<Variable>> map = super.localFieldsMap();
+    Map<String, SimpleSet<Variable>> map = new HashMap<String, SimpleSet<Variable>>(
+        super.localFieldsMap());
     for (BodyDecl decl : getBodyDeclList()) {
       if (decl instanceof EnumConstant) {
         EnumConstant constant = (EnumConstant) decl;
@@ -435,7 +436,11 @@ aspect Enums {
   */
 
   eq EnumDecl.methodsNameMap() {
-    Map<String, Collection<MethodDecl>> map = super.methodsNameMap();
+    Map<String, Collection<MethodDecl>> map = new HashMap<String, Collection<MethodDecl>>();
+    // Copy map entries manually to avoid aliasing the collections.
+    for (Map.Entry<String, Collection<MethodDecl>> entry : super.methodsNameMap().entrySet()) {
+      map.put(entry.getKey(), new ArrayList<MethodDecl>(entry.getValue()));
+    }
     addMethodToMap(implicitValuesMethod(), map);
     addMethodToMap(implicitValueOfMethod(), map);
     return map;
@@ -468,20 +473,18 @@ aspect Enums {
             new Modifier("final"),
             new Modifier("synthetic"))),
         arrayType().createQualifiedAccess(),
-        new List<FieldDeclarator>(values)
-    );
+        new List<FieldDeclarator>(values));
   }
 
   // public static final Test[] values() { return (Test[])$VALUES.clone(); }
   syn nta MethodDecl EnumDecl.implicitValuesMethod() {
     return
       new MethodDecl(
-        new Modifiers(new List().add(
-          new Modifier("public")).add(
-          new Modifier("static")).add(
-          new Modifier("final")).add(
-          new Modifier("synthetic"))
-        ),
+        new Modifiers(new List<Modifier>(
+          new Modifier("public"),
+          new Modifier("static"),
+          new Modifier("final"),
+          new Modifier("synthetic"))),
         arrayType().createQualifiedAccess(),
         "values",
         new List(),
@@ -496,36 +499,24 @@ aspect Enums {
                     valuesFieldDeclarator().createBoundAccess().qualifiesAccess(
                       new MethodAccess(
                         "clone",
-                        new List()
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      );
+                        new List())))))))));
   }
 
   // public static Test valueOf(String s) { return (Test) java.lang.Enum.valueOf(Test.class, s); }
   syn nta MethodDecl EnumDecl.implicitValueOfMethod() {
     return
       new MethodDecl(
-        new Modifiers(new List().add(
-          new Modifier("public")).add(
-          new Modifier("static")).add(
-          new Modifier("synthetic"))
-        ),
+        new Modifiers(new List<Modifier>(
+            new Modifier("public"),
+            new Modifier("static"),
+            new Modifier("synthetic"))),
         createQualifiedAccess(),
         "valueOf",
         new List().add(
           new ParameterDeclaration(
             new Modifiers(new List()),
             typeString().createQualifiedAccess(),
-            "s"
-          )
-        ),
+            "s")),
         new List(),
         new Opt(
           new Block(
@@ -541,18 +532,7 @@ aspect Enums {
                           createQualifiedAccess().qualifiesAccess(new ClassAccess())
                         ).add(
                           new VarAccess(
-                            "s"
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      );
+                            "s")))))))))));
   }
 
   inh TypeDecl EnumDecl.typeString();
@@ -634,8 +614,6 @@ aspect Enums {
 
   traversal that checks for errors
   */
-
-
 
   // 8.9
 
@@ -844,7 +822,8 @@ aspect Enums {
   }
 
   eq EnumDecl.localMethodsSignatureMap() {
-    Map<String, SimpleSet<MethodDecl>> map = super.localMethodsSignatureMap();
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(
+        super.localMethodsSignatureMap());
     putSimpleSetElement(map, implicitValuesMethod().signature(), implicitValuesMethod());
     putSimpleSetElement(map, implicitValueOfMethod().signature(), implicitValueOfMethod());
     return map;

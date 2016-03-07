@@ -878,9 +878,10 @@ aspect LookupParTypeDecl {
   syn nta TypeDecl GenericTypeDecl.lookupParTypeDecl(Collection<TypeDecl> typeArgs);
 
   eq GenericClassDecl.lookupParTypeDecl(Collection<TypeDecl> typeArgs) {
-    ParClassDecl typeDecl = typeArgs.size() == 0 ? new RawClassDecl() : new ParClassDecl();
-    typeDecl.setModifiers((Modifiers) getModifiers().treeCopyNoTransform());
-    typeDecl.setID(getID());
+    Modifiers modifiers = (Modifiers) getModifiers().treeCopyNoTransform();
+    ParClassDecl typeDecl = typeArgs.size() == 0
+        ? new RawClassDecl(modifiers, getID(), new BodyDeclList())
+        : new ParClassDecl(modifiers, getID(), new List<Access>(), new BodyDeclList());
     // Trying to only do this for ParClassDecl and then later for RawClassDecl
     if (!(typeDecl instanceof RawClassDecl)) {
       typeDecl.setArgumentList(createArgumentList(typeArgs));
@@ -889,11 +890,10 @@ aspect LookupParTypeDecl {
   }
 
   eq GenericInterfaceDecl.lookupParTypeDecl(Collection<TypeDecl> typeArgs) {
+    Modifiers modifiers = (Modifiers) getModifiers().treeCopyNoTransform();
     ParInterfaceDecl typeDecl = typeArgs.size() == 0
-        ? new RawInterfaceDecl()
-        : new ParInterfaceDecl();
-    typeDecl.setModifiers((Modifiers) getModifiers().treeCopyNoTransform());
-    typeDecl.setID(getID());
+        ? new RawInterfaceDecl(modifiers, getID(), new BodyDeclList())
+        : new ParInterfaceDecl(modifiers, getID(), new List<Access>(), new BodyDeclList());
     // Trying to only do this for ParInterfaceDecl and then later for RawInterfaceDecl
     if (!(typeDecl instanceof RawInterfaceDecl)) {
       typeDecl.setArgumentList(createArgumentList(typeArgs));
@@ -1209,20 +1209,11 @@ aspect LookupParTypeDecl {
     return list;
   }
 
-  syn lazy List ParClassDecl.getBodyDeclList() = new BodyDeclList();
-
   syn lazy List ParInterfaceDecl.getSuperInterfaceList() {
     GenericInterfaceDecl decl = (GenericInterfaceDecl) genericDecl();
     List list = decl.getSuperInterfaceList().substitute(this);
     return list;
   }
-
-  syn lazy List ParInterfaceDecl.getBodyDeclList() = new BodyDeclList();
-
-  syn lazy List ClassDeclSubstituted.getBodyDeclList() = new BodyDeclList();
-  syn lazy List InterfaceDeclSubstituted.getBodyDeclList() = new BodyDeclList();
-  syn lazy List GenericClassDeclSubstituted.getBodyDeclList() = new BodyDeclList();
-  syn lazy List GenericInterfaceDeclSubstituted.getBodyDeclList() = new BodyDeclList();
 
   syn boolean ASTNode.usesTypeVariable() {
     for (int i = 0; i < getNumChild(); i++) {
@@ -1268,13 +1259,11 @@ aspect LookupParTypeDecl {
     Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
     for (Iterator<MethodDecl> iter = original().localMethodsIterator(); iter.hasNext(); ) {
       MethodDecl decl = iter.next();
-
       if (!decl.isStatic() && (decl.usesTypeVariable() || isRawType())) {
         BodyDecl copyDecl = ((BodyDeclList) getBodyDeclList()).localMethodSignatureCopy(decl, this);
         decl = (MethodDecl) copyDecl;
       }
       putSimpleSetElement(map, decl.signature(), decl);
-
     }
     return map;
   }
@@ -1448,37 +1437,38 @@ aspect LookupParTypeDecl {
         getID(),
         hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
         getImplementsList().substitute(parTypeDecl),
+        new BodyDeclList(),
         this);
   }
 
   public ClassDecl GenericClassDecl.substitutedClassDecl(Parameterization parTypeDecl) {
     return new GenericClassDeclSubstituted(
-      (Modifiers) getModifiers().treeCopyNoTransform(),
-      getID(),
-      hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
-      getImplementsList().substitute(parTypeDecl),
-      new List(), // Delegates TypeParameter lookup to original.
-      this
-    );
+        (Modifiers) getModifiers().treeCopyNoTransform(),
+        getID(),
+        hasSuperClass() ? new Opt(getSuperClass().type().substitute(parTypeDecl)) : new Opt(),
+        getImplementsList().substitute(parTypeDecl),
+        new BodyDeclList(),
+        new List(), // Delegates TypeParameter lookup to original.
+        this);
   }
 
   public InterfaceDecl InterfaceDecl.substitutedInterfaceDecl(Parameterization parTypeDecl) {
     return new InterfaceDeclSubstituted(
-      (Modifiers) getModifiers().treeCopyNoTransform(),
-      getID(),
-      getSuperInterfaceList().substitute(parTypeDecl),
-      this
-    );
+        (Modifiers) getModifiers().treeCopyNoTransform(),
+        getID(),
+        getSuperInterfaceList().substitute(parTypeDecl),
+        new BodyDeclList(),
+        this);
   }
 
   public InterfaceDecl GenericInterfaceDecl.substitutedInterfaceDecl(Parameterization parTypeDecl) {
     return new GenericInterfaceDeclSubstituted(
-      (Modifiers) getModifiers().treeCopyNoTransform(),
-      getID(),
-      getSuperInterfaceList().substitute(parTypeDecl),
-      new List(), // Delegates TypeParameter lookup to original.
-      this
-    );
+        (Modifiers) getModifiers().treeCopyNoTransform(),
+        getID(),
+        getSuperInterfaceList().substitute(parTypeDecl),
+        new BodyDeclList(),
+        new List(), // Delegates TypeParameter lookup to original.
+        this);
   }
 
   syn nta WildcardsCompilationUnit Program.wildcards() {
