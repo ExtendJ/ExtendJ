@@ -30,26 +30,17 @@
  */
 package org.extendj;
 
-import org.extendj.ast.Program;
-import org.extendj.ast.Problem;
-import org.extendj.ast.Frontend;
 import org.extendj.ast.CompilationUnit;
-import org.extendj.ast.BytecodeParser;
-import org.extendj.ast.BytecodeReader;
-import org.extendj.ast.JavaParser;
+import org.extendj.ast.Frontend;
+import org.extendj.ast.Problem;
+import org.extendj.ast.Program;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
-import java.io.IOException;
 import java.util.Collection;
 
 /**
  * Dump the parsed AST for some Java source files.
  */
-class JavaDumpTree extends Frontend {
-
-  private final JavaParser parser;
-  private final BytecodeReader bytecodeParser;
+public class JavaDumpTree extends Frontend {
 
   /**
    * Entry point.
@@ -67,20 +58,6 @@ class JavaDumpTree extends Frontend {
    */
   public JavaDumpTree() {
     super("Java AST Dumper", ExtendJVersion.getVersion());
-    parser = new JavaParser() {
-      @Override
-      public CompilationUnit parse(InputStream is, String fileName)
-          throws IOException, beaver.Parser.Exception {
-        return new org.extendj.parser.JavaParser().parse(is, fileName);
-      }
-    };
-    bytecodeParser = new BytecodeReader() {
-      @Override
-      public CompilationUnit read(InputStream is, String fullName, Program p)
-          throws FileNotFoundException, IOException {
-        return new BytecodeParser(is, fullName).parse(null, null, p);
-      }
-    };
   }
 
   /**
@@ -99,7 +76,7 @@ class JavaDumpTree extends Frontend {
    * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
    */
   public int run(String args[]) {
-    return run(args, bytecodeParser, parser);
+    return run(args, Program.defaultBytecodeReader(), Program.defaultJavaParser());
   }
 
   @Override

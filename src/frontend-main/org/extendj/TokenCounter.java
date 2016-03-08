@@ -65,7 +65,7 @@ public class TokenCounter {
       }
     }
     int numTokens = 0;
-    for (String arg: args) {
+    for (String arg : args) {
       if (arg.startsWith("@")) {
         numTokens += processFileList(arg.substring(1));
       } else {

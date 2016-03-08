@@ -30,6 +30,9 @@
  */
 
 import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.io.IOException;
 import java.util.Set;
 import java.util.HashSet;
 import java.util.Collections;
@@ -38,26 +41,48 @@ import java.util.ArrayList;
 import beaver.*;
 
 aspect ClassPath {
+  /** Interface for ExtendJ bytecode reader adapter. */
   public interface BytecodeReader {
     CompilationUnit read(InputStream is, String fullName, Program p)
         throws FileNotFoundException, IOException;
   }
 
+  /** Interface for ExtendJ Java parser adapter. */
   public interface JavaParser {
     CompilationUnit parse(InputStream is, String fileName)
         throws IOException, beaver.Parser.Exception;
   }
 
-  protected BytecodeReader Program.bytecodeReader;
+  protected BytecodeReader Program.bytecodeReader = defaultBytecodeReader();
 
   public void Program.initBytecodeReader(BytecodeReader r) {
     bytecodeReader = r;
   }
 
-  protected JavaParser Program.javaParser;
+  public static BytecodeReader Program.defaultBytecodeReader() {
+    return new BytecodeReader() {
+      @Override
+      public CompilationUnit read(InputStream is, String fullName, Program p)
+          throws FileNotFoundException, IOException {
+        return new BytecodeParser(is, fullName).parse(null, null, p);
+      }
+    };
+  }
+
+  protected JavaParser Program.javaParser = defaultJavaParser();
 
   public void Program.initJavaParser(JavaParser p) {
     javaParser = p;
+  }
+
+  public static JavaParser Program.defaultJavaParser() {
+    return new JavaParser() {
+      @Override
+      public CompilationUnit parse(InputStream is, String fileName)
+          throws IOException, beaver.Parser.Exception {
+        return new org.extendj.parser.JavaParser().parse(is, fileName);
+      }
+    };
   }
 
   /**

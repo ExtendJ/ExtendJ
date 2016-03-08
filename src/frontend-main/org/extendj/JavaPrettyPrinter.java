@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2014-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,16 +30,11 @@
  */
 package org.extendj;
 
-import org.extendj.ast.Frontend;
 import org.extendj.ast.CompilationUnit;
-import org.extendj.ast.JavaParser;
-import org.extendj.ast.BytecodeParser;
-import org.extendj.ast.BytecodeReader;
+import org.extendj.ast.Frontend;
 import org.extendj.ast.Problem;
 import org.extendj.ast.Program;
 
-import java.io.FileNotFoundException;
-import java.io.InputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collection;
@@ -47,7 +42,7 @@ import java.util.Collection;
 /**
  * Pretty-print some Java source files.
  */
-class JavaPrettyPrinter extends Frontend {
+public class JavaPrettyPrinter extends Frontend {
 
   /**
    * Entry point for the compiler frontend.
@@ -60,28 +55,11 @@ class JavaPrettyPrinter extends Frontend {
     }
   }
 
-  private final JavaParser parser;
-  private final BytecodeReader bytecodeParser;
-
   /**
    * Initialize the compiler.
    */
   public JavaPrettyPrinter() {
     super("ExtendJ Java Pretty Printer", ExtendJVersion.getVersion());
-    parser = new JavaParser() {
-      @Override
-      public CompilationUnit parse(InputStream is, String fileName) throws IOException,
-          beaver.Parser.Exception {
-        return new org.extendj.parser.JavaParser().parse(is, fileName);
-      }
-    };
-    bytecodeParser = new BytecodeReader() {
-      @Override
-      public CompilationUnit read(InputStream is, String fullName, Program p)
-          throws FileNotFoundException, IOException {
-        return new BytecodeParser(is, fullName).parse(null, null, p);
-      }
-    };
   }
 
   /**
@@ -100,7 +78,7 @@ class JavaPrettyPrinter extends Frontend {
    * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
    */
   public int run(String args[]) {
-    return run(args, bytecodeParser, parser);
+    return run(args, Program.defaultBytecodeReader(), Program.defaultJavaParser());
   }
 
   @SuppressWarnings("rawtypes")
