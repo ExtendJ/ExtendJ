@@ -142,6 +142,27 @@ aspect VariableArityParametersCodegen {
     return new ConstructorAccess(getID(), args);
   }
 
+  syn nta ConstructorAccess SuperConstructorAccess.transformedVariableArity() {
+    ConstructorDecl decl = decl();
+    // Arguments to normal parameters.
+    List<Expr> args = new List<Expr>();
+    for (int i = 0; i < decl.getNumParameter() - 1; i++) {
+      args.add(getArg(i).treeCopyNoTransform());
+    }
+    // Arguments to variable arity parameters.
+    List<Expr> last = new List<Expr>();
+    for (int i = decl.getNumParameter() - 1; i < getNumArg(); i++) {
+      last.add(getArg(i).treeCopyNoTransform());
+    }
+    // Build an array holding arguments.
+    Access typeAccess = decl.lastParameter().type().elementType().createQualifiedAccess();
+    for (int i = 0; i < decl.lastParameter().type().dimension(); i++) {
+      typeAccess = new ArrayTypeAccess(typeAccess);
+    }
+    args.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
+    return new SuperConstructorAccess(getID(), args);
+  }
+
   public static final int Modifiers.ACC_VARARGS = 0x0080;
 
   /**
