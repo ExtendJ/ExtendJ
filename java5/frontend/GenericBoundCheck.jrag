@@ -1,4 +1,4 @@
-/* Copyright (c) 2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2015-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,16 +42,21 @@ aspect GenericBoundCheck {
   syn boolean TypeDecl.withinBounds(TypeDecl bound, Parameterization par) =
       bound.boundOf(this, par);
 
+  eq ArrayDecl.withinBounds(TypeDecl bound, Parameterization par) =
+      bound.boundOfArray(this, par);
+
   eq UnknownType.withinBounds(TypeDecl bound, Parameterization par) = false;
 
   eq WildcardType.withinBounds(TypeDecl bound, Parameterization par) = true;
+
   eq WildcardExtendsType.withinBounds(TypeDecl bound, Parameterization par) =
       bound.boundOf(extendsType(), par) || extendsType().boundOf(bound, par);
+
   eq WildcardSuperType.withinBounds(TypeDecl bound, Parameterization par) =
       bound.boundOf(superType(), par);
 
   /**
-   * Check if a type is in the bound of this type, given a specific
+   * Check if a given type is within the bound of this type, given a specific
    * parameterization of this type.
    *
    * See JLS SE7 $4.5
@@ -60,7 +65,8 @@ aspect GenericBoundCheck {
    * @param par a parameterization
    * @return {@code true} if the argument type is in the bound of this type
    */
-  syn boolean TypeDecl.boundOf(TypeDecl argument, Parameterization par) = false;
+  syn boolean TypeDecl.boundOf(TypeDecl argument, Parameterization par) =
+      !isPrimitive() && argument.subtype(this);
 
   eq TypeVariable.boundOf(TypeDecl argument, Parameterization par) {
     for (int i = 0; i < getNumTypeBound(); ++i) {
@@ -78,14 +84,21 @@ aspect GenericBoundCheck {
   }
 
   syn boolean TypeDecl.boundOfWildcard(WildcardType type) = false;
+
   eq TypeVariable.boundOfWildcard(WildcardType type) = true;
 
   syn boolean TypeDecl.boundOfWildcardExtends(WildcardExtendsType type) = false;
+
   eq TypeVariable.boundOfWildcardExtends(WildcardExtendsType type) =
       type.extendsType().subtype(this);
 
   syn boolean TypeDecl.boundOfWildcardSuper(WildcardSuperType type) = false;
+
   eq TypeVariable.boundOfWildcardSuper(WildcardSuperType type) =
       type.superType().subtype(this);
-}
 
+  syn boolean TypeDecl.boundOfArray(ArrayDecl type, Parameterization par) = false;
+
+  eq ArrayDecl.boundOfArray(ArrayDecl type, Parameterization par) =
+      type.componentType().withinBounds(componentType(), par);
+}
