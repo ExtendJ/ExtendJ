@@ -164,13 +164,13 @@ aspect NumericPromotion {
 
   // 5.6.2 Binary Numeric Promotion.
   syn TypeDecl TypeDecl.binaryNumericPromotion(TypeDecl type) = unknownType();
+
   syn lazy TypeDecl NumericType.binaryNumericPromotion(TypeDecl type) {
     if (!type.isNumericType()) {
       return unknownType();
     }
      return unaryNumericPromotion().instanceOf(type) ? type : unaryNumericPromotion();
   }
-
 }
 
 aspect TypeAnalysis {
@@ -343,8 +343,10 @@ aspect TypeAnalysis {
 
   // 15.17
   eq MultiplicativeExpr.type() = getLeftOperand().type().binaryNumericPromotion(getRightOperand().type());
+
   // 15.18
   eq AdditiveExpr.type() = getLeftOperand().type().binaryNumericPromotion(getRightOperand().type());
+
   // 15.18
   eq AddExpr.type() {
     TypeDecl left = getLeftOperand().type();
@@ -385,44 +387,48 @@ aspect TypeAnalysis {
   eq InstanceOfExpr.type() = typeBoolean();
 
   // 15.25
-  eq ConditionalExpr.type() {
-    TypeDecl trueType = getTrueExpr().type();
-    TypeDecl falseType = getFalseExpr().type();
+  eq ConditionalExpr.type() =
+      conditionalExprType(getTrueExpr().type(), getFalseExpr().type());
 
-    if (trueType == falseType) {
-      return trueType;
+  /**
+   * Returns the type of a conditional expression, given the types of the
+   * second and third operands.
+   */
+  syn TypeDecl ConditionalExpr.conditionalExprType(TypeDecl second, TypeDecl third) {
+    if (second == third) {
+      return second;
     }
 
-    if (trueType.isNumericType() && falseType.isNumericType()) {
-      if (trueType.isByte() && falseType.isShort()) {
-        return falseType;
+    if (second.isNumericType() && third.isNumericType()) {
+      if (second.isByte() && third.isShort()) {
+        return third;
       }
-      if (trueType.isShort() && falseType.isByte()) {
-        return trueType;
+      if (second.isShort() && third.isByte()) {
+        return second;
       }
-      if ((trueType.isByte() || trueType.isShort() || trueType.isChar())
-          && falseType.isInt() && getFalseExpr().isConstant()
-          && getFalseExpr().representableIn(trueType)) {
-        return trueType;
+      if ((second.isByte() || second.isShort() || second.isChar())
+          && third.isInt() && getFalseExpr().isConstant()
+          && getFalseExpr().representableIn(second)) {
+        return second;
       }
-      if ((falseType.isByte() || falseType.isShort() || falseType.isChar())
-          && trueType.isInt() && getTrueExpr().isConstant()
-          && getTrueExpr().representableIn(falseType)) {
-        return falseType;
+      if ((third.isByte() || third.isShort() || third.isChar())
+          && second.isInt() && getTrueExpr().isConstant()
+          && getTrueExpr().representableIn(third)) {
+        return third;
       }
-      return trueType.binaryNumericPromotion(falseType);
-    } else if (trueType.isBoolean() && falseType.isBoolean()) {
-      return trueType;
-    } else if (trueType.isReferenceType() && falseType.isNull()) {
-      return trueType;
-    } else if (trueType.isNull() && falseType.isReferenceType()) {
-      return falseType;
-    } else if (trueType.isReferenceType() && falseType.isReferenceType()) {
-      if (trueType.assignConversionTo(falseType, null)) {
-        return falseType;
+      return second.binaryNumericPromotion(third);
+    } else if (second.isBoolean() && third.isBoolean()) {
+      return second;
+    } else if (second.isReferenceType() && third.isNull()) {
+      return second;
+    } else if (second.isNull() && third.isReferenceType()) {
+      return third;
+    } else if (second.isReferenceType() && third.isReferenceType()) {
+      if (second.assignConversionTo(third, null)) {
+        return third;
       }
-      if (falseType.assignConversionTo(trueType, null)) {
-        return trueType;
+      if (third.assignConversionTo(second, null)) {
+        return second;
       }
       return unknownType();
     } else {
@@ -431,7 +437,6 @@ aspect TypeAnalysis {
   }
 
   eq ClassAccess.type() = lookupType("java.lang", "Class");
-
 }
 
 aspect TypeWideningAndIdentity {
