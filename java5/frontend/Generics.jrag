@@ -607,6 +607,8 @@ aspect GenericsTypeCheck {
     return getParameterization().sameArguments(decl.getParameterization());
   }
 
+  // TODO(joqvist): may be circular due to import-on-demand circularity.
+  // See https://bitbucket.org/extendj/extendj/issues/159/circularity-in-type-lookup-due-to-on.
   syn lazy Collection<InterfaceDecl> TypeDecl.implementedInterfaces() = Collections.emptySet();
 
   eq ClassDecl.implementedInterfaces() {
@@ -886,21 +888,21 @@ aspect LookupParTypeDecl {
       // According to JLSv8 4.6 (Type Erasure), the signature of members in the
       // erased type have no parameterized types or type variables.
       typeDecl = new RawClassDecl(
-          getModifiers().treeCopy(),
+          getModifiers().treeCopyNoTransform(),
           getID(),
-          getTypeParameterList().treeCopy(),
+          getTypeParameterList().treeCopyNoTransform(),
           parameterization,
           hasSuperClass() ? new Opt<Access>(getSuperClass().erasedCopy()) : new Opt<Access>(),
           erasedAccessList(getImplementsList()),
           erasedBodyDecls());
     } else {
       typeDecl = new ParClassDecl(
-          getModifiers().treeCopy(),
+          getModifiers().treeCopyNoTransform(),
           getID(),
-          getTypeParameterList().treeCopy(),
+          getTypeParameterList().treeCopyNoTransform(),
           parameterization,
-          getSuperClassOpt().treeCopy(),
-          getImplementsList().treeCopy(),
+          getSuperClassOpt().treeCopyNoTransform(),
+          getImplementsList().treeCopyNoTransform(),
           substitutedBodyDecls());
     }
     return typeDecl;
@@ -908,25 +910,25 @@ aspect LookupParTypeDecl {
 
   eq GenericInterfaceDecl.lookupParTypeDecl(Collection<TypeDecl> typeArgs) {
     Parameterization parameterization = new Parameterization(getTypeParameterList(), typeArgs);
-    Modifiers modifiers = getModifiers().treeCopy();
+    Modifiers modifiers = getModifiers().treeCopyNoTransform();
     ParInterfaceDecl typeDecl;
     if (typeArgs.isEmpty()) {
       // According to JLSv8 4.6 (Type Erasure), the signature of members in the
       // erased type have no parameterized types or type variables.
       typeDecl = new RawInterfaceDecl(
-          getModifiers().treeCopy(),
+          getModifiers().treeCopyNoTransform(),
           getID(),
-          getTypeParameterList().treeCopy(),
+          getTypeParameterList().treeCopyNoTransform(),
           parameterization,
           erasedAccessList(getSuperInterfaceList()),
           erasedBodyDecls());
     } else {
       typeDecl = new ParInterfaceDecl(
-          getModifiers().treeCopy(),
+          getModifiers().treeCopyNoTransform(),
           getID(),
-          getTypeParameterList().treeCopy(),
+          getTypeParameterList().treeCopyNoTransform(),
           parameterization,
-          getSuperInterfaceList().treeCopy(),
+          getSuperInterfaceList().treeCopyNoTransform(),
           substitutedBodyDecls());
     }
     return typeDecl;
@@ -1283,24 +1285,24 @@ aspect LookupParTypeDecl {
 
   public BodyDecl MethodDecl.signatureCopy() {
     return new MethodDeclSubstituted(
-        getModifiers().treeCopy(),
-        getTypeAccess().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
+        getTypeAccessNoTransform().treeCopyNoTransform(),
         getID(),
-        getParameterList().treeCopy(),
-        getExceptionList().treeCopy(),
+        getParameterList().treeCopyNoTransform(),
+        getExceptionList().treeCopyNoTransform(),
         new Opt<Block>(),
         this);
   }
 
   public BodyDecl GenericMethodDecl.signatureCopy() {
     return new GenericMethodDeclSubstituted(
-        getModifiers().treeCopy(),
-        getTypeAccess().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
+        getTypeAccessNoTransform().treeCopyNoTransform(),
         getID(),
-        getParameterList().treeCopy(),
-        getExceptionList().treeCopy(),
+        getParameterList().treeCopyNoTransform(),
+        getExceptionList().treeCopyNoTransform(),
         new Opt<Block>(),
-        getTypeParameterList().treeCopy(),
+        getTypeParameterList().treeCopyNoTransform(),
         this);
   }
 
@@ -1310,10 +1312,10 @@ aspect LookupParTypeDecl {
 
   public BodyDecl ConstructorDecl.signatureCopy() {
     return new ConstructorDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
-        getParameterList().treeCopy(),
-        getExceptionList().treeCopy(),
+        getParameterList().treeCopyNoTransform(),
+        getExceptionList().treeCopyNoTransform(),
         new Opt(),
         new Block(),
         this);
@@ -1321,13 +1323,13 @@ aspect LookupParTypeDecl {
 
   public BodyDecl GenericConstructorDecl.signatureCopy() {
     return new GenericConstructorDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
-        getParameterList().treeCopy(),
-        getExceptionList().treeCopy(),
+        getParameterList().treeCopyNoTransform(),
+        getExceptionList().treeCopyNoTransform(),
         new Opt(),
         new Block(),
-        getTypeParameterList().treeCopy(),
+        getTypeParameterList().treeCopyNoTransform(),
         this);
   }
 
@@ -1337,8 +1339,8 @@ aspect LookupParTypeDecl {
       decls.add(decl.signatureCopy());
     }
     return new FieldDeclSubstituted(
-        getModifiers().treeCopy(),
-        getTypeAccess().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
+        getTypeAccessNoTransform().treeCopyNoTransform(),
         decls,
         this);
   }
@@ -1347,7 +1349,7 @@ aspect LookupParTypeDecl {
    * Copies the declarator without initializer.
    */
   public FieldDeclarator FieldDeclarator.signatureCopy() {
-    return new FieldDeclarator(getID(), getDimsList().treeCopy(), new Opt<Expr>());
+    return new FieldDeclarator(getID(), getDimsList().treeCopyNoTransform(), new Opt<Expr>());
   }
 
   public BodyDecl MemberClassDecl.signatureCopy() {
@@ -1356,22 +1358,22 @@ aspect LookupParTypeDecl {
 
   public ClassDecl ClassDecl.signatureCopy() {
     return new ClassDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
-        getSuperClassOpt().treeCopy(),
-        getImplementsList().treeCopy(),
+        getSuperClassOpt().treeCopyNoTransform(),
+        getImplementsList().treeCopyNoTransform(),
         substitutedBodyDecls(),
         this);
   }
 
   public ClassDecl GenericClassDecl.signatureCopy() {
     return new GenericClassDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
-        getSuperClassOpt().treeCopy(),
-        getImplementsList().treeCopy(),
+        getSuperClassOpt().treeCopyNoTransform(),
+        getImplementsList().treeCopyNoTransform(),
         substitutedBodyDecls(),
-        getTypeParameterList().treeCopy(),
+        getTypeParameterList().treeCopyNoTransform(),
         this);
   }
 
@@ -1384,7 +1386,7 @@ aspect LookupParTypeDecl {
 
   public BodyDecl MethodDecl.erasedCopy() {
     return new MethodDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getTypeAccess().erasedCopy(),
         getID(),
         erasedParameterList(getParameterList()),
@@ -1395,19 +1397,19 @@ aspect LookupParTypeDecl {
 
   public BodyDecl GenericMethodDecl.erasedCopy() {
     return new GenericMethodDeclErased(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getTypeAccess().erasedCopy(),
         getID(),
         erasedParameterList(getParameterList()),
         erasedAccessList(getExceptionList()),
         new Opt<Block>(),
-        getTypeParameterList().treeCopy(),
+        getTypeParameterList().treeCopyNoTransform(),
         this);
   }
 
   public BodyDecl ConstructorDecl.erasedCopy() {
     return new ConstructorDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
         erasedParameterList(getParameterList()),
         erasedAccessList(getExceptionList()),
@@ -1418,13 +1420,13 @@ aspect LookupParTypeDecl {
 
   public BodyDecl GenericConstructorDecl.erasedCopy() {
     return new GenericConstructorDeclErased(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
         erasedParameterList(getParameterList()),
         erasedAccessList(getExceptionList()),
         new Opt<Stmt>(),
         new Block(),
-        getTypeParameterList().treeCopy(),
+        getTypeParameterList().treeCopyNoTransform(),
         this);
   }
 
@@ -1434,7 +1436,7 @@ aspect LookupParTypeDecl {
       decls.add(decl.signatureCopy());
     }
     return new FieldDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getTypeAccess().erasedCopy(),
         decls,
         this);
@@ -1446,7 +1448,7 @@ aspect LookupParTypeDecl {
 
   public ClassDecl ClassDecl.erasedCopy() {
     return new ClassDeclSubstituted(
-        getModifiers().treeCopy(),
+        getModifiers().treeCopyNoTransform(),
         getID(),
         hasSuperClass() ? new Opt<Access>(getSuperClass().erasedCopy()) : new Opt<Access>(),
         erasedAccessList(getImplementsList()),
@@ -1457,7 +1459,7 @@ aspect LookupParTypeDecl {
   /**
    * Creates a copy of this access where parameterized types have been erased.
    */
-  syn Access Access.erasedCopy() = treeCopy();
+  syn Access Access.erasedCopy() = treeCopyNoTransform();
 
   eq Dot.erasedCopy() = new Dot(getLeft().erasedCopy(), getRight().erasedCopy());
 
@@ -1465,20 +1467,20 @@ aspect LookupParTypeDecl {
 
   eq ArrayTypeAccess.erasedCopy() = new ArrayTypeAccess(getAccess().erasedCopy());
 
-  syn Expr Expr.erasedCopy() = treeCopy();
+  syn Expr Expr.erasedCopy() = treeCopyNoTransform();
 
   /**
    * Creates a copy of this parameter declaration where parameterized types have been erased.
    */
   syn ParameterDeclaration ParameterDeclaration.erasedCopy() =
       new ParameterDeclaration(
-          getModifiers().treeCopy(),
+          getModifiers().treeCopyNoTransform(),
           getTypeAccess().erasedCopy(),
           getID());
 
   eq VariableArityParameterDeclaration.erasedCopy() =
       new VariableArityParameterDeclaration(
-          getModifiers().treeCopy(),
+          getModifiers().treeCopyNoTransform(),
           getTypeAccess().erasedCopy(),
           getID());
 

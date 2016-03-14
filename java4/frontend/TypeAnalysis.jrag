@@ -678,99 +678,38 @@ aspect SuperClasses {
    * Iterate over interfaces which this type implements.
    * @return interface iterator
    */
-  public Iterator<TypeDecl> TypeDecl.interfacesIterator() {
-    return new Iterator<TypeDecl>() {
-      @Override
-      public boolean hasNext() {
-        return false;
-      }
+  syn Iterator<TypeDecl> TypeDecl.interfacesIterator() = superInterfaces().iterator();
 
-      @Override
-      public TypeDecl next() {
-        throw new NoSuchElementException("empty iterator");
-      }
+  /**
+   * @return the interfaces directly implemented by this type.
+   */
+  syn lazy Collection<TypeDecl> TypeDecl.superInterfaces() = Collections.emptyList();
 
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException("empty iterator");
+  eq ClassDecl.superInterfaces() {
+    if (isObject()) {
+      return Collections.emptyList();
+    } else {
+      Collection<TypeDecl> interfaces = new ArrayList<TypeDecl>();
+      for (Access access : getImplementsList()) {
+        TypeDecl implemented = access.type();
+        if (implemented.isInterfaceDecl()) { // TODO(joqvist): unclear why this is needed.
+          interfaces.add(implemented);
+        }
       }
-    };
+      return interfaces;
+    }
   }
 
-  public Iterator<TypeDecl> ClassDecl.interfacesIterator() {
-    return new Iterator<TypeDecl>() {
-      private int index = 0;
-      private TypeDecl current = null;
-
-      @Override
-      public boolean hasNext() {
-        computeNextCurrent();
-        return current != null;
+  eq InterfaceDecl.superInterfaces() {
+    Collection<TypeDecl> interfaces = new ArrayList<TypeDecl>();
+    for (Access access : getSuperInterfaceList()) {
+      TypeDecl implemented = access.type();
+      if (implemented.isInterfaceDecl()) { // TODO(joqvist): unclear why this is needed.
+        interfaces.add(implemented);
       }
-
-      @Override
-      public TypeDecl next() {
-        return current;
-      }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
-      }
-
-      private void computeNextCurrent() {
-        current = null;
-        if (isObject()) {
-          return;
-        }
-        while (index < getNumImplements()) {
-          TypeDecl typeDecl = getImplements(index++).type();
-          if (typeDecl.isInterfaceDecl()) {
-            current = typeDecl;
-            return;
-          }
-        }
-      }
-    };
+    }
+    return interfaces;
   }
-
-  public Iterator<TypeDecl> InterfaceDecl.interfacesIterator() {
-    return new Iterator<TypeDecl>() {
-      private int index = 0;
-      private TypeDecl current = null;
-
-      @Override
-      public boolean hasNext() {
-        computeNextCurrent();
-        return current != null;
-      }
-
-      @Override
-      public TypeDecl next() {
-        return current;
-      }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
-      }
-
-      private void computeNextCurrent() {
-        current = null;
-        if (isCircular()) {
-          return;
-        }
-        while (index < getNumSuperInterface()) {
-          TypeDecl typeDecl = getSuperInterface(index++).type();
-          if (!typeDecl.isCircular() && typeDecl.isInterfaceDecl()) {
-            current = typeDecl;
-            return;
-          }
-        }
-      }
-    };
-  }
-
 }
 
 aspect Circularity {
