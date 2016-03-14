@@ -249,19 +249,33 @@ aspect GenericsCodegen {
    * Collects bridge methods that should be generated for polymorphism
    * to work correctly with raw types.
    *
-   * Note: this collection attribute does not have CompilationUnit as the root
-   * because sometimes we need to collect the bridge methods of an NTA
-   * anonymous class, and that fails if we use CompilationUnit as the root,
-   * since the anonymous class NTA is skipped in the collection survey.  This
-   * is relevant for the Java 8 extension.
+   * <p>Note: this collection attribute does not have CompilationUnit as the
+   * root because sometimes we need to collect the bridge methods of an nested
+   * anonymous class in an NTA, and that fails if we use CompilationUnit as the
+   * root, since the anonymous class NTA is skipped in the collection survey.
+   * This is relevant for the Java 8 extension.
    */
   coll HashSet<MethodDecl> TypeDecl.bridgeMethods() root TypeDecl;
 
-  MethodDecl contributes
-      each hostType().bridgeMethods(this)
-      when !hostType().bridgeMethods(this).isEmpty()
+  TypeDecl contributes
+      each localBridgeMethods()
       to TypeDecl.bridgeMethods()
-      for hostType();
+      for this;
+
+  syn lazy Collection<MethodDecl> TypeDecl.localBridgeMethods() {
+    Collection<MethodDecl> bridgeMethods = new LinkedList<MethodDecl>();
+    for (Map.Entry<String, SimpleSet<MethodDecl>> entry : methodsSignatureMap().entrySet()) {
+      String signature = entry.getKey();
+      SimpleSet<MethodDecl> methods = entry.getValue();
+      for (MethodDecl method : methods) {
+        if (!method.isStatic() && !method.isAbstract() && !method.isFinal()) {
+          bridgeMethods.addAll(bridgeMethods(method));
+          break;
+        }
+      }
+    }
+    return bridgeMethods;
+  }
 
   syn lazy SimpleSet<MethodDecl> TypeDecl.bridgeCandidates(String signature) = emptySet();
 
@@ -279,7 +293,7 @@ aspect GenericsCodegen {
     Collection<MethodDecl> bridgeMethods = new LinkedList<MethodDecl>();
     Collection<String> processed = new HashSet<String>();
     for (MethodDecl m : bridgeCandidates(decl.signature())) {
-      if (decl.overrides(m)) {
+      if (m != decl && !m.isPrivate() && m.accessibleFrom(this)) {
         MethodDecl erased = m.erasedMethod();
         if (!erased.signature().equals(decl.signature())
             || erased.type().erasure() != decl.type().erasure()) {
@@ -316,9 +330,9 @@ aspect GenericsCodegen {
     }
     Stmt stmt;
     if (decl.type().isVoid()) {
-      stmt = new ExprStmt(decl.createBoundAccess(args));
+      stmt = new ExprStmt(decl.createBoundAccess(args, this));
     } else {
-      stmt = new ReturnStmt(decl.createBoundAccess(args));
+      stmt = new ReturnStmt(decl.createBoundAccess(args, this));
     }
     List<Modifier> modifiers = new List<Modifier>();
     if (decl.isPublic()) {
