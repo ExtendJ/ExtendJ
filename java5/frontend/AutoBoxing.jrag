@@ -233,23 +233,36 @@ aspect AutoBoxing {
     }
   }
 
+  // Refine to check if the second or third operand should be unboxed.
   refine TypeAnalysis eq ConditionalExpr.type() {
-    TypeDecl trueType = getTrueExpr().type();
-    TypeDecl falseType = getFalseExpr().type();
+    TypeDecl second = getTrueExpr().type();
+    TypeDecl third = getFalseExpr().type();
 
-    if (trueType == falseType) {
-      return trueType;
+    if (second == third) {
+      return second;
+    } else if (second.isReferenceType() && third.isNull()) {
+      return second;
+    } else if (second.isNull() && third.isReferenceType()) {
+      return third;
     }
 
-    if (!trueType.unboxed().isUnknown()) {
-      trueType = trueType.unboxed();
+    if (second.isPrimitiveType()) {
+      if (!second.isNull() && third.isNull()) {
+        return second;
+      }
+    } else if (!second.unboxed().isUnknown()) {
+      second = second.unboxed();
     }
 
-    if (!falseType.unboxed().isUnknown()) {
-      falseType = falseType.unboxed();
+    if (third.isPrimitiveType()) {
+      if (!third.isNull() && second.isNull()) {
+        return third;
+      }
+    } else if (!third.unboxed().isUnknown()) {
+      third = third.unboxed();
     }
 
-    return conditionalExprType(trueType, falseType);
+    return conditionalExprType(second, third);
   }
 
   eq UnknownType.binaryNumericPromotion(TypeDecl type) = this;
