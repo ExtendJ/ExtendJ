@@ -354,34 +354,32 @@ aspect TypeHierarchyCheck {
   syn Collection<Problem> ClassDecl.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>(super.typeProblems());
 
-    // Check if methods from superclass are incompatible with interface methods.
+    // Check if methods inherited from interfaces are compatible with the
+    // overriding method in this class or method inherited from ancestor class.
     for (Iterator<MethodDecl> iter = interfacesMethodsIterator(); iter.hasNext(); ) {
       MethodDecl decl = iter.next();
+      // First we check locally declared methods, then if no local method
+      // overrides the interface method we check ancestor methods.  We check
+      // ancestor types in superclass order and stop at the first overriding method.
       boolean overridden = false;
-      for (MethodDecl m : localMethodsSignature(decl.signature())) {
-        // Regardless of overriding.
-        // 8.4.6.3
-        if (m.overrideCandidate(decl)) {
-          overridden = true;
-          if (!m.mayOverride(decl)) {
-            problems.add(errorf(
-                "the return type of method %s in %s does not match the return type of"
-                + " method %s in %s and may thus not be overridden",
-                m.fullSignature(), m.hostType().typeName(), decl.fullSignature(),
-                decl.hostType().typeName()));
+      ClassDecl hostType = this;
+      while (!overridden) {
+        for (MethodDecl m : hostType.localMethodsSignature(decl.signature())) {
+          if (m.overrideCandidate(decl)) {
+            overridden = true;
+            if (!m.mayOverride(decl)) {
+              problems.add(errorf(
+                  "the return type of method %s in %s does not match the return type of"
+                  + " method %s in %s and may thus not be overridden",
+                  m.fullSignature(), hostType.typeName(), decl.fullSignature(),
+                  decl.hostType().typeName()));
+            }
           }
         }
-      }
-      if (!overridden) {
-        for (MethodDecl m : ancestorMethods(decl.signature())) {
-          if (!m.isAbstract() && m.overrideCandidate(decl) && !m.mayOverride(decl)) {
-            problems.add(errorf(
-                "the return type of method %s in %s does not match the return type of"
-                + " method %s in %s and may thus not be overridden",
-                m.fullSignature(), m.hostType().typeName(), decl.fullSignature(),
-                decl.hostType().typeName()));
-          }
+        if (!hostType.hasSuperclass()) {
+          break;
         }
+        hostType = (ClassDecl) hostType.superclass();
       }
     }
     return problems;
