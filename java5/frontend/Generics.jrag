@@ -1169,66 +1169,49 @@ aspect LookupParTypeDecl {
     return lookupLUBType(list);
   }
 
-  public Access TypeDecl.substituteParameterType(Parameterization parTypeDecl) {
-    return substitute(parTypeDecl);
-  }
-
   inh TypeDecl TypeVariable.typeNull();
 
-  public Access TypeVariable.substituteParameterType(Parameterization parTypeDecl) {
-    if (parTypeDecl.isRawType()) {
-      return erasure().createBoundAccess();
-    }
-    TypeDecl typeDecl = parTypeDecl.substitute(this);
-    if (typeDecl instanceof WildcardType) {
-      return typeNull().createQualifiedAccess();
-    } else if (typeDecl instanceof WildcardExtendsType) {
-      return typeNull().createQualifiedAccess();
-    } else if (typeDecl instanceof WildcardSuperType) {
-      return ((WildcardSuperType) typeDecl).superType().createBoundAccess();
-    }
-    return typeDecl.createBoundAccess();
-  }
-
-  public Access RawClassDecl.substituteParameterType(Parameterization parTypeDecl) {
-    return createBoundAccess();
-  }
-
-  public Access RawInterfaceDecl.substituteParameterType(Parameterization parTypeDecl) {
-    return createBoundAccess();
-  }
-
-  public List List.substitute(Parameterization parTypeDecl) {
-    List list = new List();
+  /**
+   * Replace references to type variables in the parameterization by the
+   * substituted type.
+   */
+  public List<Access> List.substitute(Parameterization parTypeDecl) {
+    List<Access> list = new List<Access>();
     for (int i = 0; i < getNumChild(); i++) {
       ASTNode node = getChild(i);
       if (node instanceof Access) {
         Access a = (Access) node;
-        list.add(a.type().substitute(parTypeDecl));
-      } else if (node instanceof VariableArityParameterDeclaration) {
+        list.add(a.substitute(parTypeDecl));
+      } else {
+        throw new Error("Trying to substitute list of accesses, but node number "
+            + (i + 1) + " is of type " + node.getClass().getName());
+      }
+    }
+    return list;
+  }
+
+  public List<ParameterDeclaration> List.substituteParameters(Parameterization parTypeDecl) {
+    List<ParameterDeclaration> list = new List<ParameterDeclaration>();
+    for (int i = 0; i < getNumChild(); i++) {
+      ASTNode node = getChild(i);
+      if (node instanceof VariableArityParameterDeclaration) {
         VariableArityParameterDeclaration p = (VariableArityParameterDeclaration) node;
-        list.add(
-          new VariableArityParameterDeclarationSubstituted(
+        list.add(new VariableArityParameterDeclarationSubstituted(
             (Modifiers) p.getModifiers().treeCopyNoTransform(),
-            // use the type acces since VariableArity adds to the dimension
-            p.getTypeAccess().type().substituteParameterType(parTypeDecl),
+            // Use the type acces since VariableArity adds to the dimension.
+            p.getTypeAccess().substitute(parTypeDecl),
             p.getID(),
-            p
-          )
-        );
+            p));
       } else if (node instanceof ParameterDeclaration) {
         ParameterDeclaration p = (ParameterDeclaration) node;
-        list.add(
-          new ParameterDeclarationSubstituted(
+        list.add(new ParameterDeclarationSubstituted(
             (Modifiers) p.getModifiers().treeCopyNoTransform(),
-            p.type().substituteParameterType(parTypeDecl),
+            p.getTypeAccess().substitute(parTypeDecl),
             p.getID(),
-            p
-          )
-        );
+            p));
       } else {
-        throw new Error("Can only substitute lists of access nodes but node number "
-            + i + " is of type " + node.getClass().getName());
+        throw new Error("Trying to substitute list of parameters, but node number "
+            + (i + 1) + " is of type " + node.getClass().getName());
       }
     }
     return list;
@@ -1236,25 +1219,21 @@ aspect LookupParTypeDecl {
 
   syn lazy Opt ParClassDecl.getSuperClassOpt() {
     GenericClassDecl decl = (GenericClassDecl) genericDecl();
-    Opt opt;
     if (decl.hasSuperClass()) {
-      opt = new Opt((decl.getSuperClass().type().substitute(this)));
+      return new Opt((decl.getSuperClass().type().substitute(this)));
     } else {
-      opt = new Opt();
+      return new Opt();
     }
-    return opt;
   }
 
   syn lazy List ParClassDecl.getImplementsList() {
     GenericClassDecl decl = (GenericClassDecl) genericDecl();
-    List list = decl.getImplementsList().substitute(this);
-    return list;
+    return decl.getImplementsList().substitute(this);
   }
 
   syn lazy List ParInterfaceDecl.getSuperInterfaceList() {
     GenericInterfaceDecl decl = (GenericInterfaceDecl) genericDecl();
-    List list = decl.getSuperInterfaceList().substitute(this);
-    return list;
+    return decl.getSuperInterfaceList().substitute(this);
   }
 
   syn boolean ASTNode.usesTypeVariable() {
@@ -1283,10 +1262,11 @@ aspect LookupParTypeDecl {
     if (super.usesTypeVariable()) {
       return true;
     }
-    for (int i = 0; i < getNumArgument(); i++)
-      if (getArgument(i).type().usesTypeVariable()) {
+    for (Expr argument : getArgumentList()) {
+      if (argument.type().usesTypeVariable()) {
         return true;
       }
+    }
     return false;
   }
 
@@ -1403,7 +1383,7 @@ aspect LookupParTypeDecl {
         (Modifiers) getModifiers().treeCopyNoTransform(),
         getTypeAccess().substitute(parTypeDecl),
         getID(),
-        getParameterList().substitute(parTypeDecl),
+        getParameterList().substituteParameters(parTypeDecl),
         getExceptionList().substitute(parTypeDecl),
         substituteBody(parTypeDecl),
         this);
@@ -1421,7 +1401,7 @@ aspect LookupParTypeDecl {
     return new ConstructorDeclSubstituted(
         (Modifiers) getModifiers().treeCopyNoTransform(),
         getID(),
-        getParameterList().substitute(parTypeDecl),
+        getParameterList().substituteParameters(parTypeDecl),
         getExceptionList().substitute(parTypeDecl),
         new Opt(),
         new Block(),
