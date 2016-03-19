@@ -497,16 +497,44 @@ aspect InnerClasses {
   syn TypeDecl ConstructorDecl.enclosing() = hostType().enclosing();
   syn TypeDecl ConstructorDecl.superEnclosing() = hostType().superEnclosing();
 
-  syn ConstructorDecl ConstructorDecl.createAccessor() =
-      hostType().getAccessor(this);
+  /**
+   * This class is used to compare constructor declarations by signature
+   * rather than reference equality. This fixes multiple contributed
+   * constructor accessors due to using default constructors in multiple
+   * parameterizations of the same type.
+   */
+  class ConstructorSignatureMapper {
+    public final ConstructorDecl decl;
 
-  syn nta ConstructorDecl TypeDecl.getAccessor(ConstructorDecl decl) {
+    public ConstructorSignatureMapper(ConstructorDecl decl) {
+      this.decl = decl;
+    }
+
+    @Override
+    public int hashCode() {
+      return decl.signature().hashCode();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (o instanceof ConstructorSignatureMapper) {
+        ConstructorSignatureMapper other = (ConstructorSignatureMapper) o;
+        return decl.signature().equals(other.decl.signature());
+      }
+      return false;
+    }
+  }
+
+  syn ConstructorDecl ConstructorDecl.createAccessor() =
+      hostType().getAccessor(new ConstructorSignatureMapper(this));
+
+  syn nta ConstructorDecl TypeDecl.getAccessor(ConstructorSignatureMapper constructor) {
     Modifiers modifiers = new Modifiers(new List<Modifier>(new Modifier("synthetic")));
 
-    List<ParameterDeclaration> parameters = decl.createAccessorParameters();
+    List<ParameterDeclaration> parameters = constructor.decl.createAccessorParameters();
 
     List<Access> exceptionList = new List<Access>();
-    for (Access exception : decl.getExceptionList()) {
+    for (Access exception : constructor.decl.getExceptionList()) {
       exceptionList.add(exception.type().createQualifiedAccess());
     }
 
