@@ -35,25 +35,19 @@
 aspect GenericBoundCheck {
   /**
    * @param bound the bounded type variable
-   * @param par a parameterization of the type for which the type variable
-   * occurs in the type parameter list
    * @return {@code true} if this type is within the bounds of the parameter type
    */
-  syn boolean TypeDecl.withinBounds(TypeDecl bound, Parameterization par) =
-      bound.boundOf(this, par);
+  syn boolean TypeDecl.withinBounds(TypeDecl bound) = bound.boundOf(this);
 
-  eq ArrayDecl.withinBounds(TypeDecl bound, Parameterization par) =
-      bound.boundOfArray(this, par);
+  eq ArrayDecl.withinBounds(TypeDecl bound) = bound.boundOfArray(this);
 
-  eq UnknownType.withinBounds(TypeDecl bound, Parameterization par) = false;
+  eq UnknownType.withinBounds(TypeDecl bound) = false;
 
-  eq WildcardType.withinBounds(TypeDecl bound, Parameterization par) = true;
+  eq WildcardType.withinBounds(TypeDecl bound) = true;
 
-  eq WildcardExtendsType.withinBounds(TypeDecl bound, Parameterization par) =
-      bound.boundOf(extendsType(), par) || extendsType().boundOf(bound, par);
+  eq WildcardExtendsType.withinBounds(TypeDecl bound) = bound.boundOf(extendsType());
 
-  eq WildcardSuperType.withinBounds(TypeDecl bound, Parameterization par) =
-      bound.boundOf(superType(), par);
+  eq WildcardSuperType.withinBounds(TypeDecl bound) = bound.boundOf(superType());
 
   /**
    * Check if a given type is within the bound of this type, given a specific
@@ -62,20 +56,13 @@ aspect GenericBoundCheck {
    * See JLS SE7 $4.5
    *
    * @param argument argument type
-   * @param par a parameterization
    * @return {@code true} if the argument type is in the bound of this type
    */
-  syn boolean TypeDecl.boundOf(TypeDecl argument, Parameterization par) =
-      !isPrimitive() && argument.subtype(this);
+  syn boolean TypeDecl.boundOf(TypeDecl argument) = !isPrimitive() && argument.subtype(this);
 
-  eq TypeVariable.boundOf(TypeDecl argument, Parameterization par) {
+  eq TypeVariable.boundOf(TypeDecl argument) {
     for (int i = 0; i < getNumTypeBound(); ++i) {
       TypeDecl bound = getTypeBound(i).type();
-      if (bound.usesTypeVariable()) {
-        Access substituted = bound.substitute(par);
-        substituted.setParent(this);
-        bound = substituted.type();
-      }
       if (!argument.subtype(bound)) {
         return false;
       }
@@ -97,25 +84,23 @@ aspect GenericBoundCheck {
   eq TypeVariable.boundOfWildcardSuper(WildcardSuperType type) =
       type.superType().subtype(this);
 
-  syn boolean TypeDecl.boundOfArray(ArrayDecl type, Parameterization par) = this == typeObject();
+  syn boolean TypeDecl.boundOfArray(ArrayDecl type) = this == typeObject();
 
-  eq WildcardType.boundOfArray(ArrayDecl type, Parameterization par) = true;
+  eq WildcardType.boundOfArray(ArrayDecl type) = true;
 
-  eq WildcardSuperType.boundOfArray(ArrayDecl type, Parameterization par) = true;
+  eq WildcardSuperType.boundOfArray(ArrayDecl type) = true;
 
-  eq WildcardExtendsType.boundOfArray(ArrayDecl type, Parameterization par) =
-      getAccess().type().boundOfArray(type, par);
+  eq WildcardExtendsType.boundOfArray(ArrayDecl type) = getAccess().type().boundOfArray(type);
 
-  eq TypeVariable.boundOfArray(ArrayDecl type, Parameterization par) {
+  eq TypeVariable.boundOfArray(ArrayDecl type) {
     // An array type is within the bounds of a type variable if the
     // type variable has a single type bound that is an array type bound,
     // or if there are no type bounds for the type variable.
     if (getNumTypeBound() == 1) {
-      return getTypeBound(0).type().boundOfArray(type, par);
+      return getTypeBound(0).type().boundOfArray(type);
     }
     return getNumTypeBound() == 0;
   }
 
-  eq ArrayDecl.boundOfArray(ArrayDecl type, Parameterization par) =
-      type.componentType().withinBounds(componentType(), par);
+  eq ArrayDecl.boundOfArray(ArrayDecl type) = type.componentType().withinBounds(componentType());
 }

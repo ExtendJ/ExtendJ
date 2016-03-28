@@ -46,7 +46,7 @@ aspect GenericMethods {
     return Collections.emptyList();
   }
 
-  syn lazy MethodDecl GenericMethodDecl.rawMethodDecl() =
+  syn lazy ParMethodDecl GenericMethodDecl.rawMethodDecl() =
       lookupParMethodDecl(Collections.<TypeDecl>emptyList());
 
   syn lazy GenericMethodDecl ParMethodDecl.genericMethodDecl() = getGenericMethodDecl();
@@ -54,10 +54,16 @@ aspect GenericMethods {
   syn lazy GenericConstructorDecl ParConstructorDecl.genericConstructorDecl() =
       getGenericConstructorDecl();
 
-  syn nta MethodDecl MethodDecl.lookupParMethodDecl(Collection<TypeDecl> typeArguments) =
+  syn nta ParMethodDecl GenericMethodDecl.lookupParMethodDecl(Collection<TypeDecl> typeArguments) =
       newParMethodDecl(typeArguments);
 
-  public ParMethodDecl MethodDecl.newParMethodDecl(Collection<TypeDecl> typeArguments) {
+  syn nta ParMethodDecl GenericMethodDeclErased.lookupParMethodDecl(
+      Collection<TypeDecl> typeArguments) =
+          newParMethodDecl(Collections.<TypeDecl>emptyList());
+
+  public ParMethodDecl GenericMethodDecl.newParMethodDecl(Collection<TypeDecl> typeArguments) {
+    Parameterization parameterization = new Parameterization(getTypeParameterList(),
+        typeArguments);
     ParMethodDecl methodDecl = typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl();
 
     // Adding a link to GenericMethodDecl to be used during substitution
@@ -76,20 +82,28 @@ aspect GenericMethods {
       }
     }
     methodDecl.setTypeArgumentList(list);
-    methodDecl.setModifiers((Modifiers) getModifiers().treeCopyNoTransform());
-    methodDecl.setTypeAccess(getTypeAccess().substitute(methodDecl));
+    methodDecl.setModifiers(getModifiers().treeCopy());
+    methodDecl.setTypeAccess(getTypeAccess().treeCopy());
     methodDecl.setID(getID());
-    methodDecl.setParameterList(getParameterList().substituteParameters(methodDecl));
-    methodDecl.setExceptionList(getExceptionList().substitute(methodDecl));
+    methodDecl.setParameterList(getParameterList().treeCopy());
+    methodDecl.setExceptionList(getExceptionList().treeCopy());
+    methodDecl.setTypeParameterList(getTypeParameterList().treeCopy());
+    methodDecl.setParameterization(parameterization);
     return methodDecl;
   }
 
-  syn nta ParConstructorDecl ConstructorDecl.lookupParConstructorDecl(
+  syn nta ParConstructorDecl GenericConstructorDecl.lookupParConstructorDecl(
       Collection<TypeDecl> typeArguments) =
           newParConstructorDecl(typeArguments);
 
-  public ParConstructorDecl ConstructorDecl.newParConstructorDecl(
+  syn nta ParConstructorDecl GenericConstructorDeclErased.lookupParConstructorDecl(
+      Collection<TypeDecl> typeArguments) =
+          newParConstructorDecl(Collections.<TypeDecl>emptyList());
+
+  public ParConstructorDecl GenericConstructorDecl.newParConstructorDecl(
       Collection<TypeDecl> typeArguments) {
+    Parameterization parameterization = new Parameterization(getTypeParameterList(),
+        typeArguments);
     ParConstructorDecl constructorDecl = typeArguments.isEmpty()
         ? new RawConstructorDecl()
         : new ParConstructorDecl();
@@ -110,10 +124,12 @@ aspect GenericMethods {
       }
     }
     constructorDecl.setTypeArgumentList(list);
-    constructorDecl.setModifiers((Modifiers) getModifiers().treeCopyNoTransform());
+    constructorDecl.setModifiers(getModifiers().treeCopy());
     constructorDecl.setID(getID());
-    constructorDecl.setParameterList(getParameterList().substituteParameters(constructorDecl));
-    constructorDecl.setExceptionList(getExceptionList().substitute(constructorDecl));
+    constructorDecl.setParameterList(getParameterList().treeCopy());
+    constructorDecl.setExceptionList(getExceptionList().treeCopy());
+    constructorDecl.setTypeParameterList(getTypeParameterList().treeCopy());
+    constructorDecl.setParameterization(parameterization);
     return constructorDecl;
   }
 }
@@ -127,7 +143,14 @@ aspect TypeCheck {
    * other declaration
    */
   refine TypeHierarchyCheck eq MethodDecl.mayOverride(MethodDecl m) {
-    TypeDecl typeA = type();
+    MethodDecl self = this;
+    if (self.isGeneric()) {
+      self = genericDecl().rawMethodDecl();
+    }
+    if (m.isGeneric()) {
+      m = m.genericDecl().rawMethodDecl();
+    }
+    TypeDecl typeA = self.type();
     TypeDecl typeB = m.type();
     if (typeA == typeB) {
       return true;
@@ -135,7 +158,7 @@ aspect TypeCheck {
     if (typeA.isPrimitive() && typeB.isPrimitive()) {
       return false;
     }
-    return typeA.subtype(typeB);
+    return typeA.subtype(typeB) || typeA == typeB.erasure() || typeA.erasure() == typeB;
   }
 
   /**

@@ -35,25 +35,31 @@ aspect GenericMethodsInference {
   syn boolean TypeDecl.isUnboxedPrimitive() = this instanceof PrimitiveType && isPrimitive();
 
   syn boolean TypeDecl.involvesTypeParameters() circular [false] = false;
+
   eq TypeVariable.involvesTypeParameters() = true;
+
   eq ArrayDecl.involvesTypeParameters() = componentType().involvesTypeParameters();
+
   eq ParClassDecl.involvesTypeParameters() {
-    for (int i = 0; i < getNumArgument(); i++) {
-      if (getArgument(i).type().involvesTypeParameters()) {
+    for (TypeDecl arg : getParameterization().args) {
+      if (arg.involvesTypeParameters()) {
         return true;
       }
     }
     return false;
   }
+
   eq ParInterfaceDecl.involvesTypeParameters() {
-    for (int i = 0; i < getNumArgument(); i++) {
-      if (getArgument(i).type().involvesTypeParameters()) {
+    for (TypeDecl arg : getParameterization().args) {
+      if (arg.involvesTypeParameters()) {
         return true;
       }
     }
     return false;
   }
+
   eq WildcardExtendsType.involvesTypeParameters() = extendsType().involvesTypeParameters();
+
   eq WildcardSuperType.involvesTypeParameters() = superType().involvesTypeParameters();
 
   inh TypeDecl Expr.assignConvertedType();
@@ -354,18 +360,16 @@ aspect GenericMethodsInference {
       if (A.isUnboxedPrimitive()) {
         TypeDecl U = A.boxed();
         convertibleTo(U, F);
-      }
-      // If F = Tj, then the constrint Tj :> A is implied.
-      else if (F instanceof TypeVariable) {
+      } else if (F instanceof TypeVariable) {
+        // If F = Tj, then the constrint Tj :> A is implied.
         if (typeVariables.contains(F)) {
           addSupertypeConstraint(F, A);
         }
-      }
-      // If F = U[], where the type U involves Tj, then if A is an array type V[]
-      // or a type variable with an upper bound that is an array type V[],
-      // where V is a reference type, this algorithm is applied recursively
-      // to the constraint V << U.
-      else if (F.isArrayDecl()) {
+      } else if (F.isArrayDecl()) {
+        // If F = U[], where the type U involves Tj, then if A is an array type V[]
+        // or a type variable with an upper bound that is an array type V[],
+        // where V is a reference type, this algorithm is applied recursively
+        // to the constraint V << U.
         TypeDecl U = ((ArrayDecl) F).componentType();
         if (!U.involvesTypeParameters()) {
           return;
@@ -392,33 +396,36 @@ aspect GenericMethodsInference {
           if (PF.genericDecl() == PA.genericDecl()) {
             if (A.isRawType()) {
               rawAccess = true;
-            } else
-            for (int i = 0; i < PF.getNumArgument(); i++) {
-              TypeDecl T = PF.getArgument(i).type();
-              if (T.involvesTypeParameters()) {
-                if (!T.isWildcard()) {
-                  TypeDecl U = T;
-                  TypeDecl V = PA.getArgument(i).type();
-                  constraintEqual(V, U);
-                } else if (T instanceof WildcardExtendsType) {
-                  TypeDecl U = ((WildcardExtendsType) T).getAccess().type();
-                  TypeDecl S = PA.getArgument(i).type();
-                  if (!S.isWildcard()) {
-                    TypeDecl V = S;
-                    convertibleTo(V, U);
-                  } else if (S instanceof WildcardExtendsType) {
-                    TypeDecl V = ((WildcardExtendsType) S).getAccess().type();
-                    convertibleTo(V, U);
-                  }
-                } else if (T instanceof WildcardSuperType) {
-                  TypeDecl U = ((WildcardSuperType) T).getAccess().type();
-                  TypeDecl S = PA.getArgument(i).type();
-                  if (!S.isWildcard()) {
-                    TypeDecl V = S;
-                    convertibleFrom(V, U);
-                  } else if (S instanceof WildcardSuperType) {
-                    TypeDecl V = ((WildcardSuperType) S).getAccess().type();
-                    convertibleFrom(V, U);
+            } else {
+              java.util.List<TypeDecl> pfArgs = PF.getParameterization().args;
+              java.util.List<TypeDecl> paArgs = PA.getParameterization().args;
+              for (int i = 0; i < pfArgs.size(); i++) {
+                TypeDecl T = pfArgs.get(i);
+                if (T.involvesTypeParameters()) {
+                  if (!T.isWildcard()) {
+                    TypeDecl U = T;
+                    TypeDecl V = paArgs.get(i);
+                    constraintEqual(V, U);
+                  } else if (T instanceof WildcardExtendsType) {
+                    TypeDecl U = ((WildcardExtendsType) T).getAccess().type();
+                    TypeDecl S = paArgs.get(i);
+                    if (!S.isWildcard()) {
+                      TypeDecl V = S;
+                      convertibleTo(V, U);
+                    } else if (S instanceof WildcardExtendsType) {
+                      TypeDecl V = ((WildcardExtendsType) S).getAccess().type();
+                      convertibleTo(V, U);
+                    }
+                  } else if (T instanceof WildcardSuperType) {
+                    TypeDecl U = ((WildcardSuperType) T).getAccess().type();
+                    TypeDecl S = paArgs.get(i);
+                    if (!S.isWildcard()) {
+                      TypeDecl V = S;
+                      convertibleFrom(V, U);
+                    } else if (S instanceof WildcardSuperType) {
+                      TypeDecl V = ((WildcardSuperType) S).getAccess().type();
+                      convertibleFrom(V, U);
+                    }
                   }
                 }
               }
@@ -428,14 +435,12 @@ aspect GenericMethodsInference {
       }
     }
 
-
     public void convertibleFrom(TypeDecl A, TypeDecl F) {
       // If F does not involve a type parameter Tj then con constraint is implied on Tj.
       if (!F.involvesTypeParameters()) {
         return;
-      }
-      // If A is the type of null, no constraint is implied on Tj.
-      else if (A.isNull()) {
+      } else if (A.isNull()) {
+        // If A is the type of null, no constraint is implied on Tj.
         return;
       } else if (F instanceof TypeVariable) {
         if (typeVariables.contains(F)) {
@@ -461,10 +466,12 @@ aspect GenericMethodsInference {
           && A instanceof ParTypeDecl && !A.isRawType()) {
         ParTypeDecl PF = (ParTypeDecl) F;
         ParTypeDecl PA = (ParTypeDecl) A;
+        java.util.List<TypeDecl> pfArgs = PF.getParameterization().args;
+        java.util.List<TypeDecl> paArgs = PA.getParameterization().args;
         TypeDecl G = PF.genericDecl();
         TypeDecl H = PA.genericDecl();
-        for (int i = 0; i < PF.getNumArgument(); i++) {
-          TypeDecl T = PF.getArgument(i).type();
+        for (int i = 0; i < pfArgs.size(); i++) {
+          TypeDecl T = pfArgs.get(i);
           if (T.involvesTypeParameters()) {
             // If F has the form G<...,U,...> where U is a type expression that involves Tj.
             if (!T.isWildcard()) {
@@ -478,8 +485,8 @@ aspect GenericMethodsInference {
                       }
                     }
                   }
-                } else if (PF.getNumArgument() == PA.getNumArgument()) {
-                  TypeDecl X = PA.getArgument(i).type();
+                } else if (pfArgs.size() == paArgs.size()) {
+                  TypeDecl X = paArgs.get(i);
                   if (!X.isWildcard()) {
                     TypeDecl W = X;
                     constraintEqual(W, U);
@@ -500,15 +507,15 @@ aspect GenericMethodsInference {
                     if (!V.isRawType() && V.genericDecl() == H) {
                       // Replace type argument Un with ? extends Un in V.
                       ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-                      for (int j = 0; j < ((ParTypeDecl) V).getNumArgument(); j++) {
-                        list.add(((ParTypeDecl) V).getArgument(j).type().asWildcardExtends());
+                      for (TypeDecl vArg : V.getParameterization().args) {
+                        list.add(vArg.asWildcardExtends());
                       }
                       TypeDecl typeV = ((GenericTypeDecl) H).lookupParTypeDecl(list);
                       convertibleFrom(A, typeV);
                     }
                   }
-                } else if (PF.getNumArgument() == PA.getNumArgument()) {
-                  TypeDecl X = PA.getArgument(i).type();
+                } else if (pfArgs.size() == paArgs.size()) {
+                  TypeDecl X = paArgs.get(i);
                   if (X instanceof WildcardExtendsType) {
                     TypeDecl W = ((WildcardExtendsType) X).getAccess().type();
                     convertibleFrom(W, U);
@@ -523,15 +530,15 @@ aspect GenericMethodsInference {
                     if (!V.isRawType() && V.genericDecl() == H) {
                       // Replace type argument Un with ? super Un in V.
                       ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-                      for (int j = 0; j < ((ParTypeDecl) V).getNumArgument(); j++) {
-                        list.add(((ParTypeDecl) V).getArgument(j).type().asWildcardExtends());
+                      for (TypeDecl vArg : V.getParameterization().args) {
+                        list.add(vArg.asWildcardExtends());
                       }
                       TypeDecl typeV = ((GenericTypeDecl) H).lookupParTypeDecl(list);
                       convertibleFrom(A, typeV);
                     }
                   }
-                } else if (PF.getNumArgument() == PA.getNumArgument()) {
-                  TypeDecl X = PA.getArgument(i).type();
+                } else if (pfArgs.size() == paArgs.size()) {
+                  TypeDecl X = paArgs.get(i);
                   if (X instanceof WildcardSuperType) {
                     TypeDecl W = ((WildcardSuperType) X).getAccess().type();
                     convertibleTo(W, U);
@@ -550,9 +557,8 @@ aspect GenericMethodsInference {
       // If F does not involve a type parameter Tj then con constraint is implied on Tj.
       if (!F.involvesTypeParameters()) {
         return;
-      }
-      // If A is the type of null, no constraint is implied on Tj.
-      else if (A.isNull()) {
+      } else if (A.isNull()) {
+        // If A is the type of null, no constraint is implied on Tj.
         return;
       } else if (F instanceof TypeVariable) {
         if (typeVariables.contains(F)) {
@@ -578,27 +584,29 @@ aspect GenericMethodsInference {
         if (A instanceof ParTypeDecl) {
           ParTypeDecl PF = (ParTypeDecl) F;
           ParTypeDecl PA = (ParTypeDecl) A;
+          java.util.List<TypeDecl> pfArgs = PF.getParameterization().args;
+          java.util.List<TypeDecl> paArgs = PA.getParameterization().args;
           if (PF.genericDecl() == PA.genericDecl()) {
             if (A.isRawType()) {
               rawAccess = true;
             } else
-            for (int i = 0; i < PF.getNumArgument(); i++) {
-              TypeDecl T = PF.getArgument(i).type();
+            for (int i = 0; i < pfArgs.size(); i++) {
+              TypeDecl T = pfArgs.get(i);
               if (T.involvesTypeParameters()) {
                 if (!T.isWildcard()) {
                   TypeDecl U = T;
-                  TypeDecl V = PA.getArgument(i).type();
+                  TypeDecl V = paArgs.get(i);
                   constraintEqual(V, U);
                 } else if (T instanceof WildcardExtendsType) {
                   TypeDecl U = ((WildcardExtendsType) T).getAccess().type();
-                  TypeDecl S = PA.getArgument(i).type();
+                  TypeDecl S = paArgs.get(i);
                   if (S instanceof WildcardExtendsType) {
                     TypeDecl V = ((WildcardExtendsType) S).getAccess().type();
                     constraintEqual(V, U);
                   }
                 } else if (T instanceof WildcardSuperType) {
                   TypeDecl U = ((WildcardSuperType) T).getAccess().type();
-                  TypeDecl S = PA.getArgument(i).type();
+                  TypeDecl S = paArgs.get(i);
                   if (S instanceof WildcardSuperType) {
                     TypeDecl V = ((WildcardSuperType) S).getAccess().type();
                     constraintEqual(V, U);
@@ -628,211 +636,212 @@ aspect GenericMethodsInference {
     return lookupLUBType(bounds);
   }
 
-    // The erased candidate set for type parameter Tj, EC,
-    // is the intersection of all the sets EST(U) for each
-    // U in U1...Uk.
-    public static Collection<TypeDecl> LUBType.EC(ArrayList<TypeDecl> list) {
-      Collection<TypeDecl> result = new HashSet<TypeDecl>();
-      boolean first = true;
-      for (TypeDecl U : list) {
-        // Erased supertype set of U.
-        Collection<TypeDecl> EST = LUBType.EST(U);
-        if (first) {
-          result.addAll(EST);
-          first = false;
-        } else {
-          result.retainAll(EST);
-        }
-      }
-      return result;
-    }
-
-    /**
-     * The minimal erased candidate set for Tj
-     * is MEC = {V | V in EC, forall  W != V in EC, not W <: V}
-     * @return minimal erased candidate set for Tj
-     */
-    public static Collection<TypeDecl> LUBType.MEC(ArrayList<TypeDecl> list) {
-      Collection<TypeDecl> EC = LUBType.EC(list);
-      if (EC.size() == 1) {
-        return EC;
-      }
-      Collection<TypeDecl> MEC = new HashSet<TypeDecl>();
-      for (TypeDecl V : EC) {
-        boolean keep = true;
-        for (TypeDecl W : EC) {
-          if (!(V instanceof TypeVariable) && V != W && W.instanceOf(V)) {
-            keep = false;
-          }
-        }
-        if (keep) {
-          MEC.add(V);
-        }
-      }
-      return MEC;
-    }
-
-    /**
-     * Relevant invocations of G, Inv(G)
-     * Inv(G) = {V | 1 <= i <= k, V in ST(Ui), V = G<...>}
-     * @return set of relevant invocations of G, Inv(G)
-     */
-    public static Collection<ParTypeDecl> LUBType.Inv(TypeDecl G, Collection<TypeDecl> Us) {
-      Collection<ParTypeDecl> result = new HashSet<ParTypeDecl>();
-      for (TypeDecl U : Us) {
-        for (TypeDecl V : LUBType.ST(U)) {
-          if (V instanceof ParTypeDecl && !V.isRawType() && ((ParTypeDecl) V).genericDecl() == G) {
-            result.add((ParTypeDecl) V);
-          }
-        }
-      }
-      return result;
-    }
-
-    /**
-     * @return least containing invocation (lci)
-     */
-    public TypeDecl LUBType.lci(Collection<ParTypeDecl> set, TypeDecl G) {
-      ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-      boolean first = true;
-      for (ParTypeDecl decl : set) {
-        if (first) {
-          first = false;
-          for (int i = 0; i < decl.getNumArgument(); i++) {
-            list.add(decl.getArgument(i).type());
-          }
-        } else {
-          for (int i = 0; i < decl.getNumArgument(); i++) {
-            list.set(i, lcta(list.get(i), decl.getArgument(i).type()));
-          }
-        }
-      }
-      return ((GenericTypeDecl) G).lookupParTypeDecl(list);
-    }
-
-    /**
-     * Least containing type arguments.
-     */
-    public TypeDecl LUBType.lcta(TypeDecl X, TypeDecl Y) {
-      if (!X.isWildcard() && !Y.isWildcard()) {
-        TypeDecl U = X;
-        TypeDecl V = Y;
-        return U == V ? U : lub(U, V).asWildcardExtends();
-      } else if (!X.isWildcard() && Y instanceof WildcardExtendsType) {
-        TypeDecl U = X;
-        TypeDecl V = ((WildcardExtendsType) Y).getAccess().type();
-        return lub(U, V).asWildcardExtends();
-      } else if (!Y.isWildcard() && X instanceof WildcardExtendsType) {
-        TypeDecl U = Y;
-        TypeDecl V = ((WildcardExtendsType) X).getAccess().type();
-        return lub(U, V).asWildcardExtends();
-      } else if (!X.isWildcard() && Y instanceof WildcardSuperType) {
-        TypeDecl U = X;
-        TypeDecl V = ((WildcardSuperType) Y).getAccess().type();
-        ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
-        bounds.add(U);
-        bounds.add(V);
-        return GLBTypeFactory.glb(bounds).asWildcardSuper();
-      } else if (!Y.isWildcard() && X instanceof WildcardSuperType) {
-        TypeDecl U = Y;
-        TypeDecl V = ((WildcardSuperType) X).getAccess().type();
-        ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
-        bounds.add(U);
-        bounds.add(V);
-        return GLBTypeFactory.glb(bounds).asWildcardSuper();
-      } else if (X instanceof WildcardExtendsType && Y instanceof WildcardExtendsType) {
-        TypeDecl U = ((WildcardExtendsType) X).getAccess().type();
-        TypeDecl V = ((WildcardExtendsType) Y).getAccess().type();
-        return lub(U, V).asWildcardExtends();
-      } else if (X instanceof WildcardExtendsType && Y instanceof WildcardSuperType) {
-        TypeDecl U = ((WildcardExtendsType) X).getAccess().type();
-        TypeDecl V = ((WildcardSuperType) Y).getAccess().type();
-        return U == V ? U : U.typeWildcard();
-      } else if (Y instanceof WildcardExtendsType && X instanceof WildcardSuperType) {
-        TypeDecl U = ((WildcardExtendsType) Y).getAccess().type();
-        TypeDecl V = ((WildcardSuperType) X).getAccess().type();
-        return U == V ? U : U.typeWildcard();
-      } else if (X instanceof WildcardSuperType && Y instanceof WildcardSuperType) {
-        TypeDecl U = ((WildcardSuperType) X).getAccess().type();
-        TypeDecl V = ((WildcardSuperType) Y).getAccess().type();
-        ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
-        bounds.add(U);
-        bounds.add(V);
-        return GLBTypeFactory.glb(bounds).asWildcardSuper();
+  // The erased candidate set for type parameter Tj, EC,
+  // is the intersection of all the sets EST(U) for each
+  // U in U1...Uk.
+  public static Collection<TypeDecl> LUBType.EC(ArrayList<TypeDecl> list) {
+    Collection<TypeDecl> result = new HashSet<TypeDecl>();
+    boolean first = true;
+    for (TypeDecl U : list) {
+      // Erased supertype set of U.
+      Collection<TypeDecl> EST = LUBType.EST(U);
+      if (first) {
+        result.addAll(EST);
+        first = false;
       } else {
-        throw new Error("lcta not defined for (" + X.getClass().getName()
-            + ", " + Y.getClass().getName() + ")");
+        result.retainAll(EST);
       }
     }
+    return result;
+  }
 
-    public TypeDecl LUBType.lub(TypeDecl X, TypeDecl Y) {
-      ArrayList<TypeDecl> list = new ArrayList<TypeDecl>(2);
-      list.add(X);
-      list.add(Y);
-      return lub(list);
+  /**
+   * The minimal erased candidate set for Tj
+   * is MEC = {V | V in EC, forall  W != V in EC, not W <: V}
+   * @return minimal erased candidate set for Tj
+   */
+  public static Collection<TypeDecl> LUBType.MEC(ArrayList<TypeDecl> list) {
+    Collection<TypeDecl> EC = LUBType.EC(list);
+    if (EC.size() == 1) {
+      return EC;
     }
-
-    public TypeDecl LUBType.lub(ArrayList<TypeDecl> list) {
-      return lookupLUBType(list);
-    }
-
-    /** @return erased supertype set of the given type. */
-    public static Collection<TypeDecl> LUBType.EST(TypeDecl type) {
-      Collection<TypeDecl> result = new HashSet<TypeDecl>();
-      for (TypeDecl typeDecl : LUBType.ST(type)) {
-        if (typeDecl instanceof TypeVariable) {
-          result.add(typeDecl);
-        } else {
-          result.add(typeDecl.erasure());
+    Collection<TypeDecl> MEC = new HashSet<TypeDecl>();
+    for (TypeDecl V : EC) {
+      boolean keep = true;
+      for (TypeDecl W : EC) {
+        if (!(V instanceof TypeVariable) && V != W && W.instanceOf(V)) {
+          keep = false;
         }
       }
-      return result;
-    }
-
-    /** @return supertype set of the given type. */
-    public static Collection<TypeDecl> LUBType.ST(TypeDecl type) {
-      Collection<TypeDecl> result = new HashSet<TypeDecl>();
-      LUBType.addSupertypes(result, type);
-      return result;
-    }
-
-    public static void LUBType.addSupertypes(Collection<TypeDecl> set, TypeDecl t) {
-      set.add(t);
-      if (t instanceof ClassDecl) {
-        ClassDecl type = (ClassDecl) t;
-        if (type.hasSuperclass()) {
-          addSupertypes(set, type.superclass());
-        }
-        for (int i = 0; i < type.getNumImplements(); i++) {
-          addSupertypes(set, type.getImplements(i).type());
-        }
-      } else if (t instanceof InterfaceDecl) {
-        InterfaceDecl type = (InterfaceDecl) t;
-        for (int i = 0; i < type.getNumSuperInterface(); i++) {
-          addSupertypes(set, type.getSuperInterface(i).type());
-        }
-        if (type.getNumSuperInterface() == 0) {
-          set.add(type.typeObject());
-        }
-      } else if (t instanceof TypeVariable) {
-        TypeVariable type = (TypeVariable) t;
-        for (int i = 0; i < type.getNumTypeBound(); i++) {
-          addSupertypes(set, type.getTypeBound(i).type());
-        }
-        if (type.getNumTypeBound() == 0) {
-          set.add(type.typeObject());
-        }
-      } else if (t instanceof LUBType) {
-        LUBType type = (LUBType) t;
-        for (int i = 0; i < type.getNumTypeBound(); i++) {
-          addSupertypes(set, type.getTypeBound(i).type());
-        }
-        if (type.getNumTypeBound() == 0) {
-          set.add(type.typeObject());
-        }
-      } else if (! (t instanceof NullType)) {
-        throw new Error("Operation not supported for "
-            + t.fullName() + ", " + t.getClass().getName());
+      if (keep) {
+        MEC.add(V);
       }
     }
+    return MEC;
+  }
+
+  /**
+   * Relevant invocations of G, Inv(G)
+   * Inv(G) = {V | 1 <= i <= k, V in ST(Ui), V = G<...>}
+   * @return set of relevant invocations of G, Inv(G)
+   */
+  public static Collection<ParTypeDecl> LUBType.Inv(TypeDecl G, Collection<TypeDecl> Us) {
+    Collection<ParTypeDecl> result = new HashSet<ParTypeDecl>();
+    for (TypeDecl U : Us) {
+      for (TypeDecl V : LUBType.ST(U)) {
+        if (V instanceof ParTypeDecl && !V.isRawType() && ((ParTypeDecl) V).genericDecl() == G) {
+          result.add((ParTypeDecl) V);
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * @return least containing invocation (lci)
+   */
+  public TypeDecl LUBType.lci(Collection<ParTypeDecl> set, TypeDecl G) {
+    ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
+    boolean first = true;
+    for (ParTypeDecl decl : set) {
+      java.util.List<TypeDecl> declArgs = decl.getParameterization().args;
+      if (first) {
+        first = false;
+        for (TypeDecl arg : declArgs) {
+          list.add(arg);
+        }
+      } else {
+        for (int i = 0; i < declArgs.size(); i++) {
+          list.set(i, lcta(list.get(i), declArgs.get(i)));
+        }
+      }
+    }
+    return ((GenericTypeDecl) G).lookupParTypeDecl(list);
+  }
+
+  /**
+   * Least containing type arguments.
+   */
+  public TypeDecl LUBType.lcta(TypeDecl X, TypeDecl Y) {
+    if (!X.isWildcard() && !Y.isWildcard()) {
+      TypeDecl U = X;
+      TypeDecl V = Y;
+      return U == V ? U : lub(U, V).asWildcardExtends();
+    } else if (!X.isWildcard() && Y instanceof WildcardExtendsType) {
+      TypeDecl U = X;
+      TypeDecl V = ((WildcardExtendsType) Y).getAccess().type();
+      return lub(U, V).asWildcardExtends();
+    } else if (!Y.isWildcard() && X instanceof WildcardExtendsType) {
+      TypeDecl U = Y;
+      TypeDecl V = ((WildcardExtendsType) X).getAccess().type();
+      return lub(U, V).asWildcardExtends();
+    } else if (!X.isWildcard() && Y instanceof WildcardSuperType) {
+      TypeDecl U = X;
+      TypeDecl V = ((WildcardSuperType) Y).getAccess().type();
+      ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
+      bounds.add(U);
+      bounds.add(V);
+      return GLBTypeFactory.glb(bounds).asWildcardSuper();
+    } else if (!Y.isWildcard() && X instanceof WildcardSuperType) {
+      TypeDecl U = Y;
+      TypeDecl V = ((WildcardSuperType) X).getAccess().type();
+      ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
+      bounds.add(U);
+      bounds.add(V);
+      return GLBTypeFactory.glb(bounds).asWildcardSuper();
+    } else if (X instanceof WildcardExtendsType && Y instanceof WildcardExtendsType) {
+      TypeDecl U = ((WildcardExtendsType) X).getAccess().type();
+      TypeDecl V = ((WildcardExtendsType) Y).getAccess().type();
+      return lub(U, V).asWildcardExtends();
+    } else if (X instanceof WildcardExtendsType && Y instanceof WildcardSuperType) {
+      TypeDecl U = ((WildcardExtendsType) X).getAccess().type();
+      TypeDecl V = ((WildcardSuperType) Y).getAccess().type();
+      return U == V ? U : U.typeWildcard();
+    } else if (Y instanceof WildcardExtendsType && X instanceof WildcardSuperType) {
+      TypeDecl U = ((WildcardExtendsType) Y).getAccess().type();
+      TypeDecl V = ((WildcardSuperType) X).getAccess().type();
+      return U == V ? U : U.typeWildcard();
+    } else if (X instanceof WildcardSuperType && Y instanceof WildcardSuperType) {
+      TypeDecl U = ((WildcardSuperType) X).getAccess().type();
+      TypeDecl V = ((WildcardSuperType) Y).getAccess().type();
+      ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
+      bounds.add(U);
+      bounds.add(V);
+      return GLBTypeFactory.glb(bounds).asWildcardSuper();
+    } else {
+      throw new Error("lcta not defined for (" + X.getClass().getName()
+          + ", " + Y.getClass().getName() + ")");
+    }
+  }
+
+  public TypeDecl LUBType.lub(TypeDecl X, TypeDecl Y) {
+    ArrayList<TypeDecl> list = new ArrayList<TypeDecl>(2);
+    list.add(X);
+    list.add(Y);
+    return lub(list);
+  }
+
+  public TypeDecl LUBType.lub(ArrayList<TypeDecl> list) {
+    return lookupLUBType(list);
+  }
+
+  /** @return erased supertype set of the given type. */
+  public static Collection<TypeDecl> LUBType.EST(TypeDecl type) {
+    Collection<TypeDecl> result = new HashSet<TypeDecl>();
+    for (TypeDecl typeDecl : LUBType.ST(type)) {
+      if (typeDecl instanceof TypeVariable) {
+        result.add(typeDecl);
+      } else {
+        result.add(typeDecl.erasure());
+      }
+    }
+    return result;
+  }
+
+  /** @return supertype set of the given type. */
+  public static Collection<TypeDecl> LUBType.ST(TypeDecl type) {
+    Collection<TypeDecl> result = new HashSet<TypeDecl>();
+    LUBType.addSupertypes(result, type);
+    return result;
+  }
+
+  public static void LUBType.addSupertypes(Collection<TypeDecl> set, TypeDecl t) {
+    set.add(t);
+    if (t instanceof ClassDecl) {
+      ClassDecl type = (ClassDecl) t;
+      if (type.hasSuperclass()) {
+        addSupertypes(set, type.superclass());
+      }
+      for (int i = 0; i < type.getNumImplements(); i++) {
+        addSupertypes(set, type.getImplements(i).type());
+      }
+    } else if (t instanceof InterfaceDecl) {
+      InterfaceDecl type = (InterfaceDecl) t;
+      for (int i = 0; i < type.getNumSuperInterface(); i++) {
+        addSupertypes(set, type.getSuperInterface(i).type());
+      }
+      if (type.getNumSuperInterface() == 0) {
+        set.add(type.typeObject());
+      }
+    } else if (t instanceof TypeVariable) {
+      TypeVariable type = (TypeVariable) t;
+      for (int i = 0; i < type.getNumTypeBound(); i++) {
+        addSupertypes(set, type.getTypeBound(i).type());
+      }
+      if (type.getNumTypeBound() == 0) {
+        set.add(type.typeObject());
+      }
+    } else if (t instanceof LUBType) {
+      LUBType type = (LUBType) t;
+      for (int i = 0; i < type.getNumTypeBound(); i++) {
+        addSupertypes(set, type.getTypeBound(i).type());
+      }
+      if (type.getNumTypeBound() == 0) {
+        set.add(type.typeObject());
+      }
+    } else if (! (t instanceof NullType)) {
+      throw new Error("Operation not supported for "
+          + t.fullName() + ", " + t.getClass().getName());
+    }
+  }
 }

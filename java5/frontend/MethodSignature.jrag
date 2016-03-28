@@ -55,7 +55,7 @@ aspect MethodSignature15 {
               method.getParameterList(),
               getArgList(),
               gm.getTypeParameterList());
-          method = method.lookupParMethodDecl(typeArguments);
+          method = gm.lookupParMethodDecl(typeArguments);
         }
         potentiallyApplicable = potentiallyApplicable.add(method);
       }
@@ -138,7 +138,7 @@ aspect MethodSignature15 {
               gc.getParameterList(),
               argList,
               gc.getTypeParameterList());
-          decl = decl.lookupParConstructorDecl(typeArguments);
+          decl = gc.lookupParConstructorDecl(typeArguments);
         }
         potentiallyApplicable = potentiallyApplicable.add(decl);
       }
@@ -213,7 +213,7 @@ aspect MethodSignature15 {
     for (int i = 0; i < num; i++) {
       TypeDecl t1 = getParameter(Math.min(i, numA - 1)).type();
       TypeDecl t2 = m.getParameter(Math.min(i, numB - 1)).type();
-      if (!t1.instanceOf(t2) && !t1.withinBounds(t2, Parameterization.RAW)) {
+      if (!t1.instanceOf(t2) && !t1.withinBounds(t2)) {
         return true;
       }
     }
@@ -227,54 +227,12 @@ aspect MethodSignature15 {
     for (int i = 0; i < num; i++) {
       TypeDecl t1 = getParameter(Math.min(i, numA - 1)).type();
       TypeDecl t2 = m.getParameter(Math.min(i, numB - 1)).type();
-      if (!t1.instanceOf(t2) && !t1.withinBounds(t2, Parameterization.RAW)) {
+      if (!t1.instanceOf(t2) && !t1.withinBounds(t2)) {
         return true;
       }
     }
     return false;
   }
-
-  /**
-   * A raw type parameterization. Performs no substitutions.
-   */
-  public static final Parameterization Parameterization.RAW = new Parameterization() {
-    @Override
-    public boolean isRawType() {
-      return true;
-    }
-    @Override
-    public TypeDecl substitute(TypeVariable typeVariable) {
-      return typeVariable;
-    }
-  };
-
-  /**
-   * A simple parameterization. Each type variable is mapped to a type decl.
-   */
-  class SimpleParameterization implements Parameterization {
-    Map<TypeVariable, TypeDecl> typeMap = new HashMap<TypeVariable, TypeDecl>();
-    public SimpleParameterization(Iterable<TypeVariable> typeParams, Iterable<TypeDecl> typeArgs) {
-      Iterator<TypeVariable> param = typeParams.iterator();
-      Iterator<TypeDecl> arg = typeArgs.iterator();
-      while (param.hasNext() && arg.hasNext()) {
-        typeMap.put(param.next(), arg.next());
-      }
-    }
-
-    @Override
-    public boolean isRawType() {
-      return false;
-    }
-
-    @Override
-    public TypeDecl substitute(TypeVariable typeVariable) {
-      if (typeMap.containsKey(typeVariable)) {
-        return typeMap.get(typeVariable);
-      }
-      return typeVariable;
-    }
-  }
-
 
   syn boolean MethodAccess.applicableBySubtyping(MethodDecl m) {
     if (m.getNumParameter() != getNumArg()) {
@@ -283,14 +241,8 @@ aspect MethodSignature15 {
     for (int i = 0; i < m.getNumParameter(); i++) {
       TypeDecl arg = getArg(i).type();
       TypeDecl param = m.getParameter(i).type();
-      if (!param.isTypeVariable()) {
-        if (!arg.instanceOf(param)) {
-          return false;
-        }
-      } else {
-        if (!arg.withinBounds(param, Parameterization.RAW)) {
-          return false;
-        }
+      if (!arg.subtype(param)) {
+        return false;
       }
     }
     return true;
@@ -303,14 +255,8 @@ aspect MethodSignature15 {
     for (int i = 0; i < getNumParameter(); i++) {
       TypeDecl arg = argList.getChild(i).type();
       TypeDecl param = getParameter(i).type();
-      if (!param.isTypeVariable()) {
-        if (!arg.instanceOf(param)) {
-          return false;
-        }
-      } else {
-        if (!arg.withinBounds(param, Parameterization.RAW)) {
-          return false;
-        }
+      if (!arg.subtype(param)) {
+        return false;
       }
     }
     return true;
@@ -377,10 +323,10 @@ aspect MethodSignature15 {
    * substitued generic method or constructor.
    */
   syn boolean BodyDecl.isGeneric() = false;
+
   eq GenericMethodDecl.isGeneric() = true;
-  eq MethodDeclSubstituted.isGeneric() = sourceMethodDecl().isGeneric();
+
   eq GenericConstructorDecl.isGeneric() = true;
-  eq ConstructorDeclSubstituted.isGeneric() = sourceConstructorDecl().isGeneric();
 
   /**
    * Note: isGeneric must be called first to check if this declaration is generic.
@@ -390,8 +336,8 @@ aspect MethodSignature15 {
   syn GenericMethodDecl MethodDecl.genericDecl() {
     throw new Error("can not evaulate generic declaration of non-generic method");
   }
+
   eq GenericMethodDecl.genericDecl() = this;
-  eq MethodDeclSubstituted.genericDecl() = sourceMethodDecl().genericDecl();
 
   /**
    * Note: isGeneric must be called first to check if this declaration is generic.
@@ -401,8 +347,10 @@ aspect MethodSignature15 {
   syn GenericConstructorDecl ConstructorDecl.genericDecl() {
     throw new Error("can not evaulate generic declaration of non-generic constructor");
   }
+
   eq GenericConstructorDecl.genericDecl() = this;
-  eq ConstructorDeclSubstituted.genericDecl() = sourceConstructorDecl().genericDecl();
+
+  eq GenericConstructorDeclSubstituted.genericDecl() = this;
 
   /**
    * Note: isGeneric must be called first to check if this declaration is generic.
@@ -446,7 +394,7 @@ aspect MethodSignature15 {
     if (!m.accessibleFrom(hostType())) {
       return false;
     }
-    if (m.isVariableArity() && !(arity() >= m.arity()-1)) {
+    if (m.isVariableArity() && !(arity() >= m.arity() - 1)) {
       return false;
     }
     if (!m.isVariableArity() && !(m.arity() == arity())) {
@@ -463,9 +411,9 @@ aspect MethodSignature15 {
         if (gm.getNumTypeParameter() != typeArguments.size()) {
           return false;
         }
-        Parameterization par = new SimpleParameterization(gm.getTypeParameterList(), typeArguments);
+        ParMethodDecl parMethod = gm.lookupParMethodDecl(typeArguments);
         for (int i = 0; i < gm.getNumTypeParameter(); i++) {
-          if (!typeArguments.get(i).withinBounds(gm.original().getTypeParameter(i), par)) {
+          if (!typeArguments.get(i).withinBounds(parMethod.getTypeParameter(i))) {
             return false;
           }
         }

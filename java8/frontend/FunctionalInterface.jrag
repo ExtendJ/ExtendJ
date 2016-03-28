@@ -96,7 +96,7 @@ aspect FunctionalInterface {
       if (t1.strictSubtype(t2)) {
         return true;
       } else {
-        return !sameSignature(m) && t1 == t2.erasure();
+        return !sameSignature(m) && (t1 == t2.erasure() || t1.erasure() == t2);
       }
     } else {
       return false;
@@ -113,34 +113,8 @@ aspect FunctionalInterface {
     for (int i = 0; i < getNumTypeParameter(); i++) {
       TypeVariable tv1 = getTypeParameter(i);
       TypeVariable tv2 = gm.getTypeParameter(i);
-      if (tv1.getNumTypeBound() != tv2.getNumTypeBound()) {
+      if (!tv1.sameType(tv2)) {
         return false;
-      }
-
-      /* The bounds have to be the same in the way that a bound
-      that exists in type variable tv1 must exist exactly the same
-      number of times in tv2, but the order doesn't matter */
-
-      boolean[] checkedBound = new boolean[tv1.getNumTypeBound()];
-
-      for (int j = 0; j < tv1.getNumTypeBound(); j++) {
-        boolean found = false;
-        for (int k = 0; k < tv2.getNumTypeBound(); k++) {
-          if (checkedBound[k]) {
-            continue;
-          }
-          Access a1 = tv1.getTypeBound(j);
-          Access a2 = tv2.getTypeBound(k);
-
-          if (a1.sameType(a2)) {
-            checkedBound[k] = true;
-            found = true;
-            break;
-          }
-        }
-        if (!found) {
-          return false;
-        }
       }
     }
     return true;
@@ -167,10 +141,44 @@ aspect FunctionalInterface {
     return true;
   }
 
-  /*
-  Checks that two type accesses are the same, while taking type variable substitution
-  into account.
-  */
+  syn lazy boolean TypeVariable.sameType(TypeVariable tv2) {
+    TypeVariable tv1 = this;
+    if (tv1.getNumTypeBound() != tv2.getNumTypeBound()) {
+      return false;
+    }
+
+    // The bounds have to be the same in the way that a bound
+    // that exists in type variable tv1 must exist exactly the same
+    // number of times in tv2, but the order doesn't matter.
+
+    boolean[] checkedBound = new boolean[tv1.getNumTypeBound()];
+
+    for (int j = 0; j < tv1.getNumTypeBound(); j++) {
+      boolean found = false;
+      for (int k = 0; k < tv2.getNumTypeBound(); k++) {
+        if (checkedBound[k]) {
+          continue;
+        }
+        Access a1 = tv1.getTypeBound(j);
+        Access a2 = tv2.getTypeBound(k);
+
+        if (a1.sameType(a2)) {
+          checkedBound[k] = true;
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Checks that two type accesses are the same, while taking type variable
+   * substitution into account.
+   */
   public boolean Access.sameType(Access a) {
     if (this instanceof ArrayTypeAccess && a instanceof ArrayTypeAccess) {
       ArrayTypeAccess at1 = (ArrayTypeAccess) this;
@@ -194,12 +202,11 @@ aspect FunctionalInterface {
   }
 
   public boolean TypeAccess.sameType(TypeAccess t) {
-    /*
-    First, two type variables that are to be compared are checked to see if they are
-    both declared by methods and that one of the methods is not inside the scope of the other
-    method. If this is the case it is enough to simply check that the positions are equal.
-    Otherwise the types has to equal.
-    */
+    // First, two type variables that are to be compared are checked to see if
+    // they are both declared by methods and that one of the methods is not
+    // inside the scope of the other method. If this is the case it is enough
+    // to simply check that the positions are equal.  Otherwise the types has
+    // to equal.
 
     if (type() instanceof TypeVariable && t.type() instanceof TypeVariable) {
       TypeVariable t1 = (TypeVariable) type();
@@ -208,11 +215,30 @@ aspect FunctionalInterface {
           && t1.genericMethodLevel() == t2.genericMethodLevel()) {
         return t1.typeVarPosition() == t2.typeVarPosition();
       } else {
-        return t1 == t2;
+        if (t1.enclosingType() == t2.enclosingType()) {
+          return t1 == t2;
+        } else {
+          return t1.sameType(t2);
+        }
       }
-    } else if (type() instanceof TypeVariable && !(t.type() instanceof TypeVariable)
-        || t.type() instanceof TypeVariable && !(type() instanceof TypeVariable) ) {
-      return false;
+    } else if (type() instanceof TypeVariable && !(t.type() instanceof TypeVariable)) {
+      TypeVariable t1 = (TypeVariable) type();
+      TypeDecl t2 = t.type().erasure();
+      for (Access bound : t1.getTypeBoundList()) {
+        if (bound.type() != t2) {
+          return false;
+        }
+      }
+      return true;
+    } else if (t.type() instanceof TypeVariable && !(type() instanceof TypeVariable)) {
+      TypeDecl t1 = type().erasure();
+      TypeVariable t2 = (TypeVariable) t.type();
+      for (Access bound : t2.getTypeBoundList()) {
+        if (bound.type() != t1) {
+          return false;
+        }
+      }
+      return true;
     } else if (type() == t.type()) {
       return true;
     } else {

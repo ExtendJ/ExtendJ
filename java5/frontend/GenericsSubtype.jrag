@@ -116,8 +116,15 @@ aspect GenericsSubtype {
   eq WildcardSuperType.supertypeTypeVariable(TypeVariable type) = superType().subtype(type);
   eq WildcardSuperType.supertypeArrayDecl(ArrayDecl type) = superType().subtype(type);
 
+  /** @return {@code true} if this type is a wildcard type, possibly with type bounds. */
   syn boolean TypeDecl.isWildcard() = false;
+
   eq AbstractWildcardType.isWildcard() = true;
+
+  /** @return {@code true} if this type is the unbounded wildcard type. */
+  syn boolean TypeDecl.isUnboundedWildcard() = false;
+
+  eq WildcardType.isUnboundedWildcard() = true;
 
   eq ParClassDecl.supertypeClassDecl(ClassDecl type) = super.supertypeClassDecl(type);
   eq ParInterfaceDecl.supertypeClassDecl(ClassDecl type) = super.supertypeClassDecl(type);
@@ -197,6 +204,13 @@ aspect GenericsSubtype {
     }
   }
 
+  public static final TypeProperty Parameterization.SAME_STRUCTURE = new TypeProperty() {
+    @Override
+    public boolean holds(TypeDecl t1, TypeDecl t2) {
+      return t1.sameStructure(t2);
+    }
+  };
+
   syn boolean TypeDecl.sameStructure(TypeDecl t) circular [true] = t == this;
 
   eq ParClassDecl.sameStructure(TypeDecl t) {
@@ -204,12 +218,10 @@ aspect GenericsSubtype {
       return false;
     }
     ParClassDecl type = (ParClassDecl) t;
-    if (type.genericDecl().original() == genericDecl().original()
-        && type.getNumArgument() == getNumArgument()) {
-      for (int i = 0; i < getNumArgument(); i++) {
-        if (!type.getArgument(i).type().sameStructure(getArgument(i).type())) {
-          return false;
-        }
+    if (type.genericDecl().original() == genericDecl().original()) {
+      if (!getParameterization().compare(type.getParameterization(),
+          Parameterization.SAME_STRUCTURE)) {
+        return false;
       }
       if (isNestedType() && type.isNestedType()) {
         return type.enclosingType().sameStructure(enclosingType());
@@ -224,12 +236,10 @@ aspect GenericsSubtype {
       return false;
     }
     ParInterfaceDecl type = (ParInterfaceDecl) t;
-    if (type.genericDecl().original() == genericDecl().original()
-        && type.getNumArgument() == getNumArgument()) {
-      for (int i = 0; i < getNumArgument(); i++) {
-        if (!type.getArgument(i).type().sameStructure(getArgument(i).type())) {
-          return false;
-        }
+    if (type.genericDecl().original() == genericDecl().original()) {
+      if (!getParameterization().compare(type.getParameterization(),
+          Parameterization.SAME_STRUCTURE)) {
+        return false;
       }
       if (isNestedType() && type.isNestedType()) {
         return type.enclosingType().sameStructure(enclosingType());
@@ -272,13 +282,18 @@ aspect GenericsSubtype {
     return true;
   }
 
+  public static final TypeProperty Parameterization.CONTAINED_IN = new TypeProperty() {
+    @Override
+    public boolean holds(TypeDecl t1, TypeDecl t2) {
+      return t1.containedIn(t2);
+    }
+  };
+
   eq ParClassDecl.supertypeParClassDecl(ParClassDecl type) {
-    if (type.genericDecl().original() == genericDecl().original()
-        && type.getNumArgument() == getNumArgument()) {
-      for (int i = 0; i < getNumArgument(); i++) {
-        if (!type.getArgument(i).type().containedIn(getArgument(i).type())) {
-          return false;
-        }
+    if (type.genericDecl().original() == genericDecl().original()) {
+      if (!type.getParameterization().compare(getParameterization(),
+          Parameterization.CONTAINED_IN)) {
+        return false;
       }
       if (isNestedType() && type.isNestedType()) {
         return type.enclosingType().subtype(enclosingType());
@@ -291,12 +306,10 @@ aspect GenericsSubtype {
   eq ParClassDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) = false;
 
   eq ParInterfaceDecl.supertypeParClassDecl(ParClassDecl type) {
-    if (type.genericDecl().original() == genericDecl().original()
-        && type.getNumArgument() == getNumArgument()) {
-      for (int i = 0; i < getNumArgument(); i++) {
-        if (!type.getArgument(i).type().containedIn(getArgument(i).type())) {
-          return false;
-        }
+    if (type.genericDecl().original() == genericDecl().original()) {
+      if (!type.getParameterization().compare(getParameterization(),
+          Parameterization.CONTAINED_IN)) {
+        return false;
       }
       if (isNestedType() && type.isNestedType()) {
         return type.enclosingType().subtype(enclosingType());
@@ -305,13 +318,12 @@ aspect GenericsSubtype {
     }
     return supertypeClassDecl(type);
   }
+
   eq ParInterfaceDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) {
-    if (type.genericDecl().original() == genericDecl().original()
-        && type.getNumArgument() == getNumArgument()) {
-      for (int i = 0; i < getNumArgument(); i++) {
-        if (!type.getArgument(i).type().containedIn(getArgument(i).type())) {
-          return false;
-        }
+    if (type.genericDecl().original() == genericDecl().original()) {
+      if (!type.getParameterization().compare(getParameterization(),
+          Parameterization.CONTAINED_IN)) {
+        return false;
       }
       if (isNestedType() && type.isNestedType()) {
         return type.enclosingType().subtype(enclosingType());
@@ -358,37 +370,18 @@ aspect GenericsSubtype {
       return true;
     }
     for (int i = 0; i < getNumTypeBound(); i++) {
-      boolean found = false;
-      for (int j = 0; !found && j < type.getNumTypeBound(); j++) {
-        if (type.getSubstitutedTypeBound(j, this).type().subtype(getTypeBound(i).type())) {
-          found = true;
+      boolean foundSubtype = false;
+      for (int j = 0; !foundSubtype && j < type.getNumTypeBound(); j++) {
+        if (type.getTypeBound(j).type().subtype(getTypeBound(i).type())) {
+          foundSubtype = true;
+          break;
         }
       }
-      if (!found) {
+      if (!foundSubtype) {
         return false;
       }
     }
     return true;
-  }
-
-  syn lazy Access TypeVariable.getSubstitutedTypeBound(int i, TypeDecl type) {
-    Access bound = getTypeBound(i);
-    if (!bound.type().usesTypeVariable()) {
-      return bound;
-    }
-    final TypeDecl typeDecl = type;
-    Access access = bound.type().substitute(
-      new Parameterization() {
-        public boolean isRawType() {
-          return false;
-        }
-        public TypeDecl substitute(TypeVariable typeVariable) {
-          return typeVariable == TypeVariable.this ? typeDecl : typeVariable;
-        }
-      }
-    );
-    access.setParent(this);
-    return access;
   }
 
   // Type variable can not be a strict supertype to a concrete type because the
@@ -576,6 +569,7 @@ aspect GenericsSubtype {
   }
 
   syn boolean TypeDecl.supertypeNullType(NullType type) = false;
+  eq AbstractWildcardType.supertypeNullType(NullType type) = true;
   eq ReferenceType.supertypeNullType(NullType type) = true;
   eq NullType.supertypeNullType(NullType type) = true;
 
