@@ -174,7 +174,8 @@ aspect QualifiedNames {
 
   syn boolean Access.hasPrevExpr() = isRightChildOfDot();
 
-  // Part of cycle (rewrite ParseName -> hasPrev() -> isRightChildOfDot() -> getRight() -> rewrite):
+  // Access.hasPrevExpr() is part of circular attribute/rewrite dependency:
+  // rewrite ParseName -> hasPrev() -> isRightChildOfDot() -> getRight() -> rewrite.
   uncache Access.hasPrevExpr();
 
   public Dot Dot.lastDot() {
@@ -261,7 +262,7 @@ aspect NameResolution {
 
   eq ParseName.isParseName() = true;
 
-  // Replace the parsed name with a name reclassified according to context.
+  // This rewrite replaces a parsed name with a name reclassified according to context.
   // This is done upon first access to a name node.
   rewrite ParseName {
     when (!hasPrevExpr() || !prevExpr().isParseName()) // Ensure rewrites happen left-to-right.
@@ -297,14 +298,9 @@ aspect NameResolution {
   }
 
   rewrite Dot {
-    // NB: leftSide() and rightSide() are allowed to trigger rewrites, and in
-    // fact it is necessary in order to trigger rewrites on parse name leafs of
-    // this qualified expression.
-    // - Jesper 2015
-
-    // Collapse package accesses.
     when (leftSide().isPackageAccess() && rightSide().isPackageAccess())
     to Access {
+      // Collapse package accesses.
       PackageAccess left = (PackageAccess) leftSide();
       PackageAccess right = (PackageAccess) rightSide();
       PackageAccess result = new PackageAccess(left.getPackage() + "." + right.getPackage());
@@ -313,10 +309,10 @@ aspect NameResolution {
       return qualifyTailWith(result);
     }
 
-    // Collapse package with type access.
     when (leftSide().isPackageAccess()
         && !((Access) leftSide()).hasPrevExpr() && rightSide() instanceof TypeAccess)
     to Access {
+      // Collapse package with type access.
       PackageAccess left = (PackageAccess) leftSide();
       TypeAccess right = (TypeAccess) rightSide();
       TypeAccess result = new TypeAccess(left.getPackage(), right.getID());
