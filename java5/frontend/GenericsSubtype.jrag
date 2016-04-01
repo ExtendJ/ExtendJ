@@ -172,16 +172,6 @@ aspect GenericsSubtype {
     return sameStructure(type);
   }
 
-  eq TypeVariable.containedIn(TypeDecl type) {
-    if (super.containedIn(type)) {
-      return true;
-    } else if (getNumTypeBound() == 0) {
-      return typeObject().containedIn(type);
-    } else {
-      return getTypeBound(0).type().containedIn(type);
-    }
-  }
-
   eq WildcardExtendsType.containedIn(TypeDecl type) {
     if (type == this || type instanceof WildcardType) {
       return true;
@@ -196,9 +186,11 @@ aspect GenericsSubtype {
     if (type == this || type instanceof WildcardType) {
       return true;
     } else if (type instanceof WildcardExtendsType) {
-      return superType().subtype(((WildcardExtendsType) type).extendsType());
+      TypeDecl typeExtends = ((WildcardExtendsType) type).extendsType();
+      return superType().subtype(typeExtends);
     } else if (type instanceof WildcardSuperType) {
-      return ((WildcardSuperType) type).superType().subtype(superType());
+      TypeDecl typeSuper = ((WildcardSuperType) type).superType();
+      return superType().sameStructure(typeSuper) || typeSuper.subtype(superType());
     } else {
       return false;
     }
@@ -268,28 +260,32 @@ aspect GenericsSubtype {
       && ((WildcardSuperType) t).superType().sameStructure(superType());
 
   eq TypeVariable.sameStructure(TypeDecl t) {
-    if (!(t instanceof TypeVariable)) {
-      return false;
-    }
-    if (t == this) {
+    if (this == t) {
       return true;
     }
-    TypeVariable type = (TypeVariable) t;
-    if (type.getNumTypeBound() != getNumTypeBound()) {
-      return false;
-    }
-    for (int i = 0; i < getNumTypeBound(); i++) {
-      boolean found = false;
-      for (int j = i; !found && j < getNumTypeBound(); j++) {
-        if (getTypeBound(i).type().sameStructure(type.getTypeBound(j).type())) {
-          found = true;
-        }
-      }
-      if (!found) {
+    if (t instanceof TypeVariable) {
+      TypeVariable type = (TypeVariable) t;
+      if (type.getNumTypeBound() != getNumTypeBound()) {
         return false;
       }
+      for (int i = 0; i < getNumTypeBound(); i++) {
+        boolean found = false;
+        for (int j = i; !found && j < getNumTypeBound(); j++) {
+          if (getTypeBound(i).type().sameStructure(type.getTypeBound(j).type())) {
+            found = true;
+          }
+        }
+        if (!found) {
+          return false;
+        }
+      }
+      return true;
+    } else if (t.usesTypeVariable()) {
+      if (getNumTypeBound() > 0) {
+        return getTypeBound(0).type().sameStructure(t);
+      }
     }
-    return true;
+    return false;
   }
 
   public static final TypeProperty Parameterization.CONTAINED_IN = new TypeProperty() {
