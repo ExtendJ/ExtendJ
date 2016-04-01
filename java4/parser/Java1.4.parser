@@ -14,7 +14,7 @@
 %left OROR;
 %right QUESTION, COLON;
 %right EQ, PLUSEQ, MINUSEQ, MULTEQ, DIVEQ, MODEQ, ANDEQ,
-		XOREQ, OREQ, LSHIFTEQ, RSHIFTEQ, URSHIFTEQ;
+    XOREQ, OREQ, LSHIFTEQ, RSHIFTEQ, URSHIFTEQ;
 %left DOUBLECOLON, RARROW;
 
 %nonassoc BOTTOM;
@@ -72,7 +72,7 @@ Access interface_type =
   ;
 Access array_type =
     primitive_type.t dims @BOTTOM  {: return t.addArrayDims(dims); :}
-  | name dims     		  @BOTTOM  {: return name.addArrayDims(dims); :}
+  | name dims             @BOTTOM  {: return name.addArrayDims(dims); :}
   ;
 Access name =
     simple_name
@@ -596,25 +596,11 @@ Access field_access =
   ;
 Access method_invocation =
   name LPAREN argument_list.l? RPAREN
-  {: if(name instanceof AbstractDot) {
-       AbstractDot d = (AbstractDot) name;
-       ParseName pn = (ParseName)d.extractLast();
-       MethodAccess m = new MethodAccess(pn.getID(), l);
-       m.setStart(pn.getStart()); // add location information
-       m.setEnd(RPAREN.getEnd()); // add location information
-       m.IDstart = pn.getStart();
-       m.IDend = pn.getStart() + pn.getID().length() - 1;
-       d.replaceLast(m);
-       return d;
-     } else {
-       ParseName pn = (ParseName) name;
-       MethodAccess m = new MethodAccess(pn.getID(), l);
-       m.setStart(pn.getStart()); // add location information
-       m.setEnd(RPAREN.getEnd()); // add location information
-       m.IDstart = pn.getStart();
-       m.IDend = pn.getStart() + pn.getID().length() - 1;
-       return m;
-     } :}
+  {:  Access result = name.buildMethodAccess(l);
+      result.setStart(name.getStart());
+      result.setEnd(RPAREN.getEnd());
+      return result;
+  :}
   | primary.p DOT IDENTIFIER LPAREN argument_list.l? RPAREN
   {: MethodAccess m = new MethodAccess(IDENTIFIER, l);
      m.setStart(IDENTIFIER.getStart()); // add location information
@@ -648,16 +634,10 @@ Access array_access =
      a.setStart(LBRACK.getStart());
      a.setEnd(RBRACK.getEnd());
      return p.qualifiesAccess(a); :}
-/*| array_creation_init.i LBRACK expression.e RBRACK
- *{: ArrayAccess a = new ArrayAccess(e);
- *   a.setStart(LBRACK.getStart());
- *   a.setEnd(RBRACK.getEnd());
- *   return i.qualifiesAccess(a); :}
- */
   ;
 Expr postfix_expression =
     primary @BOTTOM
-  | name @BOTTOM
+  | name    @BOTTOM
   | postincrement_expression
   | postdecrement_expression
   ;
@@ -687,8 +667,10 @@ Expr unary_expression_not_plus_minus =
   | cast_expression
   ;
 Expr cast_expression =
-    LPAREN primitive_type.t dims.d? RPAREN unary_expression.e  @CAST   {: return new CastExpr(t.addArrayDims(d), e); :}
-  | LPAREN name.t dims.d? RPAREN unary_expression_not_plus_minus.e @CAST {: return new CastExpr(t.addArrayDims(d), e); :}
+    LPAREN primitive_type.t dims.d? RPAREN unary_expression.e      @CAST
+  {: return new CastExpr(t.addArrayDims(d), e); :}
+  | LPAREN name.t dims.d? RPAREN unary_expression_not_plus_minus.e @CAST
+  {: return new CastExpr(t.addArrayDims(d), e); :}
   ;
 Expr multiplicative_expression =
     unary_expression
