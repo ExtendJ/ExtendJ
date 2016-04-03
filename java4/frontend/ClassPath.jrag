@@ -40,6 +40,11 @@ import java.util.Collection;
 import java.util.ArrayList;
 import beaver.*;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
+
 aspect ClassPath {
   /** Interface for ExtendJ bytecode reader adapter. */
   public interface BytecodeReader {
@@ -112,6 +117,9 @@ aspect ClassPath {
    * Parse the source file and add the compilation unit to the list of
    * compilation units in the program.
    *
+   * <p>This method modifies the AST. It may not be called after any attribute
+   * evaluation starts.
+   *
    * @param fileName file name of the source file
    * @return The CompilationUnit representing the source file,
    * or <code>null</code> if the source file could not be parsed
@@ -121,7 +129,12 @@ aspect ClassPath {
     CompilationUnit cu = pathPart.getCompilationUnit(this, fileName);
     if (cu != emptyCompilationUnit()) {
       classPath.addPackage(cu.packageName());
-      addCompilationUnit(cu);
+      // In parallel execution, multiple source files could be added concurrently.
+      // However, the Program class is not thread-safe for modification, so we use
+      // a synchronized block to ensure sequential updating of the Program node.
+      synchronized (this) {
+        addCompilationUnit(cu);
+      }
     }
     return cu;
   }
@@ -296,7 +309,7 @@ aspect ClassPath {
      * @return the loaded compilation unit, or the provided default compilation unit if no matching
      * compilation unit was found.
      */
-    public synchronized CompilationUnit getCompilationUnit(String typeName,
+    public CompilationUnit getCompilationUnit(String typeName,
         CompilationUnit defaultCompilationUnit) {
       try {
         initPaths();
@@ -410,19 +423,92 @@ aspect ClassPath {
   }
 
   /**
+   * This is a helper class used to ensure that only one thread
+   * parses a single demand loaded compilation unit.
+   *
+   * <p>A thread calls the first() method to check if it should parse the
+   * compilation unit. If first() returns {@code true} then the thread proceeds
+   * to parse the compilation unit and stores the result by calling set(). If
+   * first() instead returns {@code false} the thread will call get() which
+   * waits until the result is available.
+   */
+  class ParseSynchronizer {
+    private AtomicBoolean first = new AtomicBoolean(true);
+    private CompilationUnit result = null;
+
+    /**
+     * @return {@code true} in only one thread calling this method.
+     * Returns {@code false} in all other threads.
+     */
+    public boolean first() {
+      return first.getAndSet(false);
+    }
+
+    /**
+     * Share a parsed compilation unit with other threads.
+     * The compilation unit must not be null!
+     */
+    public synchronized void set(CompilationUnit result) {
+      this.result = result;
+      notifyAll();
+    }
+
+    /**
+     * Read the stored compilation unit. This blocks until the result has been
+     * stored by another thread.
+     */
+    public synchronized CompilationUnit get() {
+      try {
+        while (result == null) {
+          wait();
+        }
+      } catch (InterruptedException e) {
+      }
+      return result;
+    }
+  }
+
+  /**
+   * Cache for parsed compilation units.
+   *
+   * <p>Should only be accessed via Program.getCompilationUnit(String).
+   */
+  private ConcurrentMap<String, ParseSynchronizer> Program.parseLocks =
+      new ConcurrentSkipListMap<String, ParseSynchronizer>();
+
+  /**
    * Load a compilation unit from disk, selecting a class file
    * if one exists that is not older than a corresponding source
    * file, otherwise the source file is selected.
    *
-   * <p>This method is called by the LibCompilationUnit NTA.  We rely on the
-   * result of this method being cached because it will return a newly parsed
-   * compilation unit each time it is called.
+   * <p>This attribute is used by the LibCompilationUnit NTA.  Internally this
+   * attribute memoizes its results via the parseLocks map.
    *
-   * @return the loaded compilation unit, or the empty compilation unit if no compilation unit was
-   * found.
+   * @return the loaded compilation unit, or the empty compilation unit if no
+   * compilation unit was found.
    */
-  syn lazy CompilationUnit Program.getCompilationUnit(String typeName) =
-      classPath.getCompilationUnit(typeName, emptyCompilationUnit());
+  syn lazy CompilationUnit Program.getCompilationUnit(String typeName) {
+    final ParseSynchronizer synchronizer;
+    ParseSynchronizer old = parseLocks.get(typeName);
+    if (old != null) {
+      synchronizer = old;
+    } else {
+      ParseSynchronizer fresh = new ParseSynchronizer();
+      old = parseLocks.putIfAbsent(typeName, fresh);
+      if (old == null) {
+        synchronizer = fresh;
+      } else {
+        synchronizer = old;
+      }
+    }
+    if (synchronizer.first()) {
+      CompilationUnit result = classPath.getCompilationUnit(typeName, emptyCompilationUnit());
+      synchronizer.set(result);
+      return result;
+    } else {
+      return synchronizer.get();
+    }
+  }
 
   /**
    * @return <code>true</code> if there is a package with the given name on

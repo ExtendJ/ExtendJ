@@ -100,10 +100,6 @@ aspect SpecialClasses {
 aspect LookupFullyQualifiedTypes {
   syn lazy boolean Program.hasPackage(String packageName) = isPackage(packageName);
 
-  /**
-   * The scope of a declaration of an observable top level package is all
-   * observable compilation units
-   */
   eq Program.getChild().hasPackage(String packageName) = hasPackage(packageName);
   eq AbstractDot.getRight().hasPackage(String packageName) =
       getLeft().hasQualifiedPackage(packageName);
@@ -155,12 +151,25 @@ aspect LookupFullyQualifiedTypes {
   }
 
   /**
-   * Extra cache for source type lookups. This cache is important in order to
-   * make all source types shadow library types with matching names, even when
-   * the source type lives in a compilation unit with a different simple name.
+   * Cache for source type lookups.
+   *
+   * <p>Should only be accessed via Program.lookupSourceType(String,String)!
+   *
+   * <p>This cache is important in order to make all source types shadow
+   * library types with matching names, even when the source type lives in a
+   * compilation unit with a different name.
+   *
+   * <p>When loading a compilation unit, all additional types in the compilation unit
+   * must become visible after the type lookup for the type with the same name as the
+   * compilation unit. This map ensures that additional types become visible.
    */
   private final Map<String, TypeDecl> Program.sourceTypeMap = new HashMap<String, TypeDecl>();
 
+  /**
+   * Flag indictating if the source type map has already been initialized.
+   *
+   * <p>Should only be accessed via Program.lookupSourceType(String,String)!
+   */
   private boolean Program.sourceTypeMapInitialized = false;
 
   /**
@@ -168,12 +177,18 @@ aspect LookupFullyQualifiedTypes {
    *
    * <p>Invoking this method may cause more than just the specified type to be
    * loaded, for example if there exists other types in the same source file,
-   * the additional types are also loaded and cached for the next lookup.
+   * the additional types are also loaded and memoized for the next lookup.
    *
-   * <p>This method is not an attribute due to the necessary side-effects
-   * caused by loading and caching of extra types.
+   * <p>This is a method rather than an attribute because it uses side-effects
+   * to memoize additional types. The side effects are only observable via the
+   * fields Program.sourceTypeMapInitialized and Program.sourceTypeMap.
+   * These fields should only be used by this method to ensure that it is
+   * observationally pure.
+   *
+   * <p>This method is synchronized to ensure that concurrent type lookups
+   * run sequentially.
    */
-  protected TypeDecl Program.lookupSourceType(String packageName, String typeName) {
+  protected synchronized TypeDecl Program.lookupSourceType(String packageName, String typeName) {
     String fullName = packageName.equals("") ? typeName : packageName + "." + typeName;
 
     if (!sourceTypeMapInitialized) {
@@ -187,7 +202,7 @@ aspect LookupFullyQualifiedTypes {
       sourceTypeMap.put(fullName, unknownType());
     }
 
-    // Look for a matching library type.
+    // Source type not found: lookup library type instead.
     return unknownType();
   }
 
@@ -207,16 +222,25 @@ aspect LookupFullyQualifiedTypes {
   }
 
   /**
-   * Extra cache for library type lookups. This cache does not have a big
-   * effect on performance due to the caching of the parameterized
-   * lookupLibraryType attribute. The cache is needed to be able to track library types
-   * that are declared in compilation units with a different simple name than the type itself.
+   * Extra cache for library type lookups.
+   *
+   * <p>Should only be accessed via Program.lookupLibraryType(String,String)!
+   *
+   * <p>This cache is needed to be able to track library types that are
+   * declared in compilation units with a different name than the type itself.
+   * Note that this only affects library types loaded from source (unfortunately easy
+   * to confuse with sourceTypeMap).
    */
   private final Map<String, TypeDecl> Program.libraryTypeMap = new HashMap<String, TypeDecl>();
 
   private final Set<CompilationUnit> Program.libraryCompilationUnitSet =
       new RobustSet<CompilationUnit>(new HashSet<CompilationUnit>());
 
+  /**
+   * Flag indictating if the library type map has already been initialized.
+   *
+   * <p>Should only be accessed via Program.lookupLibraryType(String,String)!
+   */
   private boolean Program.libraryTypeMapInitialized = false;
 
   /**
@@ -224,12 +248,18 @@ aspect LookupFullyQualifiedTypes {
    *
    * <p>Invoking this method may cause more than just the specified type to be loaded, for
    * example if there exists other types in the same source file, the additional
-   * types are also loaded and cached for the next lookup.
+   * types are also loaded and memoized for the next lookup.
    *
-   * <p>This method is not an attribute due to the necessary side-effects caused
-   * by loading and caching of extra types.
+   * <p>This is a method rather than an attribute because it uses side-effects
+   * to memoize additional types. The side effects are only observable via the
+   * fields Program.libraryTypeMapInitialized and Program.libraryTypeMap.
+   * These fields should only be used by this method to ensure that it is
+   * observationally pure.
+   *
+   * <p>This method is synchronized to ensure that concurrent type lookups
+   * run sequentially.
    */
-  protected TypeDecl Program.lookupLibraryType(String packageName, String typeName) {
+  protected synchronized TypeDecl Program.lookupLibraryType(String packageName, String typeName) {
     String fullName = packageName.isEmpty() ? typeName : packageName + "." + typeName;
 
     if (!libraryTypeMapInitialized) {
@@ -294,7 +324,7 @@ aspect LookupFullyQualifiedTypes {
 aspect TypeScopePropagation {
   inh TypeDecl Access.unknownType();
 
-  // Can not be lazy due to circular use from StaticImportDecl.importedTypes.
+  // This can be in a dependency cycle with StaticImportDecl.importedTypes().
   syn SimpleSet<TypeDecl> TypeAccess.decls() =
       packageName().equals("")
       ? lookupType(name())
@@ -323,7 +353,7 @@ aspect TypeScopePropagation {
   syn lazy SimpleSet<TypeDecl> PrimitiveTypeAccess.decls() =
       lookupType(PRIMITIVE_PACKAGE_NAME, name());
 
-  // Can not be lazy due to circular use from StaticImportDecl.importedTypes.
+  // This can be in a dependency cycle with StaticImportDecl.importedTypes().
   syn TypeDecl TypeAccess.decl() {
     SimpleSet<TypeDecl> decls = decls();
     if (decls.isSingleton()) {
@@ -368,8 +398,11 @@ aspect TypeScopePropagation {
 
   eq Program.getChild().lookupType(String name) = emptySet();
 
-  // The scope of a type import declaration is all the class and interface type declarations in
-  // the compilation unit in which the import declaration appears.
+  /**
+   * The scope of a type import declaration is all the class and interface type
+   * declarations in the compilation unit in which the import declaration
+   * appears.
+   */
   eq CompilationUnit.getChild().lookupType(String name) {
     // Locally declared types in the compilation unit.
     SimpleSet<TypeDecl> result = localLookupType(name);
