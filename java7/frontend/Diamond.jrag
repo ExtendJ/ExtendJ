@@ -87,9 +87,15 @@ aspect Diamond {
   syn boolean Access.isDiamond() = false;
   eq DiamondAccess.isDiamond() = true;
 
+  /**
+   * @return the nearest enclosing class instance expression, or {@code null}
+   * if there is no enclosing class instance expression.
+   */
   inh ClassInstanceExpr DiamondAccess.getClassInstanceExpr();
   eq ClassInstanceExpr.getAccess().getClassInstanceExpr() = this;
-  eq Program.getChild(int i).getClassInstanceExpr() = null; // TODO
+  eq BodyDecl.getChild().getClassInstanceExpr() = null;
+  eq TypeDecl.getChild().getClassInstanceExpr() = null;
+  eq Program.getChild().getClassInstanceExpr() = null;
 
   protected static SimpleSet<MethodDecl> DiamondAccess.mostSpecific(
       SimpleSet<MethodDecl> maxSpecific, MethodDecl decl) {
@@ -107,8 +113,11 @@ aspect Diamond {
   }
 
   /**
-   * Choose a constructor for the diamond operator using placeholder
-   * methods.
+   * Choose a constructor for the diamond operator using stand-in
+   * methods. One stand-in method is generated for each constructor
+   * of the generic type. Type inference is then used to select the
+   * type arguments for the method, which can be used as the type
+   * arguments of the generic type.
    */
   protected SimpleSet<MethodDecl> DiamondAccess.chooseConstructor() {
     ClassInstanceExpr instanceExpr = getClassInstanceExpr();
@@ -134,13 +143,14 @@ aspect Diamond {
   }
 
   /**
-   * The placeholder method list for the constructors of this generic
-   * class.
+   * The stand-in method list for the constructors of this generic
+   * class.  One stand-in method is generated for each constructor
+   * of the generic class.
    *
-   * @return list of placeholder methods
+   * @return list of stand-in methods
    */
   syn nta List<StandInMethodDecl> GenericClassDecl.getStandInMethodList() {
-    List<StandInMethodDecl> placeholderMethods = new List<StandInMethodDecl>();
+    List<StandInMethodDecl> methods = new List<StandInMethodDecl>();
     List<TypeVariable> typeParams = getTypeParameterList();
     List<TypeVariable> classTypeVars = new List<TypeVariable>();
     List<Access> typeArgs = new List<Access>();
@@ -214,7 +224,7 @@ aspect Diamond {
         substExceptions.add(exception.substituted(originalTypeVars, typeVars));
       }
 
-      StandInMethodDecl placeholderMethod = new StandInMethodDecl(
+      StandInMethodDecl standInMethod = new StandInMethodDecl(
           (Modifiers) decl.getModifiers().treeCopyNoTransform(),
           (Access) returnType.treeCopyNoTransform(),
           "#" + getID(),
@@ -223,9 +233,9 @@ aspect Diamond {
           new Opt(new Block()),
           typeVars);
 
-      placeholderMethods.add(placeholderMethod);
+      methods.add(standInMethod);
     }
-    return placeholderMethods;
+    return methods;
   }
 
   /**
