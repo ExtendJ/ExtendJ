@@ -206,16 +206,21 @@ aspect BytecodeDescriptor {
       }
       if ((flags & Flags.ACC_VARARGS) != 0) {
         int lastIndex = parameterList.getNumChildNoTransform() - 1;
-        ParameterDeclaration p = (ParameterDeclaration)
-            parameterList.getChildNoTransform(lastIndex);
-        parameterList.setChild(
-            new VariableArityParameterDeclaration(
-              p.getModifiersNoTransform(),
-              ((ArrayTypeAccess) p.getTypeAccessNoTransform()).getAccessNoTransform(),
-              p.getID()
-            ),
-          lastIndex
-        );
+        // The last index is -1 if this is the constructor of a static anonymous
+        // inner class with a variable arity parameter list.
+        // Since this only affects anonymous inner classes we don't have to
+        // generate a precise AST for the bytecode. We could even skip loading
+        // the bytecode entirely.
+        if (lastIndex >= 0) {
+          ParameterDeclaration p = (ParameterDeclaration)
+              parameterList.getChildNoTransform(lastIndex);
+          parameterList.setChild(
+              new VariableArityParameterDeclaration(
+                  p.getModifiersNoTransform(),
+                  ((ArrayTypeAccess) p.getTypeAccessNoTransform()).getAccessNoTransform(),
+                  p.getID()),
+              lastIndex);
+        }
       }
       List exceptionList = (s != null && s.hasExceptionList())
           ? s.exceptionList()
