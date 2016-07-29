@@ -58,8 +58,7 @@ public class RobustSet<V> implements Set<V> {
   private final RobustLinkedList<V> list = new RobustLinkedList<V>();
 
   /**
-   * Construct robust set as a wrapper using an underlying HashSet.
-   * @param underlyingSet
+   * Construct robust set based on a HashSet.
    */
   public RobustSet() {
     this(new HashSet<V>());

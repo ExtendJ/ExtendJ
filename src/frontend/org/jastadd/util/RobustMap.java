@@ -97,8 +97,7 @@ public class RobustMap<K, V> implements Map<K, V> {
   private final Map<K, V> map;
 
   /**
-   * Construct robust map as a wrapper around a HashMap.
-   * @param underlyingMap
+   * Construct robust based on a HashMap.
    */
   public RobustMap() {
     this(new HashMap<K, V>());
