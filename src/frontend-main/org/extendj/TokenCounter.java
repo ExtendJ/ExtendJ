@@ -1,4 +1,4 @@
-/* Copyright (c) 2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,9 +48,12 @@ import java.util.Scanner;
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class TokenCounter {
+  private int tokens = 0;
+  private int lines = 0;
+  private int imports = 0;
+
   /**
    * Count tokens in some Java source files.
-   * @param args
    */
   public static void main(String[] args) {
     if (args.length == 0) {
@@ -64,20 +67,10 @@ public class TokenCounter {
         System.exit(0);
       }
     }
-    int numTokens = 0;
-    for (String arg : args) {
-      if (arg.startsWith("@")) {
-        numTokens += processFileList(arg.substring(1));
-      } else {
-        numTokens += process(arg);
-      }
-    }
-    System.out.println("tokens: " + numTokens);
+    TokenCounter counter = new TokenCounter();
+    counter.processArgs(args);
   }
 
-  /**
-   * Print help
-   */
   public static void printHelp() {
     System.out.println("Usage: TokenCounter <Java files> [@filelist]");
     System.out.println();
@@ -87,30 +80,38 @@ public class TokenCounter {
     System.out.println("character increases the total token count by one.");
   }
 
+  public void processArgs(String[] args) {
+    for (String arg : args) {
+      if (arg.startsWith("@")) {
+        processFileList(arg.substring(1));
+      } else {
+        processFile(arg);
+      }
+    }
+    System.out.println("tokens: " + tokens);
+    System.out.println("lines: " + lines);
+    System.out.println("imports: " + imports);
+  }
+
   /**
-   * @param filename
    * @return number of tokens in the files listed in the file list
    */
-  public static int processFileList(String filename) {
-    int numTokens = 0;
+  public void processFileList(String filename) {
     try {
       Scanner scanner = new Scanner(new File(filename));
       while (scanner.hasNextLine()) {
-        numTokens += process(scanner.nextLine());
+        processFile(scanner.nextLine());
       }
       scanner.close();
     } catch (IOException e) {
       System.err.println("Could not read file list: " + filename);
     }
-    return numTokens;
   }
 
   /**
-   * @param filename
    * @return number of tokens in the file
    */
-  public static int process(String filename) {
-    int numTokens = 0;
+  public void processFile(String filename) {
     File file = new File(filename);
     if (!file.isFile()) {
       System.err.println("Warning: could not open file " + filename);
@@ -118,6 +119,8 @@ public class TokenCounter {
       try {
         FileInputStream is = new FileInputStream(file);
         JavaScanner scanner = new JavaScanner(new Unicode(is));
+        boolean inImport = false;
+        int prevLine = 0;
         while (true) {
           try {
             Symbol next = scanner.nextToken();
@@ -126,6 +129,13 @@ public class TokenCounter {
               break;
             }
             switch (id) {
+              case Terminals.IMPORT:
+                inImport = true;
+                imports += 1;
+                break;
+              case Terminals.SEMICOLON:
+                inImport = false;
+                break;
               case Terminals.DOCUMENTATION_COMMENT:
               case Terminals.LPAREN:
               case Terminals.RPAREN:
@@ -134,11 +144,19 @@ public class TokenCounter {
                 // Not counted!
                 break;
               default:
-                numTokens += 1;
+                if (!inImport) {
+                  // Only count non-import tokens.
+                  tokens += 1;
+                  int currentLine = beaver.Symbol.getLine(next.getStart());
+                  if (currentLine != prevLine) {
+                    lines += 1;
+                    prevLine = currentLine;
+                  }
+                }
             }
           } catch (beaver.Scanner.Exception e) {
             System.err.println("Warning "+filename+":"+e.line+":"+e.column+": " + e.getMessage());
-            numTokens += 1;
+            tokens += 1;
           }
         }
         is.close();
@@ -147,6 +165,5 @@ public class TokenCounter {
         System.err.println(e.getMessage());
       }
     }
-    return numTokens;
   }
 }
