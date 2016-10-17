@@ -28,7 +28,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * This aspect adds compile errors for exception handling problems.
+ */
 aspect ExceptionHandling {
+
+  // TODO(joqvist): add an attribute to easily access the collection of exception types
+  // thrown by a statement. This already exists for MethodAccess, but not other types
+  // of expressions/statements. See MethodAccess.exceptionCollection() below.
 
   /**
    * @return <code>true</code> if this TyStmt has a non-empty finally block
@@ -102,6 +109,7 @@ aspect ExceptionHandling {
     return problems;
   }
 
+  /** @return the exception types possibly thrown by this method access */
   syn lazy Collection<TypeDecl> MethodAccess.exceptionCollection() {
     Collection<TypeDecl> exceptions = new HashSet<TypeDecl>();
     Iterator<MethodDecl> iter = decls().iterator();
@@ -365,4 +373,28 @@ aspect ExceptionHandling {
     return false;
   }
 
+  ClassDecl contributes each exceptionHandlingProblems() to CompilationUnit.problems();
+
+  /**
+   * Computes compile errors for each checked exception thrown by the default
+   * constructor of this class.
+   */
+  syn Collection<Problem> ClassDecl.exceptionHandlingProblems() {
+    if (!hasImplicitConstructor() || isAnonymous()) {
+      // If this class is anonymous, then exceptions are checked by the code
+      // instantiating the anonymous class.
+      return Collections.emptyList();
+    }
+    Collection<Problem> problems = new LinkedList<Problem>();
+    Stmt superCall = getImplicitConstructor().getParsedConstructorInvocation();
+    SuperConstructorAccess superAccess = (SuperConstructorAccess) ((ExprStmt) superCall).getExpr();
+    for (Access exception : superAccess.decl().getExceptionList()) {
+      if (exception.type().isCheckedException()) {
+        problems.add(errorf(
+            "default constructor for class %s throws unchecked exception %s via "
+            + "superclass constructor", name(), exception.type().fullName()));
+      }
+    }
+    return problems;
+  }
 }

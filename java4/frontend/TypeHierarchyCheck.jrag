@@ -387,8 +387,6 @@ aspect TypeHierarchyCheck {
 
   syn boolean MethodDecl.mayOverride(MethodDecl m) = type() == m.type();
 
-  ClassDecl contributes each nameProblems() to CompilationUnit.problems();
-
   syn Collection<Problem> ClassDecl.nameProblems() {
     Collection<Problem> problems = new LinkedList<Problem>(super.nameProblems());
     if (hasSuperClass() && !getSuperClass().type().isClassDecl()) {
@@ -437,6 +435,19 @@ aspect TypeHierarchyCheck {
             checkAbstractMethodDecls(problems, m, n);
           }
         }
+      }
+    }
+
+    // Check if there is a matching accessible super constructor for the default constructor.
+    if (hasImplicitConstructor()) {
+      Stmt superCall = getImplicitConstructor().getParsedConstructorInvocation();
+      SuperConstructorAccess superAccess =
+          (SuperConstructorAccess) ((ExprStmt) superCall).getExpr();
+      if (superAccess.decls().isEmpty()) {
+        problems.add(errorf(
+            "can not generate default constructor for class %s because "
+            + "superclass %s has no accessible zero-argument constructor",
+            name(), superclass().name()));
       }
     }
     return problems;
