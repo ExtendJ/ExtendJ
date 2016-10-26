@@ -115,15 +115,15 @@ aspect TypeHierarchyCheck {
             s.typeName(), c.typeName()));
       } else if (!qualifier().type().instanceOf(s.enclosingType())) {
         problems.add(errorf(
-            "The type of this primary expression, %s is not enclosing the super type, %s, of %s",
+            "the type of this primary expression, %s is not enclosing the super type, %s, of %s",
             qualifier().type().typeName(), s.typeName(), c.typeName()));
       }
     }
-    if (!isQualified() && s.isInnerType()) {
-      if (!c.isInnerType()) {
-        problems.add(errorf("no enclosing instance for %s when accessed in %s",
-            s.typeName(), this.prettyPrint()));
-      }
+    if (!isQualified() && s.isInnerType()
+        && (!c.isInnerType() || !c.enclosingType().instanceOf(s.enclosingType()))) {
+      problems.add(errorf("superconstructor call in constructor for class %s requires "
+          + "enclosing instance for the enclosing class %s of superclass %s",
+          c.name(), s.enclosingType().name(), s.typeName()));
     }
     if (s.isInnerType() && hostType().instanceOf(s.enclosingType())) {
       problems.add(error("cannot reference 'this' before supertype constructor has been called"));
@@ -448,6 +448,14 @@ aspect TypeHierarchyCheck {
             "can not generate default constructor for class %s because "
             + "superclass %s has no accessible zero-argument constructor",
             name(), superclass().name()));
+      } else if (superclass().isInnerType()
+          && (!isInnerType() || !enclosingType().instanceOf(superclass().enclosingType()))) {
+        problems.add(errorf(
+            "can not generate default constructor for class %s because its "
+            + "superclass %s is an inner type of %s and %s is not an inner type of %s or a "
+            + "subtype thereof",
+            name(), superclass().typeName(), superclass().enclosingType().name(),
+            name(), superclass().enclosingType().name()));
       }
     }
     return problems;
