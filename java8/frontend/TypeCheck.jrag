@@ -485,7 +485,138 @@ aspect LambdaParametersInference {
     } else if (iDecl.functionDescriptor().method.getNumParameter() < i + 1) {
       return unknownType();
     } else {
+      // The target functional interface matches this lambda.
       return iDecl.functionDescriptor().method.getParameter(i).type();
     }
   }
+
+  /**
+   * If the method is parameterized, this returns the non-wildcard parameterization
+   * according to the rules specified in JLS 8 &sect;9.9.
+   */
+  syn MethodDecl MethodDecl.nonWildcardParameterization() = this;
+
+  eq MethodDeclSubstituted.nonWildcardParameterization() {
+    TypeDecl host = hostType();
+    TypeDecl param = host.nonWildcardParameterization();
+    if (param == null) {
+      // Undefined function type.
+      return null;
+    }
+    if (param == host) {
+      // No change to generic type parameterization.
+      return this;
+    } else {
+      for (BodyDecl decl : param.getBodyDeclList()) {
+        if (decl.isSubstitutionOf(this.sourceMethodDecl())) {
+          return (MethodDecl) decl;
+        }
+      }
+      // This should not happen.
+      throw new Error("Did not find matching substituted method.");
+    }
+  }
+
+  /**
+   * @return {@code true} if this method is a substituted method declaration with
+   * the source declaration being identical to the given method.
+   */
+  syn boolean BodyDecl.isSubstitutionOf(MethodDecl method) = false;
+
+  eq MethodDeclSubstituted.isSubstitutionOf(MethodDecl method) = sourceMethodDecl() == method;
+
+  /**
+   * If this type is parameterized, this returns the non-wildcard parameterization
+   * of the type according to the rules specified in JLS 8 &sect;9.9.
+   */
+  syn TypeDecl TypeDecl.nonWildcardParameterization() = this;
+
+  eq ParInterfaceDecl.nonWildcardParameterization() {
+    TypeDecl genericDecl = genericDecl();
+    if (genericDecl instanceof GenericInterfaceDecl) {
+      GenericInterfaceDecl generic = (GenericInterfaceDecl) genericDecl();
+      Collection<TypeDecl> typeArgs = new ArrayList<TypeDecl>();
+      boolean allSame = true;
+      for (int i = 0; i < getNumTypeParameter(); ++i) {
+        TypeDecl Ai = getParameterization().getArg(i);
+
+        if (!Ai.isWildcard()) {
+          // Ti = Ai.
+          typeArgs.add(Ai);
+        } else {
+          allSame = false;
+          TypeVariable Pi = generic.getTypeParameter(i);
+          if (Pi.mentionsTypeVariable(generic.getTypeParameterList())) {
+            // Ti is undefined, there is no function type.
+            return null;
+          } else {
+            typeArgs.add(Ai.nonWildcardParamType(Pi));
+          }
+        }
+      }
+      if (allSame) {
+        // No changes to the parameterization needed.
+        return this;
+      } else {
+        return generic.lookupParTypeDecl(typeArgs);
+      }
+    } else {
+      return this;
+    }
+  }
+
+  /**
+   * Returns true if this type variable contains a mention of any of the
+   * given type variables.
+   */
+  syn boolean TypeVariable.mentionsTypeVariable(List<TypeVariable> vars) {
+    for (Access bound : getTypeBoundList()) {
+      for (TypeVariable var : vars) {
+        if (bound.mentionsTypeVariable(var)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  syn boolean Access.mentionsTypeVariable(TypeVariable var) = false;
+
+  eq TypeAccess.mentionsTypeVariable(TypeVariable var) =
+      getPackage().isEmpty() && getID().equals(var.getID());
+
+  eq WildcardExtends.mentionsTypeVariable(TypeVariable var) =
+      getAccess().mentionsTypeVariable(var);
+
+  eq WildcardSuper.mentionsTypeVariable(TypeVariable var) =
+      getAccess().mentionsTypeVariable(var);
+
+  /**
+   * For a wildcard type this gives the bound of the wildcard.
+   * For non-wildcard types this is just the same type.
+   */
+  syn TypeDecl TypeDecl.boundType() = this;
+
+  eq WildcardType.boundType() = typeObject();
+
+  eq WildcardExtendsType.boundType() = extendsType();
+
+  eq WildcardSuperType.boundType() = superType();
+
+  /**
+   * This computes the non-wildcard parameterization type of a parameter
+   * in a generic function type according to the rules in JLS 8 &sect;9.9.
+   */
+  syn TypeDecl TypeDecl.nonWildcardParamType(TypeVariable bound) = this;
+
+  eq WildcardType.nonWildcardParamType(TypeVariable bound) = bound.lubType();
+
+  eq WildcardExtendsType.nonWildcardParamType(TypeVariable bound) {
+    ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
+    bounds.add(extendsType());
+    bounds.add(bound.lubType());
+    return GLBTypeFactory.glb(bounds);
+  }
+
+  eq WildcardSuperType.nonWildcardParamType(TypeVariable bound) = superType();
 }

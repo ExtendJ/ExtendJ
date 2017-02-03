@@ -26,13 +26,26 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect FunctionDescriptor {
+  /**
+   * Describes a function type.
+   *
+   * <p>Function types are defined by functional interfaces, but
+   * the function type is not always the identical to a single
+   * abstract method in the interface.
+   */
   class FunctionDescriptor {
-    ArrayList<TypeDecl> throwsList = null;
-    MethodDecl method = null;
-    InterfaceDecl fromInterface = null;
+    public final java.util.List<TypeDecl> throwsList;
+    public final MethodDecl method;
+    public final InterfaceDecl fromInterface;
 
-    public FunctionDescriptor(InterfaceDecl fromInterface) {
+    public FunctionDescriptor(InterfaceDecl fromInterface, MethodDecl method,
+        java.util.List<TypeDecl> throwsList) {
       this.fromInterface = fromInterface;
+      // TODO: need to handle errors in the function descriptor better!
+      // Right now, the method is set to null if the function type is undefined,
+      // however this leads to null pointer exceptions all over.
+      this.method = method.nonWildcardParameterization();
+      this.throwsList = throwsList;
     }
 
     public boolean isGeneric() {
@@ -86,23 +99,26 @@ aspect FunctionDescriptor {
   }
 
   // 9.8
+  /**
+   * Builds a function type from this interface.
+   *
+   * If the interface can not be used to construct a valid function
+   * type then {@code null} is returned.
+   */
   syn lazy FunctionDescriptor InterfaceDecl.functionDescriptor() {
     java.util.List<MethodDecl> methods = collectAbstractMethods();
 
     if (methods.isEmpty()) {
+      // No abstract method in this interface.
       return null;
     } else if (methods.size() == 1) {
       MethodDecl m = methods.get(0);
-      FunctionDescriptor f = new FunctionDescriptor(this);
-      f.method = m;
       ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
       for (Access exception : m.getExceptionList()) {
         throwsList.add(exception.type());
       }
-      f.throwsList = throwsList;
-      return f;
+      return new FunctionDescriptor(this, m, throwsList);
     } else {
-      FunctionDescriptor f = null;
       MethodDecl foundMethod = null;
 
       for (MethodDecl current : methods) {
@@ -117,79 +133,78 @@ aspect FunctionDescriptor {
         }
       }
 
+      if (foundMethod == null) {
+        return null;
+      }
+
+      // Now the throws-list needs to be computed as stated in 9.8.
       ArrayList<Access> descriptorThrows = new ArrayList<Access>();
-      if (foundMethod != null) {
-        // Now the throws-list needs to be computed as stated in 9.8
-        for (MethodDecl current : methods) {
-          for (Access exception : current.getExceptionList()) {
-            boolean alreadyInserted = false;
-            for (Access found : descriptorThrows) {
-              if (found.sameType(exception)) {
-                alreadyInserted = true;
+      for (MethodDecl current : methods) {
+        for (Access exception : current.getExceptionList()) {
+          boolean alreadyInserted = false;
+          for (Access found : descriptorThrows) {
+            if (found.sameType(exception)) {
+              alreadyInserted = true;
+              break;
+            }
+          }
+          if (alreadyInserted) {
+            continue;
+          }
+
+          boolean foundIncompatibleClause = false;
+          // Has to be the subtype to at least one exception in each clause.
+          if (foundMethod.isGeneric()) {
+            for (MethodDecl inner : methods) {
+              if (!inner.subtypeThrowsClause(exception)) {
+                foundIncompatibleClause = true;
                 break;
               }
             }
-            if (alreadyInserted) {
-              continue;
-            }
-
-            boolean foundIncompatibleClause = false;
-            // Has to be the subtype to at least one exception in each clause
-            if (foundMethod.isGeneric()) {
-              for (MethodDecl inner : methods) {
-                if (!inner.subtypeThrowsClause(exception)) {
-                  foundIncompatibleClause = true;
-                  break;
-                }
-              }
-            } else {
-              for (MethodDecl inner : methods) {
-                if (!inner.subtypeThrowsClauseErased(exception)) {
-                  foundIncompatibleClause = true;
-                  break;
-                }
-              }
-            }
-
-            if (!foundIncompatibleClause) {
-              // Was subtype to one exception in every clause
-              descriptorThrows.add(exception);
-            }
-          }
-        }
-
-        /* Found a suitable method and finished building throws-list,
-        now the descriptor just needs to be put together */
-        f = new FunctionDescriptor(this);
-        f.method = foundMethod;
-        if (descriptorThrows.size() == 0) {
-          f.throwsList = new ArrayList<TypeDecl>();
-        } else {
-          ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
-
-          /* All type variables must be replaced with foundMethods
-              type variables if the descriptor is generic */
-          if (foundMethod.isGeneric()) {
-            GenericMethodDecl foundGeneric = foundMethod.genericDecl();
-            for (Access exception : descriptorThrows) {
-              if (exception.type() instanceof TypeVariable) {
-                TypeVariable foundVar = (TypeVariable) exception.type();
-                TypeVariable original = foundGeneric.getTypeParameter(foundVar.typeVarPosition());
-                throwsList.add(original);
-              } else {
-                throwsList.add(exception.type());
-              }
-            }
           } else {
-            // All throwed types must be erased if the descriptor is not generic.
-            for (Access exception : descriptorThrows) {
-              throwsList.add(exception.type().erasure());
+            for (MethodDecl inner : methods) {
+              if (!inner.subtypeThrowsClauseErased(exception)) {
+                foundIncompatibleClause = true;
+                break;
+              }
             }
           }
-          f.throwsList = throwsList;
+
+          if (!foundIncompatibleClause) {
+            // Was subtype to one exception in every clause
+            descriptorThrows.add(exception);
+          }
         }
       }
-      return f;
+
+      // Found a suitable method and finished building throws-list,
+      // now the descriptor just needs to be put together.
+      if (descriptorThrows.size() == 0) {
+        return new FunctionDescriptor(this, foundMethod, Collections.<TypeDecl>emptyList());
+      } else {
+        ArrayList<TypeDecl> throwsList = new ArrayList<TypeDecl>();
+
+        // All type variables must be replaced with foundMethods
+        // type variables if the descriptor is generic.
+        if (foundMethod.isGeneric()) {
+          GenericMethodDecl foundGeneric = foundMethod.genericDecl();
+          for (Access exception : descriptorThrows) {
+            if (exception.type() instanceof TypeVariable) {
+              TypeVariable foundVar = (TypeVariable) exception.type();
+              TypeVariable original = foundGeneric.getTypeParameter(foundVar.typeVarPosition());
+              throwsList.add(original);
+            } else {
+              throwsList.add(exception.type());
+            }
+          }
+        } else {
+          // All throwed types must be erased if the descriptor is not generic.
+          for (Access exception : descriptorThrows) {
+            throwsList.add(exception.type().erasure());
+          }
+        }
+        return new FunctionDescriptor(this, foundMethod, throwsList);
+      }
     }
   }
 
