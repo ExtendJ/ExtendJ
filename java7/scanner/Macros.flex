@@ -31,13 +31,17 @@ EndOfLineComment = "//" {InputCharacter}* {LineTerminator}?
  *
  * See JLSv3 $3.101 http://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.10.1
  */
-NumericLiteral = 0 [_0-9a-fA-FxXlL.]* {FloatExponentPart}? {FloatSuffix}?
-               | [1-9] [_0-9a-fA-FxXlL.]* {FloatExponentPart}? {FloatSuffix}?
-               | \. [0-9] [_0-9a-fA-FxXlL.]* {FloatExponentPart}? {FloatSuffix}?
+AnyDigit = [_0-9a-fA-FxXlL]
+NonHexDigit = [_0-9]
+NumericLiteral = [0-9] {NonHexDigit}* {FloatExponentPart}? {FloatSuffix}?
+               | [0-9] {AnyDigit}* {HexExponentPart}? {FloatSuffix}?
+               | [0-9] {AnyDigit}* \. {AnyDigit}* {ExponentPart}? {FloatSuffix}?
+               | \. [0-9] {AnyDigit}* {ExponentPart}? {FloatSuffix}?
+ExponentPart = {HexExponentPart} | {FloatExponentPart}
+HexExponentPart = [pP] [_0-9]+
+                | [pP] [+-] [0-9] [_0-9]*
 FloatExponentPart = [eE] [_0-9fF]*
-             | [pP] [_0-9]+
              | [eE] [+-] [0-9] [_0-9]*
-             | [pP] [+-] [0-9] [_0-9]*
 FloatSuffix = [fFdD]
 
 /* 3.10.4 Character Literals */
