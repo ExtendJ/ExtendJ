@@ -301,6 +301,7 @@ aspect Generics {
     public String typeName();
     SimpleSet<Variable> localFields(String name);
     Map<String, SimpleSet<MethodDecl>> localMethodsSignatureMap();
+    List<TypeVariable> getSubstTypeParamList();
   }
 
   ParClassDecl implements ParTypeDecl;
@@ -676,8 +677,9 @@ aspect GenericsTypeCheck {
               original.typeName(), original.getNumTypeParameter(), getNumTypeArgument(),
               this.prettyPrint()));
         } else {
+          List<TypeVariable> typeParam = decl.getSubstTypeParamList();
           for (int i = 0; i < getNumTypeArgument(); i++) {
-            if (!getTypeArgument(i).type().withinBounds(decl.getTypeParameter(i))) {
+            if (!getTypeArgument(i).type().withinBounds(typeParam.getChild(i))) {
               problems.add(errorf("type argument %d is of type %s which is not within"
                   + " the bounds of type parameter %s (%s)",
                   i + 1, getTypeArgument(i).type().typeName(),
@@ -691,6 +693,33 @@ aspect GenericsTypeCheck {
     return problems;
   }
 
+  /** Substituted type parameters are used when checking type argument bounds. */
+  syn lazy List<TypeVariable> ParInterfaceDecl.getSubstTypeParamList() {
+    List<TypeVariable> result = new List<TypeVariable>();
+    for (TypeVariable param : getTypeParameterList()) {
+      result.add(new SubstitutedTypeVariable(
+          new Modifiers(new List<Modifier>()),
+          param.getID(),
+          new List<BodyDecl>(),
+          param.getTypeBoundList().treeCopy(),
+          getParameterization()));
+    }
+    return result;
+  }
+
+  /** Substituted type parameters are used when checking type argument bounds. */
+  syn lazy List<TypeVariable> ParClassDecl.getSubstTypeParamList() {
+    List<TypeVariable> result = new List<TypeVariable>();
+    for (TypeVariable param : getTypeParameterList()) {
+      result.add(new SubstitutedTypeVariable(
+          new Modifiers(new List<Modifier>()),
+          param.getID(),
+          new List<BodyDecl>(),
+          param.getTypeBoundList().treeCopy(),
+          getParameterization()));
+    }
+    return result;
+  }
 }
 
 aspect GenericsNameBinding {
@@ -966,6 +995,14 @@ aspect LookupParTypeDecl {
     return lookupType(name);
   }
 
+  eq SubstitutedTypeVariable.getChild().lookupType(String name) {
+    TypeDecl paramType = getParameterization().substituteBound(name);
+    if (paramType != null) {
+      return paramType;
+    }
+    return lookupType(name);
+  }
+
   /**
    * Parameterizations are used during type lookup to substitute type variable names
    * for type arguments (TypeDecl).
@@ -994,6 +1031,13 @@ aspect LookupParTypeDecl {
         return arg == null
             ? param.erasure()
             : arg.expandWildcard(param);
+      }
+
+      /** Substitute types, preserving wildcards. */
+      public TypeDecl substituteBound() {
+        return arg == null
+            ? param.erasure()
+            : arg;
       }
     }
 
@@ -1038,6 +1082,17 @@ aspect LookupParTypeDecl {
     public TypeDecl substitute(String name) {
       if (typeMap.containsKey(name)) {
         return typeMap.get(name).substitute();
+      }
+      return null;
+    }
+
+    /**
+     * Substitute a type bound of a type variable.
+     * This should preserve wildcards.
+     */
+    public TypeDecl substituteBound(String name) {
+      if (typeMap.containsKey(name)) {
+        return typeMap.get(name).substituteBound();
       }
       return null;
     }
