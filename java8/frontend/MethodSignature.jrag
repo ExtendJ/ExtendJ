@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -250,84 +251,90 @@ aspect MethodSignature18 {
       return false;
     }
 
-    FunctionDescriptor f1 = iDecl1.functionDescriptor();
-    FunctionDescriptor f2 = iDecl2.functionDescriptor();
+    FunctionDescriptor fd1 = iDecl1.functionDescriptor();
+    FunctionDescriptor fd2 = iDecl2.functionDescriptor();
 
-    // First bullet
-    if (f2.method.type().isVoid()) {
-      return true;
-    }
+    if (fd1.method.hasValue() && fd2.method.hasValue()) {
+      // Can only compare method types if both function descriptors have target methods.
+      TypeDecl methodType1 = fd1.method.get().type();
+      TypeDecl methodType2 = fd2.method.get().type();
 
-    // Second bullet
-    if (f1.method.type().instanceOf(f2.method.type())) {
-      return true;
-    }
-
-    // Third bullet
-    if (f1.method.type().isFunctionalInterface() && f2.method.type().isFunctionalInterface()) {
-      if (getLambdaBody().isBlockBody()) {
-        BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
-        boolean allMoreSpecific = true;
-        ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
-        for (ReturnStmt returnStmt : returnList) {
-          if (returnStmt.hasResult() && !returnStmt.getResult().moreSpecificThan(f1.method.type(),
-              f2.method.type())) {
-            allMoreSpecific = false;
-            break;
-          }
-        }
-        return allMoreSpecific;
-      } else {
-        ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
-        return exprBody.getExpr().moreSpecificThan(f1.method.type(), f2.method.type());
+      // First bullet
+      if (methodType2.isVoid()) {
+        return true;
       }
-    }
 
-    // Fourth bullet
-    if (f1.method.type().isPrimitiveType() && f2.method.type().isReferenceType()) {
-      if (getLambdaBody().isBlockBody()) {
-        BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
-        boolean allPrimitive = true;
-        ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
-        for (ReturnStmt returnStmt : returnList) {
-          if (returnStmt.hasResult() && returnStmt.getResult().isPolyExpression()) {
-            allPrimitive = false;
-            break;
-          } else if (returnStmt.hasResult() && !returnStmt.getResult().type().isPrimitiveType()) {
-            allPrimitive = false;
-            break;
-          }
-        }
-        return allPrimitive;
-      } else {
-        ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
-        if (exprBody.getExpr().isPolyExpression()) {
-          return false;
-        }
-        return exprBody.getExpr().type().isPrimitiveType();
+      // Second bullet
+      if (methodType1.instanceOf(methodType2)) {
+        return true;
       }
-    }
 
-    // Fifth bullet
-    if (f1.method.type().isReferenceType() && f2.method.type().isPrimitiveType()) {
-      if (getLambdaBody().isBlockBody()) {
-        BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
-        boolean allReference = true;
-        ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
-        for (ReturnStmt returnStmt : returnList) {
-          if (returnStmt.hasResult() && !returnStmt.getResult().isPolyExpression()
-              && !returnStmt.getResult().type().isReferenceType()) {
-            allReference = false;
-            break;
+      // Third bullet
+      if (methodType1.isFunctionalInterface() && methodType2.isFunctionalInterface()) {
+        if (getLambdaBody().isBlockBody()) {
+          BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
+          boolean allMoreSpecific = true;
+          ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+          for (ReturnStmt returnStmt : returnList) {
+            if (returnStmt.hasResult() && !returnStmt.getResult().moreSpecificThan(methodType1,
+                methodType2)) {
+              allMoreSpecific = false;
+              break;
+            }
           }
+          return allMoreSpecific;
+        } else {
+          ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
+          return exprBody.getExpr().moreSpecificThan(methodType1, methodType2);
         }
-        return allReference;
-      } else {
-        ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
-        if (exprBody.getExpr().isPolyExpression()) {
-          return true;
+      }
+
+      // Fourth bullet
+      if (methodType1.isPrimitiveType() && methodType2.isReferenceType()) {
+        if (getLambdaBody().isBlockBody()) {
+          BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
+          boolean allPrimitive = true;
+          ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+          for (ReturnStmt returnStmt : returnList) {
+            if (returnStmt.hasResult() && returnStmt.getResult().isPolyExpression()) {
+              allPrimitive = false;
+              break;
+            } else if (returnStmt.hasResult() && !returnStmt.getResult().type().isPrimitiveType()) {
+              allPrimitive = false;
+              break;
+            }
+          }
+          return allPrimitive;
+        } else {
+          ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
+          if (exprBody.getExpr().isPolyExpression()) {
+            return false;
+          }
+          return exprBody.getExpr().type().isPrimitiveType();
         }
-        return exprBody.getExpr().type().isReferenceType();
+      }
+
+      // Fifth bullet
+      if (methodType1.isReferenceType() && methodType2.isPrimitiveType()) {
+        if (getLambdaBody().isBlockBody()) {
+          BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
+          boolean allReference = true;
+          ArrayList<ReturnStmt> returnList = blockBody.lambdaReturns();
+          for (ReturnStmt returnStmt : returnList) {
+            if (returnStmt.hasResult() && !returnStmt.getResult().isPolyExpression()
+                && !returnStmt.getResult().type().isReferenceType()) {
+              allReference = false;
+              break;
+            }
+          }
+          return allReference;
+        } else {
+          ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
+          if (exprBody.getExpr().isPolyExpression()) {
+            return true;
+          }
+          return exprBody.getExpr().type().isReferenceType();
+        }
       }
     }
     return false;
@@ -351,37 +358,44 @@ aspect MethodSignature18 {
       return false;
     }
 
-    FunctionDescriptor f1 = iDecl1.functionDescriptor();
-    FunctionDescriptor f2 = iDecl2.functionDescriptor();
+    FunctionDescriptor fd1 = iDecl1.functionDescriptor();
+    FunctionDescriptor fd2 = iDecl2.functionDescriptor();
+    if (fd1.method.hasValue() && fd2.method.hasValue()) {
+      // Can only compare method types if both function descriptors have target methods.
+      MethodDecl method1 = fd1.method.get();
+      MethodDecl method2 = fd2.method.get();
+      TypeDecl methodType1 = method1.type();
+      TypeDecl methodType2 = method2.type();
 
-    if (f1.method.arity() != f2.method.arity()) {
-      return false;
-    }
-
-    for (int i = 0; i < f1.method.getNumParameter(); i++) {
-      if (f1.method.getParameter(i).type() != f2.method.getParameter(i).type()) {
+      if (method1.arity() != method2.arity()) {
         return false;
       }
-    }
 
-    // First bullet
-    if (f2.method.type().isVoid()) {
-      return true;
-    }
+      for (int i = 0; i < method1.getNumParameter(); i++) {
+        if (method1.getParameter(i).type() != method2.getParameter(i).type()) {
+          return false;
+        }
+      }
 
-    // Second bullet
-    if (f1.method.type().instanceOf(f2.method.type())) {
-      return true;
-    }
+      // First bullet
+      if (methodType2.isVoid()) {
+        return true;
+      }
 
-    // Third bullet
-    if (f1.method.type().isPrimitiveType() && f2.method.type().isReferenceType()) {
-      return exactCompileTimeDeclaration().type().isPrimitiveType();
-    }
+      // Second bullet
+      if (methodType1.instanceOf(methodType2)) {
+        return true;
+      }
 
-    // Fourth bullet
-    if (f1.method.type().isReferenceType() && f2.method.type().isPrimitiveType()) {
-      return exactCompileTimeDeclaration().type().isReferenceType();
+      // Third bullet
+      if (methodType1.isPrimitiveType() && methodType2.isReferenceType()) {
+        return exactCompileTimeDeclaration().type().isPrimitiveType();
+      }
+
+      // Fourth bullet
+      if (methodType1.isReferenceType() && methodType2.isPrimitiveType()) {
+        return exactCompileTimeDeclaration().type().isReferenceType();
+      }
     }
 
     return false;
@@ -405,39 +419,46 @@ aspect MethodSignature18 {
       return false;
     }
 
-    FunctionDescriptor f1 = iDecl1.functionDescriptor();
-    FunctionDescriptor f2 = iDecl2.functionDescriptor();
+    FunctionDescriptor fd1 = iDecl1.functionDescriptor();
+    FunctionDescriptor fd2 = iDecl2.functionDescriptor();
+    if (fd1.method.hasValue() && fd2.method.hasValue()) {
+      // Can only compare method types if both function descriptors have target methods.
+      MethodDecl method1 = fd1.method.get();
+      MethodDecl method2 = fd2.method.get();
+      TypeDecl methodType1 = method1.type();
+      TypeDecl methodType2 = method2.type();
 
-    if (f1.method.arity() != f2.method.arity()) {
-      return false;
-    }
-
-    for (int i = 0; i < f1.method.getNumParameter(); i++) {
-      if (f1.method.getParameter(i).type() != f2.method.getParameter(i).type()) {
+      if (method1.arity() != method2.arity()) {
         return false;
       }
-    }
 
-    // First bullet
-    if (f2.method.type().isVoid()) {
-      return true;
-    }
+      for (int i = 0; i < method1.getNumParameter(); i++) {
+        if (method1.getParameter(i).type() != method2.getParameter(i).type()) {
+          return false;
+        }
+      }
 
-    // Second bullet
-    if (f1.method.type().instanceOf(f2.method.type())) {
-      return true;
-    }
+      // First bullet
+      if (methodType2.isVoid()) {
+        return true;
+      }
 
-    // Third bullet
-    if (f1.method.type().isPrimitiveType() && f2.method.type().isReferenceType()) {
-      // A constructor can never have primitive return type
-      return false;
-    }
+      // Second bullet
+      if (methodType1.instanceOf(methodType2)) {
+        return true;
+      }
 
-    // Fourth bullet
-    if (f1.method.type().isReferenceType() && f2.method.type().isPrimitiveType()) {
-      // A constructor always have reference return type
-      return true;
+      // Third bullet
+      if (methodType1.isPrimitiveType() && methodType2.isReferenceType()) {
+        // A constructor can never have primitive return type
+        return false;
+      }
+
+      // Fourth bullet
+      if (methodType1.isReferenceType() && methodType2.isPrimitiveType()) {
+        // A constructor always have reference return type
+        return true;
+      }
     }
 
     return false;
@@ -485,31 +506,38 @@ aspect MethodSignature18 {
       return false;
     }
     InterfaceDecl iDecl = (InterfaceDecl) type;
+    FunctionDescriptor fd = iDecl.functionDescriptor();
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
 
-    if (arity() != iDecl.functionDescriptor().method.arity()) {
-      return false;
-    }
-    if (iDecl.functionDescriptor().method.type().isVoid()) {
-      if (getLambdaBody().isExprBody()) {
-        ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
-        if (!exprBody.getExpr().stmtCompatible()) {
-          return false;
+      if (arity() != targetMethod.arity()) {
+        return false;
+      }
+      if (targetMethod.type().isVoid()) {
+        if (getLambdaBody().isExprBody()) {
+          ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
+          if (!exprBody.getExpr().stmtCompatible()) {
+            return false;
+          }
+        } else {
+          BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
+          if (!blockBody.voidCompatible()) {
+            return false;
+          }
         }
       } else {
-        BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
-        if (!blockBody.voidCompatible()) {
-          return false;
+        if (getLambdaBody().isBlockBody()) {
+          BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
+          if (!blockBody.valueCompatible()) {
+            return false;
+          }
         }
       }
+      return true;
     } else {
-      if (getLambdaBody().isBlockBody()) {
-        BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
-        if (!blockBody.valueCompatible()) {
-          return false;
-        }
-      }
+      // No target method.
+      return false;
     }
-    return true;
   }
 
   eq MethodReference.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) {
@@ -543,13 +571,15 @@ aspect MethodSignature18 {
     }
 
     InterfaceDecl iDecl = (InterfaceDecl) type;
-    FunctionDescriptor f = iDecl.functionDescriptor();
-
+    FunctionDescriptor fd = iDecl.functionDescriptor();
     boolean foundMethod = false;
-    for (MethodDecl decl : potentiallyApplicableMethods(f)) {
-      if (!decl.isStatic() && f.method.arity() == decl.arity()) {
-        foundMethod = true;
-        break;
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      for (MethodDecl decl : potentiallyApplicableMethods(fd)) {
+        if (!decl.isStatic() && targetMethod.arity() == decl.arity()) {
+          foundMethod = true;
+          break;
+        }
       }
     }
     return foundMethod;
@@ -563,16 +593,18 @@ aspect MethodSignature18 {
     }
 
     InterfaceDecl iDecl = (InterfaceDecl) type;
-    FunctionDescriptor f = iDecl.functionDescriptor();
-
+    FunctionDescriptor fd = iDecl.functionDescriptor();
     boolean foundMethod = false;
-    for (MethodDecl decl : potentiallyApplicableMethods(f)) {
-      if (decl.isStatic() && f.method.arity() == decl.arity()) {
-        foundMethod = true;
-        break;
-      } else if (!decl.isStatic() && f.method.arity() - 1 == decl.arity()) {
-        foundMethod = true;
-        break;
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      for (MethodDecl decl : potentiallyApplicableMethods(fd)) {
+        if (decl.isStatic() && targetMethod.arity() == decl.arity()) {
+          foundMethod = true;
+          break;
+        } else if (!decl.isStatic() && targetMethod.arity() - 1 == decl.arity()) {
+          foundMethod = true;
+          break;
+        }
       }
     }
     return foundMethod;
@@ -609,13 +641,16 @@ aspect MethodSignature18 {
     }
 
     InterfaceDecl iDecl = (InterfaceDecl) type;
-    FunctionDescriptor f = iDecl.functionDescriptor();
+    FunctionDescriptor fd = iDecl.functionDescriptor();
 
     boolean foundMethod = false;
-    for (ConstructorDecl decl : potentiallyApplicableConstructors(f)) {
-      if (f.method.arity() == decl.arity()) {
-        foundMethod = true;
-        break;
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      for (ConstructorDecl decl : potentiallyApplicableConstructors(fd)) {
+        if (targetMethod.arity() == decl.arity()) {
+          foundMethod = true;
+          break;
+        }
       }
     }
     return foundMethod;
@@ -628,8 +663,12 @@ aspect MethodSignature18 {
       return false;
     }
     InterfaceDecl iDecl = (InterfaceDecl) type;
-    FunctionDescriptor f = iDecl.functionDescriptor();
-    return f.method.arity() == 1;
+    FunctionDescriptor fd = iDecl.functionDescriptor();
+    if (fd.method.hasValue()) {
+      return fd.method.get().arity() == 1;
+    } else {
+      return false;
+    }
   }
 
   eq ParExpr.potentiallyCompatible(TypeDecl type, BodyDecl candidateDecl) =

@@ -1,0 +1,124 @@
+/* Copyright (c) 2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ *     * Redistributions of source code must retain the above copyright notice,
+ *       this list of conditions and the following disclaimer.
+ *     * Redistributions in binary form must reproduce the above copyright
+ *       notice, this list of conditions and the following disclaimer in the
+ *       documentation and/or other materials provided with the distribution.
+ *     * Neither the name of the Lund University nor the names of its
+ *       contributors may be used to endorse or promote products derived from
+ *       this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+/**
+ * This adds a useful option type to avoid nullable references.
+ */
+aspect OptionType {
+  /**
+   * An option type, for representing a nullable object with a non-null
+   * reference.
+   *
+   * <p>The main benefit in using this type is that the Java type checker
+   * disallows direct dereference, and you instead have to decide to use
+   * either the get() or getOrElse() methods.
+   */
+  public abstract class Option<T> {
+    protected static final Option NONE = new Option() {
+      @Override public Object get() {
+        throw new NullPointerException();
+      }
+
+      @Override public Object getOrElse(Object v) {
+        return v;
+      }
+
+      @Override public boolean hasValue() {
+        return false;
+      }
+    };
+
+    protected static class OptionSome<V> extends Option<V> {
+      private final V value;
+
+      public OptionSome(V value) {
+        assert (value != null);
+        this.value = value;
+      }
+
+      @Override public V get() {
+        return value;
+      }
+
+      @Override public V getOrElse(V v) {
+        return value;
+      }
+
+      @Override public boolean hasValue() {
+        return true;
+      }
+    }
+
+    protected Option() { }
+
+    /**
+     * Get the contained value.
+     * Throws an error if there is no object.
+     */
+    public abstract T get();
+
+    /**
+     * Get the contained value.
+     * If there is no value, the argument is returned.
+     */
+    public abstract T getOrElse(T v);
+
+    /** Test if there is a value in this option object. */
+    public abstract boolean hasValue();
+
+    /**
+     * Convert a nullable object to an option.
+     */
+    public static <U> Option<U> maybe(U u) {
+      if (u != null) {
+        return new OptionSome(u);
+      } else {
+        return (Option<U>) NONE;
+      }
+    }
+
+    /**
+     * Convert a nullable object to an option.
+     */
+    public static <U> Option<U> some(U u) {
+      if (u == null) {
+        throw new Error("Can't create an option containing null using Option.some(). "
+            + "Use Option.none() or Option.maybe() instead.");
+      }
+      return new OptionSome(u);
+    }
+
+    /**
+     * Returns the empty option object.
+     */
+    public static <U> Option<U> none() {
+      return (Option<U>) NONE;
+    }
+
+  }
+}

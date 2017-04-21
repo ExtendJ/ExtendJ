@@ -1,5 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
- *               2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2016-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -53,7 +53,17 @@ aspect LambdaToClass {
 
     // To do that we must build the method which is the only BodyDecl
     Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-    Access returnType = iDecl.functionDescriptor().method.type().createQualifiedAccess();
+    FunctionDescriptor fd = iDecl.functionDescriptor();
+    TypeDecl methodType;
+    String methodName;
+    if (fd.method.hasValue()) {
+      methodType = fd.method.get().type();
+      methodName = fd.method.get().name();
+    } else {
+      methodType = unknownType();
+      methodName = "<unknown>";
+    }
+    Access returnType = methodType.createQualifiedAccess();
     List<ParameterDeclaration> methodParams = getLambdaParameters().toParameterList();
     List<Access> methodThrows = new List<Access>();
     for (TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
@@ -61,7 +71,7 @@ aspect LambdaToClass {
     }
     Opt<Block> methodBlock = new Opt<Block>(getLambdaBody().toBlock());
     MethodDecl method = new MethodDecl(methodModifiers, returnType,
-        iDecl.functionDescriptor().method.name(), methodParams, methodThrows, methodBlock);
+        methodName, methodParams, methodThrows, methodBlock);
 
     bodyDecls.add(method);
 
@@ -82,9 +92,16 @@ aspect LambdaToClass {
 
   protected Block ExprLambdaBody.toBlock() {
     List<Stmt> stmtList = new List<Stmt>();
-    // If expected return type is void, insert ExprStmt in list.
     Expr expr = getExpr().treeCopyNoTransform();
-    if (enclosingLambda().targetInterface().functionDescriptor().method.type().isVoid()) {
+    boolean voidType;
+    FunctionDescriptor fd = enclosingLambda().targetInterface().functionDescriptor();
+    if (fd.method.hasValue()) {
+      voidType = fd.method.get().type().isVoid();
+    } else {
+      voidType = false;
+    }
+    if (voidType) {
+      // Return type is void: insert ExprStmt in list.
       stmtList.add(new ExprStmt(expr));
     } else {
       // Otherwise, insert return statement.
@@ -104,13 +121,16 @@ aspect LambdaToClass {
 
   protected List<ParameterDeclaration> InferredLambdaParameters.toParameterList() {
     List<ParameterDeclaration> paramList = new List<ParameterDeclaration>();
-    int i = 0;
-    for (InferredParameterDeclaration infDecl : getParameterList()) {
-      ParameterDeclaration funcDecl = enclosingLambda().targetInterface()
-          .functionDescriptor().method.getParameter(i);
-      paramList.add(
-          new ParameterDeclaration(funcDecl.type().createQualifiedAccess(), infDecl.name()));
-      i += 1;
+    FunctionDescriptor fd = enclosingLambda().targetInterface().functionDescriptor();
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      int i = 0;
+      for (InferredParameterDeclaration infDecl : getParameterList()) {
+        ParameterDeclaration funcDecl = targetMethod.getParameter(i);
+        paramList.add(
+            new ParameterDeclaration(funcDecl.type().createQualifiedAccess(), infDecl.name()));
+        i += 1;
+      }
     }
     return paramList;
   }

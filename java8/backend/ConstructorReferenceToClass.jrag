@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,10 +33,12 @@ aspect ConstructorReferenceToClass {
 
   ConstructorReference contributes nta toClass() to TypeDecl.accessors();
 
-  /* Build a nested ArrayTypeWithSizeAccess from the normal
-     ArrayTypeAccess. This is to be used when generating
-     the anonymous inner class which must instantiate a new
-     array according to the array reference */
+  /**
+   * Build a nested ArrayTypeWithSizeAccess from the normal
+   * ArrayTypeAccess.  This is to be used when generating
+   * the anonymous inner class which must instantiate a new
+   * array according to the array reference.
+   */
   syn ArrayTypeAccess ArrayReference.getArrayTypeWithSizeAccess(Expr expr) {
     return recursiveArrayTypeWithSizeAccess((ArrayTypeAccess) getTypeAccess(),
         (Expr) expr.treeCopyNoTransform());
@@ -51,22 +54,22 @@ aspect ConstructorReferenceToClass {
     }
   }
 
-  // Build an anonymous inner class for bytecode generation
+  /** Build an anonymous inner class for bytecode generation. */
   syn nta lazy ClassInstanceExpr ConstructorReference.toClass() {
     List<Access> implementsList = new List<Access>();
     InterfaceDecl iDecl = targetInterface();
 
-    // First compute the interface implemented by the anonymous class
+    // First compute the interface implemented by the anonymous class.
     Access implementsInterface = iDecl.createQualifiedAccess();
     implementsList.add(implementsInterface);
 
-    // Next compute the BodyDecls for the anonymous class
+    // Next, compute the BodyDecls for the anonymous class.
     List<BodyDecl> bodyDecls = new List<BodyDecl>();
 
-    // Which means we must build the method overriding the abstract methods
-
+    // Which means we must build the method overriding the abstract methods.
     Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-    Access returnType = new SyntheticTypeAccess(iDecl.functionDescriptor().method.type());
+    MethodDecl targetMethod = iDecl.functionDescriptor().method.get();
+    Access returnType = new SyntheticTypeAccess(targetMethod.type());
     List<ParameterDeclaration> methodParams = toParameterList();
     List<Access> methodThrows = new List<Access>();
     for (TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
@@ -74,7 +77,7 @@ aspect ConstructorReferenceToClass {
     }
     Opt<Block> methodBlock = new Opt<Block>(toBlock());
     MethodDecl method = new MethodDecl(methodModifiers, returnType,
-        iDecl.functionDescriptor().method.name(),
+        targetMethod.name(),
         methodParams, methodThrows, methodBlock);
 
     bodyDecls.add(method);
@@ -94,24 +97,26 @@ aspect ConstructorReferenceToClass {
 
   syn lazy List<ParameterDeclaration> ConstructorReference.toParameterList() {
     List<ParameterDeclaration> list = new List<ParameterDeclaration>();
-    for (int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-      TypeDecl paramType = targetInterface().functionDescriptor().method.getParameter(i).type();
-      String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+    MethodDecl targetMethod = targetInterface().functionDescriptor().method.get();
+    for (int i = 0; i < targetMethod.getNumParameter(); i++) {
+      TypeDecl paramType = targetMethod.getParameter(i).type();
+      String paramName = targetMethod.getParameter(i).name();
       list.add(new ParameterDeclaration(new SyntheticTypeAccess(paramType), paramName));
     }
     return list;
   }
 
   eq ArrayReference.toBlock() {
-    // First, build an ArrayCreationExpr used in the block
-    String paramName = targetInterface().functionDescriptor().method.getParameter(0).name();
+    // First, build an ArrayCreationExpr used in the block.
+    MethodDecl targetMethod = targetInterface().functionDescriptor().method.get();
+    String paramName = targetMethod.getParameter(0).name();
     VarAccess paramAccess = new VarAccess(paramName);
     ArrayCreationExpr arrayExpr = new ArrayCreationExpr(getArrayTypeWithSizeAccess(paramAccess),
         new Opt());
 
-    // Next build actual block
+    // Next, build actual block.
     Stmt blockStmt = null;
-    if (targetInterface().functionDescriptor().method.type().isVoid()) {
+    if (targetMethod.type().isVoid()) {
       blockStmt = new ExprStmt(arrayExpr);
     } else {
       blockStmt = new ReturnStmt(arrayExpr);
@@ -123,8 +128,9 @@ aspect ConstructorReferenceToClass {
 
   eq ClassReference.toBlock() {
     List<Expr> arguments = new List<Expr>();
-    for (int i = 0; i < targetInterface().functionDescriptor().method.getNumParameter(); i++) {
-      String paramName = targetInterface().functionDescriptor().method.getParameter(i).name();
+    MethodDecl targetMethod = targetInterface().functionDescriptor().method.get();
+    for (int i = 0; i < targetMethod.getNumParameter(); i++) {
+      String paramName = targetMethod.getParameter(i).name();
       arguments.add(new VarAccess(paramName));
     }
 
@@ -142,7 +148,7 @@ aspect ConstructorReferenceToClass {
       }
     }
     Stmt blockStmt = null;
-    if (targetInterface().functionDescriptor().method.type().isVoid()) {
+    if (targetMethod.type().isVoid()) {
       blockStmt = new ExprStmt(instanceExpr);
     } else {
       blockStmt = new ReturnStmt(instanceExpr);

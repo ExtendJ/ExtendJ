@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,25 +46,35 @@ aspect LambdaExpr {
   eq InferredLambdaParameters.numParameters() = getNumParameter();
   eq DeclaredLambdaParameters.numParameters() = getNumParameter();
 
-  syn lazy boolean LambdaParameters.congruentTo(FunctionDescriptor f);
+  syn lazy boolean LambdaParameters.congruentTo(FunctionDescriptor fd);
 
   // 15.27.3
-  eq InferredLambdaParameters.congruentTo(FunctionDescriptor f) =
-      numParameters() == f.method.getNumParameter();
-
-  // 15.27.3
-  eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor f) {
-    if (numParameters() != f.method.getNumParameter()) {
+  eq InferredLambdaParameters.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      return numParameters() == fd.method.get().getNumParameter();
+    } else {
       return false;
     }
-    for (int i = 0; i < numParameters(); i++) {
-      // Lambdas can't declare type variables so that doesn't need to be taken into account.
-      if (getParameter(i).type() != f.method.getParameter(i).type() &&
-          getParameter(i).type() != f.method.getParameter(i).type().erasure()) {
+  }
+
+  // 15.27.3
+  eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      if (numParameters() != targetMethod.getNumParameter()) {
         return false;
       }
+      for (int i = 0; i < numParameters(); i++) {
+        // Lambdas can't declare type variables so that doesn't need to be taken into account.
+        if (getParameter(i).type() != targetMethod.getParameter(i).type() &&
+            getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
+          return false;
+        }
+      }
+      return true;
+    } else {
+      return false;
     }
-    return true;
   }
 
   syn lazy boolean LambdaExpr.isImplicit() =
@@ -71,31 +82,40 @@ aspect LambdaExpr {
 
   syn lazy boolean LambdaExpr.isExplicit() = !isImplicit();
 
-  syn lazy boolean LambdaBody.congruentTo(FunctionDescriptor f);
+  syn lazy boolean LambdaBody.congruentTo(FunctionDescriptor fd);
 
   // 15.27.3
-  eq ExprLambdaBody.congruentTo(FunctionDescriptor f) {
-    if (f.method.type().isVoid()) {
-      return getExpr().stmtCompatible();
+  eq ExprLambdaBody.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      if (fd.method.get().type().isVoid()) {
+        return getExpr().stmtCompatible();
+      } else {
+        return getExpr().assignConversionTo(fd.method.get().type());
+      }
     } else {
-      return getExpr().assignConversionTo(f.method.type());
+      return false;
     }
   }
 
   // 15.27.3
-  eq BlockLambdaBody.congruentTo(FunctionDescriptor f) {
-    if (f.method.type().isVoid()) {
-      return voidCompatible();
-    } else {
-      if (!valueCompatible()) {
-        return false;
-      }
-      for (ReturnStmt returnStmt : lambdaReturns()) {
-        if (!returnStmt.getResult().assignConversionTo(f.method.type())) {
+  eq BlockLambdaBody.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      TypeDecl methodType = fd.method.get().type();
+      if (methodType.isVoid()) {
+        return voidCompatible();
+      } else {
+        if (!valueCompatible()) {
           return false;
         }
+        for (ReturnStmt returnStmt : lambdaReturns()) {
+          if (!returnStmt.getResult().assignConversionTo(methodType)) {
+            return false;
+          }
+        }
+        return true;
       }
-      return true;
+    } else {
+      return false;
     }
   }
 
@@ -113,8 +133,8 @@ aspect LambdaExpr {
    * congruency checks that handle inferrence differently depending on the
    * function descriptor input to this method, then this check must be altered!
    */
-  syn lazy boolean LambdaExpr.congruentTo(FunctionDescriptor f) =
-      !f.isGeneric() && getLambdaParameters().congruentTo(f) && getLambdaBody().congruentTo(f);
+  syn lazy boolean LambdaExpr.congruentTo(FunctionDescriptor fd) =
+      !fd.isGeneric() && getLambdaParameters().congruentTo(fd) && getLambdaBody().congruentTo(fd);
 }
 
 aspect StmtCompatible {

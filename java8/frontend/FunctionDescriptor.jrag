@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,24 +36,21 @@ aspect FunctionDescriptor {
    */
   class FunctionDescriptor {
     public final java.util.List<TypeDecl> throwsList;
-    public final MethodDecl method;
+    public final Option<? extends MethodDecl> method;
     public final InterfaceDecl fromInterface;
 
     public FunctionDescriptor(InterfaceDecl fromInterface, MethodDecl method,
         java.util.List<TypeDecl> throwsList) {
       this.fromInterface = fromInterface;
-      // TODO: need to handle errors in the function descriptor better!
-      // Right now, the method is set to null if the function type is undefined,
-      // however this leads to null pointer exceptions all over.
       this.method = method.nonWildcardParameterization();
       this.throwsList = throwsList;
     }
 
     public boolean isGeneric() {
-      if (method == null) {
-        return false;
+      if (method.hasValue()) {
+        return method.get().isGeneric();
       } else {
-        return method.isGeneric();
+        return false;
       }
     }
 
@@ -61,10 +59,11 @@ aspect FunctionDescriptor {
     }
 
     public String toString() {
-      StringBuilder str = new StringBuilder();
-      if (method != null) {
-        if (method.isGeneric()) {
-          GenericMethodDecl genericMethod = method.genericDecl();
+      if (method.hasValue()) {
+        MethodDecl targetMethod = method.get();
+        StringBuilder str = new StringBuilder();
+        if (targetMethod.isGeneric()) {
+          GenericMethodDecl genericMethod = targetMethod.genericDecl();
           str.append("<" + genericMethod.getTypeParameter(0).prettyPrint());
           for (int i = 1; i < genericMethod.getNumTypeParameter(); i++) {
             str.append(", " + genericMethod.getTypeParameter(i).prettyPrint());
@@ -72,14 +71,14 @@ aspect FunctionDescriptor {
           str.append("> ");
         }
         str.append("(");
-        if (method.getNumParameter() > 0) {
-          str.append(method.getParameter(0).type().typeName());
-          for (int i = 1; i < method.getNumParameter(); i++) {
-            str.append(", " + method.getParameter(i).type().typeName());
+        if (targetMethod.getNumParameter() > 0) {
+          str.append(targetMethod.getParameter(0).type().typeName());
+          for (int i = 1; i < targetMethod.getNumParameter(); i++) {
+            str.append(", " + targetMethod.getParameter(i).type().typeName());
           }
         }
         str.append(")->");
-        str.append(method.type().typeName());
+        str.append(targetMethod.type().typeName());
 
         str.append(" throws ");
         if (throwsList.size() > 0) {
@@ -88,9 +87,10 @@ aspect FunctionDescriptor {
             str.append(", " + throwsList.get(i).typeName());
           }
         }
+        return str.toString();
+      } else {
+        return "<unknown>";
       }
-
-      return str.toString();
     }
   }
 

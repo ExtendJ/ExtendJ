@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,21 +29,24 @@
 aspect ConstructorReference {
   inh ConstructorDecl ConstructorReference.unknownConstructor();
 
-  syn lazy ConstructorDecl ClassReference.targetConstructor(FunctionDescriptor f) =
-      syntheticInstanceExpr(f).decl();
+  syn lazy ConstructorDecl ClassReference.targetConstructor(FunctionDescriptor fd) =
+      syntheticInstanceExpr(fd).decl();
 
-  syn nta lazy ClassInstanceExpr ClassReference.syntheticInstanceExpr(FunctionDescriptor f) {
+  syn nta lazy ClassInstanceExpr ClassReference.syntheticInstanceExpr(FunctionDescriptor fd) {
     List<Expr> arguments = new List<Expr>();
-    for (int i = 0; i < f.method.getNumParameter(); i++) {
-      TypeDecl argumentType = f.method.getParameter(i).type();
-      arguments.add(new SyntheticTypeAccess(argumentType));
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      for (int i = 0; i < targetMethod.getNumParameter(); i++) {
+        TypeDecl argumentType = targetMethod.getParameter(i).type();
+        arguments.add(new SyntheticTypeAccess(argumentType));
+      }
     }
 
     ClassInstanceExpr instanceExpr = null;
     if (hasTypeArgument()) {
       instanceExpr = new ParConstructorReferenceAccess(
           (Access) getTypeAccess().treeCopyNoTransform(), arguments,
-          new Opt(), (List<Access>) getTypeArgumentList().treeCopyNoTransform(), f);
+          new Opt(), (List<Access>) getTypeArgumentList().treeCopyNoTransform(), fd);
     } else {
       // Must check for raw reference type, and in that case infer using diamond (JLS 15.13.1)
       boolean checkDiamond = true;
@@ -52,10 +56,10 @@ aspect ConstructorReference {
       }
       if (getTypeAccess().type().isRawType() && checkDiamond) {
         DiamondAccess diamond = new DiamondAccess((Access) getTypeAccess().treeCopyNoTransform());
-        instanceExpr = new ConstructorReferenceAccess(diamond, arguments, f);
+        instanceExpr = new ConstructorReferenceAccess(diamond, arguments, fd);
       } else {
         instanceExpr = new ConstructorReferenceAccess(
-            (Access) getTypeAccess().treeCopyNoTransform(), arguments, f);
+            (Access) getTypeAccess().treeCopyNoTransform(), arguments, fd);
       }
     }
     return instanceExpr;
@@ -65,62 +69,84 @@ aspect ConstructorReference {
   eq ClassReference.getTypeArgument().nameType() = NameType.TYPE_NAME;
   eq ConstructorReference.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
-  syn lazy boolean ConstructorReference.congruentTo(FunctionDescriptor f);
+  syn lazy boolean ConstructorReference.congruentTo(FunctionDescriptor fd);
 
-  eq ClassReference.congruentTo(FunctionDescriptor f) {
-    ConstructorDecl decl = targetConstructor(f);
+  eq ClassReference.congruentTo(FunctionDescriptor fd) {
+    ConstructorDecl decl = targetConstructor(fd);
     if (unknownConstructor() == decl) {
       return false;
     }
-    if (!f.method.type().isVoid()) {
-      TypeDecl returnType = syntheticInstanceExpr(f).type();
-      if (!returnType.assignConversionTo(f.method.type(), null)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  eq ArrayReference.congruentTo(FunctionDescriptor f) {
-    if (f.method.getNumParameter() != 1) {
-      return false;
-    }
-    if (!f.method.getParameter(0).type().assignConversionTo(f.fromInterface().typeInt(), null)) {
-      return false;
-    }
-    if (!f.method.type().isVoid()) {
-      if (!getTypeAccess().type().assignConversionTo(f.method.type(), null)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-
-  syn lazy ArrayList<ConstructorDecl> ClassReference.potentiallyApplicableConstructors(
-      FunctionDescriptor f) {
-    TypeDecl classType = syntheticInstanceExpr(f).type();
-    Collection<ConstructorDecl> col = classType.constructors();
-    ArrayList<ConstructorDecl> applicable = new ArrayList<ConstructorDecl>();
-    for (ConstructorDecl decl : col) {
-      if (!decl.accessibleFrom(hostType())) {
-        continue;
-      }
-      if (!(decl.arity() == f.method.arity())) {
-        continue;
-      }
-      if (hasTypeArgument()) {
-        if (!decl.isGeneric()) {
-          continue;
-        }
-        GenericConstructorDecl genDecl = decl.genericDecl();
-        if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
-          continue;
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      if (!targetMethod.type().isVoid()) {
+        TypeDecl returnType = syntheticInstanceExpr(fd).type();
+        if (!returnType.assignConversionTo(targetMethod.type(), null)) {
+          return false;
         }
       }
-      applicable.add(decl);
+      return true;
+    } else {
+      // No target method.
+      return false;
     }
-    return applicable;
+  }
+
+  eq ArrayReference.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      if (targetMethod.getNumParameter() != 1) {
+        return false;
+      }
+      if (!targetMethod.getParameter(0).type()
+          .assignConversionTo(fd.fromInterface().typeInt(), null)) {
+        return false;
+      }
+      if (!targetMethod.type().isVoid()) {
+        if (!getTypeAccess().type().assignConversionTo(targetMethod.type(), null)) {
+          return false;
+        }
+      }
+      return true;
+    } else {
+      // No target method.
+      return false;
+    }
+  }
+
+  /**
+   * Find potentially applicable constructors for a class reference matching a given
+   * function descriptor.
+   */
+  syn lazy java.util.List<ConstructorDecl> ClassReference.potentiallyApplicableConstructors(
+      FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      TypeDecl classType = syntheticInstanceExpr(fd).type();
+      Collection<ConstructorDecl> col = classType.constructors();
+      ArrayList<ConstructorDecl> applicable = new ArrayList<ConstructorDecl>();
+      for (ConstructorDecl decl : col) {
+        if (!decl.accessibleFrom(hostType())) {
+          continue;
+        }
+        if (!(decl.arity() == targetMethod.arity())) {
+          continue;
+        }
+        if (hasTypeArgument()) {
+          if (!decl.isGeneric()) {
+            continue;
+          }
+          GenericConstructorDecl genDecl = decl.genericDecl();
+          if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
+            continue;
+          }
+        }
+        applicable.add(decl);
+      }
+      return applicable;
+    } else {
+      // No target method.
+      return Collections.emptyList();
+    }
   }
 
   // 15.13.1
