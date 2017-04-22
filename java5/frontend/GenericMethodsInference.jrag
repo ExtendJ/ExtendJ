@@ -96,8 +96,8 @@ aspect GenericMethodsInference {
     Constraints constraints = new Constraints();
 
     // Store type parameters.
-    for (int i = 0; i < typeParams.getNumChild(); i++) {
-      constraints.addTypeVariable(typeParams.getChild(i));
+    for (TypeVariable p : typeParams) {
+      constraints.addTypeVariable(p);
     }
 
     // Add initial constraints.
@@ -126,16 +126,36 @@ aspect GenericMethodsInference {
         S = S.boxed();
       }
       TypeDecl R = resultType;
-      // TODO: replace all uses of type variables in R with their inferred types.
-      TypeDecl Rprime = R;
       if (R.isVoid()) {
         R = typeObject();
       }
       constraints.convertibleFrom(S, R);
+      // Build the last constraints by substituting type bounds using the
+      // already-inferred type variables.
+      Collection<TypeDecl> substArgs = new ArrayList<TypeDecl>();
+      for (TypeVariable p : typeParams) {
+        TypeDecl arg = constraints.constraintsMap.get(p).typeArgument;
+        if (arg != null) {
+          substArgs.add(arg);
+        } else {
+          substArgs.add(p);
+        }
+      }
+      Parameterization partialSubst = new Parameterization(typeParams, substArgs);
+      for (TypeVariable p : typeParams) {
+        if (p.hasTypeBound() && !p.getTypeBound(0).isTypeAccess("java.lang", "Object")) {
+          TypeDecl Bp = constraints.constraintsMap.get(p).typeArgument;
+          if (Bp == null) {
+            Bp = p;
+          }
+          TypeDecl Bi_sub = p.substituted(partialSubst).lowerBound();
+          constraints.convertibleFrom(Bi_sub, p);
+          constraints.convertibleTo(Bp, Bi_sub);
+        }
+      }
       constraints.resolveEqualityConstraints();
       constraints.resolveSupertypeConstraints();
       constraints.resolveSubtypeConstraints();
-      // TODO(joqvist): missing constraints?
     }
 
     return constraints.typeArguments();
@@ -151,7 +171,7 @@ aspect GenericMethodsInference {
 
     private Collection<TypeVariable> typeVariables;
 
-    private Map<TypeVariable, ConstraintSet> constraintsMap;
+    protected Map<TypeVariable, ConstraintSet> constraintsMap;
 
     public boolean rawAccess = false;
 
@@ -360,8 +380,9 @@ aspect GenericMethodsInference {
       set.equaltypeConstraints.add(A);
     }
 
+    /**  A &lt;&lt; F  : A is convertible to F by method invocation conversion. */
     public void convertibleTo(TypeDecl A, TypeDecl F) {
-      // If F does not involve a type parameter Tj then con constraint is implied on Tj.
+      // If F does not involve a type parameter Tj then no constraint is implied on Tj.
       if (!F.involvesTypeParameters()) {
         return;
       }
@@ -375,7 +396,7 @@ aspect GenericMethodsInference {
         TypeDecl U = A.boxed();
         convertibleTo(U, F);
       } else if (F instanceof TypeVariable) {
-        // If F = Tj, then the constrint Tj :> A is implied.
+        // If F = Tj, then the constraint Tj :> A is implied.
         if (typeVariables.contains(F)) {
           addSupertypeConstraint(F, A);
         }
@@ -449,8 +470,9 @@ aspect GenericMethodsInference {
       }
     }
 
+    /**  A &gt;&gt; F  : F is convertible to A by method invocation conversion. */
     public void convertibleFrom(TypeDecl A, TypeDecl F) {
-      // If F does not involve a type parameter Tj then con constraint is implied on Tj.
+      // If F does not involve a type parameter Tj then no constraint is implied on Tj.
       if (!F.involvesTypeParameters()) {
         return;
       } else if (A.isNull()) {
@@ -568,7 +590,7 @@ aspect GenericMethodsInference {
     }
 
     public void constraintEqual(TypeDecl A, TypeDecl F) {
-      // If F does not involve a type parameter Tj then con constraint is implied on Tj.
+      // If F does not involve a type parameter Tj then no constraint is implied on Tj.
       if (!F.involvesTypeParameters()) {
         return;
       } else if (A.isNull()) {
