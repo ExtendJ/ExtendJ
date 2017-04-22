@@ -28,8 +28,25 @@
  */
 aspect MethodSignature18 {
 
-  /* Used to compute compatibility during phase 1 of overload resolution */
+  /**
+   * Builds an NTA bound method access, with a specific target method
+   * declaration.
+   *
+   * <p>This is used to pin the type inference to inferring types based on a
+   * candidate method declaration, instead of inferring types for an unbound
+   * method access - which would cause circularity.
+   *
+   * @return a BoundMethodAccess with the argument method as the target
+   * declaration.
+   */
+  syn nta MethodAccess MethodAccess.boundAccess(MethodDecl decl) {
+    return new BoundMethodAccess(name(), getArgList().treeCopy(), decl);
+  }
 
+  eq MethodAccess.boundAccess().lookupType(String name) =
+      unqualifiedScope().lookupType(name);
+
+  /** Used to compute compatibility during phase 1 of overload resolution. */
   syn lazy boolean Expr.compatibleStrictContext(TypeDecl type) = type().subtype(type);
 
   eq LambdaExpr.compatibleStrictContext(TypeDecl type) {
@@ -687,6 +704,18 @@ aspect MethodSignature18 {
   /* Below are the relevant overload resolution computations for choosing a method */
 
   refine MethodSignature15
+  protected SimpleSet<MethodDecl> MethodAccess.applicableBySubtyping(
+      SimpleSet<MethodDecl> potentiallyApplicable) {
+    SimpleSet<MethodDecl> maxSpecific = emptySet();
+    for (MethodDecl method : potentiallyApplicable) {
+      if (boundAccess(method).applicableBySubtyping(method)) {
+        maxSpecific = mostSpecific(maxSpecific, method);
+      }
+    }
+    return maxSpecific;
+  }
+
+  refine MethodSignature15
   eq MethodAccess.applicableBySubtyping(MethodDecl m) {
     if (m.getNumParameter() != getNumArg()) {
       return false;
@@ -699,6 +728,19 @@ aspect MethodSignature18 {
       }
     }
     return true;
+  }
+
+  refine MethodSignature15
+  protected SimpleSet<MethodDecl> MethodAccess.applicableByMethodInvocationConversion(
+      SimpleSet<MethodDecl> potentiallyApplicable, SimpleSet<MethodDecl> maxSpecific) {
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl method : potentiallyApplicable) {
+        if (boundAccess(method).applicableByMethodInvocationConversion(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
+        }
+      }
+    }
+    return maxSpecific;
   }
 
   refine MethodSignature15
@@ -810,6 +852,34 @@ aspect MethodSignature18 {
     return newMax;
   }
 
+  refine MethodSignature15
+  protected SimpleSet<MethodDecl> MethodAccess.potentiallyApplicable(
+      Collection<MethodDecl> candidates) {
+    SimpleSet<MethodDecl> potentiallyApplicable = emptySet();
+    // Select potentially applicable methods.
+    for (MethodDecl method : candidates) {
+      if (potentiallyApplicable(method) && accessible(method)) {
+        if (method.isGeneric()) {
+          GenericMethodDecl gm = method.genericDecl();
+          MethodAccess inferenceNode;
+          if (this instanceof ParMethodAccess) {
+            inferenceNode = this;
+          } else {
+            inferenceNode = boundAccess(gm);
+          }
+          Collection<TypeDecl> typeArguments = inferenceNode.inferTypeArguments(
+              method.type(),
+              method.getParameterList(),
+              inferenceNode.getArgList(),
+              gm.getTypeParameterList());
+          method = gm.lookupParMethodDecl(typeArguments);
+        }
+        potentiallyApplicable = potentiallyApplicable.add(method);
+      }
+    }
+    return potentiallyApplicable;
+  }
+
   refine MethodSignature15 eq MethodAccess.potentiallyApplicable(MethodDecl m) {
     if (!m.name().equals(name())) {
       return false;
@@ -853,10 +923,17 @@ aspect MethodSignature18 {
 
     if (m.isGeneric()) {
       GenericMethodDecl gm = m.genericDecl();
-      ArrayList<TypeDecl> typeArguments = inferTypeArguments(
+      MethodAccess inferenceNode;
+      if (this instanceof ParMethodAccess) {
+        // Type inference is not needed for a parameterized method access.
+        inferenceNode = this;
+      } else {
+        inferenceNode = boundAccess(gm);
+      }
+      ArrayList<TypeDecl> typeArguments = inferenceNode.inferTypeArguments(
           gm.type(),
           gm.getParameterList(),
-          getArgList(),
+          inferenceNode.getArgList(),
           gm.getTypeParameterList());
       if (!typeArguments.isEmpty()) {
         if (gm.getNumTypeParameter() != typeArguments.size()) {
