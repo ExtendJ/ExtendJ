@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2013-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -229,32 +229,44 @@ aspect NameCheck {
     return problems;
   }
 
+  TypeAccess contributes each nameProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> TypeAccess.nameProblems() {
+    if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
+      return Collections.singletonList(
+          errorf("the type %s is not accessible in this context", decl().typeName()));
+    }
+    // Type lookup for an unknown type can result in either an empty set or
+    // a set containing the unknown type.
+    // The empty set is returned for an unqualified type lookup, and the
+    // unknown type is returned for qualified type lookup.
+    // TODO(joqvist): Make qualified and unqualified type lookup behave the same on failure.
+    SimpleSet<TypeDecl> decls = decls();
+    if (decls.isSingleton()) {
+      if (decls.singletonValue().isUnknown()) {
+        return Collections.singletonList(
+            errorf("no visible type named %s", typeName()));
+      } else {
+        return Collections.emptyList();
+      }
+    } else if (decls.isEmpty()) {
+      return Collections.singletonList(
+          errorf("no visible type named %s", typeName()));
+    } else {
+      StringBuilder sb = new StringBuilder();
+      sb.append("multiple types named " + name() + " are visible:");
+      for (TypeDecl type : decls) {
+        sb.append(" " + type.typeName());
+      }
+      return Collections.singletonList(error(sb.toString()));
+    }
+  }
+
   eq ArrayTypeAccess.nameProblems() {
     if (decl().elementType().isUnknown()) {
       return Collections.singletonList(errorf("no type named %s", decl().elementType().typeName()));
     }
     return Collections.emptyList();
-  }
-
-  TypeAccess contributes each nameProblems() to CompilationUnit.problems();
-
-  syn Collection<Problem> TypeAccess.nameProblems() {
-    Collection<Problem> problems = new LinkedList<Problem>();
-    if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
-      problems.add(errorf("can not access the type named %s in this context", decl().typeName()));
-    }
-    if (decls().isEmpty()) {
-      problems.add(errorf("no visible type named %s", typeName()));
-    }
-    if (decls().size() > 1) {
-      StringBuilder sb = new StringBuilder();
-      sb.append("several types named " + name() + ":");
-      for (TypeDecl t : decls()) {
-        sb.append(" " + t.typeName());
-      }
-      problems.add(error(sb.toString()));
-    }
-    return problems;
   }
 
 
