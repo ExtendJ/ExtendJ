@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2014-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,27 +32,70 @@
 import java.util.*;
 import java.util.ArrayList;
 
+/**
+ * Attributes for method lookup.
+ */
 aspect LookupMethod {
+  /**
+   * Returns a method declaration representing unknown methods.
+   * Used in method lookup when no matching method was found.
+   */
   inh MethodDecl MethodDecl.unknownMethod();
 
+  /**
+   * Returns a method declaration representing unknown methods.
+   * Used in method lookup when no matching method was found.
+   */
   inh MethodDecl MethodAccess.unknownMethod();
 
+  /**
+   * Find the outermost qualified expression this access, if this access is
+   * qualified. Otherwise, returns this access.
+   *
+   * <p>For example, if {@code unqualifiedScope()} is evaluated for the {@code
+   * MethodAccess} inside the expression {@code Dot(FieldAccess,
+   * Dot(FieldAccess, MethodAcceess))}, then the outermost {@code Dot} is the
+   * unqualified scope of the {@code MethodAccess}.
+   */
   syn Expr Access.unqualifiedScope() = isQualified() ? nestedScope() : this;
 
+  /**
+   * Find the outermost qualified expression of a qualified access.
+   *
+   * <p>It is an error if this attribute is evaluated on an unqualified
+   * access.
+   *
+   * @throws UnsupportedOperationException if evaluated on an unqualified
+   * access.
+   */
   inh Expr Access.nestedScope();
 
   eq AbstractDot.getChild().nestedScope() = isQualified() ? nestedScope() : this;
 
   eq Program.getChild().nestedScope() {
-    throw new UnsupportedOperationException();
+    throw new UnsupportedOperationException(
+        "Can not evaluate nestedScope() on unqualified access.");
   }
 
+  /**
+   * Find all visible methods with the given name in the local
+   * scope or a qualified scope.
+   */
   inh Collection<MethodDecl> Expr.lookupMethod(String name);
 
+  /**
+   * Find all visible methods with the given name in the local scope.
+   */
   inh Collection<MethodDecl> Stmt.lookupMethod(String name);
 
+  /**
+   * Find all visible methods with the given name in the local scope.
+   */
   inh Collection<MethodDecl> BodyDecl.lookupMethod(String name);
 
+  /**
+   * Find all visible methods with the given name in the local scope.
+   */
   inh lazy Collection<MethodDecl> TypeDecl.lookupMethod(String name);
 
   eq MethodAccess.getArg().lookupMethod(String name) = unqualifiedScope().lookupMethod(name);
@@ -68,6 +111,10 @@ aspect LookupMethod {
 
   eq TypeDecl.getBodyDecl(int i).lookupMethod(String name) = unqualifiedLookupMethod(name);
 
+  /**
+   * Find all visible methods with the given name in this type or an enclosing
+   * type.
+   */
   syn lazy Collection<MethodDecl> TypeDecl.unqualifiedLookupMethod(String name) {
     Collection<MethodDecl> methods = memberMethods(name);
     if (!methods.isEmpty()) {
@@ -101,8 +148,10 @@ aspect LookupMethod {
   }
 
   /**
-   * Returns a filtered collection of methods, keeping only the static methods
+   * Filter a collection of methods, keeping only the static methods
    * from the input collection.
+   *
+   * @return the filtered collection of methods.
    */
   public static Collection<MethodDecl> ASTNode.keepStaticMethods(
       Collection<MethodDecl> methods) {
@@ -117,6 +166,14 @@ aspect LookupMethod {
 
   eq AbstractDot.getRight().lookupMethod(String name) = getLeft().type().memberMethods(name);
 
+  /**
+   * Returns one of the candidate declarations of this method access,
+   * or null if there exist no possible candidate declarations.
+   *
+   * <p>This attribute is only used in error reporting, to give a hint about
+   * a candidate declaration that was not applicable for method invocation
+   * for some reason.
+   */
   syn MethodDecl MethodAccess.singleCandidateDecl() {
     MethodDecl result = null;
     for (MethodDecl m : lookupMethod(name())) {
@@ -129,6 +186,10 @@ aspect LookupMethod {
     return result;
   }
 
+  /**
+   * Filters a collection of candidate method declarations, keeping
+   * only the most specific declarations for this invocation.
+   */
   protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(Collection<MethodDecl> candidates) {
     SimpleSet<MethodDecl> maxSpecific = emptySet();
     for (MethodDecl decl : candidates) {
@@ -148,6 +209,9 @@ aspect LookupMethod {
     return maxSpecific;
   }
 
+  /**
+   * Find all most specific applicable method declarations for this invocation.
+   */
   syn lazy SimpleSet<MethodDecl> MethodAccess.decls() {
     SimpleSet<MethodDecl> maxSpecific = maxSpecific(lookupMethod(name()));
     if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
@@ -156,6 +220,12 @@ aspect LookupMethod {
     return maxSpecific;
   }
 
+  /**
+   * Find the single method declaration matching this invocation.
+   *
+   * <p>If no such declaration exists, the unknown method declaration is returned
+   * instead.
+   */
   syn lazy MethodDecl MethodAccess.decl() {
     SimpleSet<MethodDecl> decls = decls();
     if (decls.isSingleton()) {
@@ -178,7 +248,7 @@ aspect LookupMethod {
   }
 
   /**
-   * Returns a filtered set of methods, keeping only the static methods
+   * Filter a set of methods, keeping only the static methods
    * from the input set.
    */
   protected static SimpleSet<MethodDecl> MethodAccess.keepStaticMethods(
@@ -210,9 +280,7 @@ aspect MethodDecl {
     return sb.toString();
   }
 
-  /**
-   * @return Method signature, including generic parameters.
-   */
+  /** Method signature, including type arguments.  */
   syn String MethodDecl.fullSignature() {
     StringBuilder sb = new StringBuilder();
     sb.append(name() + "(");
@@ -228,15 +296,21 @@ aspect MethodDecl {
 
 
   /**
-   * 8.4.2 Method Signature
-   * @param other
-   * @return {@code true} if the signature of this method is same as the
-   * the signature of the argument method
+   * Compare the signature of this method declaration with another
+   * method declaration.
+   *
+   * See JLS 6 &sect;8.4.2.
+   *
+   * @return {@code true} if the signature of this method is equal to
+   * the signature of the argument method.
    */
   syn boolean MethodDecl.sameSignature(MethodDecl other) =
       signature().equals(other.signature());
 
   /**
+   * Determine if this method declaration is more specific than another
+   * method declaration.
+   *
    * @param m argument method to compare to
    * @return {@code true} if this the argument method is less specific than this
    * and this is not less specific than the argument
@@ -245,11 +319,16 @@ aspect MethodDecl {
       m.lessSpecificThan(this) && !this.lessSpecificThan(m);
 
   /**
-   * Caution: a less specific than b does not mean b is not less specific than a!
-   * @param m argument method to compare to
-   * @return {@code true} if any parameter of this method decl is not a
-   * subtype (non-proper subtype) of the corresponding parameter of the
-   * argument method
+   * Determine if this method declaration is less specific than another
+   * method declaration.
+   *
+   * <p>Caution: that {@code a} is less specific than {@code b} does not mean that
+   * {@code b} is not less specific than {@code a}!
+   *
+   * @param m argument method to compare to.
+   * @return {@code true} if any parameter of this method declaration is not a
+   * (non-proper) subtype of the corresponding parameter of the argument
+   * method.
    */
   syn lazy boolean MethodDecl.lessSpecificThan(MethodDecl m) {
     if (getNumParameter() == 0) {
@@ -263,6 +342,10 @@ aspect MethodDecl {
     return false;
   }
 
+  /**
+   * Determine if a candidate method declaration is applicable
+   * for this invocation.
+   */
   public boolean MethodAccess.applicable(MethodDecl decl) {
     if (getNumArg() != decl.getNumParameter()) {
       return false;
@@ -278,6 +361,10 @@ aspect MethodDecl {
     return true;
   }
 
+  /**
+   * Determine if a candidate method declaration is accessible
+   * from this invocation.
+   */
   syn boolean MethodAccess.accessible(MethodDecl m) {
     if (!isQualified()) {
       return true;
@@ -298,7 +385,9 @@ aspect MethodDecl {
   }
 
   /**
-   * @return true if the method access may access the method
+   * Determine if a method invocation may access a given method declaration
+   * with protected access modifier from within a body declaration of this
+   * type.
    */
   public boolean TypeDecl.mayAccess(MethodAccess access, MethodDecl method) {
     if (instanceOf(method.hostType())
@@ -317,8 +406,9 @@ aspect MethodDecl {
    * Only check if this method would be able to override other method,
    * not if this method is declared in a subtype of the hostType of
    * other method. NB: does not check for equal signature!
-   * @param m other method
-   * @return {@code true} of the method could potentially override
+   *
+   * @param m other method.
+   * @return {@code true} of the method could potentially override.
    */
   syn lazy boolean MethodDecl.overrideCandidate(MethodDecl m) =
       !isStatic() && !m.isPrivate() && m.accessibleFrom(hostType());
@@ -332,7 +422,14 @@ aspect MethodDecl {
       && hostType().instanceOf(m.hostType()) && m.signature().equals(signature());
 }
 
+/**
+ * Attributes for enumerating member methods of types.
+ */
 aspect MemberMethods {
+  /**
+   * Find all member method declarations with the given name.
+   * This includes methods inherited from supertypes.
+   */
   syn Collection<MethodDecl> TypeDecl.memberMethods(String name) {
     Collection<MethodDecl> methods = methodsNameMap().get(name);
     if (methods != null) {
@@ -341,8 +438,12 @@ aspect MemberMethods {
       return Collections.emptyList();
     }
   }
+
   /**
-   * @return map from method name to method declarations
+   * Maps method names to method declarations for methods declared
+   * in this type and inherited from supertypes.
+   *
+   * <p>Each method name can map to multiple declarations.
    */
   syn lazy Map<String, Collection<MethodDecl>> TypeDecl.methodsNameMap() {
     Map<String, Collection<MethodDecl>> map = new HashMap<String, Collection<MethodDecl>>();
@@ -358,6 +459,9 @@ aspect MemberMethods {
     return map;
   }
 
+  /**
+   * Utility method to add a method to a method collection map.
+   */
   protected static void TypeDecl.addMethodToMap(MethodDecl method,
       Map<String, Collection<MethodDecl>> map) {
     String name = method.name();
@@ -370,8 +474,10 @@ aspect MemberMethods {
   }
 
   /**
-   * Iterate over all local methods in the type.
-   * @return method iterator
+   * Iterate over all method declarations for methods
+   * declared in this type and inherited from supertypes.
+   *
+   * @return iterator for iterating over method declarations.
    */
   public Iterator<MethodDecl> TypeDecl.localMethodsIterator() {
     return new Iterator<MethodDecl>() {
@@ -399,6 +505,11 @@ aspect MemberMethods {
     };
   }
 
+  /**
+   * Find local method declarations for the given method signature.
+   * Does not include supertype methods.
+   * The result can be multiple method declarations.
+   */
   syn SimpleSet<MethodDecl> TypeDecl.localMethodsSignature(String signature) {
     SimpleSet<MethodDecl> result = localMethodsSignatureMap().get(signature);
     if (result != null) {
@@ -409,7 +520,11 @@ aspect MemberMethods {
   }
 
   /**
-   * @return a mapping of method signature to method declaration
+   * Maps method signatures to local method declarations.
+   * Does not include supertype methods.
+   * Each signature can map to multiple declarations.
+   *
+   * @return a mapping of method signature to method declarations
    */
   syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.localMethodsSignatureMap() {
     Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(
@@ -424,8 +539,10 @@ aspect MemberMethods {
   }
 
   /**
+   * Iterate over all method declarations inherited from superinterfaces.
+   *
    * @return iterator for iterating over all method declarations in implemented
-   * interfaces
+   * interfaces.
    */
   public Iterator<MethodDecl> TypeDecl.interfacesMethodsIterator() {
     return new Iterator<MethodDecl>() {
@@ -453,6 +570,11 @@ aspect MemberMethods {
     };
   }
 
+  /**
+   * Find method declarations inherited from superinterfaces with the given
+   * signature.
+   * The result can be multiple method declarations.
+   */
   syn SimpleSet<MethodDecl> ClassDecl.interfacesMethodsSignature(String signature) {
     SimpleSet<MethodDecl> result = interfacesMethodsSignatureMap().get(signature);
     if (result != null) {
@@ -463,7 +585,9 @@ aspect MemberMethods {
   }
 
   /**
-   * Map signature to set of method declarations.
+   * Maps method signatures to sets of method declarations
+   * inherited from superinterfaces of this type.
+   * Each signature can map to multiple declarations.
    */
   syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.interfacesMethodsSignatureMap() {
     Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
@@ -483,7 +607,9 @@ aspect MemberMethods {
   }
 
   /**
-   * Iterate over all member methods in the type.
+   * Builds an iterator to iterate over all member methods in the type
+   * and its supertypes.
+   *
    * @return method iterator
    */
   public Iterator<MethodDecl> TypeDecl.methodsIterator() {
@@ -520,7 +646,12 @@ aspect MemberMethods {
     }
   }
 
-  /** Maps signature String to SimpleSet. */
+  /**
+   * Map method signatures to sets of method declarations
+   * for this type.
+   *
+   * <p>Includes all supertype method declarations.
+   */
   syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.methodsSignatureMap() =
       localMethodsSignatureMap();
 
@@ -565,7 +696,7 @@ aspect MemberMethods {
   }
 
   /**
-   * Utility method to add a single item in a SimpleSet based signature map.
+   * Utility method to add a single item in a {@code SimpleSet}-based map.
    */
   protected static <E> void ASTNode.putSimpleSetElement(Map<String, SimpleSet<E>> map,
       String key, E value) {
@@ -576,6 +707,10 @@ aspect MemberMethods {
     map.put(key, result.add(value));
   }
 
+  /**
+   * Utility method to determine if all method declarations in a set
+   * are abstract declarations.
+   */
   protected boolean TypeDecl.allMethodsAbstract(SimpleSet<MethodDecl> methods) {
     if (methods == null) {
       return true;
@@ -589,6 +724,10 @@ aspect MemberMethods {
   }
 }
 
+/**
+ * Attributes for enumerating method declarations inherited
+ * from supertypes.
+ */
 aspect AncestorMethods {
   /**
    * Finds methods with the same signature declared in ancestors types.  This
