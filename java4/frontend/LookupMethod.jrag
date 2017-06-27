@@ -168,18 +168,22 @@ aspect LookupMethod {
 
   /**
    * Returns one of the candidate declarations of this method access,
-   * or null if there exist no possible candidate declarations.
+   * or {@code null} if there exist no possible candidate declarations.
    *
    * <p>This attribute is only used in error reporting, to give a hint about
    * a candidate declaration that was not applicable for method invocation
    * for some reason.
    */
   syn MethodDecl MethodAccess.singleCandidateDecl() {
+    String signature = "";
     MethodDecl result = null;
     for (MethodDecl m : lookupMethod(name())) {
-      if (result == null) {
-        result = m;
-      } else if (m.getNumParameter() == getNumArg() && result.getNumParameter() != getNumArg()) {
+      String otherSignature = m.fullSignature();
+      // Choose the candidate matching arity or the lexicographically first signature.
+      if (result == null
+          || (m.getNumParameter() == getNumArg() && result.getNumParameter() != getNumArg())
+          || (m.getNumParameter() == getNumArg() && otherSignature.compareTo(signature) < 0)) {
+        signature = otherSignature;
         result = m;
       }
     }
@@ -293,7 +297,13 @@ aspect MethodDecl {
       if (i != 0) {
         sb.append(", ");
       }
-      sb.append(getParameter(i).type().fullName());
+      // TODO: TypeDecl.fullName() should not include @primitive.
+      TypeDecl paramType = getParameter(i).type();
+      if (paramType instanceof PrimitiveType) {
+        sb.append(paramType.typeName());
+      } else {
+        sb.append(paramType.fullName());
+      }
     }
     sb.append(")");
     return sb.toString();
