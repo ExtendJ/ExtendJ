@@ -289,38 +289,44 @@ aspect ExceptionHandling {
   syn lazy boolean TryStmt.catchableException(TypeDecl type) =
       getBlock().reachedException(type);
 
-  protected boolean ASTNode.reachedException(TypeDecl type) {
+  /**
+   * @param catchType test if this expression/statement throws an exception
+   * catchable as this type
+   * @return {@code true} if this expression/statement can throw an exception
+   * that is catchable as the given exception type.
+   */
+  protected boolean ASTNode.reachedException(TypeDecl catchType) {
     for (int i = 0; i < getNumChild(); i++) {
-      if (getChild(i).reachedException(type)) {
+      if (getChild(i).reachedException(catchType)) {
         return true;
       }
     }
     return false;
   }
 
-  protected boolean TryStmt.reachedException(TypeDecl type) {
+  protected boolean TryStmt.reachedException(TypeDecl catchType) {
     boolean found = false;
     // Found is true if the exception type is caught by a catch clause.
     for (int i = 0; i < getNumCatchClause() && !found; i++) {
-      if (getCatchClause(i).handles(type)) {
+      if (getCatchClause(i).handles(catchType)) {
         found = true;
       }
     }
     // If an exception is thrown in the block and the exception is not caught and
     // either there is no finally block or the finally block can complete normally.
     if (!found && (!hasNonEmptyFinally() || getFinally().canCompleteNormally()) ) {
-      if (getBlock().reachedException(type)) {
+      if (getBlock().reachedException(catchType)) {
         return true;
       }
     }
     // Even if the exception is caught by the catch clauses they may
     // throw new exceptions.
     for (int i = 0; i < getNumCatchClause(); i++) {
-      if (getCatchClause(i).reachedException(type)) {
+      if (getCatchClause(i).reachedException(catchType)) {
         return true;
       }
     }
-    return hasNonEmptyFinally() && getFinally().reachedException(type);
+    return hasNonEmptyFinally() && getFinally().reachedException(catchType);
   }
 
   syn lazy boolean TypeDecl.mayCatch(TypeDecl thrownType) =
