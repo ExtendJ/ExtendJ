@@ -29,6 +29,43 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * <b>Notes on parameterized type substitution.</b>
+ *
+ * <p>In ExtendJ parameterized types are represented by higher-order attributes
+ * representing synthetic type declarations as children of the original generic
+ * type declaration. Generic method and constructor parameterization works
+ * similarly.
+ * Note that "original" is used in attribute names to refer to
+ * the generic declaration parent of a parameterized type or method/constructor.
+ *
+ * <p>Parameterized types are generic types with type arguments. The type variables
+ * of the generic type should be substituted for the type arguments.
+ * This used to be done using direct substitution, i.e., all occurrences of the
+ * type variable were replaced directly in the synthetic parameterized declaration when
+ * the synthetic declaration was constructed. However, this caused problems because
+ * it prevented a few tricky cases of type substitution to work correctly.
+ *
+ * <p>The new system for parameterized type substitution is more light-weight and
+ * demand-driven. The type substition only occurs during type lookup. Since type
+ * lookup follows the AST upwards to find a declaration for a type, we simply
+ * intercept type lookup at parameterized declarations and check if the typename should
+ * be substituted. This easily enables complex nested substitutions which were tricky
+ * to implement previously. It even allows some circularly dependent type substitions
+ * and recursive types.
+ *
+ * <p>The synthetic parameterized declarations are copied from their original generic
+ * templates, but it is not necessary to copy everything. Method bodies and instance
+ * initializers can be dropped. Only the "signature" part of members are kept.
+ * This is done by the signatureCopy() method. It copies the parts of a declaration
+ * that are essential for type analysis. The erasedCopy() method works similarly but
+ * removes type arguments in all parameterized type accesses, as necessary for
+ * type erasure.
+ *
+ * <p>The new way of doing type substitution means that the parameterization needs to
+ * be kept in the parameterized declaration. This is done by using a token of type
+ * Parameterization.
+ */
 aspect Generics {
 
   /**
@@ -732,6 +769,15 @@ aspect GenericsNameBinding {
   eq GenericInterfaceDecl.getTypeParameter().isNestedType() = true;
   eq GenericInterfaceDecl.getTypeParameter().enclosingType() = this;
 
+  /**
+   * Helper method used to interject type variable substitution into the type
+   * lookup process for generic type scopes.
+   *
+   * <p>When the type variables should be visible to a typename lookup from
+   * inside this generic type scope, this helper method will check if there
+   * exists a type variable with the given name. If so, that type variable is
+   * the target for the lookup.
+   */
   public SimpleSet<TypeDecl> GenericTypeDecl.addTypeVariables(SimpleSet<TypeDecl> types,
       String name) {
     GenericTypeDecl original = (GenericTypeDecl) original();
@@ -922,8 +968,7 @@ aspect LookupParTypeDecl {
           getTypeParameterList().treeCopyNoTransform(),
           parameterization,
           hasSuperClass() ? new Opt<Access>(getSuperClass().erasedCopy()) : new Opt<Access>(),
-          erasedAccessList(getImplementsList()),
-          erasedBodyDecls());
+          erasedAccessList(getImplementsList()));
     } else {
       typeDecl = new ParClassDecl(
           getModifiers().treeCopyNoTransform(),
@@ -931,8 +976,7 @@ aspect LookupParTypeDecl {
           getTypeParameterList().treeCopyNoTransform(),
           parameterization,
           getSuperClassOpt().treeCopyNoTransform(),
-          getImplementsList().treeCopyNoTransform(),
-          substitutedBodyDecls());
+          getImplementsList().treeCopyNoTransform());
     }
     return typeDecl;
   }
@@ -949,20 +993,21 @@ aspect LookupParTypeDecl {
           getID(),
           getTypeParameterList().treeCopyNoTransform(),
           parameterization,
-          erasedAccessList(getSuperInterfaceList()),
-          erasedBodyDecls());
+          erasedAccessList(getSuperInterfaceList()));
     } else {
       typeDecl = new ParInterfaceDecl(
           getModifiers().treeCopyNoTransform(),
           getID(),
           getTypeParameterList().treeCopyNoTransform(),
           parameterization,
-          getSuperInterfaceList().treeCopyNoTransform(),
-          substitutedBodyDecls());
+          getSuperInterfaceList().treeCopyNoTransform());
     }
     return typeDecl;
   }
 
+  /**
+   * This substitutes type variable names for matching type arguments during type lookup.
+   */
   eq ParTypeDecl.getBodyDecl().lookupType(String name) {
     TypeDecl paramType = getParameterization().substitute(name);
     if (paramType != null) {
@@ -971,6 +1016,9 @@ aspect LookupParTypeDecl {
     return localLookupType(name);
   }
 
+  /**
+   * This substitutes type variable names for matching type arguments during type lookup.
+   */
   eq ParTypeDecl.getChild().lookupType(String name) {
     TypeDecl paramType = getParameterization().substitute(name);
     if (paramType != null) {
@@ -979,6 +1027,9 @@ aspect LookupParTypeDecl {
     return lookupType(name);
   }
 
+  /**
+   * This substitutes type variable names for matching type arguments during type lookup.
+   */
   eq ParMethodDecl.getChild().lookupType(String name) {
     TypeDecl paramType = getParameterization().substitute(name);
     if (paramType != null) {
@@ -987,6 +1038,9 @@ aspect LookupParTypeDecl {
     return lookupType(name);
   }
 
+  /**
+   * This substitutes type variable names for matching type arguments during type lookup.
+   */
   eq ParConstructorDecl.getChild().lookupType(String name) {
     TypeDecl paramType = getParameterization().substitute(name);
     if (paramType != null) {
@@ -995,6 +1049,9 @@ aspect LookupParTypeDecl {
     return lookupType(name);
   }
 
+  /**
+   * This substitutes type variable names for matching type arguments during type lookup.
+   */
   eq SubstitutedTypeVariable.getChild().lookupType(String name) {
     TypeDecl paramType = getParameterization().substituteBound(name);
     if (paramType != null) {
@@ -1438,7 +1495,6 @@ aspect LookupParTypeDecl {
         getID(),
         getSuperClassOpt().treeCopyNoTransform(),
         getImplementsList().treeCopyNoTransform(),
-        substitutedBodyDecls(),
         this);
   }
 
@@ -1448,13 +1504,14 @@ aspect LookupParTypeDecl {
         getID(),
         getSuperClassOpt().treeCopyNoTransform(),
         getImplementsList().treeCopyNoTransform(),
-        substitutedBodyDecls(),
         getTypeParameterList().treeCopyNoTransform(),
         this);
   }
 
   /**
    * Creates an erased copy of the signature of this body declaration.
+   *
+   * <p>Occurrences of type variables are replaced by their type bound.
    */
   public BodyDecl BodyDecl.erasedCopy() {
     throw new Error("Can not erase types in body decl of type " + getClass().getSimpleName());
@@ -1523,12 +1580,11 @@ aspect LookupParTypeDecl {
   }
 
   public ClassDecl ClassDecl.erasedCopy() {
-    return new ClassDeclSubstituted(
+    return new ClassDeclErased(
         getModifiers().treeCopyNoTransform(),
         getID(),
         hasSuperClass() ? new Opt<Access>(getSuperClass().erasedCopy()) : new Opt<Access>(),
         erasedAccessList(getImplementsList()),
-        erasedBodyDecls(),
         this);
   }
 
@@ -1610,6 +1666,13 @@ aspect LookupParTypeDecl {
   eq GenericInterfaceDeclSubstituted.original() = getOriginal().original();
   eq ParTypeDecl.original() = genericDecl().original();
 
+  // Equations for the BodyDecl NTA:
+  syn lazy List<BodyDecl> RawClassDecl.getBodyDeclList() = original().erasedBodyDecls();
+  syn lazy List<BodyDecl> RawInterfaceDecl.getBodyDeclList() = original().erasedBodyDecls();
+  syn lazy List<BodyDecl> ClassDeclErased.getBodyDeclList() = getOriginal().erasedBodyDecls();
+  syn lazy List<BodyDecl> GenericClassDeclErased.getBodyDeclList() =
+      getOriginal().erasedBodyDecls();
+
   /**
    * Builds a list of erased members in a raw type.
    */
@@ -1623,8 +1686,18 @@ aspect LookupParTypeDecl {
     return list;
   }
 
+  // Equations for the BodyDecl NTA:
+  syn lazy List<BodyDecl> ParClassDecl.getBodyDeclList() = original().substitutedBodyDecls();
+  syn lazy List<BodyDecl> ParInterfaceDecl.getBodyDeclList() = original().substitutedBodyDecls();
+  syn lazy List<BodyDecl> ClassDeclSubstituted.getBodyDeclList() =
+      getOriginal().substitutedBodyDecls();
+  syn lazy List<BodyDecl> GenericClassDeclSubstituted.getBodyDeclList() =
+      getOriginal().substitutedBodyDecls();
+
   /**
-   * Builds a list of substituted body decls in a parameterized type.
+   * Builds a list of substituted members in a parameterized type.
+   *
+   * <p>The bodies of methods are not copied to the substituted version.
    */
   protected List<BodyDecl> TypeDecl.substitutedBodyDecls() {
     List<BodyDecl> list = new List<BodyDecl>();
