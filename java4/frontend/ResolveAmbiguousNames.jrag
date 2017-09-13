@@ -531,8 +531,39 @@ aspect NameResolution {
     return resolvePackageOrTypeName(qualifier, name);
   }
 
+  /**
+   * A parse name can only be disambiguated if it is not qualified by an
+   * expression containing another unresolved parse name.
+   */
+  inh boolean ParseName.canResolve();
+  inh boolean AbstractDot.canResolve();
+
+  // Default equations:
+  eq TypeDecl.getChild().canResolve() = true;
+  eq BodyDecl.getChild().canResolve() = true;
+  eq CompilationUnit.getChild().canResolve() = true;
+
+  // The right hand side can be resolved if the left does not contain a parse name,
+  // and if the current context allows resolution.
+  eq AbstractDot.getRight().canResolve() = !getLeft().containsParseName() && canResolve();
+
+  /**
+   * Test if an expression contains an unresolved parse name.
+   */
+  syn boolean Expr.containsParseName() = false;
+  eq Binary.containsParseName() =
+      getLeftOperand().containsParseName() || getRightOperand().containsParseName();
+  eq CastExpr.containsParseName() =
+      getTypeAccess().containsParseName() || getExpr().containsParseName();
+  eq ParExpr.containsParseName() = getExpr().containsParseName();
+  eq ClassInstanceExpr.containsParseName() = getAccess().containsParseName();
+  eq ParseName.containsParseName() = true;
+
   // This rewrite replaces a parsed name with a name reclassified according to context.
+  // Rewrites in qualified expressions must happen left-to-right. Rewrite ordering
+  // is ensured by the rewrite condition.
   rewrite ParseName {
+    when (canResolve())
     to Access {
       NamePart name = NamePart.EMPTY;
       switch (nameType()) {
