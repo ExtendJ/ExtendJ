@@ -133,10 +133,22 @@ aspect Diamond {
     SimpleSet<MethodDecl> maxSpecific = emptySet();
     Collection<MethodDecl> potentiallyApplicable = potentiallyApplicable(placeholderMethods);
     for (MethodDecl candidate : potentiallyApplicable) {
-      if (applicableBySubtyping(instanceExpr, candidate)
-          || applicableByMethodInvocationConversion(instanceExpr, candidate)
-          || applicableByVariableArity(instanceExpr, candidate)) {
+      if (applicableBySubtyping(instanceExpr, candidate)) {
         maxSpecific = mostSpecific(maxSpecific, candidate);
+      }
+    }
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl candidate : potentiallyApplicable) {
+        if (applicableByMethodInvocationConversion(instanceExpr, candidate)) {
+          maxSpecific = mostSpecific(maxSpecific, candidate);
+        }
+      }
+    }
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl candidate : potentiallyApplicable) {
+        if (applicableByVariableArity(instanceExpr, candidate)) {
+          maxSpecific = mostSpecific(maxSpecific, candidate);
+        }
       }
     }
     return maxSpecific;
@@ -309,7 +321,7 @@ aspect Diamond {
   }
 
   /**
-   * @return true if the method is applicable by method invocation conversion
+   * @return {@code true} if the candidate method is applicable by method invocation conversion
    */
   protected boolean DiamondAccess.applicableByMethodInvocationConversion(
       ClassInstanceExpr expr, MethodDecl method) {
@@ -326,7 +338,7 @@ aspect Diamond {
   }
 
   /**
-   * @return true if the method is applicable by variable arity
+   * @return {@code true} if the candidate method is applicable by variable arity
    */
   protected boolean DiamondAccess.applicableByVariableArity(
       ClassInstanceExpr expr, MethodDecl method) {
@@ -350,33 +362,46 @@ aspect Diamond {
    * of type variables in the original type parameter list have been replaced
    * by the substitution type parameters.
    *
+   * <p>This should only be used to generate candidate methods for Diamond type
+   * inference.
+   *
    * @return the substituted ParameterDeclaration node
    */
-  syn ParameterDeclaration ParameterDeclaration.substituted(Collection<TypeVariable> original,
-      List<TypeVariable> substitution) =
-    new ParameterDeclaration(
+  public ParameterDeclaration ParameterDeclaration.substituted(Collection<TypeVariable> original,
+      List<TypeVariable> substitution) {
+    return new ParameterDeclaration(
         (Modifiers) getModifiers().treeCopyNoTransform(),
         getTypeAccess().substituted(original, substitution),
         getID());
+  }
+
+  @Override
+  public ParameterDeclaration VariableArityParameterDeclaration.substituted(
+      Collection<TypeVariable> original, List<TypeVariable> substitution) {
+    return new VariableArityParameterDeclaration(
+        (Modifiers) getModifiers().treeCopyNoTransform(),
+        getTypeAccess().substituted(original, substitution),
+        getID());
+  }
 
   /**
    * Builds a copy of this Access node where all occurrences
    * of type variables in the original type parameter list have been replaced
    * by the substitution type parameters.
    *
+   * <p>This should only be used to generate candidate methods for Diamond type
+   * inference.
+   *
    * @return the substituted Access node
    */
-  syn Access Access.substituted(Collection<TypeVariable> original,
-      List<TypeVariable> substitution) = (Access) treeCopyNoTransform();
+  public Access Access.substituted(Collection<TypeVariable> original,
+      List<TypeVariable> substitution) {
+    return (Access) treeCopyNoTransform();
+  }
 
-  /**
-   * Builds a copy of this TypeAccess node where all occurrences
-   * of type variables in the original type parameter list have been replaced
-   * by the substitution type parameters.
-   *
-   * @return the substituted TypeAccess node
-   */
-  eq TypeAccess.substituted(Collection<TypeVariable> original, List<TypeVariable> substitution) {
+  @Override
+  public Access TypeAccess.substituted(Collection<TypeVariable> original,
+      List<TypeVariable> substitution) {
     TypeDecl decl = decl();
     int i = 0;
     for (TypeVariable typeVar : original) {
@@ -388,14 +413,9 @@ aspect Diamond {
     return super.substituted(original, substitution);
   }
 
-  /**
-   * Builds a copy of this ParTypeAccess node where all occurrences
-   * of type variables in the original type parameter list have been replaced
-   * by the substitution type parameters.
-   *
-   * @return the substituted ParTypeAccess node
-   */
-  eq ParTypeAccess.substituted(Collection<TypeVariable> original, List<TypeVariable> substitution) {
+  @Override
+  public Access ParTypeAccess.substituted(Collection<TypeVariable> original,
+      List<TypeVariable> substitution) {
     List<Access> substArgs = new List<Access>();
     for (Access arg : getTypeArgumentList()) {
       substArgs.add(arg.substituted(original, substitution));
@@ -424,21 +444,16 @@ aspect Diamond {
    */
   inh boolean DiamondAccess.isExplicitGenericConstructorAccess();
 
-  /**
-   * @return true
-   */
   eq ParClassInstanceExpr.getAccess().isExplicitGenericConstructorAccess() = true;
 
-  /**
-   * @return false
-   */
   eq Program.getChild(int i).isExplicitGenericConstructorAccess() = false;
 
   DiamondAccess contributes each typeProblems() to CompilationUnit.problems();
 
   /**
    * Checks if this diamond access is legal.
-   * The diamond access is not legal if it either is part of an inner class
+   *
+   * <p>The diamond access is not legal if it either is part of an inner class
    * declaration, if it is used to access a non-generic type, or if it is
    * part of a call to a generic constructor with explicit type arguments.
    */
