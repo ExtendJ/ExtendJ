@@ -704,12 +704,32 @@ aspect MethodSignature18 {
   /* Below are the relevant overload resolution computations for choosing a method */
 
   refine MethodSignature15
-  protected SimpleSet<MethodDecl> MethodAccess.applicableBySubtyping(
-      SimpleSet<MethodDecl> potentiallyApplicable) {
+  protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(Collection<MethodDecl> candidates) {
+    SimpleSet<MethodDecl> potentiallyApplicable = potentiallyApplicable(candidates);
+
+    // First phase.
     SimpleSet<MethodDecl> maxSpecific = emptySet();
     for (MethodDecl method : potentiallyApplicable) {
       if (boundAccess(method).applicableBySubtyping(method)) {
         maxSpecific = mostSpecific(maxSpecific, method);
+      }
+    }
+
+    // Second phase.
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl method : potentiallyApplicable) {
+        if (boundAccess(method).applicableByMethodInvocationConversion(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
+        }
+      }
+    }
+
+    // Third phase.
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl method : potentiallyApplicable) {
+        if (method.isVariableArity() && applicableVariableArity(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
+        }
       }
     }
     return maxSpecific;
@@ -728,19 +748,6 @@ aspect MethodSignature18 {
       }
     }
     return true;
-  }
-
-  refine MethodSignature15
-  protected SimpleSet<MethodDecl> MethodAccess.applicableByMethodInvocationConversion(
-      SimpleSet<MethodDecl> potentiallyApplicable, SimpleSet<MethodDecl> maxSpecific) {
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl method : potentiallyApplicable) {
-        if (boundAccess(method).applicableByMethodInvocationConversion(method)) {
-          maxSpecific = mostSpecific(maxSpecific, method);
-        }
-      }
-    }
-    return maxSpecific;
   }
 
   refine MethodSignature15

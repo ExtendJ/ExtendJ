@@ -30,15 +30,35 @@
  */
 
 aspect MethodSignature15 {
-  refine LookupMethod protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(
-      Collection<MethodDecl> candidates) {
+  refine LookupMethod
+  protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(Collection<MethodDecl> candidates) {
     SimpleSet<MethodDecl> potentiallyApplicable = potentiallyApplicable(candidates);
+
     // First phase.
-    SimpleSet<MethodDecl> maxSpecific = applicableBySubtyping(potentiallyApplicable);
+    SimpleSet<MethodDecl> maxSpecific = emptySet();
+    for (MethodDecl method : potentiallyApplicable) {
+      if (applicableBySubtyping(method)) {
+        maxSpecific = mostSpecific(maxSpecific, method);
+      }
+    }
+
     // Second phase.
-    maxSpecific = applicableByMethodInvocationConversion(potentiallyApplicable, maxSpecific);
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl method : potentiallyApplicable) {
+        if (applicableByMethodInvocationConversion(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
+        }
+      }
+    }
+
     // Third phase.
-    maxSpecific = applicableVariableArity(potentiallyApplicable, maxSpecific);
+    if (maxSpecific.isEmpty()) {
+      for (MethodDecl method : potentiallyApplicable) {
+        if (method.isVariableArity() && applicableVariableArity(method)) {
+          maxSpecific = mostSpecific(maxSpecific, method);
+        }
+      }
+    }
     return maxSpecific;
   }
 
@@ -61,41 +81,6 @@ aspect MethodSignature15 {
       }
     }
     return potentiallyApplicable;
-  }
-
-  protected SimpleSet<MethodDecl> MethodAccess.applicableBySubtyping(
-      SimpleSet<MethodDecl> potentiallyApplicable) {
-    SimpleSet<MethodDecl> maxSpecific = emptySet();
-    for (MethodDecl method : potentiallyApplicable) {
-      if (applicableBySubtyping(method)) {
-        maxSpecific = mostSpecific(maxSpecific, method);
-      }
-    }
-    return maxSpecific;
-  }
-
-  protected SimpleSet<MethodDecl> MethodAccess.applicableByMethodInvocationConversion(
-      SimpleSet<MethodDecl> potentiallyApplicable, SimpleSet<MethodDecl> maxSpecific) {
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl method : potentiallyApplicable) {
-        if (applicableByMethodInvocationConversion(method)) {
-          maxSpecific = mostSpecific(maxSpecific, method);
-        }
-      }
-    }
-    return maxSpecific;
-  }
-
-  protected SimpleSet<MethodDecl> MethodAccess.applicableVariableArity(
-      SimpleSet<MethodDecl> potentiallyApplicable, SimpleSet<MethodDecl> maxSpecific) {
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl method : potentiallyApplicable) {
-        if (method.isVariableArity() && applicableVariableArity(method)) {
-          maxSpecific = mostSpecific(maxSpecific, method);
-        }
-      }
-    }
-    return maxSpecific;
   }
 
   refine ConstructScope eq ClassInstanceExpr.decls() {
