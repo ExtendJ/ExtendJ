@@ -299,9 +299,6 @@ aspect DefiniteAssignment {
     if (b instanceof FieldDecl && !((FieldDecl) b).isStatic() && v.isClassVariable()) {
       return true;
     }
-    if (b instanceof MethodDecl) {
-      return true;
-    }
     if (b instanceof MemberTypeDecl && v.isBlank() && v.isFinal() && v.hostType() == this) {
       return true;
     }
@@ -547,8 +544,7 @@ aspect DefiniteAssignment {
   eq ArrayCreationExpr.getArrayInit().assignedBefore(Variable v) = assignedAfterCreation(v);
 
   // 16.2.2 1st bullet
-  eq MethodDecl.getBlock().assignedBefore(Variable v) =
-      v.isFinal() && v.isField() || assignedBefore(v);
+  eq MethodDecl.getBlock().assignedBefore(Variable v) = v.isField() || assignedBefore(v);
 
   eq InstanceInitializer.getBlock().assignedBefore(Variable v) = assignedBefore(v);
 
@@ -920,6 +916,10 @@ aspect DefiniteUnassignment {
 
   syn boolean BodyDecl.unassignedBefore(Variable v) = unassignedBefore(v, this);
 
+  eq MethodDecl.unassignedBefore(Variable v) = false;
+
+  eq MemberTypeDecl.unassignedBefore(Variable v) = false;
+
   inh boolean BodyDecl.unassignedBefore(Variable v, BodyDecl b);
 
   /**
@@ -933,9 +933,6 @@ aspect DefiniteUnassignment {
    * <p>This attribute is not circular.
    */
   eq TypeDecl.getChild().unassignedBefore(Variable v, BodyDecl b) {
-    if (b instanceof MethodDecl || b instanceof MemberTypeDecl) {
-      return false;
-    }
     if (v.isField()) {
       boolean skip = !(b instanceof ConstructorDecl);
       for (int i = getNumBodyDecl() - 1; i >= 0; --i) {
@@ -1159,7 +1156,7 @@ aspect DefiniteUnassignment {
 
   eq AssertStmt.unassignedAfter(Variable v) = getCondition().unassignedAfter(v);
 
-  eq MethodDecl.getBlock().unassignedBefore(Variable v) = !(v.isFinal() && v.isField());
+  eq MethodDecl.getBlock().unassignedBefore(Variable v) = !v.isField();
 
   eq Block.unassignedAfter(Variable v) =
       getNumStmt() == 0 ? unassignedBefore(v) : getStmt(getNumStmt() - 1).unassignedAfter(v);
