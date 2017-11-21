@@ -65,25 +65,6 @@ aspect SafeVarargs {
    */
   syn boolean Modifiers.hasAnnotationSafeVarargs() = hasAnnotation("java.lang", "SafeVarargs");
 
-  /**
-   * It is an error if the SafeVarargs annotation is used on something
-   * that is not a variable arity method or constructor.
-   */
-  syn boolean BodyDecl.hasIllegalAnnotationSafeVarargs() = hasAnnotationSafeVarargs();
-
-  /**
-   * The SafeVarargs annotation is allowed on a constructor if it
-   * has variable arity.
-   */
-  eq ConstructorDecl.hasIllegalAnnotationSafeVarargs() = hasAnnotationSafeVarargs() && !isVariableArity();
-
-  /**
-   * The SafeVarargs annotation is allowed on a method if it
-   * has variable arity and is either static or final.
-   */
-  eq MethodDecl.hasIllegalAnnotationSafeVarargs() =
-      hasAnnotationSafeVarargs() && (!isVariableArity() || (!isFinal() && !isStatic()));
-
   MethodAccess contributes each uncheckedWarnings() to CompilationUnit.problems();
 
   syn Collection<Problem> MethodAccess.uncheckedWarnings() {
@@ -107,13 +88,45 @@ aspect SafeVarargs {
    * We must report illegal uses of the SafeVarargs annotation.
    * It is only allowed on variable arity method and constructor declarations.
    */
-  BodyDecl contributes
-      error("@SafeVarargs is only allowed for variable arity method and constructor declarations")
-      when hasIllegalAnnotationSafeVarargs()
-      to CompilationUnit.problems();
+  BodyDecl contributes each safeVarargsProblems() to CompilationUnit.problems();
+
+  syn Collection<Problem> BodyDecl.safeVarargsProblems() {
+    if (hasAnnotationSafeVarargs()) {
+      return Collections.singleton(error(
+            "the @SafeVarargs annotation is only allowed on constructor or method declarations."));
+    } else {
+      return Collections.emptySet();
+    }
+  }
+
+  eq MethodDecl.safeVarargsProblems() {
+    if (hasAnnotationSafeVarargs()) {
+      if (!isVariableArity()) {
+        return Collections.singleton(errorf(
+              "illegal use of @SafeVarargs on non-varargs method %s().", name()));
+      } else if (!isFinal() && !isStatic()) {
+        return Collections.singleton(errorf(
+              "illegal use of @SafeVarargs on non-final and non-static method %s().", name()));
+      }
+    }
+    return Collections.emptySet();
+  }
+
+  eq ConstructorDecl.safeVarargsProblems() {
+    if (hasAnnotationSafeVarargs()) {
+      if (!isVariableArity()) {
+        return Collections.singleton(errorf(
+              "illegal use of @SafeVarargs on non-varargs constructor.", name()));
+      }
+    }
+    return Collections.emptySet();
+  }
 
   /**
    * Check if the method is missing a SafeVarargs annotation.
+   *
+   * <p>This adds a heap pollution warning if this is a varargs method without a
+   * @SafeVarargs annotation.
    */
   MethodDecl contributes
       warning("possible heap pollution for variable arity parameter")
