@@ -27,6 +27,12 @@
  */
 
 aspect Java8TypeHierarchyCheck {
+  // The refined typeProblems() attribute contains duplicated code from
+  // java4/frontend/TypeHierarchyCheck.jrag and java5/frontend/Generics.jrag.
+  // The code from the Java 4 aspect is copied because small changes have to be
+  // done to handle default method overriding for interfaces.
+  // The code from the Java 5 aspect is copied because there is no easy way to
+  // reuse it without using the original Java 4 code.
   // 8.4.6.4 & 9.4.1
   refine GenericsTypeCheck eq TypeDecl.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>();
@@ -56,7 +62,7 @@ aspect Java8TypeHierarchyCheck {
             }
           }
 
-          // regardless of overriding
+          // Regardless of overriding.
           // 8.4.4
           for (Access e: m.getExceptionList()) {
             if (e.type().isCheckedException()) {
@@ -88,7 +94,7 @@ aspect Java8TypeHierarchyCheck {
           if ((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate()) {
             problems.add(target.error("overriding access modifier error"));
           }
-          // regardless of overriding
+          // Regardless of overriding.
           if (decl.isFinal()) {
             problems.add(target.errorf("method %s in %s can not override final method %s in %s",
                 m.fullSignature(), hostType().typeName(), decl.fullSignature(),
@@ -114,27 +120,28 @@ aspect Java8TypeHierarchyCheck {
               }
             }
             if (!found) {
-              problems.add(target.error("may not throw more checked exceptions than hidden method"));
+              problems.add(target.error(
+                  "may not throw more checked exceptions than hidden method"));
             }
           }
           // 8.4.6.3
           if (decl.isPublic() && !m.isPublic()) {
-            problems.add(target.errorf("hiding access modifier: public method %s in %s is hidden by"
-                + " non public method %s in %s",
+            problems.add(target.errorf("hiding access modifier:"
+                + " public method %s in %s is hidden by non public method %s in %s",
                 decl.fullSignature(), decl.hostType().typeName(), m.fullSignature(),
                 m.hostType().typeName()));
           }
           // 8.4.6.3
           if (decl.isProtected() && !(m.isPublic() || m.isProtected())) {
-            problems.add(target.errorf("hiding access modifier: protected method %s in %s is hidden by"
-                + " non (public|protected) method %s in %s",
+            problems.add(target.errorf("hiding access modifier:"
+                + " protected method %s in %s is hidden by non (public|protected) method %s in %s",
                 decl.fullSignature(), decl.hostType().typeName(), m.fullSignature(),
                 m.hostType().typeName()));
           }
           // 8.4.6.3
           if ((!decl.isPrivate() && !decl.isProtected() && !decl.isPublic()) && m.isPrivate()) {
-            problems.add(target.errorf("hiding access modifier: default method %s in %s is hidden by"
-                + " private method %s in %s",
+            problems.add(target.errorf("hiding access modifier:"
+                + " default method %s in %s is hidden by private method %s in %s",
                 decl.fullSignature(), decl.hostType().typeName(), m.fullSignature(),
                 m.hostType().typeName()));
           }
@@ -162,6 +169,25 @@ aspect Java8TypeHierarchyCheck {
               problems.add(errorf("%s cannot be inherited with different type arguments: %s and %s",
                   p.genericDecl().name(), p.typeName(), q.typeName()));
             }
+          }
+        }
+      }
+    }
+
+    // Check if a method has same signature as another in a supertype but does not override it.
+    Map<String, SimpleSet<MethodDecl>> map = erasedAncestorMethodsMap();
+    for (Iterator iter1 = localMethodsIterator(); iter1.hasNext(); ) {
+      MethodDecl localMethod = (MethodDecl) iter1.next();
+
+      String signature = localMethod.signature();
+
+      SimpleSet<MethodDecl> set = map.get(signature);
+      if (set != null) {
+        for (MethodDecl decl : set) {
+          if (!decl.signature().equals(signature)) {
+            problems.add(localMethod.errorf("method %s in %s has the same erased signature as"
+                + " %s declared in %s but does not override it",
+                signature, typeName(), decl.signature(), decl.hostType().typeName()));
           }
         }
       }
