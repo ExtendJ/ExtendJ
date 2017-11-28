@@ -572,7 +572,7 @@ aspect NameCheck {
   ConstCase contributes each nameProblems() to CompilationUnit.problems();
 
   syn Collection<Problem> ConstCase.nameProblems() {
-    if (getValue().isConstant() && bind(this) != this) {
+    if (getValue().isConstant() && previousCase(this) != this) {
       return Collections.singletonList(errorf(
           "constant expression %s is multiply declared in two case statements",
           getValue().prettyPrint()));
@@ -582,26 +582,86 @@ aspect NameCheck {
 
   DefaultCase contributes
       error("only one default case statement allowed")
-      when bind(this) != this
+      when previousCase(this) != this
       to CompilationUnit.problems();
 
-  inh lazy Case Case.bind(Case c);
+  /**
+   * Finds the first case label that has the same constant expression as
+   * this case label in the immediately enclosing switch statement.
+   */
+  inh lazy Case Case.previousCase(Case c);
 
-  eq SwitchStmt.getBlock().bind(Case c) {
-    Block b = getBlock();
-    for (int i = 0; i < b.getNumStmt(); i++) {
-      if (b.getStmt(i) instanceof Case && ((Case) b.getStmt(i)).constValue(c)) {
-        return (Case) b.getStmt(i);
+  eq SwitchStmt.getBlock().previousCase(Case c) {
+    if (c instanceof ConstCase) {
+      ConstCase cc = (ConstCase) c;
+      if (cc.getValue().isConstant()) {
+        if (cc.getValue().type().assignableToInt()) {
+          return caseMap().get(cc.getValue().constant().intValue());
+        }
+      } else {
+        // The label does not have a constant value, so we won't be able to
+        // find a duplicate.
+        return c;
+      }
+    } else if (c instanceof DefaultCase) {
+      // Default case label.
+      for (Stmt stmt : getBlock().getStmtList()) {
+        if (stmt instanceof DefaultCase) {
+          return (Case) stmt;
+        }
       }
     }
-    return null;
+    // Fall back on comparing against all case labels.
+    for (Stmt stmt : getBlock().getStmtList()) {
+      if (stmt instanceof Case && ((Case) stmt).constValue(c)) {
+        return (Case) stmt;
+      }
+      if (stmt == c) {
+        return c;
+      }
+    }
+    // This should not happen, since the Case label that evaluates the
+    // attribute must be directly nested in this switch statement.
+    throw new Error("Case label not found in switch statement list.");
   }
-  eq Program.getChild().bind(Case c) = null;
+
+  eq Program.getChild().previousCase(Case c) {
+    throw new Error("Missing enclosing switch for case label.");
+  }
+
+  /**
+   * Maps constant values to case labels.
+   *
+   * <p>This is used to accelerate duplicate statement label checking.
+   */
+  syn lazy Map<Object, Case> SwitchStmt.caseMap() {
+    Map<Object, Case> map = new HashMap<Object, Case>();
+    for (Stmt stmt : getBlock().getStmtList()) {
+      if (stmt instanceof Case) {
+        if (stmt instanceof ConstCase) {
+          ConstCase cc = (ConstCase) stmt;
+          if (cc.getValue().isConstant()) {
+            if (cc.getValue().type().assignableToInt()) {
+              Constant v = cc.getValue().constant();
+              if (!map.containsKey(v.intValue())) {
+                map.put(v.intValue(), cc);
+              }
+            }
+          }
+        }
+      }
+    }
+    return map;
+  }
 
   syn boolean TypeDecl.assignableToInt() = false;
   eq IntegralType.assignableToInt() = true;
   eq LongType.assignableToInt() = false;
 
+  /**
+   * @return {@code true} if this case label has the same constant value as
+   * the argument case label.
+   */
   syn boolean Case.constValue(Case c);
 
   eq ConstCase.constValue(Case c) {
