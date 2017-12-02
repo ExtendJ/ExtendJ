@@ -129,16 +129,14 @@ aspect CreateBCode {
     int paramLength = 0;
     if (!isStatic()) {
       paramLength += 1;
-      gen.addLocalVariableEntryAtCurrentPC("this", hostType().typeDescriptor(), 0, label);
+      gen.addLocalVariableEntryAtCurrentPC("this", hostType(), 0, label);
     }
     for (ParameterDeclaration p : getParameterList()) {
       paramLength += p.type().variableSize();
       if (paramLength > 255) {
         throw new Error("parameter list too large");
       }
-      gen.addLocalVariableEntryAtCurrentPC(
-        p.name(), p.type().typeDescriptor(), p.localNum(), label
-      );
+      gen.addLocalVariableEntryAtCurrentPC(p.name(), p.type(), p.localNum(), label);
     }
     createBCode(gen);
     if (type() instanceof VoidType) {
@@ -163,14 +161,13 @@ aspect CreateBCode {
   private void ConstructorDecl.generateBytecodes(CodeGeneration gen) {
     int label = gen.variableScopeLabel();
     int paramLength = 1;
-    gen.addLocalVariableEntryAtCurrentPC("this", hostType().typeDescriptor(), 0, label);
+    gen.addLocalVariableEntryAtCurrentPC("this", hostType(), 0, label);
     for (ParameterDeclaration p : getParameterList()) {
       paramLength += p.type().variableSize();
       if (paramLength > 255) {
         throw new Error("parameter list too large");
       }
-      gen.addLocalVariableEntryAtCurrentPC(
-          p.name(), p.type().typeDescriptor(), p.localNum(), label);
+      gen.addLocalVariableEntryAtCurrentPC(p.name(), p.type(), p.localNum(), label);
     }
     int nextLocal = offsetFirstEnclosingVariable();
     for (Variable var : hostType().enclosingVariables()) {
@@ -178,8 +175,7 @@ aspect CreateBCode {
       if (paramLength > 255) {
         throw new Error("parameter list too large, not enough room for enclosing variables");
       }
-      gen.addLocalVariableEntryAtCurrentPC(
-          "val$" + var.name(), var.type().typeDescriptor(), nextLocal, label);
+      gen.addLocalVariableEntryAtCurrentPC("val$" + var.name(), var.type(), nextLocal, label);
       nextLocal += var.type().variableSize();
     }
     createBCode(gen);
@@ -219,9 +215,8 @@ aspect CreateBCode {
         gen.emitLoadReference(0);
         gen.emitLoadReference(1);
         String classname = hostType().constantPoolName();
-        String desc = enclosing().typeDescriptor();
         String name = "this$0";
-        int index = gen.constantPool().addFieldref(classname, name, desc);
+        int index = gen.constantPool().addFieldref(classname, name, enclosing());
         gen.emit(Bytecode.PUTFIELD, -2).add2(index);
       }
 
@@ -230,9 +225,8 @@ aspect CreateBCode {
         gen.emitLoadReference(0);
         v.type().emitLoadLocal(gen, localIndex);
         String classname = hostType().constantPoolName();
-        String desc = v.type().typeDescriptor();
         String name = "val$" + v.name();
-        int index = gen.constantPool().addFieldref(classname, name, desc);
+        int index = gen.constantPool().addFieldref(classname, name, v.type());
         gen.emit(Bytecode.PUTFIELD, -1 - v.type().variableSize()).add2(index);
         localIndex += v.type().variableSize();
       }
@@ -311,8 +305,7 @@ aspect CreateBCode {
 
   public void VariableDeclarator.createBCode(CodeGeneration gen) {
     if (hasInit()) {
-      gen.addLocalVariableEntryAtCurrentPC(name(), type().typeDescriptor(),
-          localNum(), variableScopeEndLabel(gen));
+      gen.addLocalVariableEntryAtCurrentPC(name(), type(), localNum(), variableScopeEndLabel(gen));
       emitInitializerBCode(gen);
       type().emitStoreLocal(gen, localNum());
     }
@@ -633,9 +626,8 @@ aspect CreateBCode {
       v.type().emitLoadLocal(gen, c.localIndexOfEnclosingVariable(v));
     } else {
       String classname = hostType().constantPoolName();
-      String      desc = v.type().typeDescriptor();
       String      name = "val$" + v.name();
-      int index = gen.constantPool().addFieldref(classname, name, desc);
+      int index = gen.constantPool().addFieldref(classname, name, v.type());
       gen.emit(Bytecode.ALOAD_0);
       gen.emit(Bytecode.GETFIELD, v.type().variableSize() - 1).add2(index);
     }
@@ -751,8 +743,7 @@ aspect CreateBCode {
       while (enclosing != targetDecl) {
         String classname = enclosing.constantPoolName();
         enclosing = enclosing.enclosingType();
-        String desc = enclosing.typeDescriptor();
-        int index = gen.constantPool().addFieldref(classname, "this$0", desc);
+        int index = gen.constantPool().addFieldref(classname, "this$0", enclosing);
         gen.emit(Bytecode.GETFIELD, 0).add2(index);
       }
     }

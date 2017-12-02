@@ -220,13 +220,13 @@ class CodeGeneration {
     }
   }
 
-  public void addLocalVariableEntryAtCurrentPC(String name, String typeDescriptor,
+  public void addLocalVariableEntryAtCurrentPC(String name, TypeDecl type,
       int localNum, int variableScopeEndLabel) {
     LocalVariableEntry e = new LocalVariableEntry();
     e.start_pc = pos();
     e.length = 0;
     e.name_index = constantPool().addUtf8(name);
-    e.descriptor_index = constantPool().addUtf8(typeDescriptor);
+    e.descriptor_index = constantPool().addUtf8(type.typeDescriptor());
     e.index = localNum;
     localVariableTable.add(e);
     Integer label_object = variableScopeEndLabel;
