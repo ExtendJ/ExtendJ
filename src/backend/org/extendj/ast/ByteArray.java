@@ -39,7 +39,6 @@ class ByteArray {
   private int size = 64;
   private byte[] bytes = new byte[size];
   private int pos = 0;
-  private int lastGotoPos = 0;
 
   /**
    * Grow the byte array to fit more bytes if needed.
@@ -96,13 +95,6 @@ class ByteArray {
     return this;
   }
 
-  ByteArray emitGoto(byte b) {
-    changeStackDepth(BytecodeDebug.stackChange(b));
-    lastGotoPos = pos;
-    add(b);
-    return this;
-  }
-
   ByteArray emit(byte b, int stackChange) {
     changeStackDepth(stackChange);
     add(b);
@@ -125,8 +117,6 @@ class ByteArray {
 
   public int pos() { return pos; }
 
-  public int lastGotoPos() { return lastGotoPos; }
-
   public void setPos(int index) {
     pos = index;
     grow(0);
@@ -142,6 +132,7 @@ class ByteArray {
     bytes[index] = value;
   }
 
+  @Override
   public String toString() {
     StringBuilder b = new StringBuilder();
     for(int i = 0; i < pos; i++) b.append(" " + bytes[i]);
