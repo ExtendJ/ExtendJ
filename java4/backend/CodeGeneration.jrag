@@ -390,19 +390,18 @@ aspect CodeGeneration {
   }
 
   /** Generate bytecode to load this field. */
-  protected static void ASTNode.emitLoadField(CodeGeneration gen, Variable field,
-      TypeDecl hostType) {
-    if (field.hostType().isArrayDecl() && field.name().equals("length")) {
+  public void Variable.emitLoadField(CodeGeneration gen, TypeDecl hostType) {
+    if (hostType().isArrayDecl() && name().equals("length")) {
       gen.emit(Bytecode.ARRAYLENGTH);
       return;
     }
     String classname = hostType.constantPoolName();
-    String name = field.name();
-    int index = gen.constantPool().addFieldref(classname, name, field.type());
-    if (field.isStatic()) {
-      gen.emit(Bytecode.GETSTATIC, field.type().variableSize()).add2(index);
+    String name = name();
+    int index = gen.constantPool().addFieldref(classname, name, type());
+    if (isStatic()) {
+      gen.emit(Bytecode.GETSTATIC, type().variableSize()).add2(index);
     } else {
-      gen.emit(Bytecode.GETFIELD, field.type().variableSize() - 1).add2(index);
+      gen.emit(Bytecode.GETFIELD, type().variableSize() - 1).add2(index);
     }
   }
 
@@ -425,10 +424,11 @@ aspect CodeGeneration {
       var.type().emitStoreLocal(gen, var.localNum());
     } else if (v.isField()) {
       if (v.isPrivate() && !hostType().hasField(v.name())) {
-        fieldWriteAccessor(v, fieldQualifierType())
+        fieldQualifierType()
+            .fieldWriteAccessor(v)
             .emitInvokeMethod(gen, fieldQualifierType());
       } else {
-        emitStoreField(gen, v, fieldQualifierType());
+        v.emitStoreField(gen, fieldQualifierType());
       }
     } else if (v instanceof ParameterDeclaration) {
       ParameterDeclaration decl = (ParameterDeclaration) v;
@@ -463,14 +463,14 @@ aspect CodeGeneration {
   eq BooleanType.arrayStore() = Bytecode.BASTORE;
 
   /** Generate bytecode to store a field in the given hostType. */
-  protected void ASTNode.emitStoreField(CodeGeneration gen, Variable var, TypeDecl hostType) {
+  public void Variable.emitStoreField(CodeGeneration gen, TypeDecl hostType) {
     String classname = hostType.constantPoolName();
-    String name = var.name();
-    int index = gen.constantPool().addFieldref(classname, name, var.type());
-    if (var.isStatic()) {
-      gen.emit(Bytecode.PUTSTATIC, -var.type().variableSize()).add2(index);
+    String name = name();
+    int index = gen.constantPool().addFieldref(classname, name, type());
+    if (isStatic()) {
+      gen.emit(Bytecode.PUTSTATIC, -type().variableSize()).add2(index);
     } else {
-      gen.emit(Bytecode.PUTFIELD, -var.type().variableSize() - 1).add2(index);
+      gen.emit(Bytecode.PUTFIELD, -type().variableSize() - 1).add2(index);
     }
   }
 

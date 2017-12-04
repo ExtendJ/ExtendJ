@@ -40,11 +40,7 @@ aspect CreateBCode {
       int begin_lbl, int end_lbl);
 
   public void BasicCatch.exceptionTableEntries(CodeGeneration gen, int begin_lbl, int end_lbl) {
-    gen.addException(
-        begin_lbl,
-        end_lbl,
-        label(),
-        gen.constantPool().addClass(getParameter().type().constantPoolName()));
+    gen.addExceptionHandler(begin_lbl, end_lbl, label(), getParameter().type());
   }
 
   syn lazy boolean TypeDecl.hasClinit() {
@@ -97,7 +93,7 @@ aspect CreateBCode {
           for (FieldDeclarator decl : field.getDeclaratorList()) {
             if (decl.hasInit()) {
               decl.emitInitializerBCode(gen);
-              emitStoreField(gen, decl, this);
+              decl.emitStoreField(gen, this);
             }
           }
         }
@@ -107,7 +103,7 @@ aspect CreateBCode {
     }
     if (hasAssertStatement()) {
       assertionsDisabled().emitInitializerBCode(gen);
-      emitStoreField(gen, assertionsDisabled(), this);
+      assertionsDisabled().emitStoreField(gen, this);
     }
     gen.emitReturn();
   }
@@ -240,7 +236,7 @@ aspect CreateBCode {
                 if (decl.hasInit()) {
                   gen.emit(Bytecode.ALOAD_0);
                   decl.emitInitializerBCode(gen);
-                  emitStoreField(gen, decl, hostType());
+                  decl.emitStoreField(gen, hostType());
                 }
               }
             }
@@ -497,7 +493,7 @@ aspect CreateBCode {
       if (requiresAccessor()) {
         fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
       } else {
-        emitLoadField(gen, v, fieldQualifierType());
+        v.emitLoadField(gen, fieldQualifierType());
       }
     } else if (v instanceof ParameterDeclaration) {
       ParameterDeclaration decl = (ParameterDeclaration) v;
@@ -595,7 +591,7 @@ aspect CreateBCode {
       } else if (requiresAccessor()) {
         fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
       } else {
-        emitLoadField(gen, v, fieldQualifierType());
+        v.emitLoadField(gen, fieldQualifierType());
       }
     } else if (v instanceof ParameterDeclaration) {
       ParameterDeclaration decl = (ParameterDeclaration) v;
@@ -651,6 +647,35 @@ aspect CreateBCode {
     }
   }
 
+  /**
+   * Prints diagnostic error messages for debugging method binding errors.
+   */
+  public void MethodAccess.printDiagnosticMessages() {
+    if (decl().type().isUnknown()) {
+      System.err.format("Could not bind %s()%n", name());
+      for (Expr arg : getArgList()) {
+        System.err.format("Argument %d is of type %s%n",
+            arg,
+            arg.type().typeName());
+        if (arg.varDecl() != null) {
+          System.err.format("%s in %s%n",
+              arg.varDecl().name(),
+              arg.varDecl().hostType().typeName());
+        }
+      }
+      if (isQualified()) {
+        System.err.format("Qualifier %s is of type %s%n",
+            qualifier().prettyPrint(),
+            qualifier().type().typeName());
+      }
+      throw new Error(String.format("Could not bind %s()", name()));
+    }
+    if (decl().getNumParameter() != getNumArg()) {
+      System.out.format("%s() does not have the same number of arguments as %s()%n",
+          name(), decl().name());
+    }
+  }
+
   public void MethodAccess.createBCode(CodeGeneration gen) {
     if (transformed() != this) {
       // Ensure bytecode is generated for the transformed access.
@@ -660,26 +685,7 @@ aspect CreateBCode {
     createLoadQualifier(gen);
 
     if (program().options().hasOption("-debug")) {
-      if (decl().type().isUnknown()) {
-        System.err.println("Could not bind " + this);
-        for (int i = 0; i < getNumArg(); ++i) {
-          System.err.println("Argument " + getArg(i)
-              + " is of type " + getArg(i).type().typeName());
-          if (getArg(i).varDecl() != null) {
-            System.err.println(getArg(i).varDecl() + " in "
-                + getArg(i).varDecl().hostType().typeName());
-          }
-        }
-        if (isQualified()) {
-          System.err.println("Qualifier " + qualifier()
-              + " is of type " + qualifier().type().typeName());
-        }
-        throw new Error("Could not bind " + this);
-      }
-      if (decl().getNumParameter() != getNumArg()) {
-        System.err.println(this
-            + " does not have the same number of arguments as " + decl());
-      }
+      printDiagnosticMessages();
     }
 
     // Perform method invocation conversions.
@@ -1873,8 +1879,7 @@ aspect CreateBCode {
         int cc_end_lbl = gen.constantPool().newLabel();
         gen.addLabel(cc_end_lbl);
         needsHandler = true;
-        gen.addException(cc.label(), cc_end_lbl, handler_lbl,
-            CodeGeneration.ExceptionEntry.CATCH_ALL);
+        gen.addCatchAll(cc.label(), cc_end_lbl, handler_lbl);
       }
     }
 
@@ -1919,7 +1924,7 @@ aspect CreateBCode {
       getExceptionHandler().createBCode(gen);
       gen.emitLoadReference(num);
       gen.emit(Bytecode.ATHROW);
-      gen.addException(start_lbl, end_lbl, handler_lbl, CodeGeneration.ExceptionEntry.CATCH_ALL);
+      gen.addCatchAll(start_lbl, end_lbl, handler_lbl);
     }
   }
 
@@ -2004,7 +2009,7 @@ aspect CreateBCode {
       TypeDecl typeDecl = lookupType("java.lang", prevExpr().type().primitiveClassName());
       SimpleSet<Variable> fields = typeDecl.memberFields("TYPE");
       Variable f = fields.iterator().next();
-      emitLoadField(gen, f, typeDecl);
+      f.emitLoadField(gen, typeDecl);
     } else {
       int index = gen.constantPool().addClass(prevExpr().type().jvmName());
       if (index < 256) {
@@ -2049,6 +2054,6 @@ aspect CreateBCode {
 
     // Add exception handler for the monitor closing.
     // See http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4414101.
-    gen.addException(handler_lbl, end_lbl, handler_lbl, CodeGeneration.ExceptionEntry.CATCH_ALL);
+    gen.addCatchAll(handler_lbl, end_lbl, handler_lbl);
   }
 }

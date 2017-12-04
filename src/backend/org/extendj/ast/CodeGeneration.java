@@ -247,17 +247,28 @@ public class CodeGeneration {
 
   /**
    * Adds an exception handler for the given exception type.
-   * If catch_type is zero then this handler catches any exception.
-   * @param start_lbl
-   * @param end_lbl
-   * @param handler_lbl
-   * @param catch_type
    */
-  public void addException(int start_lbl, int end_lbl, int handler_lbl, int catch_type) {
-    int start_pc = addressOf(start_lbl);
-    int end_pc = addressOf(end_lbl);
-    if (start_pc != end_pc) {
-      exceptions.add(new ExceptionEntry(start_pc, end_pc, handler_lbl, catch_type));
+  public void addExceptionHandler(int startLbl, int endLbl, int handlerLbl, TypeDecl catchType) {
+    addException(startLbl, endLbl, handlerLbl,
+        constantPool().addClass(catchType.constantPoolName()));
+  }
+
+  /**
+   * Adds an exception handler to catch any exception.
+   */
+  public void addCatchAll(int startLbl, int endLbl, int handlerLbl) {
+    addException(startLbl, endLbl, handlerLbl, ExceptionEntry.CATCH_ALL);
+  }
+
+  /**
+   * Adds an exception handler for the given exception type.
+   * If catch_type is zero then this handler catches any exception.
+   */
+  private void addException(int startLbl, int endLbl, int handlerLbl, int catchType) {
+    int startPc = addressOf(startLbl);
+    int endPc = addressOf(endLbl);
+    if (startPc != endPc) {
+      exceptions.add(new ExceptionEntry(startPc, endPc, handlerLbl, catchType));
     }
   }
 
