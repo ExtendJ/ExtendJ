@@ -1,4 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
+ *               2017, Jesper Öqvist
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -50,4 +51,39 @@ aspect Java8CreateBCode {
       emitThis(gen, decl());
     }
   }
+
+  refine CodeGeneration
+  public void MethodDecl.emitInvokeMethod(CodeGeneration gen, TypeDecl hostType) {
+    if (hostType.isInterfaceDecl()) {
+      String classname = hostType.constantPoolName();
+      String desc = descName();
+      String name = name();
+      int index = gen.constantPool().addInterfaceMethodref(classname, name, desc);
+      int numArg = getNumParameter();
+      int argSize = 0;
+      for (int i = 0; i < getNumParameter(); i++) {
+        argSize += getParameter(i).type().variableSize();
+      }
+      if (isStatic()) {
+        gen.INVOKESTATIC(index, numArg, type());
+      } else {
+        numArg += 1; // Add this reference.
+        argSize += 1;
+        gen.INVOKEINTERFACE(index, numArg, argSize, type());
+      }
+    } else {
+      String classname = hostType.constantPoolName();
+      String desc = descName();
+      String name = name();
+      int index = gen.constantPool().addMethodref(classname, name, desc);
+      int numArg = getNumParameter();
+      if (isStatic()) {
+        gen.INVOKESTATIC(index, numArg, type());
+      } else {
+        numArg += 1; // Add this reference.
+        gen.INVOKEVIRTUAL(index, numArg, type());
+      }
+    }
+  }
+
 }
