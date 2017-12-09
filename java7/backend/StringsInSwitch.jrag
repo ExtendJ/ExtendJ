@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2011-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -61,52 +61,31 @@ aspect StringsInSwitch {
   syn int SwitchStmt.localNumB() = localNum() + typeInt().variableSize();
 
   /**
-   * Group multiple case labels as one.
+   * A group of several string case labels with the same hash code.
    */
-  class CaseGroup {
-    int lbl;
-    int hashCode;
-    java.util.List<CaseLbl> lbls = new LinkedList<CaseLbl>();
+  class StringLblGroup extends CaseLabel {
+    public java.util.List<StringLabel> subLabels = new LinkedList<StringLabel>();
 
-    public CaseGroup(SwitchStmt ss, int hash) {
-      lbl = ss.hostType().constantPool().newLabel();
-      hashCode = hash;
+    public StringLblGroup(int hash, int label) {
+      super(hash, label);
     }
 
-    public void addCase(CaseLbl lbl) {
-      lbls.add(lbl);
+    public void addCase(StringLabel lbl) {
+      subLabels.add(lbl);
     }
   }
 
   /**
-   * Handles code generation for individual case labels.
+   * A string case label.
    */
-  class CaseLbl {
-    int lbl;
-    int serial;
-    String value;
-    java.util.List<Stmt> stmts = new ArrayList<Stmt>();
+  class StringLabel extends CaseLabel {
+    public final String string;
+    public final int hashCode;
 
-    CaseLbl(int lbl) {
-      this.lbl = lbl;
-    }
-
-    CaseLbl(ConstCase cc, CodeGeneration gen) {
-      lbl = cc.label();
-      value = cc.getValue().constant().stringValue();
-    }
-
-    void addStmt(Stmt stmt) {
-      stmts.add(stmt);
-    }
-
-    /**
-     * Code generation for case label.
-     */
-    void createBCode(CodeGeneration gen) {
-      for (Stmt stmt : stmts) {
-        stmt.createBCode(gen);
-      }
+    public StringLabel(int index, ConstCase cc) {
+      super(index, cc.label());
+      string = cc.getValue().constant().stringValue();
+      hashCode = string.hashCode();
     }
   }
 
@@ -128,36 +107,28 @@ aspect StringsInSwitch {
       super.createBCode(gen);
 
       // Enumerate case labels with same hash value.
-      TreeMap<Integer, CaseGroup> groups = new TreeMap<Integer, CaseGroup>();
-      java.util.List<CaseLbl> labels = new LinkedList<CaseLbl>();
+      Map<Integer, StringLblGroup> groups = new HashMap<Integer, StringLblGroup>();
 
-      CaseLbl defaultLbl = null;
-      CaseLbl caseLbl = null;
-      int serial = 1;
+      int index = 1;
       for (Stmt stmt : getBlock().getStmts()) {
         if (stmt instanceof ConstCase) {
           ConstCase cc = (ConstCase) stmt;
-          caseLbl = new CaseLbl(cc, gen);
-          caseLbl.serial = serial++;
-          labels.add(caseLbl);
-          int key = caseLbl.value.hashCode();
-          if (groups.containsKey(key)) {
-            groups.get(key).addCase(caseLbl);
-          } else {
-            CaseGroup group = new CaseGroup(this, key);
-            group.addCase(caseLbl);
+          StringLabel caseLbl = new StringLabel(index++, cc);
+          int key = caseLbl.hashCode;
+          StringLblGroup group = groups.get(key);
+          if (group == null) {
+            group = new StringLblGroup(key, gen.constantPool().newLabel());
             groups.put(key, group);
           }
-        } else if (stmt instanceof DefaultCase) {
-          defaultLbl = new CaseLbl(hostType().constantPool().newLabel());
-          caseLbl = defaultLbl;
-        } else if (caseLbl != null) {
-          caseLbl.addStmt(stmt);
+          group.addCase(caseLbl);
         }
       }
-      int index_a = localNumA();
-      genFirstSwitch(gen, groups, index_a);
-      genSecondSwitch(gen, labels, index_a, defaultLbl);
+
+      genFirstSwitch(gen, groups.values());
+
+      getBlock().createBCode(gen);
+
+      gen.addLabel(end_label());
     } else {
       refined(gen);
     }
@@ -165,175 +136,59 @@ aspect StringsInSwitch {
 
   private void SwitchStmt.genFirstSwitch(
       CodeGeneration gen,
-      TreeMap<Integer, CaseGroup> groups,
-      int index_a) {
-    int switch_label = gen.constantPool().newLabel();
-    int end_label1 = gen.constantPool().newLabel();
-    int index_b = localNumB();
+      Collection<StringLblGroup> groups) {
 
-    // Initialize switch variable for second switch.
-    IntegerLiteral.push(gen, 0);
-    typeInt().emitStoreLocal(gen, index_a);
+    int defaultLbl = defaultLabel();
+    int index_b = localNumB();
 
     // Store the value of the switch expr so that it is only evaluated once!
     getExpr().createBCode(gen);
 
     // Push the hash code for the switch instruction.
     if (getExpr().isConstant()) {
+      // Statically computed hash code.
       typeString().emitStoreLocal(gen, index_b);
-
       int hashCode = getExpr().constant().stringValue().hashCode();
-      IntegerLiteral.push(gen, hashCode);
+      gen.ICONST(hashCode);
     } else {
-      typeString().emitDup(gen);
+      // Dynamically computed hash code.
+      gen.DUP(typeString());
       typeString().emitStoreLocal(gen, index_b);
       hashCodeMethod().emitInvokeMethod(gen,
           lookupType("java.lang", "Object"));
     }
 
     // Emit switch instruction.
-    int low = groups.isEmpty() ? 0 : groups.firstKey();
-    int high = groups.isEmpty() ? 0 : groups.lastKey();
+    gen.SWITCH(groups, defaultLbl);
 
-    long tableSwitchSize = 4L * (3L + (high - low + 1L));
-    int lookupSwitchSize = 4 * (2 + 2 * groups.size());
-    int pad;
-    int switchSize;
-    int switchPos;
-    boolean tableSwitch = tableSwitchSize < lookupSwitchSize;
-
-    gen.addLabel(switch_label);
-
-    // Select the switch type which produces the smallest switch instruction.
-    if (tableSwitch) {
-      // Use TABLESWITCH.
-      gen.emit(Bytecode.TABLESWITCH);
-      switchSize = (int) tableSwitchSize;
-    } else {
-      // Use LOOKUPSWITCH.
-      gen.emit(Bytecode.LOOKUPSWITCH);
-      switchSize = lookupSwitchSize;
-    }
-
-    pad = emitPad(gen);
-    switchPos = gen.pos();
-
-    // Leave room for the address table.
-    gen.skip(switchSize);
-
-    // Code generation for switch body.
-    for (CaseGroup group : groups.values()) {
-      gen.addLabel(group.lbl);
+    // Code generation for switch body
+    for (StringLblGroup group : groups) {
+      gen.addLabel(group.label);
 
       // Possible hash miss. Check for equality.
-      Iterator<CaseLbl> iter = group.lbls.iterator();
+      Iterator<StringLabel> iter = group.subLabels.iterator();
       while (iter.hasNext()) {
-        CaseLbl lbl = iter.next();
+        StringLabel lbl = iter.next();
         int thenLbl;
         if (iter.hasNext()) {
           thenLbl = gen.constantPool().newLabel();
-        } else {
-          // The last conditional branches to end label.
-          thenLbl = end_label1;
+        } else{
+          // Last conditional branches to default label.
+          thenLbl = defaultLbl;
         }
 
         typeString().emitLoadLocal(gen, index_b);
-        StringLiteral.push(gen, lbl.value);
+        gen.LDC(lbl.string);
         equalsMethod().emitInvokeMethod(gen,
             lookupType("java.lang", "Object"));
-        gen.emitCompare(Bytecode.IFEQ, thenLbl);
-        IntegerLiteral.push(gen, lbl.serial);
-        typeInt().emitStoreLocal(gen, index_a);
-        gen.emitGoto(end_label1);
+        gen.IFEQ(thenLbl);
+        gen.GOTO(lbl.label);
 
         if (iter.hasNext()) {
           gen.addLabel(thenLbl);
         }
       }
     }
-
-    // Write jump address table.
-    int endpos = gen.pos();
-    gen.setPos(switchPos);
-    if (tableSwitch) {
-      int defaultOffset = 1 + pad + switchSize;
-      gen.add4(defaultOffset);
-      gen.add4(low);
-      gen.add4(high);
-      for (int i = low; i <= high; i++) {
-        if (groups.containsKey(i)) {
-          CaseGroup group = groups.get(i);
-          int offset = labelOffset(gen, group.lbl, switch_label);
-          gen.add4(offset);
-        } else {
-          gen.add4(defaultOffset);
-        }
-      }
-    } else {
-      int defaultOffset = 1 + pad + switchSize;
-      gen.add4(defaultOffset);
-      gen.add4(groups.size());
-      for (CaseGroup group : groups.values()) {
-        gen.add4(group.hashCode);
-        int offset = labelOffset(gen, group.lbl, switch_label);
-        gen.add4(offset);
-      }
-    }
-    gen.setPos(endpos);
-
-    gen.addLabel(end_label1);
-  }
-
-  private void SwitchStmt.genSecondSwitch(
-      CodeGeneration gen,
-      java.util.List<CaseLbl> labels,
-      int index_a,
-      CaseLbl defaultLbl) {
-    int switch_label = gen.constantPool().newLabel();
-    int default_label = gen.constantPool().newLabel();
-
-    // Push the switch variable.
-    typeInt().emitLoadLocal(gen, index_a);
-
-    // Emit switch instruction.
-    gen.addLabel(switch_label);
-    gen.emit(Bytecode.TABLESWITCH);
-    int high = labels.size();
-    int low = 0;
-    int pad;
-    int switchSize = 4 * (3 + (high - low + 1));
-    int switchPos;
-
-    pad = emitPad(gen);
-    switchPos = gen.pos();
-    gen.skip(switchSize);
-
-    // Code generation for case labels.
-    for (CaseLbl lbl : labels) {
-      gen.addLabel(lbl.lbl);
-      lbl.createBCode(gen);
-    }
-
-    gen.addLabel(default_label);
-    if (defaultLbl != null) {
-      defaultLbl.createBCode(gen);
-    }
-
-    int endpos = gen.pos();
-    gen.setPos(switchPos);
-    int defaultOffset = 1 + pad + switchSize;
-    gen.add4(defaultOffset);
-    gen.add4(low);
-    gen.add4(high);
-    int offset = labelOffset(gen, default_label, switch_label);
-    gen.add4(offset);
-    for (CaseLbl lbl : labels) {
-      offset = labelOffset(gen, lbl.lbl, switch_label);
-      gen.add4(offset);
-    }
-    gen.setPos(endpos);
-
-    gen.addLabel(end_label());
   }
 
   /**
@@ -342,9 +197,6 @@ aspect StringsInSwitch {
    */
   private MethodDecl SwitchStmt.hashCodeMethod() {
     TypeDecl objectType = lookupType("java.lang", "Object");
-    if (objectType.isUnknown()) {
-      throw new Error("Could not find java.lang.Object");
-    }
     for (MethodDecl method :
         (Collection<MethodDecl>) objectType.memberMethods("hashCode")) {
       if (method.getNumParameter() == 0) {
@@ -360,9 +212,6 @@ aspect StringsInSwitch {
    */
   private MethodDecl SwitchStmt.equalsMethod() {
     TypeDecl objectType = lookupType("java.lang", "Object");
-    if (objectType.isUnknown()) {
-      throw new Error("Could not find java.lang.Object");
-    }
     for (MethodDecl method :
         (Collection<MethodDecl>) objectType.memberMethods("equals")) {
       if (method.getNumParameter() == 1 &&

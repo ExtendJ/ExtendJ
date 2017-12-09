@@ -1,4 +1,4 @@
-/* Copyright (c) 2011, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2011-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,7 @@ aspect TryWithResources {
           getResource(0).treeCopyNoTransform(),
           block);
     } else {
-      // Transform to surrounding try stmt.
+      // Transform to surrounding try statement.
       Block block = new Block();
       block.addStmt(new TryWithResources(
             (List<ResourceDeclaration>)
@@ -174,7 +174,6 @@ aspect TryWithResources {
     TypeDecl resourceType = resource.type();
     TypeDecl autoCloseableType = lookupType("java.lang", "AutoCloseable");
 
-    gen.changeStackDepth(3);
     int resourceIndex = resource.localNum();
     int primaryIndex = resourceIndex+resourceType.variableSize();
     int suppressedIndex = primaryIndex+throwableType.variableSize();
@@ -183,17 +182,17 @@ aspect TryWithResources {
     gen.addLabel(resourceBeginLbl);
     resource.createBCode(gen);
     gen.addLabel(resourceEndLbl);
-    gen.emit(Bytecode.NOP);
+    gen.NOP();
 
     gen.addLabel(blockBeginLbl);
     getBlock().createBCode(gen);
     gen.addLabel(blockEndLbl);
-    gen.emitGoto(outerFinallyLbl);
+    gen.GOTO(outerFinallyLbl);
 
     // If there was an exception when initializing the resource
     // we need to directly rethrow the exception.
     gen.addLabel(resourceExceptionLbl);
-    gen.emitThrow();
+    gen.ATHROW();
     gen.addCatchAll(resourceBeginLbl, resourceEndLbl, resourceExceptionLbl);
 
     if (gen.addressOf(blockBeginLbl) != gen.addressOf(blockEndLbl)) {
@@ -208,14 +207,14 @@ aspect TryWithResources {
       {
         // if resource != null
         resourceType.emitLoadLocal(gen, resourceIndex);
-        gen.emitCompare(Bytecode.IFNULL, innerFinallyLbl);
+        gen.IFNULL(innerFinallyLbl);
         resourceType.emitLoadLocal(gen, resourceIndex);
         closeMethod().emitInvokeMethod(gen, autoCloseableType);
       }
       gen.addLabel(tryCloseEndLbl);
-      gen.emitGoto(innerFinallyLbl);
+      gen.GOTO(innerFinallyLbl);
 
-      // Catch suppressed exception:
+      // Catch suppressed exception.
       // operand stack: .., #primary, #suppressed
       gen.addLabel(catchSuppressedLbl);
       throwableType.emitStoreLocal(gen, suppressedIndex);
@@ -227,7 +226,7 @@ aspect TryWithResources {
       // operand stack: .., #primary
       gen.addLabel(innerFinallyLbl);
       throwableType.emitLoadLocal(gen, primaryIndex);
-      gen.emitThrow();
+      gen.ATHROW();
 
       // If there was an exception during the block of the try
       // statement, then we should try to close the resource.
@@ -243,13 +242,13 @@ aspect TryWithResources {
     {
       // if resource != null
       resourceType.emitLoadLocal(gen, resourceIndex);
-      gen.emitCompare(Bytecode.IFNULL, tryEndLbl);
+      gen.IFNULL(tryEndLbl);
       resourceType.emitLoadLocal(gen, resourceIndex);
       closeMethod().emitInvokeMethod(gen, autoCloseableType);
     }
 
     gen.addLabel(tryEndLbl);
-    gen.emit(Bytecode.NOP);
+    gen.NOP();
   }
 
   /**

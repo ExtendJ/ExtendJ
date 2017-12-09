@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2013, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2013-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -30,14 +30,14 @@
  */
 package org.extendj.ast;
 
+import java.io.DataOutputStream;
+import java.io.IOException;
+
 /**
- * Utility class for bytecode generation.
+ * Utility class for building a byte array for bytecode generation.
  */
 class ByteArray {
-  private int stackDepth = 0;
-  private int maxStackDepth = 0;
-  private int size = 64;
-  private byte[] bytes = new byte[size];
+  private byte[] bytes = new byte[64];
   private int pos = 0;
 
   /**
@@ -45,24 +45,23 @@ class ByteArray {
    * @param num number of bytes to grow
    */
   void grow(int num) {
+    int size = bytes.length;
     int newsize = pos + num;
-    if(newsize-1 >= size) {
+    if (newsize > size) {
       newsize = Math.max(newsize, size * 2);
-      byte[] ba = new byte[newsize];
-      System.arraycopy(bytes, 0, ba, 0, size);
-      size = newsize;
-      bytes = ba;
+      byte[] newBytes = new byte[newsize];
+      System.arraycopy(bytes, 0, newBytes, 0, size);
+      bytes = newBytes;
     }
   }
 
-  ByteArray add(int i) {
-    return add((byte) i);
+  void add(int i) {
+    add((byte) i);
   }
 
-  ByteArray add(byte b) {
+  void add(byte b) {
     grow(1);
     bytes[pos++] = b;
-    return this;
   }
 
   /**
@@ -73,56 +72,32 @@ class ByteArray {
     pos += num;
   }
 
-  ByteArray add4(int i) {
+  void add4(int i) {
     grow(4);
     bytes[pos++] = (byte) (i >> 24 & 0xFF);
     bytes[pos++] = (byte) (i >> 16 & 0xFF);
     bytes[pos++] = (byte) (i >> 8 & 0xFF);
     bytes[pos++] = (byte) (i & 0xFF);
-    return this;
   }
 
-  ByteArray add2(int index) {
+  void add2(int index) {
     grow(2);
     bytes[pos++] = (byte) (index >> 8 & 0xff);
     bytes[pos++] = (byte) (index & 0xff);
-    return this;
   }
 
-  ByteArray emit(byte b) {
-    changeStackDepth(BytecodeDebug.stackChange(b));
-    add(b);
-    return this;
+  public int pos() {
+    return pos;
   }
-
-  ByteArray emit(byte b, int stackChange) {
-    changeStackDepth(stackChange);
-    add(b);
-    return this;
-  }
-
-  public int maxStackDepth() {
-    return maxStackDepth;
-  }
-
-  public int stackDepth() {
-    return stackDepth;
-  }
-
-  public void changeStackDepth(int i) {
-    stackDepth += i;
-    if(stackDepth > maxStackDepth)
-      maxStackDepth = stackDepth;
-  }
-
-  public int pos() { return pos; }
 
   public void setPos(int index) {
     pos = index;
     grow(0);
   }
 
-  public int size() { return pos; }
+  public int size() {
+    return pos;
+  }
 
   public byte get(int index) throws IndexOutOfBoundsException {
     return bytes[index];
@@ -134,9 +109,7 @@ class ByteArray {
 
   @Override
   public String toString() {
-    StringBuilder b = new StringBuilder();
-    for(int i = 0; i < pos; i++) b.append(" " + bytes[i]);
-    return b.toString();
+    return String.format("byte[%d]", size());
   }
 
   public byte[] toArray() {
@@ -144,5 +117,10 @@ class ByteArray {
     System.arraycopy(bytes, 0, b, 0, pos);
     return b;
   }
+
+  public void write(DataOutputStream out) throws IOException {
+    out.write(bytes, 0, pos);
+  }
+
 }
 

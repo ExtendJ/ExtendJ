@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2017, Jesper Öqvist
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +33,7 @@
  * Refines code generation to use Java 5 autoboxing conversions.
  */
 aspect AutoBoxingCodegen {
-  refine CodeGenerationConversions void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type) {
+  refine CodeGeneration void BooleanType.emitCastTo(CodeGeneration gen, TypeDecl type) {
     if (type.unboxed() == this || type.isObject()) {
       boxed().emitBoxingOperation(gen);
     }
@@ -128,11 +129,11 @@ aspect AutoBoxingCodegen {
     String desc = "(" + unboxed().typeDescriptor() + ")" + typeDescriptor();
     String name = "valueOf";
     int index = gen.constantPool().addMethodref(classname, name, desc);
-    gen.emit(Bytecode.INVOKESTATIC, variableSize() - unboxed().variableSize()).add2(index);
+    gen.INVOKESTATIC(index, 1, this);
   }
 
   // Code generation for Unboxing Conversion.
-  refine CodeGenerationConversions
+  refine CodeGeneration
   public void ReferenceType.emitCastTo(CodeGeneration gen, TypeDecl type) {
     if (type instanceof PrimitiveType) {
       if (unboxed().isUnknown()) {
@@ -153,7 +154,7 @@ aspect AutoBoxingCodegen {
     String desc = "(" + ")" + unboxed().typeDescriptor();
     String name = unboxed().name() + "Value";
     int index = gen.constantPool().addMethodref(classname, name, desc);
-    gen.emit(Bytecode.INVOKEVIRTUAL, unboxed().variableSize() - 1).add2(index);
+    gen.INVOKEVIRTUAL(index, 1, unboxed());
   }
 
   /**
@@ -168,7 +169,7 @@ aspect AutoBoxingCodegen {
     if (type().isReferenceType()) {
       createBCode(gen);
       type().emitUnboxingOperation(gen);
-      gen.emitCompare(Bytecode.IFNE, target);
+      gen.IFNE(target);
     } else {
       refined(gen, target);
     }
@@ -179,11 +180,21 @@ aspect AutoBoxingCodegen {
     if (type().isReferenceType()) {
       createBCode(gen);
       type().emitUnboxingOperation(gen);
-      gen.emitCompare(Bytecode.IFEQ, target);
+      gen.IFEQ(target);
     } else {
       refined(gen, target);
     }
   }
+
+  /**
+   * An enum case label.
+   */
+  class EnumLabel extends CaseLabel {
+    public EnumLabel(int index, ConstCase cc) {
+      super(index, cc.label());
+    }
+  }
+
 
   // 14.11 Switch
   // Refine swithch code generation to handle autoboxing and enum types.
@@ -192,18 +203,11 @@ aspect AutoBoxingCodegen {
     int cond_label = gen.constantPool().newLabel();
     int switch_label = gen.constantPool().newLabel();
 
-    TreeMap<Integer, ConstCase> caseMap = new TreeMap<Integer, ConstCase>();
-
-    gen.emitGoto(cond_label);
-    getBlock().createBCode(gen);
-    if (canCompleteNormally()) {
-      gen.emitGoto(end_label());
-    }
-    gen.addLabel(cond_label);
+    ArrayList<CaseLabel> cases = new ArrayList<CaseLabel>();
     if (getExpr().type().isEnumDecl()) {
       enumIndexExpr().createBCode(gen);
       for (ConstCase cc : constCases()) {
-        caseMap.put(enumIndices().get((EnumConstant) cc.getValue().varDecl()), cc);
+        cases.add(new EnumLabel(enumIndices().get((EnumConstant) cc.getValue().varDecl()), cc));
       }
     } else {
       getExpr().createBCode(gen);
@@ -211,52 +215,14 @@ aspect AutoBoxingCodegen {
         getExpr().type().emitUnboxingOperation(gen);
       }
       for (ConstCase cc : constCases()) {
-        caseMap.put(cc.getValue().constant().intValue(), cc);
+        cases.add(new CaseLabel(cc));
       }
     }
 
-    long low = caseMap.isEmpty() ? 0 : caseMap.firstKey();
-    long high = caseMap.isEmpty() ? 0 : caseMap.lastKey();
+    gen.SWITCH(cases, defaultLabel());
 
-    long tableSwitchSize = 8L + (high - low + 1L) * 4L;
-    long lookupSwitchSize = 4L + caseMap.size() * 8L;
+    getBlock().createBCode(gen);
 
-    gen.addLabel(switch_label);
-    if (tableSwitchSize < lookupSwitchSize) {
-      gen.emit(Bytecode.TABLESWITCH);
-      int pad = emitPad(gen);
-      int defaultOffset = defaultOffset(gen, switch_label);
-      if (defaultOffset == 0) {
-        defaultOffset = 1 + pad + 4 + 4 + 4 + 4 * (int)(high - low + 1);
-      }
-      gen.add4(defaultOffset);
-      gen.add4((int) low);
-      gen.add4((int) high);
-      for (long i = low; i <= high; i++) {
-        ConstCase cc = caseMap.get((int) i);
-        if (cc != null) {
-          int offset = gen.addressOf(cc.label())
-            - gen.addressOf(switch_label);
-          gen.add4(offset);
-        } else {
-          gen.add4(defaultOffset);
-        }
-      }
-    } else {
-      gen.emit(Bytecode.LOOKUPSWITCH);
-      int pad = emitPad(gen);
-      int defaultOffset = defaultOffset(gen, switch_label);
-      if (defaultOffset == 0) {
-        defaultOffset = 1 + pad + 4 + 4 + 8 * numCase();
-      }
-      gen.add4(defaultOffset);
-      gen.add4(caseMap.size());
-      for (Map.Entry<Integer, ConstCase> entry : caseMap.entrySet()) {
-        gen.add4(entry.getKey());
-        int offset = gen.addressOf(entry.getValue().label()) - gen.addressOf(switch_label);
-        gen.add4(offset);
-      }
-    }
     gen.addLabel(end_label());
   }
 
@@ -308,16 +274,12 @@ aspect AutoBoxingCodegen {
     } else {
       getTypeAccess().createBCode(gen); // push array sizes
       if (type().componentType().isPrimitive() && !type().componentType().isReferenceType()) {
-        gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+        gen.NEWARRAY(type());
       } else {
         if (numArrays() == 1) {
-          String n = type().componentType().arrayTypeDescriptor();
-          int index = gen.constantPool().addClass(n);
-          gen.emit(Bytecode.ANEWARRAY).add2(index);
+          gen.ANEWARRAY(type());
         } else {
-          String n = type().arrayTypeDescriptor();
-          int index = gen.constantPool().addClass(n);
-          gen.emit(Bytecode.MULTIANEWARRAY, 1 - numArrays()).add2(index).add(numArrays());
+          gen.MULTIANEWARRAY(type(), numArrays());
         }
       }
     }
@@ -334,26 +296,24 @@ aspect AutoBoxingCodegen {
   refine CreateBCode public void ArrayInit.createBCode(CodeGeneration gen) {
     IntegerLiteral.push(gen, getNumInit());
     if (type().componentType().isPrimitive() && !type().componentType().isReferenceType()) {
-      gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+      gen.NEWARRAY(type());
     } else {
-      String n = type().componentType().arrayTypeDescriptor();
-      int index = gen.constantPool().addClass(n);
-      gen.emit(Bytecode.ANEWARRAY).add2(index);
+      gen.ANEWARRAY(type());
     }
     for (int i = 0; i < getNumInit(); i++) {
-      gen.emitDup();
+      gen.DUP();
       IntegerLiteral.push(gen, i);
       getInit(i).createBCode(gen);
       if (getInit(i) instanceof ArrayInit) {
-        gen.emit(Bytecode.AASTORE);
+        gen.AASTORE();
       } else {
         getInit(i).type().emitAssignConvTo(gen, expectedType()); // AssignConversion
-        gen.emit(expectedType().arrayStore());
+        expectedType().emitArrayStore(gen);
       }
     }
   }
 
-  refine CodeGenerationConversions
+  refine CodeGeneration
   void TypeDecl.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {
     if (!type.isIntegralType() || !isIntegralType() || type.isLong()
         || type.isReferenceType() || isReferenceType()) {
@@ -398,7 +358,7 @@ aspect AutoBoxingCodegen {
     dest.emitCastTo(gen, type);
     getSource().createBCode(gen);
     source.emitCastTo(gen, type);
-    createAssignOp(gen, type);
+    emitAssignOp(gen, type);
     type.emitCastTo(gen, dest);
     if (needsPush()) {
       getDest().createPushAssignmentResult(gen);
@@ -410,7 +370,7 @@ aspect AutoBoxingCodegen {
     // Branch when true.
     if (isConstant()) {
       if (isTrue()) {
-        gen.emitGoto(target);
+        gen.GOTO(target);
         return;
       }
     } else {
@@ -440,7 +400,7 @@ aspect AutoBoxingCodegen {
     // Branch when false.
     if (isConstant()) {
       if (isFalse()) {
-        gen.emitGoto(target);
+        gen.GOTO(target);
         return;
       }
     } else {
@@ -469,7 +429,7 @@ aspect AutoBoxingCodegen {
     prevExpr().createBCode(gen);
     getExpr().createBCode(gen);
     getExpr().type().emitCastTo(gen, typeInt());
-    gen.emit(type().arrayLoad());
+    type().emitArrayLoad(gen);
   }
 
   refine CreateBCode public void ArrayAccess.createAssignSimpleLoadDest(CodeGeneration gen) {
@@ -480,11 +440,11 @@ aspect AutoBoxingCodegen {
 
   refine CreateBCode public void ArrayAccess.createAssignLoadDest(CodeGeneration gen) {
     prevExpr().createBCode(gen);
-    gen.emitDup();
+    gen.DUP();
     getExpr().createBCode(gen);
     getExpr().type().emitCastTo(gen, typeInt());
-    typeInt().emitDup_x1(gen);
-    gen.emit(type().arrayLoad());
+    gen.DUP_X1(typeInt());
+    type().emitArrayLoad(gen);
   }
 
   public void ConditionalExpr.emitBooleanCondition(CodeGeneration gen) {
@@ -493,4 +453,5 @@ aspect AutoBoxingCodegen {
       type().emitBoxingOperation(gen);
     }
   }
+
 }

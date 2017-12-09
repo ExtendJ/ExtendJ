@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2013-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -71,13 +71,16 @@ aspect CreateBCode {
   }
 
   syn lazy CodeGeneration TypeDecl.bytecodes(ConstantPool constantPool) {
-    CodeGeneration gen = new CodeGeneration(constantPool);
+    CodeGeneration gen = new CodeGeneration(constantPool, this);
     try {
       generateBytecodes(gen);
     } catch (CodeGeneration.JumpOffsetError e) {
       // Retry with wide gotos.
-      gen = new CodeGeneration(constantPool, true);
+      gen = new CodeGeneration(constantPool, this, true);
       generateBytecodes(gen);
+    } catch (Error e) {
+      System.err.println("Error while processing " + sourceLocation());
+      throw e;
     }
     return gen;
   }
@@ -105,17 +108,20 @@ aspect CreateBCode {
       assertionsDisabled().emitInitializerBCode(gen);
       assertionsDisabled().emitStoreField(gen, this);
     }
-    gen.emitReturn();
+    gen.RETURN();
   }
 
   syn lazy CodeGeneration MethodDecl.bytecodes(ConstantPool constantPool) {
-    CodeGeneration gen = new CodeGeneration(constantPool);
+    CodeGeneration gen = new CodeGeneration(constantPool, this);
     try {
       generateBytecodes(gen);
     } catch (CodeGeneration.JumpOffsetError e) {
       // Retry with wide gotos.
-      gen = new CodeGeneration(constantPool, true);
+      gen = new CodeGeneration(constantPool, this, true);
       generateBytecodes(gen);
+    } catch (Error e) {
+      System.err.println("Error while processing " + sourceLocation());
+      throw e;
     }
     return gen;
   }
@@ -126,6 +132,7 @@ aspect CreateBCode {
     if (!isStatic()) {
       paramLength += 1;
       gen.addLocalVariableEntryAtCurrentPC("this", hostType(), 0, label);
+      gen.addParameter(0, hostType());
     }
     for (ParameterDeclaration p : getParameterList()) {
       paramLength += p.type().variableSize();
@@ -133,22 +140,27 @@ aspect CreateBCode {
         throw new Error("parameter list too large");
       }
       gen.addLocalVariableEntryAtCurrentPC(p.name(), p.type(), p.localNum(), label);
+      gen.addParameter(p.localNum(), p.type());
     }
     createBCode(gen);
     if (type().isVoid() && (!hasBlock() || getBlock().canCompleteNormally())) {
-      gen.emitReturn();
+      // TODO(joqvist): use deadcode elimination to remove redundant RETURN.
+      gen.RETURN();
     }
     gen.addVariableScopeLabel(label);
   }
 
   syn lazy CodeGeneration ConstructorDecl.bytecodes(ConstantPool constantPool) {
-    CodeGeneration gen = new CodeGeneration(constantPool);
+    CodeGeneration gen = new CodeGeneration(constantPool, this);
     try {
       generateBytecodes(gen);
     } catch (CodeGeneration.JumpOffsetError e) {
       // Retry with wide gotos.
-      gen = new CodeGeneration(constantPool, true);
+      gen = new CodeGeneration(constantPool, this, true);
       generateBytecodes(gen);
+    } catch (Error e) {
+      System.err.println("Error while processing " + sourceLocation());
+      throw e;
     }
     return gen;
   }
@@ -157,12 +169,18 @@ aspect CreateBCode {
     int label = gen.variableScopeLabel();
     int paramLength = 1;
     gen.addLocalVariableEntryAtCurrentPC("this", hostType(), 0, label);
+    gen.addParameter(0, VerificationTypes.UNINITIALIZED_THIS);
+    if (needsEnclosing()) {
+      gen.addLocalVariableEntryAtCurrentPC("this$0", enclosing(), 1, label);
+      gen.addParameter(1, enclosing());
+    }
     for (ParameterDeclaration p : getParameterList()) {
       paramLength += p.type().variableSize();
       if (paramLength > 255) {
         throw new Error("parameter list too large");
       }
       gen.addLocalVariableEntryAtCurrentPC(p.name(), p.type(), p.localNum(), label);
+      gen.addParameter(p.localNum(), p.type());
     }
     int nextLocal = offsetFirstEnclosingVariable();
     for (Variable var : hostType().enclosingVariables()) {
@@ -171,17 +189,17 @@ aspect CreateBCode {
         throw new Error("parameter list too large, not enough room for enclosing variables");
       }
       gen.addLocalVariableEntryAtCurrentPC("val$" + var.name(), var.type(), nextLocal, label);
+      gen.addParameter(nextLocal, var.type());
       nextLocal += var.type().variableSize();
     }
     createBCode(gen);
-    gen.emitReturn();
+    gen.RETURN();
     gen.addVariableScopeLabel(label);
   }
 
   public void MethodDecl.createBCode(CodeGeneration gen) {
     try {
       if (hasBlock()) {
-        gen.maxLocals = Math.max(gen.maxLocals, getBlock().localNum());
         getBlock().createBCode(gen);
       }
     } catch (Error e) {
@@ -207,22 +225,22 @@ aspect CreateBCode {
       }
 
       if (needsEnclosing()) {
-        gen.emitLoadReference(0);
-        gen.emitLoadReference(1);
+        gen.ALOAD(0, hostType());
+        gen.ALOAD(1, enclosing());
         String classname = hostType().constantPoolName();
         String name = "this$0";
         int index = gen.constantPool().addFieldref(classname, name, enclosing());
-        gen.emit(Bytecode.PUTFIELD, -2).add2(index);
+        gen.PUTFIELD(index);
       }
 
       int localIndex = offsetFirstEnclosingVariable();
       for (Variable v : hostType().enclosingVariables()) {
-        gen.emitLoadReference(0);
+        gen.ALOAD(0, hostType());
         v.type().emitLoadLocal(gen, localIndex);
         String classname = hostType().constantPoolName();
         String name = "val$" + v.name();
         int index = gen.constantPool().addFieldref(classname, name, v.type());
-        gen.emit(Bytecode.PUTFIELD, -1 - v.type().variableSize()).add2(index);
+        gen.PUTFIELD(index);
         localIndex += v.type().variableSize();
       }
 
@@ -234,7 +252,7 @@ aspect CreateBCode {
             if (!field.isStatic()) {
               for (FieldDeclarator decl : field.getDeclaratorList()) {
                 if (decl.hasInit()) {
-                  gen.emit(Bytecode.ALOAD_0);
+                  gen.ALOAD(0, hostType());
                   decl.emitInitializerBCode(gen);
                   decl.emitStoreField(gen, hostType());
                 }
@@ -245,7 +263,6 @@ aspect CreateBCode {
           }
         }
       }
-      gen.maxLocals = Math.max(gen.maxLocals, getBlock().localNum());
       getBlock().createBCode(gen);
     } catch (Error e) {
       System.err.println(hostType().typeName() + ": " + this);
@@ -343,7 +360,7 @@ aspect CreateBCode {
     dest.emitCastTo(gen, type);
     getSource().createBCode(gen);
     source.emitCastTo(gen, type);
-    createAssignOp(gen, type);
+    emitAssignOp(gen, type);
     type.emitCastTo(gen, dest);
     if (needsPush()) {
       getDest().createPushAssignmentResult(gen);
@@ -365,19 +382,19 @@ aspect CreateBCode {
       String desc;
       int index;
       TypeDecl argumentType;
-      stringBuffer.emitNew(gen);
-      gen.emitDup();
+      gen.NEW(stringBuffer);
+      gen.DUP();
       desc = "()V";
       index = gen.constantPool().addMethodref(classname, "<init>", desc);
-      gen.emit(Bytecode.INVOKESPECIAL, -1).add2(index);
+      gen.INVOKESPECIAL_void(index, 1); // StringBuffer.<init>();
 
-      gen.emitSwap();
+      gen.SWAP();
 
       // Emit .append().
       argumentType = dest.stringPromotion();
       desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index);
+      gen.INVOKEVIRTUAL(index, 2, stringBuffer);
 
       getSource().createBCode(gen);
 
@@ -385,12 +402,12 @@ aspect CreateBCode {
       argumentType = source.stringPromotion();
       desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index);
+      gen.INVOKEVIRTUAL(index, 2, stringBuffer);
 
       // Call StringBuffer.toString().
       desc = "()" + type().typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "toString", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, 0).add2(index);
+      gen.INVOKEVIRTUAL(index, 1, lookupType("java.lang", "String"));
 
       if (needsPush()) {
         getDest().createPushAssignmentResult(gen);
@@ -410,7 +427,7 @@ aspect CreateBCode {
     dest.emitCastTo(gen, type);
     getSource().createBCode(gen);
     source.emitCastTo(gen, typeInt());
-    createAssignOp(gen, type);
+    emitAssignOp(gen, type);
     type.emitCastTo(gen, dest);
     if (needsPush()) {
       getDest().createPushAssignmentResult(gen);
@@ -462,14 +479,14 @@ aspect CreateBCode {
       return;
     }
     if (decl().isInstanceVariable()) {
-      type().emitDup_x1(gen);
+      gen.DUP_X1(type());
     } else {
-      type().emitDup(gen);
+      gen.DUP(type());
     }
   }
 
   public void ArrayAccess.createPushAssignmentResult(CodeGeneration gen) {
-    type().emitDup_x2(gen);
+    gen.DUP_X2(type());
   }
 
   // Load left hand side of destination in a compound assign expression.
@@ -484,7 +501,7 @@ aspect CreateBCode {
     createLoadQualifier(gen, decl());
     Variable v = decl();
     if (v.isInstanceVariable()) {
-      gen.emitDup();
+      gen.DUP();
     }
     if (v instanceof VariableDeclarator) {
       VariableDeclarator var = (VariableDeclarator) v;
@@ -503,60 +520,28 @@ aspect CreateBCode {
 
   public void ArrayAccess.createAssignLoadDest(CodeGeneration gen) {
     prevExpr().createBCode(gen);
-    gen.emitDup();
+    gen.DUP();
     getExpr().createBCode(gen);
-    typeInt().emitDup_x1(gen);
-    gen.emit(type().arrayLoad());
+    gen.DUP_X1(typeInt());
+    type().emitArrayLoad(gen);
   }
 
   /** Select the typed operation for a compound assign expression. */
-  public void AssignExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    throw new Error("Operation createAssignOp is not implemented for " + getClass().getName());
+  public void AssignExpr.emitAssignOp(CodeGeneration gen, TypeDecl type) {
+    throw new Error("Operation emitAssignOp is not implemented for type " + getClass().getName());
   }
 
-  public void AssignMulExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.mul(gen);
-  }
-
-  public void AssignDivExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.div(gen);
-  }
-
-  public void AssignModExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.rem(gen);
-  }
-
-  public void AssignPlusExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.add(gen);
-  }
-
-  public void AssignMinusExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.sub(gen);
-  }
-
-  public void AssignLShiftExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.shl(gen);
-  }
-
-  public void AssignRShiftExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.shr(gen);
-  }
-
-  public void AssignURShiftExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.ushr(gen);
-  }
-
-  public void AssignAndExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.bitand(gen);
-  }
-
-  public void AssignXorExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.bitxor(gen);
-  }
-
-  public void AssignOrExpr.createAssignOp(CodeGeneration gen, TypeDecl type) {
-    type.bitor(gen);
-  }
+  public void AssignMulExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)     { type.mul(gen); }
+  public void AssignDivExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)     { type.div(gen); }
+  public void AssignModExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)     { type.rem(gen); }
+  public void AssignPlusExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)    { type.add(gen); }
+  public void AssignMinusExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)   { type.sub(gen); }
+  public void AssignLShiftExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)  { type.shl(gen); }
+  public void AssignRShiftExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)  { type.shr(gen); }
+  public void AssignURShiftExpr.emitAssignOp(CodeGeneration gen, TypeDecl type) { type.ushr(gen); }
+  public void AssignAndExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)     { type.bitand(gen); }
+  public void AssignXorExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)     { type.bitxor(gen); }
+  public void AssignOrExpr.emitAssignOp(CodeGeneration gen, TypeDecl type)      { type.bitor(gen); }
 
   public void Dot.createBCode(CodeGeneration gen) {
     if (transformed() != this) {
@@ -585,7 +570,7 @@ aspect CreateBCode {
       createLoadQualifier(gen, v);
       if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
         if (!v.isStatic()) {
-          fieldQualifierType().emitPop(gen);
+          gen.POP(fieldQualifierType());
         }
         v.constant().createBCode(gen);
       } else if (requiresAccessor()) {
@@ -623,8 +608,8 @@ aspect CreateBCode {
       String classname = hostType().constantPoolName();
       String      name = "val$" + v.name();
       int index = gen.constantPool().addFieldref(classname, name, v.type());
-      gen.emit(Bytecode.ALOAD_0);
-      gen.emit(Bytecode.GETFIELD, v.type().variableSize() - 1).add2(index);
+      gen.ALOAD(0, hostType());
+      gen.GETFIELD(index, v.type());
     }
   }
 
@@ -639,7 +624,7 @@ aspect CreateBCode {
         // Pop qualifier stack element for class variables.
         // This qualifier must be computed to ensure side effects are evaluated.
         if (!prevExpr().isTypeAccess() && v.isClassVariable()) {
-          prevExpr().type().emitPop(gen);
+          gen.POP(prevExpr().type());
         }
       } else if (v.isInstanceVariable()) {
         emitThis(gen, fieldQualifierType());
@@ -710,7 +695,7 @@ aspect CreateBCode {
       // Pop qualifier stack element for class variables.
       // This qualifier must be computed to ensure side effects are evaluated.
       if (m.isStatic() && !prevExpr().isTypeAccess()) {
-        prevExpr().type().emitPop(gen);
+        gen.POP(prevExpr().type());
       }
     } else if (!m.isStatic()) {
       // Load implicit this qualifier.
@@ -721,7 +706,7 @@ aspect CreateBCode {
   public void ArrayAccess.createBCode(CodeGeneration gen) {
     prevExpr().createBCode(gen);
     getExpr().createBCode(gen);
-    gen.emit(type().arrayLoad());
+    type().emitArrayLoad(gen);
   }
 
   public void ThisAccess.createBCode(CodeGeneration gen) {
@@ -736,20 +721,20 @@ aspect CreateBCode {
   // supporting inner classes and in explicit contructor invocations.
   public void Access.emitThis(CodeGeneration gen, TypeDecl targetDecl) {
     if (targetDecl == hostType()) {
-      gen.emit(Bytecode.ALOAD_0);
+      gen.ALOAD(0, hostType());
     } else {
       TypeDecl enclosing = hostType();
       if (inExplicitConstructorInvocation()) {
-        gen.emit(Bytecode.ALOAD_1);
+        gen.ALOAD(1, enclosing.enclosing());
         enclosing = enclosing.enclosing();
       } else {
-        gen.emit(Bytecode.ALOAD_0);
+        gen.ALOAD(0, enclosing);
       }
       while (enclosing != targetDecl) {
         String classname = enclosing.constantPoolName();
         enclosing = enclosing.enclosingType();
         int index = gen.constantPool().addFieldref(classname, "this$0", enclosing);
-        gen.emit(Bytecode.GETFIELD, 0).add2(index);
+        gen.GETFIELD(index, enclosing);
       }
     }
   }
@@ -764,13 +749,13 @@ aspect CreateBCode {
     ConstructorDecl decl = decl().bytecodeTarget();
     int index = 0;
     // Push this argument.
-    gen.emitLoadReference(index++);
+    gen.ALOAD(index++, VerificationTypes.UNINITIALIZED_THIS);
     // Push this$0 argument.
     if (decl.needsEnclosing()) {
-      gen.emitLoadReference(index++);
+      gen.ALOAD(index++, hostType().enclosing());
     }
     if (decl.needsSuperEnclosing()) {
-      gen.emitLoadReference(index++);
+      gen.ALOAD(index++, hostType().superEnclosing());
     }
     // Push formal arguments.
     for (int i = 0; i < getNumArg(); ++i) {
@@ -783,7 +768,7 @@ aspect CreateBCode {
       emitLoadVariable(gen, var);
     }
     if (decl.isPrivate() && decl.hostType() != hostType()) {
-      gen.emit(Bytecode.ACONST_NULL);
+      gen.ACONST_NULL();
       decl.createAccessor().emitInvokeConstructor(gen);
     } else {
       decl.emitInvokeConstructor(gen);
@@ -800,22 +785,22 @@ aspect CreateBCode {
     ConstructorDecl decl = decl().bytecodeTarget();
 
     // Push this argument.
-    gen.emit(Bytecode.ALOAD_0);
+    gen.ALOAD(0, VerificationTypes.UNINITIALIZED_THIS);
 
     if (decl.needsEnclosing()) {
       if (hasPrevExpr() && !prevExpr().isTypeAccess()) {
         prevExpr().createBCode(gen);
-        gen.emitDup();
+        gen.DUP();
         int index = gen.constantPool().addMethodref("java/lang/Object", "getClass",
             "()Ljava/lang/Class;");
-        gen.emit(Bytecode.INVOKEVIRTUAL, 0).add2(index);
-        gen.emitPop();
+        gen.INVOKEVIRTUAL(index, 1, lookupType("java.lang", "Class"));
+        gen.POP();
       } else {
         if (hostType().needsSuperEnclosing()) {
           if (hostType().needsEnclosing()) {
-            gen.emit(Bytecode.ALOAD_2);
+            gen.ALOAD(2, hostType().enclosing());
           } else {
-            gen.emit(Bytecode.ALOAD_1);
+            gen.ALOAD(1, hostType());
           }
         } else {
           emitThis(gen, superConstructorQualifier(decl.hostType().enclosingType()));
@@ -834,11 +819,12 @@ aspect CreateBCode {
       emitLoadVariable(gen, var);
     }
     if (decl.isPrivate() && decl.hostType() != hostType()) {
-      gen.emit(Bytecode.ACONST_NULL);
+      gen.ACONST_NULL();
       decl.createAccessor().emitInvokeConstructor(gen);
     } else {
       decl.emitInvokeConstructor(gen);
     }
+    gen.initializedThis(0, hostType());
   }
 
   // 15.9.2
@@ -851,11 +837,11 @@ aspect CreateBCode {
   private void ClassInstanceExpr.emitInnerMemberEnclosing(CodeGeneration gen, TypeDecl innerClass) {
     if (hasPrevExpr()) {
       prevExpr().createBCode(gen);
-      gen.emitDup();
+      gen.DUP();
       int index = gen.constantPool()
           .addMethodref("java/lang/Object", "getClass", "()Ljava/lang/Class;");
-      gen.emit(Bytecode.INVOKEVIRTUAL, 0).add2(index);
-      gen.emitPop();
+      gen.INVOKEVIRTUAL(index, 1, lookupType("java.lang", "Class"));
+      gen.POP();
     } else {
       TypeDecl enclosing = hostType();
       while (enclosing != null && !enclosing.hasType(innerClass.name())) {
@@ -876,16 +862,16 @@ aspect CreateBCode {
       return;
     }
 
-    type().emitNew(gen);
-    type().emitDup(gen);
+    gen.NEW(type());
+    gen.DUP(type());
 
     // 15.9.2 first part
     if (type().isAnonymous()) {
       if (isAnonymousInNonStaticContext()) {
         if (type().inExplicitConstructorInvocation()) {
-          gen.emit(Bytecode.ALOAD_1);
+          gen.ALOAD(1, type().enclosing());
         } else {
-          gen.emit(Bytecode.ALOAD_0);
+          gen.ALOAD(0, type());
         }
       }
       // 15.9.2 second part
@@ -920,7 +906,7 @@ aspect CreateBCode {
     }
 
     if (decl.isPrivate() && type() != hostType()) {
-      gen.emit(Bytecode.ACONST_NULL);
+      gen.ACONST_NULL();
       decl.createAccessor().emitInvokeConstructor(gen);
     } else {
       decl.emitInvokeConstructor(gen);
@@ -938,16 +924,12 @@ aspect CreateBCode {
     } else {
       getTypeAccess().createBCode(gen); // Push array sizes.
       if (type().componentType().isPrimitive()) {
-        gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+        gen.NEWARRAY(type());
       } else {
         if (numArrays() == 1) {
-          String n = type().componentType().arrayTypeDescriptor();
-          int index = gen.constantPool().addClass(n);
-          gen.emit(Bytecode.ANEWARRAY).add2(index);
+          gen.ANEWARRAY(type());
         } else {
-          String n = type().arrayTypeDescriptor();
-          int index = gen.constantPool().addClass(n);
-          gen.emit(Bytecode.MULTIANEWARRAY, 1 - numArrays()).add2(index).add(numArrays());
+          gen.MULTIANEWARRAY(type(), numArrays());
         }
       }
     }
@@ -956,21 +938,19 @@ aspect CreateBCode {
   public void ArrayInit.createBCode(CodeGeneration gen) {
     IntegerLiteral.push(gen, getNumInit());
     if (type().componentType().isPrimitive()) {
-      gen.emit(Bytecode.NEWARRAY).add(type().componentType().arrayPrimitiveTypeDescriptor());
+      gen.NEWARRAY(type());
     } else {
-      String n = type().componentType().arrayTypeDescriptor();
-      int index = gen.constantPool().addClass(n);
-      gen.emit(Bytecode.ANEWARRAY).add2(index);
+      gen.ANEWARRAY(type());
     }
     for (int i = 0; i < getNumInit(); i++) {
-      gen.emitDup();
+      gen.DUP();
       IntegerLiteral.push(gen, i);
       getInit(i).createBCode(gen);
       if (getInit(i) instanceof ArrayInit) {
-        gen.emit(Bytecode.AASTORE);
+        gen.AASTORE();
       } else {
         getInit(i).type().emitAssignConvTo(gen, expectedType()); // Assignment conversion.
-        gen.emit(expectedType().arrayStore());
+        expectedType().emitArrayStore(gen);
       }
     }
   }
@@ -988,15 +968,19 @@ aspect CreateBCode {
   eq ClassDecl.arrayTypeDescriptor() = constantPoolName();
   eq InterfaceDecl.arrayTypeDescriptor() = constantPoolName();
 
-  syn int TypeDecl.arrayPrimitiveTypeDescriptor() { error(); return -1; }
-  eq BooleanType.arrayPrimitiveTypeDescriptor() = 4; // T_BOOLEAN
-  eq CharType.arrayPrimitiveTypeDescriptor() = 5; // T_CHAR
-  eq FloatType.arrayPrimitiveTypeDescriptor() = 6; // T_FLOAT
-  eq DoubleType.arrayPrimitiveTypeDescriptor() = 7; // T_DOUBLE
-  eq ByteType.arrayPrimitiveTypeDescriptor() = 8; // T_BYTE
-  eq ShortType.arrayPrimitiveTypeDescriptor() = 9; // T_SHORT
-  eq IntType.arrayPrimitiveTypeDescriptor() = 10; // T_INT
-  eq LongType.arrayPrimitiveTypeDescriptor() = 11; // T_LONG
+  syn int TypeDecl.arrayPrimitiveTypeDescriptor() {
+    codeGenError("primitive array type descriptor");
+    // Unreachable:
+    return -1;
+  }
+  eq BooleanType.arrayPrimitiveTypeDescriptor() = 4;  // T_BOOLEAN
+  eq CharType.arrayPrimitiveTypeDescriptor()    = 5;  // T_CHAR
+  eq FloatType.arrayPrimitiveTypeDescriptor()   = 6;  // T_FLOAT
+  eq DoubleType.arrayPrimitiveTypeDescriptor()  = 7;  // T_DOUBLE
+  eq ByteType.arrayPrimitiveTypeDescriptor()    = 8;  // T_BYTE
+  eq ShortType.arrayPrimitiveTypeDescriptor()   = 9;  // T_SHORT
+  eq IntType.arrayPrimitiveTypeDescriptor()     = 10; // T_INT
+  eq LongType.arrayPrimitiveTypeDescriptor()    = 11; // T_LONG
 
   public void Unary.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
@@ -1101,16 +1085,16 @@ aspect CreateBCode {
       int index;
       TypeDecl argumentType;
       if (firstStringAddPart()) {
-        stringBuffer.emitNew(gen);
-        gen.emitDup();
+        gen.NEW(stringBuffer); // new StringBuffer
+        gen.DUP();
         desc = "()V";
         index = gen.constantPool().addMethodref(classname, "<init>", desc);
-        gen.emit(Bytecode.INVOKESPECIAL, -1).add2(index);
+        gen.INVOKESPECIAL_void(index, 1); // StringBuffer.<init>();
         getLeftOperand().createBCode(gen);
         argumentType = getLeftOperand().type().stringPromotion();
         desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "append", desc);
-        gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index);
+        gen.INVOKEVIRTUAL(index, 2, stringBuffer); // StringBuffer.append
       } else {
         getLeftOperand().createBCode(gen);
       }
@@ -1118,11 +1102,11 @@ aspect CreateBCode {
       argumentType = getRightOperand().type().stringPromotion();
       desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.emit(Bytecode.INVOKEVIRTUAL, -argumentType.variableSize()).add2(index);
+      gen.INVOKEVIRTUAL(index, 2, stringBuffer);
       if (lastStringAddPart()) {
         desc = "()" + type().typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "toString", desc);
-        gen.emit(Bytecode.INVOKEVIRTUAL, 0).add2(index);
+        gen.INVOKEVIRTUAL(index, 1, lookupType("java.lang", "String"));
       }
     }
   }
@@ -1166,8 +1150,7 @@ aspect CreateBCode {
       BooleanLiteral.push(gen, true);
       if (canBeFalse()) {
         end_label = gen.constantPool().newLabel();
-        gen.emitGoto(end_label);
-        gen.changeStackDepth(-1); // Discard value from stack depth computation.
+        gen.GOTO(end_label);
       }
     }
     if (false_label != -1) {
@@ -1193,8 +1176,7 @@ aspect CreateBCode {
       getTrueExpr().type().emitCastTo(gen, type());
       if (getCondition().canBeFalse()) {
         end_label = gen.constantPool().newLabel();
-        gen.emitGoto(end_label);
-        gen.changeStackDepth(-type().variableSize());
+        gen.GOTO(end_label);
       }
     }
     if (false_label != -1) {
@@ -1220,11 +1202,11 @@ aspect CreateBCode {
     // Branch when true.
     if (isConstant()) {
       if (isTrue()) {
-        gen.emitGoto(target);
+        gen.GOTO(target);
       }
     } else {
       createBCode(gen);
-      gen.emitCompare(Bytecode.IFNE, target);
+      gen.IFNE(target);
     }
   }
 
@@ -1284,8 +1266,7 @@ aspect CreateBCode {
       getTrueExpr().branchTrue(gen, target);
       if (getCondition().canBeFalse() && getTrueExpr().canBeFalse()) {
         end_label = gen.constantPool().newLabel();
-        gen.emitGoto(end_label);
-        //gen.GOTO(end_label);
+        gen.GOTO(end_label);
       }
     }
     if (else_label != -1) {
@@ -1303,7 +1284,7 @@ aspect CreateBCode {
     // Branch when true.
     if (isConstant()) {
       if (isTrue()) {
-        gen.emitGoto(target);
+        gen.GOTO(target);
       }
     } else {
       TypeDecl type = getLeftOperand().type();
@@ -1332,11 +1313,11 @@ aspect CreateBCode {
     // Branch when false.
     if (isConstant()) {
       if (isFalse()) {
-        gen.emitGoto(target);
+        gen.GOTO(target);
       }
     } else {
       createBCode(gen);
-      gen.emitCompare(Bytecode.IFEQ, target);
+      gen.IFEQ(target);
     }
   }
 
@@ -1396,7 +1377,7 @@ aspect CreateBCode {
       getTrueExpr().branchFalse(gen, target);
       if (getCondition().canBeFalse() && getTrueExpr().canBeTrue()) {
         end_label = gen.constantPool().newLabel();
-        gen.emitGoto(end_label);
+        gen.GOTO(end_label);
       }
     }
     if (else_label != -1) {
@@ -1414,7 +1395,7 @@ aspect CreateBCode {
     // Branch when false.
     if (isConstant()) {
       if (isFalse()) {
-        gen.emitGoto(target);
+        gen.GOTO(target);
       }
     } else {
       TypeDecl type = getLeftOperand().type();
@@ -1490,7 +1471,7 @@ aspect CreateBCode {
 
   public void InstanceOfExpr.createBCode(CodeGeneration gen) {
     getExpr().createBCode(gen);
-    gen.emitInstanceof(getTypeAccess().type());
+    gen.INSTANCEOF(getTypeAccess().type());
   }
 
   public void Stmt.createBCode(CodeGeneration gen) {
@@ -1529,10 +1510,14 @@ aspect CreateBCode {
     super.createBCode(gen);
     getExpr().createBCode(gen);
     if (needsPop()) {
-      getExpr().type().emitPop(gen);
+      gen.POP(getExpr().type());
     }
   }
 
+  /**
+   * @return a reference to the default case lable, or {@code null}
+   * if there is no default case.
+   */
   syn lazy DefaultCase SwitchStmt.defaultCase() {
     for (int i= 0; i < getBlock().getNumStmt(); i++) {
       if (getBlock().getStmt(i) instanceof DefaultCase) {
@@ -1550,81 +1535,16 @@ aspect CreateBCode {
 
     getExpr().createBCode(gen);
 
-    TreeMap<Integer, ConstCase> map = new TreeMap<Integer, ConstCase>();
-    for (int i = 0; i < getBlock().getNumStmt(); i++) {
-      if (getBlock().getStmt(i) instanceof ConstCase) {
-        ConstCase ca = (ConstCase) getBlock().getStmt(i);
-        map.put(ca.getValue().constant().intValue(), ca);
+    ArrayList<CaseLabel> cases = new ArrayList<CaseLabel>();
+    for (Stmt stmt : getBlock().getStmts()) {
+      if (stmt instanceof ConstCase) {
+        cases.add(new CaseLabel((ConstCase) stmt));
       }
     }
 
-    int low = map.isEmpty() ? 0 : map.firstKey();
-    int high = map.isEmpty() ? 0 : map.lastKey();
-
-    long tableSwitchSize = 4L * (3L + (high - low + 1L));
-    int lookupSwitchSize = 4 * (2 + 2 * map.size());
-    int pad;
-    int switchSize;
-    int switchPos;
-    boolean tableSwitch = tableSwitchSize < lookupSwitchSize;
-
-    gen.addLabel(switch_label);
-
-    // Select the switch type which produces the smallest switch instruction.
-    if (tableSwitch) {
-      // Use TABLESWITCH.
-      gen.emit(Bytecode.TABLESWITCH);
-      switchSize = (int) tableSwitchSize;
-    } else {
-      // Use LOOKUPSWITCH.
-      gen.emit(Bytecode.LOOKUPSWITCH);
-      switchSize = lookupSwitchSize;
-    }
-
-    pad = emitPad(gen);
-    switchPos = gen.pos();
-
-    // Leave room for the address table.
-    gen.skip(switchSize);
+    gen.SWITCH(cases, defaultLabel());
 
     getBlock().createBCode(gen);
-
-    // Write jump address table.
-    int endpos = gen.pos();
-    gen.setPos(switchPos);
-    if (tableSwitch) {
-      int defaultOffset = defaultOffset(gen, switch_label);
-      int numCase = high - low + 1;
-      if (defaultOffset == 0) {
-        defaultOffset = 1 + pad + switchSize;
-      }
-      gen.add4(defaultOffset);
-      gen.add4(low);
-      gen.add4(high);
-      for (int i = low; i <= high; i++) {
-        ConstCase ca = map.get(i);
-        if (ca != null) {
-          int offset = gen.addressOf(ca.label()) - gen.addressOf(switch_label);
-          gen.add4(offset);
-        } else {
-          gen.add4(defaultOffset);
-        }
-      }
-    } else {
-      int defaultOffset = defaultOffset(gen, switch_label);
-      if (defaultOffset == 0) {
-        defaultOffset = 1 + pad + switchSize;
-      }
-      gen.add4(defaultOffset);
-      gen.add4(map.size());
-      for (ConstCase ca : map.values()) {
-        gen.add4(ca.getValue().constant().intValue());
-        int offset = gen.addressOf(ca.label())
-          - gen.addressOf(switch_label);
-        gen.add4(offset);
-      }
-    }
-    gen.setPos(endpos);
 
     gen.addLabel(end_label());
   }
@@ -1639,29 +1559,16 @@ aspect CreateBCode {
     return result;
   }
 
-  private int SwitchStmt.emitPad(CodeGeneration gen) {
-    int pad = (4 - (gen.pos() % 4)) % 4;
-    for (int i = 0; i < pad; i++) {
-      gen.emit(Bytecode.NOP);
-    }
-    if (gen.pos() % 4 != 0) {
-      throw new Error("Switch not at 4-byte boundary:" + gen.pos());
-    }
-    return pad;
-  }
-
   /**
-   * Calculate offset to the default label.
-   * @return bytecode offset to default label (or zero if there is no
-   * default label)
+   * @return label to be used as default target in switch bytecode instruction
    */
-  private int SwitchStmt.defaultOffset(CodeGeneration gen, int switch_label) {
+  private int SwitchStmt.defaultLabel() {
     DefaultCase defaultCase = defaultCase();
     if (defaultCase != null) {
-      int offset = gen.addressOf(defaultCase.label()) - gen.addressOf(switch_label);
-      return offset;
+      return defaultCase.label();
+    } else {
+      return end_label();
     }
-    return 0;
   }
 
   syn lazy int Case.label() = hostType().constantPool().newLabel();
@@ -1688,7 +1595,7 @@ aspect CreateBCode {
     if (getCondition().canBeTrue()) {
       getThen().createBCode(gen);
       if (getThen().canCompleteNormally() && hasElse() && getCondition().canBeFalse()) {
-        gen.emitGoto(endBranch);
+        gen.GOTO(endBranch);
       }
     }
     gen.addLabel(elseBranch);
@@ -1712,7 +1619,7 @@ aspect CreateBCode {
     if (getCondition().canBeTrue()) {
       getStmt().createBCode(gen);
       if (getStmt().canCompleteNormally()) {
-        gen.emitGoto(cond_label());
+        gen.GOTO(cond_label());
       }
     }
     gen.addLabel(end_label());
@@ -1752,7 +1659,7 @@ aspect CreateBCode {
       for (Stmt stmt : getUpdateStmtList()) {
         stmt.createBCode(gen);
       }
-      gen.emitGoto(cond_label());
+      gen.GOTO(cond_label());
     }
     gen.addLabel(end_label());
     gen.addVariableScopeLabel(variableScopeEndLabel(gen));
@@ -1775,11 +1682,11 @@ aspect CreateBCode {
     if (hasFinally()) {
       int nextRange = gen.constantPool().newLabel();
       getFinally().createBCode(gen);
-      gen.emitGoto(targetStmt().break_label());
+      gen.GOTO(targetStmt().break_label());
       gen.addLabel(nextRange);
       gen.monitorRangesStart(this, nextRange);
     } else {
-      gen.emitGoto(targetStmt().break_label());
+      gen.GOTO(targetStmt().break_label());
     }
   }
 
@@ -1799,11 +1706,11 @@ aspect CreateBCode {
     if (hasFinally()) {
       int nextRange = gen.constantPool().newLabel();
       getFinally().createBCode(gen);
-      gen.emitGoto(targetStmt().continue_label());
+      gen.GOTO(targetStmt().continue_label());
       gen.addLabel(nextRange);
       gen.monitorRangesStart(this, nextRange);
     } else {
-      gen.emitGoto(targetStmt().continue_label());
+      gen.GOTO(targetStmt().continue_label());
     }
   }
 
@@ -1834,11 +1741,11 @@ aspect CreateBCode {
       if (hasFinally()) {
         int nextRange = gen.constantPool().newLabel();
         getFinally().createBCode(gen);
-        gen.emitReturn();
+        gen.RETURN();
         gen.addLabel(nextRange);
         gen.monitorRangesStart(this, nextRange);
       } else {
-        gen.emitReturn();
+        gen.RETURN();
       }
     }
   }
@@ -1846,7 +1753,7 @@ aspect CreateBCode {
   public void ThrowStmt.createBCode(CodeGeneration gen) {
     super.createBCode(gen);
     getExpr().createBCode(gen);
-    gen.emitThrow();
+    gen.ATHROW();
   }
 
   syn lazy int TryStmt.fallthrough_label() =
@@ -1865,7 +1772,7 @@ aspect CreateBCode {
     gen.addLabel(block_end_lbl);
 
     if (getBlock().canCompleteNormally()) {
-      gen.emitGoto(fallthrough_lbl);
+      gen.GOTO(fallthrough_lbl);
     }
 
     for (int i = 0; i < getNumCatchClause(); i++) {
@@ -1873,7 +1780,7 @@ aspect CreateBCode {
       cc.createBCode(gen);
       cc.exceptionTableEntries(gen, block_top_lbl, block_end_lbl);
       if (cc.getBlock().canCompleteNormally()) {
-        gen.emitGoto(fallthrough_lbl);
+        gen.GOTO(fallthrough_lbl);
       }
       if (hasNonEmptyFinally()) {
         int cc_end_lbl = gen.constantPool().newLabel();
@@ -1918,28 +1825,25 @@ aspect CreateBCode {
     if (needsHandler || top_pc != end_pc) {
       // Catch-all exception handler (finally).
       gen.addLabel(handler_lbl);
-      gen.changeStackDepth(1);
       int num = getBlock().localNum();
-      gen.emitStoreReference(num);
+      gen.ASTORE(num, VerificationTypes.THROWABLE);
       getExceptionHandler().createBCode(gen);
-      gen.emitLoadReference(num);
-      gen.emit(Bytecode.ATHROW);
+      gen.ALOAD(num, VerificationTypes.THROWABLE);
+      gen.ATHROW();
       gen.addCatchAll(start_lbl, end_lbl, handler_lbl);
     }
   }
 
   public void SynchronizedStmt.emitMonitorEnter(CodeGeneration gen) {
-    gen.emitDup();
+    gen.DUP();
     int num = localNum();
-    gen.emitStoreReference(num);
-    gen.emit(Bytecode.MONITORENTER);
+    gen.ASTORE(num, VerificationTypes.OBJECT);
+    gen.MONITORENTER();
   }
 
   syn lazy int CatchClause.label() = hostType().constantPool().newLabel();
   public void BasicCatch.createBCode(CodeGeneration gen) {
     gen.addLabel(label());
-    // Add 1 to stack depth.
-    gen.changeStackDepth(1);
     getParameter().type().emitStoreLocal(gen, getParameter().localNum());
     getBlock().createBCode(gen);
   }
@@ -1959,7 +1863,7 @@ aspect CreateBCode {
 
     if (getBlock().canCompleteNormally()) {
       getMonitorExit().createBCode(gen);
-      gen.emitGoto(label_end());
+      gen.GOTO(label_end());
     }
 
     gen.monitorExit();
@@ -2011,12 +1915,7 @@ aspect CreateBCode {
       Variable f = fields.iterator().next();
       f.emitLoadField(gen, typeDecl);
     } else {
-      int index = gen.constantPool().addClass(prevExpr().type().jvmName());
-      if (index < 256) {
-        gen.emit(Bytecode.LDC).add(index);
-      } else {
-        gen.emit(Bytecode.LDC_W).add2(index);
-      }
+      gen.LDC(prevExpr().type());
     }
   }
 
@@ -2035,22 +1934,21 @@ aspect CreateBCode {
     int handler_lbl = handler_label();
     int end_lbl = handler_end_label();
 
-    gen.changeStackDepth(1);
     int num = localNum() + 1;
 
     // Handler start.
     gen.addLabel(handler_lbl);
 
-    gen.emitStoreReference(num);
+    gen.ASTORE(num, VerificationTypes.THROWABLE);
 
-    gen.emitLoadReference(monitor.localNum());
-    gen.emit(Bytecode.MONITOREXIT);
+    gen.ALOAD(monitor.localNum(), VerificationTypes.OBJECT);
+    gen.MONITOREXIT();
 
     // Handler end.
     gen.addLabel(end_lbl);
 
-    gen.emitLoadReference(num);
-    gen.emit(Bytecode.ATHROW);
+    gen.ALOAD(num, VerificationTypes.THROWABLE);
+    gen.ATHROW();
 
     // Add exception handler for the monitor closing.
     // See http://bugs.sun.com/bugdatabase/view_bug.do?bug_id=4414101.

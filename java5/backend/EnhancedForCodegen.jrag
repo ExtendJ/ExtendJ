@@ -1,4 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
+ *                    2017, Jesper Öqvist
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,25 +52,26 @@ aspect EnhancedForToBytecode {
     VariableDeclarator decl = getVariableDecl();
     gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type(),
         extraLocalIndex(), variableScopeEndLabel(gen));
-    if (getExpr().type().isArrayDecl()) {
+    TypeDecl exprType = getExpr().type();
+    if (exprType.isArrayDecl()) {
       getExpr().createBCode(gen);
-      gen.emitStoreReference(extraLocalIndex());
+      gen.ASTORE(extraLocalIndex(), exprType);
       IntegerLiteral.push(gen, 0);
-      gen.emit(Bytecode.ISTORE).add(extraLocalIndex()+1);
+      gen.ISTORE(extraLocalIndex() + 1);
       gen.addLabel(cond_label());
-      gen.emit(Bytecode.ILOAD).add(extraLocalIndex()+1);
-      gen.emitLoadReference(extraLocalIndex());
-      gen.emit(Bytecode.ARRAYLENGTH);
-      gen.emitCompare(Bytecode.IF_ICMPGE, end_label());
-      gen.emitLoadReference(extraLocalIndex());
-      gen.emit(Bytecode.ILOAD).add(extraLocalIndex()+1);
-      gen.emit(getExpr().type().componentType().arrayLoad());
-      getExpr().type().componentType().emitCastTo(gen, getTypeAccess().type());
+      gen.ILOAD(extraLocalIndex() + 1);
+      gen.ALOAD(extraLocalIndex(), exprType);
+      gen.ARRAYLENGTH();
+      gen.IF_ICMPGE(end_label());
+      gen.ALOAD(extraLocalIndex(), exprType);
+      gen.ILOAD(extraLocalIndex() + 1);
+      exprType.componentType().emitArrayLoad(gen);
+      exprType.componentType().emitCastTo(gen, getTypeAccess().type());
       getTypeAccess().type().emitStoreLocal(gen, getVariableDecl().localNum());
       getStmt().createBCode(gen);
       gen.addLabel(update_label());
-      gen.emit(Bytecode.IINC).add(extraLocalIndex()+1).add(1);
-      gen.emitGoto(cond_label());
+      gen.IINC(extraLocalIndex() + 1, 1);
+      gen.GOTO(cond_label());
       gen.addLabel(end_label());
     } else {
       TypeDecl typeIterable = lookupType("java.lang", "Iterable");
@@ -79,25 +81,25 @@ aspect EnhancedForToBytecode {
       MethodDecl nextMethod = getMethod(typeIterator, "next");
       getExpr().createBCode(gen);
       iteratorMethod.emitInvokeMethod(gen, typeIterable);
-      gen.emitStoreReference(extraLocalIndex());
+      gen.ASTORE(extraLocalIndex(), typeIterator);
       gen.addLabel(cond_label());
-      gen.emitLoadReference(extraLocalIndex());
+      gen.ALOAD(extraLocalIndex(), typeIterator);
       hasNextMethod.emitInvokeMethod(gen, typeIterator);
-      gen.emitCompare(Bytecode.IFEQ, end_label());
-      gen.emitLoadReference(extraLocalIndex());
+      gen.IFEQ(end_label());
+      gen.ALOAD(extraLocalIndex(), typeIterator);
       nextMethod.emitInvokeMethod(gen, typeIterator);
       VariableDeclarator obj = getVariableDecl();
       if (!obj.type().boxed().isUnknown()) {
-        gen.emitCheckCast(obj.type().boxed());
+        gen.CHECKCAST(obj.type().boxed());
         obj.type().boxed().emitCastTo(gen, obj.type());
         obj.type().emitStoreLocal(gen, obj.localNum());
       } else {
-        gen.emitCheckCast(obj.type());
-        gen.emitStoreReference(obj.localNum());
+        gen.CHECKCAST(obj.type());
+        gen.ASTORE(obj.localNum(), obj.type());
       }
       getStmt().createBCode(gen);
       gen.addLabel(update_label());
-      gen.emitGoto(cond_label());
+      gen.GOTO(cond_label());
       gen.addLabel(end_label());
     }
     gen.addVariableScopeLabel(variableScopeEndLabel(gen));

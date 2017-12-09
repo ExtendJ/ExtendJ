@@ -75,9 +75,9 @@ aspect Attributes {
       }
     }
 
-    public void append(byte[] data) {
+    public void append(CodeGeneration gen) {
       try {
-        output.write(data, 0, data.length);
+        gen.write(output);
       } catch(IOException e) {
       }
     }
@@ -197,7 +197,7 @@ aspect Attributes {
       u2(codeGen.maxStackDepth());
       u2(codeGen.maxLocals());
       u4(codeGen.pos()); // code_length
-      append(codeGen.toArray());
+      append(codeGen);
       u2(codeGen.exceptions.size());
       for (CodeGeneration.ExceptionEntry e : codeGen.exceptions) {
         u2(e.start_pc);
@@ -206,14 +206,26 @@ aspect Attributes {
         u2(e.catch_type);
       }
 
-      if (m == null || !m.getModifiers().isSynthetic()) {
-        u2(2); // Attribute count.
-        append(new LineNumberTableAttribute(codeGen));
-        append(new LocalVariableTableAttribute(codeGen));
-      } else {
-        u2(0); // Attribute count.
+      Collection<Attribute> attributes = ASTNode.codeAttributes(codeGen, m);
+
+      u2(attributes.size());
+      for (Attribute attr: attributes) {
+        append(attr);
       }
     }
+  }
+
+  /**
+   * Builds a collection of the extra attributes to attach to a code attribute.
+   */
+  static Collection<Attribute> ASTNode.codeAttributes(CodeGeneration codeGen, MethodDecl m) {
+    Collection<Attribute> attributes = new ArrayList<Attribute>();
+
+    if (m == null || !m.getModifiers().isSynthetic()) {
+      attributes.add(new LineNumberTableAttribute(codeGen));
+      attributes.add(new LocalVariableTableAttribute(codeGen));
+    }
+    return attributes;
   }
 
   interface ExceptionHolder {
@@ -266,17 +278,22 @@ aspect Attributes {
   }
 
   eq MethodDecl.attributes() {
-    Collection<Attribute> attributes = new ArrayList<Attribute>();
-    CodeGeneration bytecodes = bytecodes(hostType().constantPool());
-    attributes.add(new ExceptionsAttribute(bytecodes, this));
-    if (isAbstract() || isNative()) {
-      return attributes;
-    } else {
-      attributes.add(new CodeAttribute(bytecodes, this));
-      if (getModifiers().isSynthetic()) {
-        attributes.add(new SyntheticAttribute(hostType().constantPool()));
+    try {
+      Collection<Attribute> attributes = new ArrayList<Attribute>();
+      CodeGeneration bytecodes = bytecodes(hostType().constantPool());
+      attributes.add(new ExceptionsAttribute(bytecodes, this));
+      if (isAbstract() || isNative()) {
+        return attributes;
+      } else {
+        attributes.add(new CodeAttribute(bytecodes, this));
+        if (getModifiers().isSynthetic()) {
+          attributes.add(new SyntheticAttribute(hostType().constantPool()));
+        }
+        return attributes;
       }
-      return attributes;
+    } catch (Error e) {
+      System.err.println("Error while processing " + sourceLocation());
+      throw e;
     }
   }
 
