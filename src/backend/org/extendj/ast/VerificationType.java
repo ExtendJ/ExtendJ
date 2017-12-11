@@ -67,6 +67,9 @@ public abstract class VerificationType {
     return this == type || supertype.instanceOf(type);
   }
 
+  /**
+   * Finds the common supertype of two types (nearest common ancestor type).
+   */
   public VerificationType nca(VerificationType other) {
     if (this == other) {
       return this;
