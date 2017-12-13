@@ -334,7 +334,7 @@ aspect CreateBCode {
    */
   protected void Declarator.emitInitializerBCode(CodeGeneration gen) {
     getInit().createBCode(gen);
-    getInit().type().emitAssignConvTo(gen, type());
+    getInit().emitAssignConvTo(gen, type());
   }
 
   /**
@@ -343,7 +343,7 @@ aspect CreateBCode {
   public void AssignSimpleExpr.createBCode(CodeGeneration gen) {
     getDest().createAssignSimpleLoadDest(gen);
     getSource().createBCode(gen);
-    getSource().type().emitAssignConvTo(gen, getDest().type()); // Assignment conversion.
+    getSource().emitAssignConvTo(gen, getDest().type());
     if (needsPush()) {
       getDest().createPushAssignmentResult(gen);
     }
@@ -649,6 +649,8 @@ aspect CreateBCode {
         // This qualifier must be computed to ensure side effects are evaluated.
         if (!prevExpr().isTypeAccess() && v.isClassVariable()) {
           gen.POP(prevExpr().type());
+        } else {
+          prevExpr().emitCastTo(gen, fieldQualifierType());
         }
       } else if (v.isInstanceVariable()) {
         emitThis(gen, fieldQualifierType());
@@ -700,7 +702,7 @@ aspect CreateBCode {
     // Perform method invocation conversions.
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
-      getArg(i).type().emitCastTo(gen, decl().getParameter(i).type());
+      getArg(i).emitCastTo(gen, decl().getParameter(i).type());
     }
 
     if (!decl().isStatic() && isQualified() && prevExpr().isSuperAccess()
@@ -720,6 +722,8 @@ aspect CreateBCode {
       // This qualifier must be computed to ensure side effects are evaluated.
       if (m.isStatic() && !prevExpr().isTypeAccess()) {
         gen.POP(prevExpr().type());
+      } else {
+        prevExpr().emitCastTo(gen, methodQualifierType());
       }
     } else if (!m.isStatic()) {
       // Load implicit this qualifier.
@@ -785,7 +789,7 @@ aspect CreateBCode {
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // Method invocation conversion:
-      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type());
+      getArg(i).emitCastTo(gen, decl.getParameter(i).type());
     }
     // Push enclosing variable arguments.
     for (Variable var : decl.hostType().enclosingVariables()) {
@@ -836,7 +840,7 @@ aspect CreateBCode {
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // Method invocation conversion:
-      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type());
+      getArg(i).emitCastTo(gen, decl.getParameter(i).type());
     }
     // Push enclosing variable arguments.
     for (Variable var : decl.hostType().enclosingVariables()) {
@@ -921,7 +925,7 @@ aspect CreateBCode {
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // Method invocation conversion:
-      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type());
+      getArg(i).emitCastTo(gen, decl.getParameter(i).type());
     }
     // Push enclosing variable arguments.
     for (Variable var : decl.hostType().enclosingVariables()) {
@@ -974,7 +978,7 @@ aspect CreateBCode {
       if (getInit(i) instanceof ArrayInit) {
         gen.AASTORE();
       } else {
-        getInit(i).type().emitAssignConvTo(gen, expectedType()); // Assignment conversion.
+        getInit(i).emitAssignConvTo(gen, expectedType());
         expectedType().emitArrayStore(gen);
       }
     }
@@ -1014,7 +1018,7 @@ aspect CreateBCode {
 
   public void CastExpr.createBCode(CodeGeneration gen) {
     getExpr().createBCode(gen);
-    getExpr().type().emitCastTo(gen, type());
+    getExpr().emitCastTo(gen, type());
   }
 
   // TODO(joqvist): consider using IINC or WIDE, IINC.
@@ -1071,17 +1075,17 @@ aspect CreateBCode {
 
   public void Binary.createBCode(CodeGeneration gen) {
     getLeftOperand().createBCode(gen);
-    getLeftOperand().type().emitCastTo(gen, type()); // Binary numeric promotion.
+    getLeftOperand().emitCastTo(gen, type()); // Binary numeric promotion.
     getRightOperand().createBCode(gen);
-    getRightOperand().type().emitCastTo(gen, type()); // Binary numeric promotion.
+    getRightOperand().emitCastTo(gen, type()); // Binary numeric promotion.
     emitOperation(gen);
   }
 
   public void Binary.emitShiftExpr(CodeGeneration gen) {
     getLeftOperand().createBCode(gen);
-    getLeftOperand().type().emitCastTo(gen, type()); // Binary numeric promotion.
+    getLeftOperand().emitCastTo(gen, type()); // Binary numeric promotion.
     getRightOperand().createBCode(gen);
-    getRightOperand().type().emitCastTo(gen, typeInt());
+    getRightOperand().emitCastTo(gen, typeInt());
     emitOperation(gen);
   }
 
@@ -1199,7 +1203,7 @@ aspect CreateBCode {
     }
     if (getCondition().canBeTrue()) {
       getTrueExpr().createBCode(gen);
-      getTrueExpr().type().emitCastTo(gen, type());
+      getTrueExpr().emitCastTo(gen, type());
       if (getCondition().canBeFalse()) {
         end_label = gen.constantPool().newLabel();
         gen.GOTO(end_label);
@@ -1210,7 +1214,7 @@ aspect CreateBCode {
     }
     if (getCondition().canBeFalse()) {
       getFalseExpr().createBCode(gen);
-      getFalseExpr().type().emitCastTo(gen, type());
+      getFalseExpr().emitCastTo(gen, type());
     }
     if (end_label != -1) {
       gen.addLabel(end_label);
@@ -1317,9 +1321,9 @@ aspect CreateBCode {
       if (type.isNumericType()) {
         type = binaryNumericPromotedType();
         getLeftOperand().createBCode(gen);
-        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion.
+        getLeftOperand().emitCastTo(gen, type); // Binary numeric promotion.
         getRightOperand().createBCode(gen);
-        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion.
+        getRightOperand().emitCastTo(gen, type); // Binary numeric promotion.
       } else {
         getLeftOperand().createBCode(gen);
         getRightOperand().createBCode(gen);
@@ -1428,9 +1432,9 @@ aspect CreateBCode {
       if (type.isNumericType()) {
         type = binaryNumericPromotedType();
         getLeftOperand().createBCode(gen);
-        getLeftOperand().type().emitCastTo(gen, type); // Binary numeric promotion.
+        getLeftOperand().emitCastTo(gen, type); // Binary numeric promotion.
         getRightOperand().createBCode(gen);
-        getRightOperand().type().emitCastTo(gen, type); // Binary numeric promotion.
+        getRightOperand().emitCastTo(gen, type); // Binary numeric promotion.
       } else {
         getLeftOperand().createBCode(gen);
         getRightOperand().createBCode(gen);
@@ -1751,7 +1755,7 @@ aspect CreateBCode {
         throw new Error("Can not create code that returns value within non method");
       }
       getResult().createBCode(gen);
-      getResult().type().emitCastTo(gen, type);
+      getResult().emitCastTo(gen, type);
       if (hasFinally()) {
         int nextRange = gen.constantPool().newLabel();
         type.emitStoreLocal(gen, resultSaveLocalNum());

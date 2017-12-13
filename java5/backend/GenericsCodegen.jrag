@@ -113,25 +113,51 @@ aspect GenericsCodegen {
       erasedField().emitLoadVariable(gen, access);
     } else {
       refined(gen, access);
-      access.emitCheckCast(gen, this);
     }
   }
 
   public void EnumConstant.emitLoadVariable(CodeGeneration gen, Access access) {
     access.createLoadQualifier(gen, this);
     emitLoadField(gen, access.fieldQualifierType());
-    access.emitCheckCast(gen, this);
   }
 
-  /** Generate a checked cast if needed. */
-  protected void Access.emitCheckCast(CodeGeneration gen, Variable v) {
+  refine CodeGeneration
+  void Expr.emitAssignConvTo(CodeGeneration gen, TypeDecl type) {
+    // The bytecode type of this expression is the erased type, and that
+    // is the type that should be cast to the target type.
+    erasedType().emitAssignConvTo(gen, type);
   }
 
-  protected void VarAccess.emitCheckCast(CodeGeneration gen, Variable v) {
-    if (v.type() != decl().type().erasure()) {
-      gen.CHECKCAST(decl().type().erasure());
-    }
+  refine CodeGeneration
+  void Expr.emitCastTo(CodeGeneration gen, TypeDecl type) {
+    // The bytecode type of this expression is the erased type, and that
+    // is the type that should be cast to the target type.
+    erasedType().emitCastTo(gen, type);
   }
+
+  /**
+   * This finds the erased runtime type of an expression.
+   *
+   * <p>The erased type of a field or method depends on the original
+   * declaration of the field or method (without generic type substitution).
+   */
+  syn TypeDecl Expr.erasedType() = type();
+
+  eq ParExpr.erasedType() = getExpr().erasedType();
+
+  eq Dot.erasedType() = getRight().erasedType();
+
+  eq MethodAccess.erasedType() = decl().erasedMethod().type();
+
+  eq VarAccess.erasedType() = decl().erasedType();
+
+  eq ArrayAccess.erasedType() = isQualified()
+      ? qualifier().erasedType().componentType()
+      : unknownType();
+
+  syn TypeDecl Variable.erasedType() = type();
+
+  eq FieldDeclarator.erasedType() = erasedField().type();
 
   refine CreateBCode
   public void MethodAccess.createBCode(CodeGeneration gen) {
@@ -151,7 +177,7 @@ aspect GenericsCodegen {
     for (int i = 0; i < getNumArg(); ++i) {
       getArg(i).createBCode(gen);
       // The cast or boxing/unboxing operation must know the bound rather than the erased type.
-      getArg(i).type().emitCastTo(gen, decl.getParameter(i).type()); // Invocation conversion.
+      getArg(i).emitCastTo(gen, decl.getParameter(i).type()); // Invocation conversion.
     }
 
     if (!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()
@@ -159,10 +185,6 @@ aspect GenericsCodegen {
       decl.emitInvokeSpecialMethod(gen, methodQualifierType());
     } else {
       decl.emitInvokeMethod(gen, methodQualifierType());
-    }
-
-    if (decl.type() != decl().type().erasure()) {
-      gen.CHECKCAST(decl().type().erasure());
     }
   }
 
