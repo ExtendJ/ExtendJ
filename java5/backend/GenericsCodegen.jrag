@@ -108,26 +108,19 @@ aspect GenericsCodegen {
   }
 
   refine CreateBCode
-  protected void Access.emitLoadVariable(CodeGeneration gen, Variable v) {
-    if (v.isField()) {
-      if (v instanceof FieldDeclarator) {
-        v = ((FieldDeclarator) v).erasedField();
-      }
-      createLoadQualifier(gen, v);
-      if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
-        if (!v.isStatic()) {
-          gen.POP(fieldQualifierType());
-        }
-        v.constant().createBCode(gen);
-      } else if (requiresAccessor()) {
-        fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
-      } else {
-        v.emitLoadField(gen, fieldQualifierType());
-      }
-      emitCheckCast(gen, v);
+  public void FieldDeclarator.emitLoadVariable(CodeGeneration gen, Access access) {
+    if (erasedField() != this) {
+      erasedField().emitLoadVariable(gen, access);
     } else {
-      refined(gen, v);
+      refined(gen, access);
+      access.emitCheckCast(gen, this);
     }
+  }
+
+  public void EnumConstant.emitLoadVariable(CodeGeneration gen, Access access) {
+    access.createLoadQualifier(gen, this);
+    emitLoadField(gen, access.fieldQualifierType());
+    access.emitCheckCast(gen, this);
   }
 
   /** Generate a checked cast if needed. */

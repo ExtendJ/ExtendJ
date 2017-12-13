@@ -497,6 +497,11 @@ aspect CreateBCode {
     lastAccess().createAssignLoadDest(gen);
   }
 
+  /**
+   * Generates bytecode to access the target for an assignment operation.
+   *
+   * <p>This may involve loading an object reference to store a field in the object.
+   */
   public void VarAccess.createAssignLoadDest(CodeGeneration gen) {
     createLoadQualifier(gen, decl());
     Variable v = decl();
@@ -552,39 +557,51 @@ aspect CreateBCode {
   }
 
   public void VarAccess.createBCode(CodeGeneration gen) {
-    emitLoadVariable(gen, decl());
+    decl().emitLoadVariable(gen, this);
   }
 
   /**
    * Generate bytecode to load a field, local variable, or parameter.
+   *
+   * @param gen bytecode output.
+   * @param access the access for which the variable load is to be generated.
    */
-  protected void Access.emitLoadVariable(CodeGeneration gen, Variable v) {
-    if (v instanceof VariableDeclarator) {
-      VariableDeclarator var = (VariableDeclarator) v;
-      if (var.hostType() == hostType()) {
-        var.type().emitLoadLocal(gen, var.localNum());
-      } else {
-        emitLoadLocalInNestedClass(gen, v);
+  void Variable.emitLoadVariable(CodeGeneration gen, Access access);
+
+  // TODO(joqvist): remove this - added to fix build problem with JastAdd 2.2.2.
+  // See https://bitbucket.org/jastadd/jastadd2/issues/282/abstract-interface-methods-are-added-to
+  public void Declarator.emitLoadVariable(CodeGeneration gen, Access access) {
+    throw new Error("Missing implementation for emitLoadVariable in " + getClass().getName());
+  }
+
+  public void VariableDeclarator.emitLoadVariable(CodeGeneration gen, Access access) {
+    if (hostType() == access.hostType()) {
+      type().emitLoadLocal(gen, localNum());
+    } else {
+      access.emitLoadLocalInNestedClass(gen, this);
+    }
+  }
+
+  public void FieldDeclarator.emitLoadVariable(CodeGeneration gen, Access access) {
+    access.createLoadQualifier(gen, this);
+    if (isConstant() && (type().isPrimitive() || type().isString())) {
+      if (!isStatic()) {
+        gen.POP(access.fieldQualifierType());
       }
-    } else if (v.isField()) {
-      createLoadQualifier(gen, v);
-      if (v.isConstant() && (v.type().isPrimitive() || v.type().isString())) {
-        if (!v.isStatic()) {
-          gen.POP(fieldQualifierType());
-        }
-        v.constant().createBCode(gen);
-      } else if (requiresAccessor()) {
-        fieldQualifierType().fieldAccessor(v).emitInvokeMethod(gen, fieldQualifierType());
-      } else {
-        v.emitLoadField(gen, fieldQualifierType());
-      }
-    } else if (v instanceof ParameterDeclaration) {
-      ParameterDeclaration decl = (ParameterDeclaration) v;
-      if (decl.hostType() == hostType()) {
-        decl.type().emitLoadLocal(gen, decl.localNum());
-      } else {
-        emitLoadLocalInNestedClass(gen, v);
-      }
+      constant().createBCode(gen);
+    } else if (access.requiresAccessor()) {
+      access.fieldQualifierType().fieldAccessor(this).emitInvokeMethod(gen,
+          access.fieldQualifierType());
+    } else {
+      emitLoadField(gen, access.fieldQualifierType());
+    }
+  }
+
+  public void ParameterDeclaration.emitLoadVariable(CodeGeneration gen, Access access) {
+    if (hostType() == access.hostType()) {
+      type().emitLoadLocal(gen, localNum());
+    } else {
+      access.emitLoadLocalInNestedClass(gen, this);
     }
   }
 
@@ -765,7 +782,7 @@ aspect CreateBCode {
     }
     // Push enclosing variable arguments.
     for (Variable var : decl.hostType().enclosingVariables()) {
-      emitLoadVariable(gen, var);
+      var.emitLoadVariable(gen, this);
     }
     if (decl.isPrivate() && decl.hostType() != hostType()) {
       gen.ACONST_NULL();
@@ -816,7 +833,7 @@ aspect CreateBCode {
     }
     // Push enclosing variable arguments.
     for (Variable var : decl.hostType().enclosingVariables()) {
-      emitLoadVariable(gen, var);
+      var.emitLoadVariable(gen, this);
     }
     if (decl.isPrivate() && decl.hostType() != hostType()) {
       gen.ACONST_NULL();
@@ -902,7 +919,7 @@ aspect CreateBCode {
     }
     // Push enclosing variable arguments.
     for (Variable var : decl.hostType().enclosingVariables()) {
-      emitLoadVariable(gen, var);
+      var.emitLoadVariable(gen, this);
     }
 
     if (decl.isPrivate() && type() != hostType()) {
