@@ -160,6 +160,7 @@ public class CodeGeneration {
     public int offset; // Offset PC.
     public int target; // Target PC (or label, before back-patch).
     public boolean wide;
+    public BasicBlock bb;
   }
 
   /** Bytecode buffer. */
@@ -405,6 +406,7 @@ public class CodeGeneration {
    */
   private int jump(int location, int offset, int label, boolean wide) {
     Jump jump = new Jump();
+    jump.bb = block;
     jump.loc = location;
     jump.offset = offset;
     jump.wide = wide;
@@ -2027,7 +2029,7 @@ public class CodeGeneration {
         }
         if (deleted != null) {
           for (Jump jump : jumps) {
-            if (jump.target == bb.start) {
+            if (jump.bb.reachable && jump.target == bb.start) {
               jump.target = deleted.start;
               patch(jump);
             }
