@@ -372,7 +372,7 @@ public class StackFrame {
     for (; i < maxLocals && i < other.maxLocals; ++i) {
       VerificationType typeA = locals.get(i);
       VerificationType typeB = other.locals.get(i);
-      if (typeA != typeB) {
+      if (!typeA.sameType(typeB)) {
         diff = true;
         locals.set(i, typeA.nca(typeB));
       }
@@ -386,7 +386,7 @@ public class StackFrame {
     for (i = 0; i < top && i < other.top; ++i) {
       VerificationType typeA = stack.get(i);
       VerificationType typeB = other.stack.get(i);
-      if (typeA != typeB) {
+      if (!typeA.sameType(typeB)) {
         diff = true;
         stack.set(i, typeA.nca(typeB));
       }
@@ -422,7 +422,7 @@ public class StackFrame {
     for (int i = 0; i < limit; ++i) {
       VerificationType typeA = locals.get(i);
       VerificationType typeB = other.locals.get(i);
-      if (typeA != typeB) {
+      if (!typeA.sameType(typeB)) {
         return false;
       }
     }
@@ -436,7 +436,7 @@ public class StackFrame {
     for (int i = 0; i < limit; ++i) {
       VerificationType typeA = stack.get(i);
       VerificationType typeB = other.stack.get(i);
-      if (typeA != typeB) {
+      if (!typeA.sameType(typeB)) {
         return false;
       }
     }

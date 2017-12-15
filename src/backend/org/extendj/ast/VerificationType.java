@@ -104,4 +104,9 @@ public abstract class VerificationType {
   }
 
   abstract public void emit(Attribute attr, ConstantPool cp);
+
+  /**
+   * @return {@code true} if this type is the same type as the argument type.
+   */
+  abstract public boolean sameType(VerificationType other);
 }

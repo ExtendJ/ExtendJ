@@ -193,7 +193,8 @@ class BasicBlock {
     if (index < maxLocals) {
       VerificationType prevType = locals.get(index);
       if (type == VerificationTypes.TOP
-          || (prevType != VerificationTypes.TOP && prevType != type)) {
+          || (prevType != VerificationTypes.TOP
+              && !prevType.sameType(type))) {
         change.set(index);
       }
       locals.set(index, type);
@@ -319,8 +320,9 @@ class BasicBlock {
         VerificationType prevType = i < frame.maxLocals()
             ? frame.getLocal(i)
             : VerificationTypes.TOP;
-        if (nextType != VerificationTypes.TOP && prevType != VerificationTypes.TOP
-            && nextType != prevType) {
+        if (nextType != VerificationTypes.TOP
+            && prevType != VerificationTypes.TOP
+            && !nextType.sameType(prevType)) {
           frame.setLocal(i, VerificationTypes.TOP);
         }
       }

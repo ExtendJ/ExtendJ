@@ -60,6 +60,10 @@ public interface VerificationTypes {
     public void emit(Attribute attr, ConstantPool cp) {
       attr.u1(ITEM_Top);
     }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
+    }
   };
 
   VerificationType INT = new VerificationType(TOP) {
@@ -74,6 +78,10 @@ public interface VerificationTypes {
     @Override
     public String toString() {
       return "int";
+    }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
     }
   };
 
@@ -90,6 +98,10 @@ public interface VerificationTypes {
     public String toString() {
       return "float";
     }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
+    }
   };
 
   VerificationType UNINITIALIZED_THIS = new VerificationType(TOP) {
@@ -104,6 +116,10 @@ public interface VerificationTypes {
     @Override
     public String toString() {
       return "uninitializedThis";
+    }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
     }
   };
 
@@ -120,6 +136,10 @@ public interface VerificationTypes {
     public String toString() {
       return "long";
     }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
+    }
   };
 
   VerificationType DOUBLE = new VerificationType(TOP, true) {
@@ -134,6 +154,10 @@ public interface VerificationTypes {
     @Override
     public String toString() {
       return "double";
+    }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
     }
   };
 
@@ -161,6 +185,17 @@ public interface VerificationTypes {
     public String toString() {
       return constantName;
     }
+    @Override
+    public boolean sameType(VerificationType other) {
+      if (this == other) {
+        return true;
+      }
+      if (other instanceof JavaType) {
+        JavaType o = (JavaType) other;
+        return constantName.equals(o.constantName);
+      }
+      return false;
+    }
   }
 
   VerificationType OBJECT = new JavaType("java/lang/Object", TOP);
@@ -185,6 +220,10 @@ public interface VerificationTypes {
     public String toString() {
       return "null";
     }
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
+    }
   };
 
   class ArrayType extends VerificationType {
@@ -205,6 +244,17 @@ public interface VerificationTypes {
     @Override
     public String toString() {
       return constantName;
+    }
+    @Override
+    public boolean sameType(VerificationType other) {
+      if (this == other) {
+        return true;
+      }
+      if (other instanceof ArrayType) {
+        ArrayType o = (ArrayType) other;
+        return constantName.equals(o.constantName);
+      }
+      return false;
     }
   }
 }
