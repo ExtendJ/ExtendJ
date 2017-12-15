@@ -229,7 +229,14 @@ public interface VerificationTypes {
   class ArrayType extends VerificationType {
     private final String constantName;
     public ArrayType(TypeDecl type) {
-      super(OBJECT);
+      TypeDecl componentType = type.componentType();
+      VerificationType componentVt = componentType.verificationType();
+      TypeDecl sup = componentType.supertype();
+      if (sup.isUnknown()) {
+        setSupertype(OBJECT);
+      } else {
+        setSupertype(sup.arrayType().verificationType());
+      }
       this.constantName = type.constantPoolName();
     }
     @Override
