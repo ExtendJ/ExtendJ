@@ -181,7 +181,7 @@ class BasicBlock {
     pop();
     setLocal(index, type);
     if (type.isTwoWord) {
-      setLocal(index + 1, type);
+      setLocal(index + 1, VerificationTypes.TOP);
     }
   }
 

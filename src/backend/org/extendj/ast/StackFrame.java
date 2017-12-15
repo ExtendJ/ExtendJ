@@ -37,6 +37,10 @@ import java.util.List;
  *
  * <p>Stack frames are used to compute the stack map frames attributes for Java 6+ bytecode.
  *
+ * <p>Wide types (long and double) are stored in the local variable map by adding an
+ * extra TOP entry after the wide type. This is to make handling of local indexes simpler.
+ * On the stack no extra TOP entry is added after a wide type.
+ *
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class StackFrame {
@@ -231,7 +235,11 @@ public class StackFrame {
   int assignedLocals() {
     for (int i = maxLocals - 1; i >= 0; --i) {
       if (locals.get(i) != VerificationTypes.TOP) {
-        return i + 1;
+        if (locals.get(i).isTwoWord) {
+          return i + 2;
+        } else {
+          return i + 1;
+        }
       }
     }
     return 0;
@@ -245,6 +253,16 @@ public class StackFrame {
     }
   }
 
+  /**
+   * Tries to generate a non-full stack frame.
+   *
+   * <p>A diff stack frame can often be generated based on the previous stack
+   * frame.  This is not necessary but it may save space in the generated
+   * bytecode.
+   *
+   * <p>If it is not possible to generate a diff stack frame, then a full stack
+   * frame is output instead.
+   */
   private void emitDiffFrame(Attribute attr, ConstantPool cp, StackFrame prev) {
     int assigned = assignedLocals();
     int prevAssigned = prev.assignedLocals();
@@ -312,6 +330,10 @@ public class StackFrame {
     emitFullFrame(attr, cp);
   }
 
+  /**
+   * This generates a full stack frame describing the state of local variable types
+   * and operand stack items at the current bytecode position.
+   */
   private void emitFullFrame(Attribute attr, ConstantPool cp) {
     attr.u1(255); // full_frame
     attr.u2(offset); // offset_delta
