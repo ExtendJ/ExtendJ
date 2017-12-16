@@ -271,6 +271,9 @@ class BasicBlock {
       VerificationType nextType = locals.get(i);
       if (nextType != VerificationTypes.TOP) {
         out.setLocal(i, nextType);
+        if (nextType.isTwoWord) {
+          out.setLocal(i + 1, VerificationTypes.TOP);
+        }
       }
     }
     return out;
