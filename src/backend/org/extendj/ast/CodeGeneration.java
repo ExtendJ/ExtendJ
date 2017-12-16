@@ -2028,12 +2028,22 @@ public class CodeGeneration {
           printBlock(bb);
         }
         if (deleted != null) {
+          // The previous block was deleted. We will merge this block with the
+          // previous block. All jumps to this block need to be updated to
+          // point to the new start position.
           for (Jump jump : jumps) {
             if (jump.bb.reachable && jump.target == bb.start) {
               jump.target = deleted.start;
               patch(jump);
             }
           }
+          // Extend exception ranges that start at this block.
+          for (ExceptionEntry e : exceptions) {
+            if (e.handler == bb) {
+              e.handler_lbl = deleted.label;
+            }
+          }
+          // Merge this block with the previous deleted block.
           bb.start = deleted.start;
           deleted = null;
         }
@@ -2073,9 +2083,29 @@ public class CodeGeneration {
         if (deleted == null) {
           deleted = bb;
         }
+        // This block may be at the end of an exception range. If that is the case,
+        // the exception range needs to be updated to exclude this block. This may
+        // lead to the range becoming empty, and the exception handler should then
+        // be removed.
+        // If this block is at the start of an exception range, or in the
+        // middle, then nothing needs to be updated: the following block is
+        // still part of the exception range.
+        Iterator<ExceptionEntry> iter = exceptions.iterator();
+        while (iter.hasNext()) {
+          ExceptionEntry e = iter.next();
+          int eend = e.end_pc;
+          if (eend > bb.start && eend <= bb.end) {
+            e.end_pc = bb.start;
+            if (e.end_pc <= e.start_pc) {
+              iter.remove();
+            }
+          }
+        }
       }
     }
     if (deleted != null) {
+      // The deleted block was at the end of the bytecode, so we delete it by
+      // just updating the end position.
       setPos(deleted.start);
       // Trim variable entry ranges.
       Iterator<LocalVariableEntry> viter = localVariableTable.iterator();
@@ -2087,13 +2117,6 @@ public class CodeGeneration {
           viter.remove();
         } else if (vend >= pos()) {
           var.length = pos() - 1 - vstart;
-        }
-      }
-      // Trim exception handler ranges.
-      for (ExceptionEntry e : exceptions) {
-        int eend = e.end_pc;
-        if (eend >= pos()) {
-          e.end_pc = pos() - 1;
         }
       }
       // Trim line number table.
