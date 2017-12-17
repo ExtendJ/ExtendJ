@@ -429,18 +429,10 @@ public class StackFrame {
     return true;
   }
 
-  public boolean sameStack(StackFrame other, int limit) {
-    if (top < limit || other.top < limit) {
-      return false;
-    }
-    for (int i = 0; i < limit; ++i) {
-      VerificationType typeA = stack.get(i);
-      VerificationType typeB = other.stack.get(i);
-      if (!typeA.sameType(typeB)) {
-        return false;
-      }
-    }
-    return true;
+  public void clearStack() {
+    stackSize = 0;
+    top = 0;
+    stack.clear();
   }
 
 }

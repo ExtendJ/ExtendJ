@@ -1985,7 +1985,7 @@ public class CodeGeneration {
       BasicBlock handler = blockLabels.get(exception.handler_lbl);
       exception.handler = handler;
       for (BasicBlock bb : blocks) {
-        if (bb.start == exception.start_pc) {
+        if (bb.start >= exception.start_pc && bb.end <= exception.end_pc) {
           bb.excp.add(exception);
           handler.preds += 1;
         }
@@ -2128,6 +2128,12 @@ public class CodeGeneration {
         }
       }
     }
+
+    if (DEBUG) {
+      for (ExceptionEntry e : exceptions) {
+        System.out.format("  exception %d..%d -> L%d%n", e.start_pc, e.end_pc, e.handler_lbl);
+      }
+    }
   }
 
   private void printBlock(BasicBlock bb) {
@@ -2191,6 +2197,7 @@ public class CodeGeneration {
     BasicBlock next = e.handler;
     StackFrame frame = new StackFrame(from.entryStack);
     from.localSubset(frame);
+    frame.clearStack();
     frame.push(e.type);
     if (next.entryStack == null) {
       next.entryStack = frame;
