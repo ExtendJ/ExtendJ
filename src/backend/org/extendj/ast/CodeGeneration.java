@@ -347,6 +347,16 @@ public class CodeGeneration {
   }
 
   /**
+   * Marks the top stack reference as initialized.
+   *
+   * @param type the initialized type of the reference.
+   */
+  public void initializedRef(TypeDecl type) {
+    block.pop();
+    block.push(type.verificationType());
+  }
+
+  /**
    * Add a label at the current PC.
    *
    * <p>This back-patches the label address to previous jumps that use this
@@ -525,10 +535,10 @@ public class CodeGeneration {
   }
 
   public void NEW(TypeDecl type) {
+    block.push(new VerificationTypes.Uninitialized(pos()));
     int constantIndex = constantPool().addClass(type.constantPoolName());
     instr(Bytecode.NEW);
     bytes.add2(constantIndex);
-    block.push(type.verificationType());
   }
 
   public void NEWARRAY(TypeDecl arrayType) {

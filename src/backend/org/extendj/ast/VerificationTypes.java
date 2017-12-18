@@ -39,6 +39,7 @@ public interface VerificationTypes {
   int ITEM_Null = 5;
   int ITEM_UninitializedThis = 6;
   int ITEM_Object = 7;
+	int ITEM_Uninitialized = 8;
 
   VerificationType TOP = new VerificationType() {
     {
@@ -104,6 +105,25 @@ public interface VerificationTypes {
     }
   };
 
+	public static final VerificationType UNINITIALIZED = new VerificationType(TOP) {
+		@Override
+		public int variableSize() {
+			return 1;
+		}
+		@Override
+		public void emit(Attribute attr, ConstantPool cp) {
+			throw new UnsupportedOperationException();
+		}
+		@Override
+		public String toString() {
+			return "uninitiailzed";
+		}
+    @Override
+    public boolean sameType(VerificationType other) {
+      return this == other;
+    }
+	};
+
   VerificationType UNINITIALIZED_THIS = new VerificationType(TOP) {
     @Override
     public int variableSize() {
@@ -161,6 +181,43 @@ public interface VerificationTypes {
     }
   };
 
+	class Uninitialized extends VerificationType {
+		private final int offset;
+
+		public Uninitialized(int offset) {
+			setSupertype(UNINITIALIZED);
+			this.offset = offset;
+		}
+
+		@Override
+		public int variableSize() {
+			return 1;
+		}
+
+		@Override
+		public void emit(Attribute attr, ConstantPool cp) {
+			attr.u1(ITEM_Uninitialized);
+			attr.u2(offset);
+		}
+
+		@Override
+		public String toString() {
+			return "uninitialized("+offset+")";
+		}
+
+    @Override
+    public boolean sameType(VerificationType other) {
+      if (this == other) {
+        return true;
+      }
+      if (other instanceof Uninitialized) {
+        Uninitialized o = (Uninitialized) other;
+        return offset == o.offset;
+      }
+      return false;
+    }
+	};
+
   class JavaType extends VerificationType {
     private final String constantName;
 
@@ -185,6 +242,7 @@ public interface VerificationTypes {
     public String toString() {
       return constantName;
     }
+
     @Override
     public boolean sameType(VerificationType other) {
       if (this == other) {
