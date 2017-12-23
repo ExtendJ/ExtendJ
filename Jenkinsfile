@@ -10,8 +10,24 @@ node {
 		checkout scm
 	}
 
-	stage('Build') {
-		sh "./gradlew clean jar"
+	stage('Clean') {
+		sh "./gradlew clean"
+	}
+
+	stage('ExtendJ5') {
+		sh "./gradlew :java5:jar"
+	}
+
+	stage('ExtendJ6') {
+		sh "./gradlew :java6:jar"
+	}
+
+	stage('ExtendJ7') {
+		sh "./gradlew :java7:jar"
+	}
+
+	stage('ExtendJ8') {
+		sh "./gradlew :java8:jar"
 	}
 
 	stage('Archive') {
