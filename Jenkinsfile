@@ -11,7 +11,7 @@ node {
 	}
 
 	stage('Build') {
-		sh "./gradlew jar"
+		sh "./gradlew clean jar"
 	}
 
 	stage('Archive') {
