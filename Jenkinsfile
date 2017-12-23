@@ -1,5 +1,7 @@
 #!/usr/bin/env groovy
 
+// This Jenkinsfile builds ExtendJ with Gradle.
+
 node {
 	env.JAVA_HOME="${tool 'oracle-jdk-8'}"
 	env.PATH="${env.JAVA_HOME}/bin:${env.PATH}"
