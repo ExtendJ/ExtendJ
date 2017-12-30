@@ -11,10 +11,15 @@ repositories {
 
 defaultTasks 'jar'
 
-project.version = getVersion()
-project.group = 'org.extendj'
-
-println "Building ExtendJ version ${project.version}"
+gradle.taskGraph.whenReady { graph ->
+  def theVersion = getVersion()
+  println "Building ExtendJ version ${theVersion}"
+  version = theVersion
+  allprojects {
+    group = 'org.extendj'
+    version = theVersion
+  }
+}
 
 /** Helper function to run a command. Returns the command output if the command succeeded. */
 def tryCommand(List command, boolean failOnError = false) {
@@ -65,14 +70,9 @@ subprojects {
   apply plugin: 'maven'
   apply plugin: 'signing'
 
-  //project.version = '8.2.0'
-  version = rootProject.version
-  group = rootProject.group
-
   mainClassName = 'org.extendj.JavaCompiler'
 
-  sourceCompatibility = '1.6'
-  targetCompatibility = '1.6'
+  sourceCompatibility = targetCompatibility = '1.6'
 
   sourceSets {
     main.java {
@@ -95,16 +95,14 @@ subprojects {
     from sourceSets.main.allSource
   }
 
-  /*
-  TODO:
-  task javadocJar(type: Jar) {
+  // We generate this empty Jar to satisfy sonatype.
+  // We have our own generated documentation at https://extendj.org/doc2/
+  task fakeJavadocJar(type: Jar) {
     classifier = 'javadoc'
-    from javadoc
   }
-  */
 
   artifacts {
-    archives sourcesJar
+    archives fakeJavadocJar, sourcesJar
   }
 
   processResources.dependsOn 'updateVersionString'
@@ -128,6 +126,60 @@ subprojects {
     }
   }
 
+  signing {
+    // Require OSSRH credentials for signing artifacts:
+    required { project.hasProperty('ossrhUsername') && project.hasProperty('ossrhPassword') }
+    sign configurations.archives
+  }
+
+  uploadArchives {
+    repositories.mavenDeployer {
+      beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+      repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2') {
+        if (project.hasProperty('ossrhUsername')) {
+          authentication(userName: ossrhUsername, password: ossrhPassword)
+        }
+      }
+
+      snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots') {
+        if (project.hasProperty('ossrhUsername')) {
+          authentication(userName: ossrhUsername, password: ossrhPassword)
+        }
+      }
+
+      pom.project {
+        name 'ExtendJ'
+        packaging 'jar'
+        description 'Extensible Java Compiler'
+        url 'https://extendj.org'
+        organization {
+          name 'ExtendJ Committers'
+          url 'https://extendj.org'
+        }
+        licenses {
+          license {
+            name 'Modified BSD License'
+            url 'http://opensource.org/licenses/BSD-3-Clause'
+            distribution 'repo'
+          }
+        }
+        developers {
+          developer {
+            name 'Torbjörn Ekman'
+          }
+          developer {
+            name 'Jesper Öqvist'
+            email 'jesper.oqvist@cs.lth.se'
+          }
+        }
+        scm {
+          connection 'scm:git:https://bitbucket.org/extendj/extendj.git'
+          url 'https://bitbucket.org/extendj/extendj'
+        }
+      }
+    }
+  }
 }
 
 // Set the Gradle wrapper version:
