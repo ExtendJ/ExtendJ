@@ -64,10 +64,7 @@ aspect TryWithResources {
     Collection<Problem> problems = new LinkedList<Problem>();
     // Check exception handling of exceptions on auto closing of resource.
     for (ResourceDeclaration resource : getResourceList()) {
-      MethodDecl close = lookupClose(resource);
-      if (close == null) {
-        continue;
-      }
+      MethodDecl close = resource.closeAccess().decl();
       for (Access exception : close.getExceptionList()) {
         TypeDecl exceptionType = exception.type();
         if (!twrHandlesException(exceptionType)) {
@@ -119,23 +116,6 @@ aspect TryWithResources {
 
   eq TryWithResources.getBlock().handlesException(TypeDecl exceptionType) =
       twrHandlesException(exceptionType);
-
-
-  /**
-   * Lookup the close method declaration for the resource which is being used.
-   */
-  syn MethodDecl TryWithResources.lookupClose(ResourceDeclaration resource) {
-    TypeDecl resourceType = resource.getTypeAccess().type();
-    for (MethodDecl method : (Collection<MethodDecl>) resourceType.memberMethods("close")) {
-      if (method.getNumParameter() == 0) {
-        return method;
-      }
-    }
-    // We should not throw a runtime exception here. If there is no close
-    // method it likely means that the resource type is not a subtype of
-    // java.lang.AutoCloseable and type checking will report this error.
-    return null;
-  }
 
   inh lazy TypeDecl TryWithResources.typeError();
 
@@ -259,15 +239,29 @@ aspect TryWithResources {
   }
 
   /**
+   * A synthetic method access to the resource closing method.
+   *
+   * <p>This is used to find the actual close method. This is needed for precise
+   * exception analysis.
+   */
+  syn nta MethodAccess ResourceDeclaration.closeAccess() =
+      new MethodAccess("close", new List<Expr>());
+
+  // This equation is needed during lookup of the close() method:
+  eq ResourceDeclaration.closeAccess().lookupMethod(String name) =
+      getResourceType().type().memberMethods(name);
+
+  // These equations are needed so that close() lookup does not filter out non-static methods.
+  // Without these two equations, method lookup thinks it is in a static context.
+  eq ResourceDeclaration.closeAccess().inStaticContext() = false;
+
+  /**
    * True if the automatic closing of resources in this try-with-resources statement
    * may throw an exception of type catchType.
    */
   syn boolean TryWithResources.resourceClosingException(TypeDecl catchType) {
     for (ResourceDeclaration resource : getResourceList()) {
-      MethodDecl close = lookupClose(resource);
-      if (close == null) {
-        continue;
-      }
+      MethodDecl close = resource.closeAccess().decl();
       for (Access exception : close.getExceptionList()) {
         TypeDecl exceptionType = exception.type();
         if (catchType.mayCatch(exception.type())) {
