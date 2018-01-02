@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2014-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2014-2018, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -498,8 +498,7 @@ aspect MemberMethods {
    */
   syn lazy Map<String, Collection<MethodDecl>> TypeDecl.methodsNameMap() {
     Map<String, Collection<MethodDecl>> map = new HashMap<String, Collection<MethodDecl>>();
-    for (Iterator<MethodDecl> iter = methodsIterator(); iter.hasNext(); ) {
-      MethodDecl m = iter.next();
+    for (MethodDecl m : methods()) {
       Collection<MethodDecl> methods = map.get(m.name());
       if (methods == null) {
         methods = new ArrayList<MethodDecl>(4);
@@ -618,36 +617,8 @@ aspect MemberMethods {
   }
 
   /**
-   * Builds an iterator to iterate over all member methods in the type
-   * and its supertypes.
-   *
-   * @return method iterator
+   * Finds visible methods matching the given signature.
    */
-  public Iterator<MethodDecl> TypeDecl.methodsIterator() {
-    return new Iterator<MethodDecl>() {
-      private Iterator<SimpleSet<MethodDecl>> outer = methodsSignatureMap().values().iterator();
-      private Iterator inner = null;
-
-      @Override
-      public boolean hasNext() {
-        if ((inner == null || !inner.hasNext()) && outer.hasNext()) {
-          inner = outer.next().iterator();
-        }
-        return inner != null ? inner.hasNext() : false;
-      }
-
-      @Override
-      public MethodDecl next() {
-        return (MethodDecl) inner.next();
-      }
-
-      @Override
-      public void remove() {
-        throw new UnsupportedOperationException();
-      }
-    };
-  }
-
   syn SimpleSet<MethodDecl> TypeDecl.methodsSignature(String signature) {
     SimpleSet<MethodDecl> result = methodsSignatureMap().get(signature);
     if (result != null) {
@@ -658,48 +629,66 @@ aspect MemberMethods {
   }
 
   /**
-   * Map method signatures to sets of method declarations
-   * for this type.
+   * Finds all visible methods for this type (includes inherited methods).
    *
-   * <p>Includes all supertype method declarations.
+   * <p>Shadowed declarations are not included in the result.
    */
-  syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.methodsSignatureMap() =
-      localMethodsSignatureMap();
+  syn lazy java.util.List<MethodDecl> TypeDecl.methods() = localMethods();
 
-  eq ClassDecl.methodsSignatureMap() {
+  eq ClassDecl.methods() {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>(localMethods());
     if (hasSuperclass()) {
-      for (Iterator<MethodDecl> iter = superclass().methodsIterator(); iter.hasNext(); ) {
-        MethodDecl m = iter.next();
-        if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-          putSimpleSetElement(map, m.signature(), m);
+      for (MethodDecl m : superclass().methods()) {
+        if (!m.isPrivate()
+            && m.accessibleFrom(this)
+            && !localMap.containsKey(m.signature())) {
+          // Accessible and not shadowed.
+          methods.add(m);
         }
       }
     }
     for (MethodDecl m : interfacesMethods()) {
-      if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-        if (allMethodsAbstract((SimpleSet<MethodDecl>) map.get(m.signature()))) {
-          putSimpleSetElement(map, m.signature(), m);
-        }
+      // TODO(joqvist): is it possible to simplify this?
+      if (m.accessibleFrom(this)
+          && !localMap.containsKey(m.signature())
+          && allMethodsAbstract(methods, m.signature())) {
+        methods.add(m);
       }
     }
-    return map;
+    return methods;
   }
 
-  eq InterfaceDecl.methodsSignatureMap() {
+  eq InterfaceDecl.methods() {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>(localMethods());
     for (MethodDecl m : interfacesMethods()) {
-      if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-        putSimpleSetElement(map, m.signature(), m);
+      if (m.accessibleFrom(this)
+          && !localMap.containsKey(m.signature())) {
+        // Accessible and not shadowed.
+        methods.add(m);
       }
     }
-    for (Iterator<MethodDecl> iter = typeObject().methodsIterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
-      if (m.isPublic() && !map.containsKey(m.signature())) {
-        putSimpleSetElement(map, m.signature(), m);
+    for (MethodDecl m : typeObject().methods()) {
+      // TODO(joqvist): is it possible to simplify this?
+      if (m.isPublic()
+          && !containsSignature(methods, m.signature())) {
+        methods.add(m);
       }
+    }
+    return methods;
+  }
+
+  /**
+   * Map method signatures to sets of visible method declarations
+   * for this type.
+   *
+   * <p>Includes inherited method declarations from supertypes.
+   */
+  syn lazy Map<String, SimpleSet<MethodDecl>> TypeDecl.methodsSignatureMap() {
+    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
+    for (MethodDecl m : methods()) {
+      putSimpleSetElement(map, m.signature(), m);
     }
     return map;
   }
@@ -717,19 +706,27 @@ aspect MemberMethods {
   }
 
   /**
-   * Utility method to determine if all method declarations in a set
-   * are abstract declarations.
+   * Test if all methods in the collection with the given signature are abstract.
    */
-  protected boolean TypeDecl.allMethodsAbstract(SimpleSet<MethodDecl> methods) {
-    if (methods == null) {
-      return true;
-    }
+  protected boolean TypeDecl.allMethodsAbstract(Collection<MethodDecl> methods, String signature) {
     for (MethodDecl method : methods) {
-      if (!method.isAbstract()) {
+      if (!method.isAbstract() && method.signature().equals(signature)) {
         return false;
       }
     }
     return true;
+  }
+
+  /**
+   * Test if the method collection contains a method with the given signature.
+   */
+  protected boolean TypeDecl.containsSignature(Collection<MethodDecl> methods, String signature) {
+    for (MethodDecl method : methods) {
+      if (method.signature().equals(signature)) {
+        return true;
+      }
+    }
+    return false;
   }
 }
 

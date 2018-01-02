@@ -1189,8 +1189,7 @@ aspect MethodSignature18 {
 
   syn lazy boolean InterfaceDecl.hasOverridingMethodInSuper(MethodDecl m) {
     for (InterfaceDecl iface : superInterfaces()) {
-      for (Iterator iter = iface.methodsIterator(); iter.hasNext(); ) {
-        MethodDecl superMethod = (MethodDecl) iter.next();
+      for (MethodDecl superMethod : iface.methods()) {
         if (m != superMethod && superMethod.overrides(m)) {
           return true;
         }
@@ -1207,8 +1206,7 @@ aspect MethodSignature18 {
 
     }
     if (hasSuperclass()) {
-      for (Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
-        MethodDecl superMethod = (MethodDecl) iter.next();
+      for (MethodDecl superMethod : superclass().methods()) {
         if (m != superMethod && superMethod.overrides(m)) {
           return true;
         }
@@ -1220,50 +1218,53 @@ aspect MethodSignature18 {
 
 
   refine MethodSignature15
-  eq InterfaceDecl.methodsSignatureMap() {
+  eq InterfaceDecl.methods() {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>(localMethods());
     for (MethodDecl m : interfacesMethods()) {
-      if (!m.isStatic() && m.accessibleFrom(this)
+      if (!m.isStatic()
+          && m.accessibleFrom(this)
           && !localMap.containsKey(m.signature())
           && !hasOverridingMethodInSuper(m)) {
-        putSimpleSetElement(map, m.signature(), m);
+        methods.add(m);
       }
     }
-    for (Iterator<MethodDecl> iter = typeObject().methodsIterator(); iter.hasNext(); ) {
-      MethodDecl m = iter.next();
-      if (m.isPublic() && !map.containsKey(m.signature())) {
-        putSimpleSetElement(map, m.signature(), m);
+    for (MethodDecl m : typeObject().methods()) {
+      // TODO(joqvist): is it possible to simplify this?
+      if (m.isPublic()
+          && !containsSignature(methods, m.signature())) {
+        methods.add(m);
       }
     }
-    return map;
+    return methods;
   }
 
   refine MethodSignature15
-  eq ClassDecl.methodsSignatureMap() {
+  eq ClassDecl.methods() {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
-    HashMap fromSuperClass = new HashMap();
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>(localMethods());
+    Set<String> fromSuperClass = new HashSet<String>();
     if (hasSuperclass()) {
-      for (Iterator<MethodDecl> iter = superclass().methodsIterator(); iter.hasNext(); ) {
-        MethodDecl m = iter.next();
-        if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-          putSimpleSetElement(map, m.signature(), m);
+      for (MethodDecl m : superclass().methods()) {
+        if (!m.isPrivate()
+            && m.accessibleFrom(this)
+            && !localMap.containsKey(m.signature())) {
+          methods.add(m);
           if (!m.isAbstract()) {
-            putSimpleSetElement(fromSuperClass, m.signature(), m);
+            fromSuperClass.add(m.signature());
           }
         }
       }
     }
     for (MethodDecl m : interfacesMethods()) {
       if (!m.isStatic()
-          && m.accessibleFrom(this) && !localMap.containsKey(m.signature())
-          && !hasOverridingMethodInSuper(m)) {
-        if (!fromSuperClass.containsKey(m.signature())) {
-          putSimpleSetElement(map, m.signature(), m);
-        }
+          && m.accessibleFrom(this)
+          && !localMap.containsKey(m.signature())
+          && !hasOverridingMethodInSuper(m)
+          && !fromSuperClass.contains(m.signature())) {
+        methods.add(m);
       }
     }
-    return map;
+    return methods;
   }
 }

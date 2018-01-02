@@ -661,53 +661,53 @@ aspect MethodSignature15 {
     return sb.toString();
   }
 
-  refine MemberMethods eq ClassDecl.methodsSignatureMap() {
+  refine MemberMethods eq ClassDecl.methods() {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>(localMethods());
     if (hasSuperclass()) {
-      for (Iterator iter = superclass().methodsIterator(); iter.hasNext(); ) {
-        MethodDecl m = (MethodDecl) iter.next();
-        if (!m.isPrivate() && m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-          if (!(m instanceof MethodDeclSubstituted)
-              || !localMap.containsKey(m.sourceMethodDecl().signature())) {
-            putSimpleSetElement(map, m.signature(), m);
-          }
+      for (MethodDecl m : superclass().methods()) {
+        if (!m.isPrivate()
+            && m.accessibleFrom(this)
+            && !localMap.containsKey(m.signature())
+            && (!(m instanceof MethodDeclSubstituted)
+                || !localMap.containsKey(m.sourceMethodDecl().signature()))) {
+          methods.add(m);
         }
       }
     }
     for (MethodDecl m : interfacesMethods()) {
-      if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-        if (!(m instanceof MethodDeclSubstituted)
-            || !localMap.containsKey(m.sourceMethodDecl().signature())) {
-          if (allMethodsAbstract(map.get(m.signature()))
-              && (!(m instanceof MethodDeclSubstituted)
-                  || allMethodsAbstract(map.get(m.sourceMethodDecl().signature())))) {
-            putSimpleSetElement(map, m.signature(), m);
-          }
-        }
+      if (m.accessibleFrom(this)
+          && !localMap.containsKey(m.signature())
+          && (!(m instanceof MethodDeclSubstituted)
+              || !localMap.containsKey(m.sourceMethodDecl().signature()))
+          && allMethodsAbstract(methods, m.signature())
+          && (!(m instanceof MethodDeclSubstituted)
+              || allMethodsAbstract(methods, m.sourceMethodDecl().signature()))) {
+        methods.add(m);
       }
     }
-    return map;
+    return methods;
   }
 
-  refine MemberMethods eq InterfaceDecl.methodsSignatureMap() {
+  refine MemberMethods eq InterfaceDecl.methods() {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>(localMap);
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>(localMethods());
     for (MethodDecl m : interfacesMethods()) {
-      if (m.accessibleFrom(this) && !localMap.containsKey(m.signature())) {
-        if (!(m instanceof MethodDeclSubstituted)
-            || !localMap.containsKey(m.sourceMethodDecl().signature())) {
-          putSimpleSetElement(map, m.signature(), m);
-        }
+      if (m.accessibleFrom(this)
+          && !localMap.containsKey(m.signature())
+          && (!(m instanceof MethodDeclSubstituted)
+              || !localMap.containsKey(m.sourceMethodDecl().signature()))) {
+        methods.add(m);
       }
     }
-    for (Iterator iter = typeObject().methodsIterator(); iter.hasNext(); ) {
-      MethodDecl m = (MethodDecl) iter.next();
-      if (m.isPublic() && !map.containsKey(m.signature())) {
-        putSimpleSetElement(map, m.signature(), m);
+    for (MethodDecl m : typeObject().methods()) {
+      // TODO(joqvist): is it possible to simplify this?
+      if (m.isPublic()
+          && !containsSignature(methods, m.signature())) {
+        methods.add(m);
       }
     }
-    return map;
+    return methods;
   }
 
   eq ParTypeDecl.unimplementedMethods() {
