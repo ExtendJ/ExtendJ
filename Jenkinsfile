@@ -14,6 +14,10 @@ node {
 		sh "./gradlew clean"
 	}
 
+	stage('ExtendJ4') {
+		sh "./gradlew :java4:jar"
+	}
+
 	stage('ExtendJ5') {
 		sh "./gradlew :java5:jar"
 	}
