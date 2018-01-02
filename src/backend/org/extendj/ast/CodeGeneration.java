@@ -40,6 +40,7 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 
 /**
  * Helper class to generate bytecode instructions.
@@ -1960,6 +1961,14 @@ public class CodeGeneration {
     computeStackFrames();
     bytes.write(out);
   }
+
+  /**
+   * Prints bytecodes disassembly to a print stream.
+   */
+  public void printBytecodes(PrintStream out) throws IOException {
+    BytecodeDebug.printBytecodes(out, bytes.toArray());
+  }
+
 
   /**
    * Close current basic block.
