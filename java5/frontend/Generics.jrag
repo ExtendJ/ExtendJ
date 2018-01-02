@@ -515,9 +515,7 @@ aspect GenericsTypeCheck {
 
     // Check if a method has same signature as another in a supertype but does not override it.
     Map<String, SimpleSet<MethodDecl>> map = erasedAncestorMethodsMap();
-    for (Iterator iter1 = localMethodsIterator(); iter1.hasNext(); ) {
-      MethodDecl localMethod = (MethodDecl) iter1.next();
-
+    for (MethodDecl localMethod : localMethods()) {
       String signature = localMethod.signature();
 
       SimpleSet<MethodDecl> set = map.get(signature);
@@ -541,8 +539,7 @@ aspect GenericsTypeCheck {
     Map<String, SimpleSet<MethodDecl>> localMap = localMethodsSignatureMap();
     Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
     if (hasSuperclass()) {
-      for (Iterator<MethodDecl> iter = superclass().localMethodsIterator(); iter.hasNext(); ) {
-        MethodDecl m = iter.next();
+      for (MethodDecl m : superclass().localMethods()) {
         if (!m.isPrivate() && m.accessibleFrom(this) && m.erasedMethod() != m) {
           // Map erased signature to substituted method.
           putSimpleSetElement(map, m.erasedMethod().signature(), m);
@@ -1342,21 +1339,24 @@ aspect LookupParTypeDecl {
   eq WildcardSuperType.usesTypeVariable() = getAccess().type().usesTypeVariable();
   eq ArrayDecl.usesTypeVariable() = elementType().usesTypeVariable();
 
-  syn lazy Map<String, SimpleSet<MethodDecl>> MemberSubstitutor.localMethodsSignatureMap() {
-    Map<String, SimpleSet<MethodDecl>> map = new HashMap<String, SimpleSet<MethodDecl>>();
-    for (Iterator<MethodDecl> iter = original().localMethodsIterator(); iter.hasNext(); ) {
-      MethodDecl decl = iter.next();
-      if (!decl.isSubstitutable()) {
-        putSimpleSetElement(map, decl.signature(), decl);
+  /**
+   * Substituted local methods.
+   *
+   * <p>Includes all non-substitutable original methods plus all substituted methods.
+   */
+  syn lazy java.util.List<MethodDecl> MemberSubstitutor.localMethods() {
+    ArrayList<MethodDecl> methods = new ArrayList<MethodDecl>();
+    for (MethodDecl m : original().localMethods()) {
+      if (!m.isSubstitutable()) {
+        methods.add(m);
       }
     }
     for (BodyDecl decl : getBodyDeclList()) {
       if (decl instanceof MethodDecl) {
-        MethodDecl method = (MethodDecl) decl;
-        putSimpleSetElement(map, method.signature(), method);
+        methods.add((MethodDecl) decl);
       }
     }
-    return map;
+    return methods;
   }
 
   syn lazy SimpleSet<Variable> MemberSubstitutor.localFields(String name) {
