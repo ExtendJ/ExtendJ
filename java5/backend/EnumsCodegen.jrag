@@ -68,8 +68,13 @@ aspect EnumsCodegen {
   eq ReferenceType.fieldDeclarations() {
     Collection<FieldDeclarator> fields = new ArrayList<FieldDeclarator>(refined());
     // Add enum index fields:
+    Set<String> enumTypes = new HashSet<String>();
     for (SwitchStmt enumSwitch : enumSwitchStatements()) {
-      fields.add(enumArrayDecl(enumSwitch));
+      TypeDecl enumType = enumSwitch.getExpr().type();
+      if (enumTypes.add(enumType.fullName())) {
+        // This is a new enum type.
+        fields.add(enumArrayDecl(enumType));
+      }
     }
     return fields;
   }
@@ -88,8 +93,13 @@ aspect EnumsCodegen {
     }
     // Add enum index methods:
     // TODO(joqvist): generate an anonymous class with initializer instead.
+    Set<String> enumTypes = new HashSet<String>();
     for (SwitchStmt enumSwitch : enumSwitchStatements()) {
-      methods.add(createEnumMethod(enumSwitch));
+      TypeDecl enumType = enumSwitch.getExpr().type();
+      if (enumTypes.add(enumType.fullName())) {
+        // This is a new enum type.
+        methods.add(createEnumMethod(enumType));
+      }
     }
     // Add bridge methods:
     methods.addAll(bridgeMethods());
@@ -124,7 +134,8 @@ aspect EnumsCodegen {
    * and compute the jump target.
    */
   syn nta Expr SwitchStmt.enumIndexExpr() =
-      hostType().createEnumMethod(this).createBoundAccess(new List())
+      hostType().createEnumMethod(getExpr().type())
+          .createBoundAccess(new List())
           .qualifiesAccess(
               new ArrayAccess(((Expr) getExpr().treeCopyNoTransform())
                   .qualifiesAccess(new MethodAccess("ordinal", new List()))));
@@ -141,15 +152,24 @@ aspect EnumsCodegen {
   }
 
   /**
-   * Should only be evaluated on switch statements that have enum constants as
-   * the switch cases.
+   * Builds a mapping from enum constants to switch indices for all switch
+   * statements that use the same enum type in this class.
    */
-  syn lazy Map<EnumConstant, Integer> SwitchStmt.enumIndices() {
+  syn lazy Map<EnumConstant, Integer> TypeDecl.enumIndices(TypeDecl enumType) {
     Map<EnumConstant, Integer> indexMap = new HashMap<EnumConstant, Integer>();
     int next = 1;
-    for (ConstCase cc : constCases()) {
-      indexMap.put((EnumConstant) cc.getValue().varDecl(), next);
-      next += 1;
+
+    // Find all switch statements in this class that use the same enum type:
+    for (SwitchStmt enumSwitch : enumSwitchStatements()) {
+      if (enumSwitch.getExpr().type() == enumType) {
+        for (ConstCase cc : enumSwitch.constCases()) {
+          EnumConstant constant = (EnumConstant) cc.getValue().varDecl();
+          if (!indexMap.containsKey(constant)) {
+            indexMap.put(constant, next);
+            next += 1;
+          }
+        }
+      }
     }
     return indexMap;
   }
@@ -158,23 +178,22 @@ aspect EnumsCodegen {
    * Generates a method to initialize the enum switch index map.
    * @param enumSwitch the switch statement to generate an enum index map for.
    */
-  syn nta MethodDecl TypeDecl.createEnumMethod(SwitchStmt enumSwitch) {
-    TypeDecl enumDecl = enumSwitch.getExpr().type();
+  syn nta MethodDecl TypeDecl.createEnumMethod(TypeDecl enumType) {
     List<Stmt> stmts = new List<Stmt>();
     stmts.add(
         new IfStmt(
-            new EQExpr(enumArrayDecl(enumSwitch).createBoundAccess(), new NullLiteral("null")),
+            new EQExpr(enumArrayDecl(enumType).createBoundAccess(), new NullLiteral("null")),
             AssignExpr.asStmt(
-                enumArrayDecl(enumSwitch).createBoundAccess(),
+                enumArrayDecl(enumType).createBoundAccess(),
                 new ArrayCreationExpr(
                     new ArrayTypeWithSizeAccess(
                         typeInt().createQualifiedAccess(),
-                        enumDecl.createQualifiedAccess()
+                        enumType.createQualifiedAccess()
                             .qualifiesAccess(new MethodAccess("values", new List()))
                             .qualifiesAccess(new VarAccess("length"))),
                     new Opt())),
             new Opt()));
-    for (Map.Entry<EnumConstant, Integer> entry : enumSwitch.enumIndices().entrySet()) {
+    for (Map.Entry<EnumConstant, Integer> entry : enumIndices(enumType).entrySet()) {
       EnumConstant enumConstant = entry.getKey();
       int index = entry.getValue();
       stmts.add(
@@ -182,7 +201,8 @@ aspect EnumsCodegen {
               new Block(
                 new List().add(
                   AssignExpr.asStmt(
-                    enumArrayDecl(enumSwitch).createBoundAccess()
+                    enumArrayDecl(enumType)
+                        .createBoundAccess()
                         .qualifiesAccess(new ArrayAccess(enumConstant.createBoundAccess()
                             .qualifiesAccess(new MethodAccess("ordinal", new List())))),
                     Literal.buildIntegerLiteral(index)))),
@@ -193,27 +213,28 @@ aspect EnumsCodegen {
                   new Block(new List<Stmt>()))),
               new Opt()));
     }
-    stmts.add(new ReturnStmt(enumArrayDecl(enumSwitch).createBoundAccess()));
+    stmts.add(new ReturnStmt(enumArrayDecl(enumType).createBoundAccess()));
     return new MethodDecl(
         new Modifiers(new List<Modifier>(
             new Modifier("static"),
             new Modifier("final"),
             new Modifier("private"))),
         typeInt().arrayType().createQualifiedAccess(),
-        "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
+        "$SwitchMap$" + enumType.fullName().replace('.', '$'),
         new List(),
         new List(),
         new Opt<Block>(new Block(stmts)));
   }
 
-  syn FieldDeclarator TypeDecl.enumArrayDecl(SwitchStmt enumSwitch) =
-      createEnumArrayField(enumSwitch).getDeclarator(0);
+  syn FieldDeclarator TypeDecl.enumArrayDecl(TypeDecl enumType) =
+      createEnumArrayField(enumType).getDeclarator(0);
 
-  /** Inserts a new field declaration in this type to store enum switch indices. */
-  syn nta FieldDecl TypeDecl.createEnumArrayField(SwitchStmt enumSwitch) {
-    TypeDecl enumDecl = enumSwitch.getExpr().type();
+  /**
+   * Creates the field declaration for the enum switch map.
+   */
+  syn nta FieldDecl TypeDecl.createEnumArrayField(TypeDecl enumType) {
     FieldDeclarator decl = new FieldDeclarator(
-        "$SwitchMap$" + enumDecl.fullName().replace('.', '$'),
+        "$SwitchMap$" + enumType.fullName().replace('.', '$'),
         new List<Dims>(),
         new Opt<Expr>());
     return new FieldDecl(
