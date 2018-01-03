@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2017, Jesper Öqvist
+ *               2017-2018, Jesper Öqvist
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -49,10 +49,11 @@ aspect EnhancedForToBytecode {
       gen.variableScopeLabel();
 
   public void EnhancedForStmt.createBCode(CodeGeneration gen) {
-    VariableDeclarator decl = getVariableDecl();
-    gen.addLocalVariableEntryAtCurrentPC(decl.name(), decl.type(),
+    VariableDeclarator var = getVariableDecl();
+    gen.addLocalVariableEntryAtCurrentPC(var.name(), var.type(),
         extraLocalIndex(), variableScopeEndLabel(gen));
-    TypeDecl exprType = getExpr().type();
+    TypeDecl exprType = getExpr().erasedType();
+    TypeDecl targetType = getTypeAccess().type();
     if (exprType.isArrayDecl()) {
       getExpr().createBCode(gen);
       gen.ASTORE(extraLocalIndex(), exprType);
@@ -66,8 +67,8 @@ aspect EnhancedForToBytecode {
       gen.ALOAD(extraLocalIndex(), exprType);
       gen.ILOAD(extraLocalIndex() + 1);
       exprType.componentType().emitArrayLoad(gen);
-      exprType.componentType().emitCastTo(gen, getTypeAccess().type());
-      getTypeAccess().type().emitStoreLocal(gen, getVariableDecl().localNum());
+      exprType.componentType().emitCastTo(gen, targetType);
+      targetType.emitStoreLocal(gen, var.localNum());
       getStmt().createBCode(gen);
       gen.addLabel(update_label());
       gen.IINC(extraLocalIndex() + 1, 1);
@@ -88,14 +89,13 @@ aspect EnhancedForToBytecode {
       gen.IFEQ(end_label());
       gen.ALOAD(extraLocalIndex(), typeIterator);
       nextMethod.emitInvokeMethod(gen, typeIterator);
-      VariableDeclarator obj = getVariableDecl();
-      if (!obj.type().boxed().isUnknown()) {
-        gen.CHECKCAST(obj.type().boxed());
-        obj.type().boxed().emitCastTo(gen, obj.type());
-        obj.type().emitStoreLocal(gen, obj.localNum());
+      if (!targetType.boxed().isUnknown()) {
+        gen.CHECKCAST(targetType.boxed());
+        targetType.boxed().emitCastTo(gen, targetType);
+        targetType.emitStoreLocal(gen, var.localNum());
       } else {
-        gen.CHECKCAST(obj.type());
-        gen.ASTORE(obj.localNum(), obj.type());
+        gen.CHECKCAST(targetType);
+        gen.ASTORE(var.localNum(), targetType);
       }
       getStmt().createBCode(gen);
       gen.addLabel(update_label());
