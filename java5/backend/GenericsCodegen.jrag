@@ -245,29 +245,23 @@ aspect GenericsCodegen {
   }
 
   /**
-   * Collects bridge methods that should be generated for polymorphism
-   * to work correctly with raw types.
+   * Collects bridge methods that should be generated for methods in this type.
    *
-   * <p>Note: this collection attribute does not have CompilationUnit as the
-   * root because sometimes we need to collect the bridge methods of an nested
-   * anonymous class in an NTA, and that fails if we use CompilationUnit as the
-   * root, since the anonymous class NTA is skipped in the collection survey.
-   * This is relevant for the Java 8 extension.
+   * <p>Bridge methods are synthetic methods that are needed when a subtype
+   * overrides a method with a different return type than the overriden method
+   * return type. Bridge methods are also needed for polymorphism to work correctly
+   * with erased return types.
+   *
+   * <p>Bridge methods are not needed for Java 4 which does not allow overriding a
+   * method with a new return type.
    */
-  coll HashSet<MethodDecl> TypeDecl.bridgeMethods() root TypeDecl;
-
-  TypeDecl contributes
-      each localBridgeMethods()
-      to TypeDecl.bridgeMethods()
-      for this;
-
-  syn lazy Collection<MethodDecl> TypeDecl.localBridgeMethods() {
+  syn lazy Collection<MethodDecl> TypeDecl.bridgeMethods() {
     Collection<MethodDecl> bridgeMethods = new LinkedList<MethodDecl>();
     for (Map.Entry<String, SimpleSet<MethodDecl>> entry : methodsSignatureMap().entrySet()) {
       String signature = entry.getKey();
       SimpleSet<MethodDecl> methods = entry.getValue();
       for (MethodDecl method : methods) {
-        if (!method.isStatic() && !method.isAbstract() && !method.isFinal()) {
+        if (!method.isStatic() && !method.isAbstract()) {
           bridgeMethods.addAll(bridgeMethods(method));
           break;
         }
