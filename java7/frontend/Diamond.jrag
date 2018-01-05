@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2011-2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011-2018, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -48,6 +48,18 @@ aspect Diamond {
   public void StandInMethodDecl.checkUnreachableStmt() { }
   public void StandInMethodDecl.definiteAssignment() { }
   public void StandInMethodDecl.checkModifiers() { }
+
+  /**
+   * Creates a synthetic method access that is used to perform type inference
+   * for the diamond access.
+   */
+  syn nta MethodAccess DiamondAccess.methodAccess() =
+      new MethodAccess("#" + getTypeAccess().type().name(),
+          getClassInstanceExpr().getArgList().treeCopyNoTransform());
+
+  // This is to not make the synthetic method access qualified by the diamond access:
+  eq DiamondAccess.methodAccess().lookupType(String name) =
+      unqualifiedScope().lookupType(name);
 
   /**
    * If this DiamondAccess node constitutes a legal use of
@@ -120,38 +132,14 @@ aspect Diamond {
    * arguments of the generic type.
    */
   protected SimpleSet<MethodDecl> DiamondAccess.chooseConstructor() {
-    ClassInstanceExpr instanceExpr = getClassInstanceExpr();
     TypeDecl type = getTypeAccess().type();
 
-    assert instanceExpr != null;
     assert type instanceof ParClassDecl;
 
     GenericClassDecl genericType = (GenericClassDecl) ((ParClassDecl) type).genericDecl();
 
-    List<StandInMethodDecl> placeholderMethods = genericType.getStandInMethodList();
-
-    SimpleSet<MethodDecl> maxSpecific = emptySet();
-    Collection<MethodDecl> potentiallyApplicable = potentiallyApplicable(placeholderMethods);
-    for (MethodDecl candidate : potentiallyApplicable) {
-      if (applicableBySubtyping(instanceExpr, candidate)) {
-        maxSpecific = mostSpecific(maxSpecific, candidate);
-      }
-    }
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl candidate : potentiallyApplicable) {
-        if (applicableByMethodInvocationConversion(instanceExpr, candidate)) {
-          maxSpecific = mostSpecific(maxSpecific, candidate);
-        }
-      }
-    }
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl candidate : potentiallyApplicable) {
-        if (candidate.isVariableArity() && applicableByVariableArity(instanceExpr, candidate)) {
-          maxSpecific = mostSpecific(maxSpecific, candidate);
-        }
-      }
-    }
-    return maxSpecific;
+    List<MethodDecl> placeholderMethods = genericType.getStandInMethodList();
+    return methodAccess().maxSpecific(placeholderMethods);
   }
 
   /**
@@ -161,8 +149,8 @@ aspect Diamond {
    *
    * @return list of stand-in methods
    */
-  syn nta List<StandInMethodDecl> GenericClassDecl.getStandInMethodList() {
-    List<StandInMethodDecl> methods = new List<StandInMethodDecl>();
+  syn nta List<MethodDecl> GenericClassDecl.getStandInMethodList() {
+    List<MethodDecl> methods = new List<MethodDecl>();
     List<TypeVariable> typeParams = getTypeParameterList();
     List<TypeVariable> classTypeVars = new List<TypeVariable>();
     List<Access> typeArgs = new List<Access>();
@@ -248,113 +236,6 @@ aspect Diamond {
       methods.add(standInMethod);
     }
     return methods;
-  }
-
-  /**
-   * Select potentially applicable method declarations
-   * from a set of candidates.
-   * Type inference is applied to the (potentially) applicable candidates.
-   */
-  protected Collection<MethodDecl> DiamondAccess.potentiallyApplicable(
-      List<StandInMethodDecl> candidates) {
-    Collection<MethodDecl> potentiallyApplicable = new LinkedList<MethodDecl>();
-    for (GenericMethodDecl candidate : candidates) {
-      if (potentiallyApplicable(candidate)) {
-        MethodDecl decl = candidate.lookupParMethodDecl(
-            inferTypeArguments(
-                candidate.type(),
-                candidate.getParameterList(),
-                getClassInstanceExpr().getArgList(),
-                candidate.getTypeParameterList()));
-        potentiallyApplicable.add(decl);
-      }
-    }
-    return potentiallyApplicable;
-  }
-
-  /**
-   * Test if a method is applicable for this diamond access.
-   * @param candidate candidate method
-   * @return false if the candidate method is not applicable.
-   */
-  protected boolean DiamondAccess.potentiallyApplicable(
-      GenericMethodDecl candidate) {
-    if (candidate.isVariableArity() && !(getClassInstanceExpr().arity() >= candidate.arity()-1)) {
-      return false;
-    }
-    if (!candidate.isVariableArity() && !(getClassInstanceExpr().arity() == candidate.arity())) {
-      return false;
-    }
-
-    java.util.List<TypeDecl> typeArgs = inferTypeArguments(
-        candidate.type(),
-        candidate.getParameterList(),
-        getClassInstanceExpr().getArgList(),
-        candidate.getTypeParameterList());
-    if (typeArgs.size() != 0) {
-      if (candidate.getNumTypeParameter() != typeArgs.size()) {
-        return false;
-      }
-      ParMethodDecl parMethod = candidate.lookupParMethodDecl(typeArgs);
-      for (int i = 0; i < candidate.getNumTypeParameter(); i++) {
-        if (!typeArgs.get(i).withinBounds(parMethod.getTypeParameter(i))) {
-          return false;
-        }
-      }
-    }
-    return true;
-  }
-
-  /**
-   * @return true if the method is applicable by subtyping
-   */
-  protected boolean DiamondAccess.applicableBySubtyping(ClassInstanceExpr expr, MethodDecl method) {
-    if (method.getNumParameter() != expr.getNumArg()) {
-      return false;
-    }
-    for (int i = 0; i < method.getNumParameter(); i++) {
-      if (!expr.getArg(i).type().instanceOf(method.getParameter(i).type())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * @return {@code true} if the candidate method is applicable by method invocation conversion
-   */
-  protected boolean DiamondAccess.applicableByMethodInvocationConversion(
-      ClassInstanceExpr expr, MethodDecl method) {
-    if (method.getNumParameter() != expr.getNumArg()) {
-      return false;
-    }
-    for (int i = 0; i < method.getNumParameter(); i++) {
-      if (!expr.getArg(i).type().methodInvocationConversionTo(
-          method.getParameter(i).type())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * @return {@code true} if the candidate method is applicable by variable arity
-   */
-  protected boolean DiamondAccess.applicableByVariableArity(
-      ClassInstanceExpr expr, MethodDecl method) {
-    for (int i = 0; i < method.getNumParameter() - 1; i++) {
-      if (!expr.getArg(i).type().methodInvocationConversionTo(
-          method.getParameter(i).type())) {
-        return false;
-      }
-    }
-    for (int i = method.getNumParameter() - 1; i < expr.getNumArg(); i++) {
-      if (!expr.getArg(i).type().methodInvocationConversionTo(
-          method.lastParameter().type().componentType())) {
-        return false;
-      }
-    }
-    return true;
   }
 
   /**
