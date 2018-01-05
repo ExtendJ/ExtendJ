@@ -361,6 +361,14 @@ aspect GenericsCodegen {
     return attributes;
   }
 
+  refine AnnotationsCodegen eq ConstructorDecl.attributes() {
+    Collection<Attribute> attributes = refined();
+    if (needsSignatureAttribute()) {
+      attributes.add(new SignatureAttribute(hostType().constantPool(), constructorTypeSignature()));
+    }
+    return attributes;
+  }
+
   refine AnnotationsCodegen eq FieldDeclarator.attributes() {
     Collection<Attribute> attributes = refined();
     if (needsSignatureAttribute()) {
@@ -564,6 +572,35 @@ aspect GenericsCodegen {
     }
     buf.append(">");
     buf.append(super.methodTypeSignature());
+    return buf.toString();
+  }
+
+  /**
+   * This creates the type signature needed for the bytecode
+   * signature attribute.
+   */
+  syn String ConstructorDecl.constructorTypeSignature() {
+    StringBuilder buf = new StringBuilder();
+    buf.append("(");
+    for (int i = 0; i < getNumParameter(); i++) {
+      buf.append(getParameter(i).type().classTypeSignature());
+    }
+    buf.append(")V");
+    for (int i = 0; i < getNumException(); i++) {
+      buf.append("^" + getException(i).type().classTypeSignature());
+    }
+    return buf.toString();
+  }
+
+  eq GenericConstructorDecl.constructorTypeSignature() {
+    StringBuilder buf = new StringBuilder();
+    buf.append("<");
+    for (int i = 0; i < getNumTypeParameter(); i++) {
+      TypeVariable param = getTypeParameter(i);
+      buf.append(param.getID() + ":" + param.classBound() + param.interfaceBounds());
+    }
+    buf.append(">");
+    buf.append(super.constructorTypeSignature());
     return buf.toString();
   }
 
