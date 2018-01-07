@@ -377,42 +377,41 @@ aspect CreateBCode {
 
   // Generate code for String addition assignment expression.
   public void AssignPlusExpr.createBCode(CodeGeneration gen) {
-    // TODO(joqvist): use StringBuilder instead of StringBuffer (StringBuilder is not concurrent).
     TypeDecl dest = getDest().type();
     TypeDecl source = getSource().type();
     if (dest.isString()) {
       getDest().createAssignLoadDest(gen);
 
-      // Emit new StringBuffer()
-      TypeDecl stringBuffer = lookupType("java.lang", "StringBuffer");
-      String classname = stringBuffer.constantPoolName();
+      // Create new StringBuilder instance.
+      TypeDecl builderType = lookupType("java.lang", "StringBuilder");
+      String classname = builderType.constantPoolName();
       String desc;
       int index;
       TypeDecl argumentType;
-      gen.NEW(stringBuffer);
+      gen.NEW(builderType);
       gen.DUP();
       desc = "()V";
       index = gen.constantPool().addMethodref(classname, "<init>", desc);
-      gen.INVOKESPECIAL_void(index, 1); // StringBuffer.<init>();
-      gen.initializedRef(stringBuffer);
+      gen.INVOKESPECIAL_void(index, 1); // StringBuilder.<init>()
+      gen.initializedRef(builderType);
 
       gen.SWAP();
 
-      // Emit .append().
+      // Call append(dest).
       argumentType = dest.stringPromotion();
-      desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
+      desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.INVOKEVIRTUAL(index, 2, stringBuffer);
+      gen.INVOKEVIRTUAL(index, 2, builderType);
 
       getSource().createBCode(gen);
 
-      // Typed append.
+      // Call append(source).
       argumentType = source.stringPromotion();
-      desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
+      desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.INVOKEVIRTUAL(index, 2, stringBuffer);
+      gen.INVOKEVIRTUAL(index, 2, builderType);
 
-      // Call StringBuffer.toString().
+      // Call toString().
       desc = "()" + type().typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "toString", desc);
       gen.INVOKEVIRTUAL(index, 1, lookupType("java.lang", "String"));
@@ -1108,32 +1107,31 @@ aspect CreateBCode {
     } else if (isConstant()) {
       StringLiteral.push(gen, constant().stringValue());
     } else {
-      // TODO(joqvist): use StringBuilder instead. No need for synchronization.
-      TypeDecl stringBuffer = lookupType("java.lang", "StringBuffer");
-      String classname = stringBuffer.constantPoolName();
+      TypeDecl builderType = lookupType("java.lang", "StringBuilder");
+      String classname = builderType.constantPoolName();
       String desc;
       int index;
       TypeDecl argumentType;
       if (firstStringAddPart()) {
-        gen.NEW(stringBuffer); // new StringBuffer
+        gen.NEW(builderType); // new StringBuilder()
         gen.DUP();
         desc = "()V";
         index = gen.constantPool().addMethodref(classname, "<init>", desc);
-        gen.INVOKESPECIAL_void(index, 1); // StringBuffer.<init>();
-        gen.initializedRef(stringBuffer);
+        gen.INVOKESPECIAL_void(index, 1); // StringBuilder.<init>()
+        gen.initializedRef(builderType);
         getLeftOperand().createBCode(gen);
         argumentType = getLeftOperand().type().stringPromotion();
-        desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
+        desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "append", desc);
-        gen.INVOKEVIRTUAL(index, 2, stringBuffer); // StringBuffer.append
+        gen.INVOKEVIRTUAL(index, 2, builderType); // StringBuilder.append(left)
       } else {
         getLeftOperand().createBCode(gen);
       }
       getRightOperand().createBCode(gen);
       argumentType = getRightOperand().type().stringPromotion();
-      desc = "(" + argumentType.typeDescriptor() + ")" + stringBuffer.typeDescriptor();
+      desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
       index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.INVOKEVIRTUAL(index, 2, stringBuffer);
+      gen.INVOKEVIRTUAL(index, 2, builderType);
       if (lastStringAddPart()) {
         desc = "()" + type().typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "toString", desc);
