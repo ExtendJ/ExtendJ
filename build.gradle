@@ -11,57 +11,28 @@ repositories {
 
 defaultTasks 'jar'
 
-gradle.taskGraph.whenReady { graph ->
-  def theVersion = getVersion()
-  println "Building ExtendJ version ${theVersion}"
-  version = theVersion
-  allprojects {
-    group = 'org.extendj'
-    version = theVersion
-  }
-}
-
-/** Helper function to run a command. Returns the command output if the command succeeded. */
-def tryCommand(List command, boolean failOnError = false) {
-  def out = new StringBuilder()
-  def err = new StringBuilder()
-  def proc = command.execute()
-  proc.waitForProcessOutput(out, err)
-  if (proc.exitValue()) {
-    def message = "Failed to run '${command[0]}' command (args: ${command.tail()})\n$err$out"
-    if (failOnError) {
-      throw new GradleException(message)
-    } else {
-      println "Warning: ${message}"
-    }
-    ""
+group = 'org.extendj'
+def fullVersion
+if (hasProperty('newVersion')) {
+  // A new version string should be saved.
+  def props = new Properties()
+  props['version'] = newVersion
+  props.store(file('src/res/Version.properties').newWriter(), null)
+  version = fullVersion = newVersion
+} else {
+  def proc = 'git describe'.execute(null, rootDir)
+  if  (proc.waitFor() == 0) {
+    fullVersion = proc.text.trim()
+    // Trim to get latest tag:
+    version  = (fullVersion =~ /-\d+\-g.+$/).replaceAll('')
   } else {
-    if (err) println "${err}"
-    out.toString()
+    logger.warn('No git tags found. Reading stored version string.')
+    def props = new Properties()
+    file('src/res/Version.properties').withInputStream { stream -> props.load(stream) }
+    version = fullVersion = props['version']
   }
 }
-
-/** Helper function to retrieve the current version string. */
-def getVersion() {
-  if (hasProperty('newVersion')) {
-    // A new version string should be saved.
-    Properties version = new Properties()
-    version['version'] = newVersion
-    version.store(file('src/res/Version.properties').newWriter(), null)
-    return newVersion
-  } else {
-    def output = tryCommand(['git', 'describe'])
-    if (output) {
-      // Use Git describe output.
-      output.readLines()[0]
-    } else {
-      // Git command failed. Read the previous version string instead.
-      Properties version = new Properties()
-      version.load(new FileInputStream(file('src/res/Version.properties')))
-      version['version']
-    }
-  }
-}
+println "Building ExtendJ version ${fullVersion}"
 
 subprojects {
   apply plugin: 'java'
@@ -73,6 +44,10 @@ subprojects {
   mainClassName = 'org.extendj.JavaCompiler'
 
   sourceCompatibility = targetCompatibility = '1.6'
+
+  // Copy version info from parent project.
+  group = rootProject.group
+  version = rootProject.version
 
   sourceSets {
     main.java {
@@ -114,15 +89,14 @@ subprojects {
       if (output.isFile()) {
         output.withInputStream { stream -> props.load(stream) }
       }
-      props['version'] == project.version
+      props['version'] == fullVersion
     }
 
     doLast {
       file('src/gen-res').mkdirs()
-      def versionFile = file('src/gen-res/Version.properties')
-      ant.propertyfile(file: versionFile) {
-        entry(key: 'version', value: project.version)
-      }
+      def props = new Properties()
+      props['version'] = fullVersion
+      props.store(file('src/gen-res/Version.properties').newWriter(), null)
     }
   }
 
