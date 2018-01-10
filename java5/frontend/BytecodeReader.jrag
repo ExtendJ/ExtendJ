@@ -61,30 +61,34 @@ aspect BytecodeReader {
         println("Parsing byte codes in " + name);
       }
 
-      this.outerClassName = outerClassName;
-      parseMagic();
-      int minor = parseMinor();
-      int major = parseMajor();
-      if (AbstractClassfileParser.VERBOSE) {
-        println(String.format("Classfile version: %d.%d", major, minor));
+      try {
+        this.outerClassName = outerClassName;
+        parseMagic();
+        int minor = parseMinor();
+        int major = parseMajor();
+        if (AbstractClassfileParser.VERBOSE) {
+          println(String.format("Classfile version: %d.%d", major, minor));
+        }
+        if (major > 51) {
+          // The Java 5 bytecode parser handles up to Java 7 bytecode fine.
+          error(String.format("Can not parse classfile version %d.%d."
+                + " Classfile versions up to 51.x (Java 7) are supported by"
+                + " this version of the compiler.",
+                major, minor));
+        }
+        parseConstantPool();
+        CompilationUnit cu = new CompilationUnit();
+        TypeDecl typeDecl = parseTypeDecl();
+        cu.setPackageDecl(classInfo.packageDecl());
+        cu.addTypeDecl(typeDecl);
+        parseFields(typeDecl);
+        parseMethods(typeDecl);
+        // TODO(joqvist): why is a constructor with side effects used here?
+        new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program);
+        return cu;
+      } catch (Error e) {
+        throw new IOException("Failed to parse classfile: " + name, e);
       }
-      if (major > 51) {
-        // The Java 5 bytecode parser handles up to Java 7 bytecode fine.
-        error(String.format("Can not parse classfile version %d.%d."
-              + " Classfile versions up to 51.x (Java 7) are supported by"
-              + " this version of the compiler.",
-              major, minor));
-      }
-      parseConstantPool();
-      CompilationUnit cu = new CompilationUnit();
-      TypeDecl typeDecl = parseTypeDecl();
-      cu.setPackageDecl(classInfo.packageDecl());
-      cu.addTypeDecl(typeDecl);
-      parseFields(typeDecl);
-      parseMethods(typeDecl);
-      // TODO(joqvist): why is a constructor with side effects used here?
-      new Attributes.TypeAttributes(this, typeDecl, outerTypeDecl, program);
-      return cu;
     }
 
     public TypeDecl parseTypeDecl() throws IOException {
