@@ -96,6 +96,10 @@ public class CodeGeneration {
     public int handlerPC() {
       return addressOf(handler_lbl);
     }
+
+    @Override public String toString() {
+      return String.format("%d..%d => L%d", start_pc, end_pc, handler_lbl);
+    }
   }
 
   static class LineNumberEntry {
@@ -2101,6 +2105,9 @@ public class CodeGeneration {
         delete(bb);
         if (deleted == null) {
           deleted = bb;
+        } else {
+          deleted.end = bb.end;
+          bb = deleted;
         }
         // This block may be at the end of an exception range. If that is the case,
         // the exception range needs to be updated to exclude this block. This may
