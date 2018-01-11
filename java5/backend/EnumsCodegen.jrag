@@ -254,6 +254,25 @@ aspect EnumsCodegen {
   // Overriding to generate enum constant initializers and $VALUES initializer.
   @Override
   protected void EnumDecl.generateBytecodes(CodeGeneration gen) {
+    // The initialization order is important here.
+
+    // First initialize the enum constants only:
+    for (BodyDecl b : getBodyDeclList()) {
+      if (b instanceof EnumConstant) {
+        EnumConstant cons = (EnumConstant) b;
+        cons.emitInitializerBCode(gen);
+        cons.emitStoreField(gen, this);
+      }
+    }
+
+    // Now we must generate the static initializer for the $VALUES field, which
+    // depends on the enum constant initializers:
+    valuesFieldDeclarator().emitInitializerBCode(gen);
+    valuesFieldDeclarator().emitStoreField(gen, this);
+
+    // Now we generate initializers for everything else.
+    // It is important that the $VALUES field is already generated, as the
+    // following initializers may depend on its value.
     for (BodyDecl b : getBodyDeclList()) {
       if (b instanceof FieldDecl) {
         FieldDecl field = (FieldDecl) b;
@@ -267,15 +286,8 @@ aspect EnumsCodegen {
         }
       } else if (b instanceof StaticInitializer) {
         b.createBCode(gen);
-      } else if (b instanceof EnumConstant) {
-        EnumConstant cons = (EnumConstant) b;
-        cons.emitInitializerBCode(gen);
-        cons.emitStoreField(gen, this);
       }
     }
-    // Generate the static initializer for the $VALUES field:
-    valuesFieldDeclarator().emitInitializerBCode(gen);
-    valuesFieldDeclarator().emitStoreField(gen, this);
     gen.RETURN();
   }
 
