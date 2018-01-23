@@ -20,13 +20,20 @@ if (hasProperty('newVersion')) {
   props.store(file('src/res/Version.properties').newWriter(), null)
   version = fullVersion = newVersion
 } else {
-  def proc = 'git describe'.execute(null, rootDir)
-  if  (proc.waitFor() == 0) {
-    fullVersion = proc.text.trim()
-    // Trim to get latest tag:
-    version  = (fullVersion =~ /-\d+\-g.+$/).replaceAll('')
-  } else {
-    logger.warn('No git tags found. Reading stored version string.')
+  try {
+    def proc = 'git describe'.execute(null, rootDir)
+    if  (proc.waitFor() == 0) {
+      fullVersion = proc.text.trim()
+      // Trim to get latest tag:
+      version = (fullVersion =~ /-\d+\-g.+$/).replaceAll('')
+    } else {
+      logger.warn('No git tags found.')
+    }
+  } catch (IOException e) {
+    logger.warn("Failded to run git describe (${e.getMessage()}).")
+  }
+  if (!fullVersion?.trim()) {
+    logger.warn('Reading stored version string.')
     def props = new Properties()
     file('src/res/Version.properties').withInputStream { stream -> props.load(stream) }
     version = fullVersion = props['version']
