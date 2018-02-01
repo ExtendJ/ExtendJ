@@ -283,13 +283,31 @@ aspect VariableScope {
   }
 
   /**
-   * Remove fields that are not accessible when using this Expr as qualifier
+   * Remove fields that are not accessible when using this Expr as qualifier.
+   *
    * @return a set containing the accessible fields
    */
   public SimpleSet<Variable> Expr.keepAccessibleFields(SimpleSet<Variable> fields) {
+    return hostType().keepAccessibleFields(type(), fields);
+  }
+
+  public SimpleSet<Variable> SuperAccess.keepAccessibleFields(SimpleSet<Variable> fields) {
+    return hostType().keepAccessibleFields(hostType(), fields);
+  }
+
+  /**
+   * Remove fields that are not accessible when accessed by the given qualifier type
+   * from this type.
+   *
+   * @param qualifier the qualifying expression type.
+   * @param fields the visible fields.
+   * @return a set containing the accessible fields.
+   */
+  public SimpleSet<Variable> TypeDecl.keepAccessibleFields(TypeDecl qualifier,
+      SimpleSet<Variable> fields) {
     SimpleSet<Variable> newSet = emptySet();
     for (Variable f : fields) {
-      if (mayAccess(f)) {
+      if (mayAccess(qualifier, f)) {
         newSet = newSet.add(f);
       }
     }
@@ -307,38 +325,51 @@ aspect VariableScope {
   }
 
   /**
-   * @see "JLS $6.6.2.1"
+   * Test if this expression may access the given field.
+   *
+   * @see <a href="https://docs.oracle.com/javase/specs/jls/se6/html/names.html#6.6.1">JLS6 §6.6.1</a>
    * @return true if the expression may access the given field
    */
-  public boolean Expr.mayAccess(Variable f) {
-    if (f.isPublic()) {
-      return true;
-    } else if (f.isProtected()) {
-      if (f.hostPackage().equals(hostPackage())) {
-        return true;
-      }
-      return hostType().mayAccess(this, f);
-    } else if (f.isPrivate()) {
-      return f.hostType().topLevelType() == hostType().topLevelType();
-    } else {
-      return f.hostPackage().equals(hostType().hostPackage());
-    }
-  }
+  syn boolean Expr.mayAccess(Variable f) = hostType().mayAccess(type(), f);
+
+  eq SuperAccess.mayAccess(Variable f) = hostType().mayAccess(hostType(), f);
 
   /**
-   * @return true if the expression may access the field
+   * Test if a qualified field access in this type may access the given field.
+   *
+   * @param qualifier the type of the qualifying expression.
+   * @param field the field being accessed.
+   * @see <a href="https://docs.oracle.com/javase/specs/jls/se6/html/names.html#6.6.1">JLS6 §6.6.1</a>
+   * @return true if the expression may access the given field
    */
-  public boolean TypeDecl.mayAccess(Expr expr, Variable field) {
-    if (instanceOf(field.hostType())) {
-      if (!field.isInstanceVariable() || expr.isSuperAccess() || expr.type().instanceOf(this)) {
-        return true;
+  syn boolean TypeDecl.mayAccess(TypeDecl qualifier, Variable field) {
+    if (field.isPublic()) {
+      return true;
+    }
+    if (field.isPrivate()) {
+      return field.hostType().topLevelType() == hostType().topLevelType();
+    }
+
+    if (field.hostPackage().equals(hostPackage())) {
+      // Protected and package-private access is allowed from any type inside the same package
+      // (JLS6 §6.6.1, bullet 4.2.1).
+      return true;
+    }
+
+    TypeDecl C = field.hostType(); // C is the type in which the field is declared.
+    if (field.isProtected()) {
+      // Test protected field access according to JLS6 §6.6.2.1.
+      // We need to iterate over enclosing types since each enclosing type is a
+      // candidate for accessing the field.
+      for (TypeDecl S = this; S != null; S = S.isNestedType() ? S.enclosingType() : null) {
+        if (S.instanceOf(C)) {
+          if (!field.isInstanceVariable() || qualifier.instanceOf(S)) {
+            return true;
+          }
+        }
       }
     }
-    if (isNestedType()) {
-      return enclosingType().mayAccess(expr, field);
-    } else {
-      return false;
-    }
+    return false;
   }
 }
 
