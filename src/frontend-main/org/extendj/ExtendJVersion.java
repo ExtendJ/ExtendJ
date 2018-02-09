@@ -33,7 +33,13 @@ import java.util.MissingResourceException;
 import java.util.ResourceBundle;
 
 /**
- * ExtendJ version string provider.
+ * Helper class to get the current compiler version.
+ *
+ * <p>The version string is read from the property files
+ * org/extendj/Version.properties and org/extendj/BuildInfo.properties.  These
+ * files should be generated during the build process. If either is missing
+ * then there is some problem in the build script.
+ *
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class ExtendJVersion {
@@ -58,7 +64,7 @@ public class ExtendJVersion {
   }
 
   /**
-   * @return Version string, including Java support level.
+   * @return compiler version string, including Java support level.
    */
   public static String getVersion() {
     return versionString;
