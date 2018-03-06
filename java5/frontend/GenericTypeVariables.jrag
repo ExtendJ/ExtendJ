@@ -32,19 +32,35 @@
 aspect GenericTypeVariables {
 
   // The bounds of a type variable should be resolved to type names.
-  eq TypeVariable.getTypeBound().nameType() = NameType.TYPE_NAME;
+  eq TypeVariable.getBound().nameType() = NameType.TYPE_NAME;
 
-  // Set java.lang.Object as the type bound if a type variable has no
-  // explicit type bound.
-  rewrite TypeVariable {
-    when (getNumTypeBound() == 0)
-    to TypeVariable {
-      return new TypeVariable(
-          new Modifiers(),
-          getID(),
-          new List<BodyDecl>(),
-          new List<Access>(new TypeAccess("java.lang", "Object")));
+  /**
+   * The first type bound of this type variable.
+   *
+   * <p>If no explicit bound is set, this returns a bound access to the Object type.
+   */
+  syn Access TypeVariable.firstBound() =
+      hasBound() ? getBound(0) : typeObject().boundAccess();
+
+  // TypeVariable has a list of bounds, which may be empty.
+  // To avoid handling special cases for unbounded type variables,
+  // we normalize the list of type bounds and add an implicit Object
+  // bound if the actual bound list is empty.
+  // The attributes below are used to work with this normalized view
+  // of the type variable bounds.
+  // To access the actual declared bounds, use the getBound(i), etc.
+  // methods.
+  syn int TypeVariable.getNumTypeBound() = Math.max(1, getNumBound());
+
+  syn Access TypeVariable.getTypeBound(int i) =
+      i == 0 ? firstBound() : getBound(i);
+
+  syn nta List<Access> TypeVariable.getTypeBoundList() {
+    List<Access> bounds = new List<Access>();
+    for (int i = 0; i < getNumTypeBound(); ++i) {
+      bounds.add(getTypeBound(i).treeCopyNoTransform());
     }
+    return bounds;
   }
 
   eq TypeVariable.nameProblems() {
@@ -55,14 +71,12 @@ aspect GenericTypeVariables {
       return Collections.emptySet();
   }
 
-  syn TypeDecl TypeVariable.lowerBound() = getTypeBound(0).type();
-
   syn nta TypeVariable TypeVariable.substituted(Parameterization par) =
       new SubstitutedTypeVariable(
           new Modifiers(new List<Modifier>()),
           getID(),
           new List<BodyDecl>(),
-          getTypeBoundList().treeCopy(),
+          getBoundList().treeCopy(),
           par);
 }
 
@@ -100,11 +114,13 @@ aspect GenricTypeVariablesTypeAnalysis {
 
   syn Collection<Problem> TypeVariable.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>();
-    if (!getTypeBound(0).type().isTypeVariable() && !getTypeBound(0).type().isClassDecl()
-        && !getTypeBound(0).type().isInterfaceDecl()) {
+    TypeDecl first = firstBound().type();
+    if (!first.isTypeVariable()
+        && !first.isClassDecl()
+        && !first.isInterfaceDecl()) {
       problems.add(errorf("the first type bound must be either a type variable,"
           + " or a class or interface type which %s is not",
-          getTypeBound(0).type().fullName()));
+          first.fullName()));
     }
     for (int i = 1; i < getNumTypeBound(); i++) {
       if (!getTypeBound(i).type().isInterfaceDecl()) {

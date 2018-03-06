@@ -469,7 +469,7 @@ aspect GenericsErasure {
 
   eq ParInterfaceDecl.erasure() = genericDecl();
 
-  eq TypeVariable.erasure() = getTypeBound(0).type().erasure(); // TODO(joqvist): skip last erasure?
+  eq TypeVariable.erasure() = firstBound().type().erasure(); // TODO(joqvist): skip last erasure?
 
   eq ArrayDecl.erasure() = componentType().erasure().arrayType();
 }
@@ -726,7 +726,7 @@ aspect GenericsTypeCheck {
           new Modifiers(new List<Modifier>()),
           param.getID(),
           new List<BodyDecl>(),
-          param.getTypeBoundList().treeCopy(),
+          param.getBoundList().treeCopy(),
           getParameterization()));
     }
     return result;
@@ -740,7 +740,7 @@ aspect GenericsTypeCheck {
           new Modifiers(new List<Modifier>()),
           param.getID(),
           new List<BodyDecl>(),
-          param.getTypeBoundList().treeCopy(),
+          param.getBoundList().treeCopy(),
           getParameterization()));
     }
     return result;
@@ -1296,12 +1296,21 @@ aspect LookupParTypeDecl {
 
   inh TypeDecl TypeVariable.typeObject();
 
+  /**
+   * Computes the least upper bound of this type variable.
+   */
   syn lazy TypeDecl TypeVariable.lubType() {
-    ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-    for (int i = 0; i < getNumTypeBound(); i++) {
-      list.add(getTypeBound(i).type());
+    if (getNumBound() == 0) {
+      return typeObject();
+    } else if (getNumBound() == 1) {
+      return getBound(0).type();
+    } else {
+      ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
+      for (Access bound : getBoundList()) {
+        list.add(bound.type());
+      }
+      return lookupLUBType(list);
     }
-    return lookupLUBType(list);
   }
 
   inh TypeDecl TypeVariable.typeNull();
