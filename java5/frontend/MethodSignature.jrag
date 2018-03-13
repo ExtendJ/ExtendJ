@@ -527,23 +527,92 @@ aspect MethodSignature15 {
 
   /**
    * Infers type arguments for a generic method invocation.
+   *
+   * <p>The type arguments are inferred based on the actual argument types and
+   * result assignment type.
+   *
+   * @param resultType the expected result type of this expression. The
+   * inferred expression type is assignable to this type.
+   * @param params the parameter declartions (in declaration order) of the method for
+   * which types are being inferred.
+   * @param args the arguments of the method invocation. The argument types are
+   * assignable to the inferred parameter types.
+   * @param typeParams the type variables which types should be inferred for.
+   * @return the inferred types for the given type variables. The order
+   * of the result types matches the order of the type variables in typeParams.
    */
   syn lazy ArrayList<TypeDecl> Expr.inferTypeArguments(
       TypeDecl resultType,
       List<ParameterDeclaration> params,
       List<Expr> args,
       List<TypeVariable> typeParams) {
-    ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
-    Collection<TypeDecl> arguments = computeConstraints(
-        resultType,
-        params,
-        args,
-        typeParams);
-    if (arguments.isEmpty()) {
-      return typeArguments;
+    Constraints constraints = new Constraints();
+
+    // Store type parameters.
+    for (TypeVariable p : typeParams) {
+      constraints.addTypeVariable(p);
     }
+
+    // Add initial constraints.
+    for (int i = 0; i < args.getNumChild(); i++) {
+      TypeDecl A = args.getChild(i).type();
+      int index = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
+      TypeDecl F = params.getChild(index).type();
+      if (params.getChild(index) instanceof VariableArityParameterDeclaration
+          && (args.getNumChild() != params.getNumChild() || !A.isArrayDecl())) {
+        F = F.componentType();
+      }
+      constraints.convertibleTo(A, F);
+    }
+
+    if (constraints.rawAccess) {
+      return new ArrayList<TypeDecl>();
+    }
+
+    constraints.resolveEqualityConstraints();
+    constraints.resolveSupertypeConstraints();
+
+    if (constraints.unresolvedTypeArguments()) {
+      TypeDecl S = assignConvertedType();
+      if (S.isUnboxedPrimitive()) {
+        S = S.boxed();
+      }
+      TypeDecl R = resultType;
+      if (R.isVoid()) {
+        R = typeObject();
+      }
+      constraints.convertibleFrom(S, R);
+      // Build the last constraints by substituting type bounds using the
+      // already-inferred type variables.
+      Collection<TypeDecl> substArgs = new ArrayList<TypeDecl>();
+      for (TypeVariable p : typeParams) {
+        TypeDecl arg = constraints.constraintsMap.get(p).typeArgument;
+        if (arg != null) {
+          substArgs.add(arg);
+        } else {
+          substArgs.add(p);
+        }
+      }
+      Parameterization partialSubst = new Parameterization(typeParams, substArgs);
+      for (TypeVariable p : typeParams) {
+        if (!p.firstBound().type().isObject()) {
+          TypeDecl Bp = constraints.constraintsMap.get(p).typeArgument;
+          if (Bp == null) {
+            Bp = p;
+          }
+          TypeDecl Bi_sub = p.substituted(partialSubst).firstBound().type();
+          constraints.convertibleFrom(Bi_sub, p);
+          constraints.convertibleTo(Bp, Bi_sub);
+        }
+      }
+      constraints.resolveEqualityConstraints();
+      constraints.resolveSupertypeConstraints();
+      constraints.resolveSubtypeConstraints();
+    }
+
+    ArrayList<TypeDecl> typeArguments = new ArrayList<TypeDecl>();
     int i = 0;
-    for (TypeDecl type : arguments) {
+    for (TypeDecl type : constraints.typeArguments()) {
       if (type == null) {
         TypeVariable v = typeParams.getChild(i);
         type = v.lubType();
@@ -568,6 +637,9 @@ aspect MethodSignature15 {
     return typeArguments;
   }
 
+  /**
+   * Returns the type arguments for this parameterized method access.
+   */
   eq ParMethodAccess.inferTypeArguments(
       TypeDecl resultType,
       List<ParameterDeclaration> params,
@@ -580,6 +652,9 @@ aspect MethodSignature15 {
     return typeArguments;
   }
 
+  /**
+   * Returns the type arguments for this parameterized constructor access.
+   */
   eq ParConstructorAccess.inferTypeArguments(
       TypeDecl resultType,
       List<ParameterDeclaration> params,
