@@ -46,6 +46,13 @@ aspect VariableArityParametersCodegen {
   refine GenerateClassfile eq Dot.superAccessorTargetMethod() =
       ((MethodAccess) rightSide()).decl().erasedMethod();
 
+  /**
+   * Transforms this variable arity method call to a
+   * call with matching arity.
+   *
+   * <p>Variable arity parameters are packed into an array
+   * argument.
+   */
   syn nta MethodAccess MethodAccess.transformedVariableArity() {
     MethodDecl decl = decl();
     // Copy regular arguments.
@@ -64,7 +71,14 @@ aspect VariableArityParametersCodegen {
       typeAccess = new ArrayTypeAccess(typeAccess);
     }
     args.add(new ArrayCreationExpr(typeAccess, new Opt(new ArrayInit(last))));
-    return new MethodAccess(getID(), args);
+    if (decl instanceof ParMethodDecl) {
+      // Create a parameterized access to avoid unnecessary type inference.
+      ParMethodDecl parMethod = (ParMethodDecl) decl;
+      return new ParMethodAccess(getID(), args,
+          parMethod.getTypeArgumentList().treeCopyNoTransform());
+    } else {
+      return new MethodAccess(getID(), args);
+    }
   }
 
   refine Transformations
