@@ -386,8 +386,8 @@ aspect GenericMethodsInference {
      * They differ in which side of the relation contains the type variables to
      * be inferred.
      *
-     * @param A actual argument type, containing type variables to be inferred.
-     * @param F formal argument type (target type).
+     * @param A actual argument type.
+     * @param F formal argument type (target type), containing type variables to be inferred.
      */
     public void convertibleTo(TypeDecl A, TypeDecl F) {
       if (!F.involvesTypeParameters()) {
@@ -474,6 +474,7 @@ aspect GenericMethodsInference {
                 }
               }
             }
+            break;
           }
         }
       }
@@ -486,8 +487,8 @@ aspect GenericMethodsInference {
      * They differ in which side of the relation contains the type variables to
      * be inferred.
      *
-     * @param A actual argument type, containing type variables to be inferred.
-     * @param F formal argument type (target type).
+     * @param A actual argument type.
+     * @param F formal argument type (target type), containing type variables to be inferred.
      */
     public void convertibleFrom(TypeDecl A, TypeDecl F) {
       if (!F.involvesTypeParameters()) {
@@ -524,19 +525,22 @@ aspect GenericMethodsInference {
         java.util.List<TypeDecl> paArgs = PA.getParameterization().args;
         TypeDecl G = PF.genericDecl();
         TypeDecl H = PA.genericDecl();
-        for (int i = 0; i < pfArgs.size(); i++) {
-          TypeDecl T = pfArgs.get(i);
-          if (T.involvesTypeParameters()) {
-            // If F has the form G<...,U,...> where U is a type expression that involves Tj.
-            if (!T.isWildcard()) {
-              TypeDecl U = T;
-              if (G.instanceOf(H)) {
+        if (G.instanceOf(H)) {
+          for (int i = 0; i < pfArgs.size(); i++) {
+            TypeDecl T = pfArgs.get(i);
+            if (T.involvesTypeParameters()) {
+              // If F has the form G<...,U,...> where U is a type expression that involves Tj.
+              if (!T.isWildcard()) {
+                TypeDecl U = T;
                 if (H != G) {
                   for (ParTypeDecl V : parameterizedSupertypes(F)) {
-                    if (!V.isRawType() && V.genericDecl() == H) {
-                      if (F.instanceOf((TypeDecl) V)) {
-                        convertibleFrom(A, (TypeDecl) V);
+                    if (V.genericDecl() == H) {
+                      if (!V.isRawType()) {
+                        if (F.instanceOf((TypeDecl) V)) {
+                          convertibleFrom(A, (TypeDecl) V);
+                        }
                       }
+                      break;
                     }
                   }
                 } else if (pfArgs.size() == paArgs.size()) {
@@ -552,20 +556,21 @@ aspect GenericMethodsInference {
                     convertibleTo(W, U);
                   }
                 }
-              }
-            } else if (T instanceof WildcardExtendsType) {
-              TypeDecl U = ((WildcardExtendsType) T).extendsType();
-              if (G.instanceOf(H)) {
+              } else if (T instanceof WildcardExtendsType) {
+                TypeDecl U = ((WildcardExtendsType) T).extendsType();
                 if (H != G) {
                   for (ParTypeDecl V : parameterizedSupertypes(F)) {
-                    if (!V.isRawType() && V.genericDecl() == H) {
-                      // Replace type argument Un with ? extends Un in V.
-                      ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-                      for (TypeDecl vArg : V.getParameterization().args) {
-                        list.add(vArg.asWildcardExtends());
+                    if (V.genericDecl() == H) {
+                      if (!V.isRawType()) {
+                        // Replace type argument Un with ? extends Un in V.
+                        ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
+                        for (TypeDecl vArg : V.getParameterization().args) {
+                          list.add(vArg.asWildcardExtends());
+                        }
+                        TypeDecl typeV = ((GenericTypeDecl) H).lookupParTypeDecl(list);
+                        convertibleFrom(A, typeV);
                       }
-                      TypeDecl typeV = ((GenericTypeDecl) H).lookupParTypeDecl(list);
-                      convertibleFrom(A, typeV);
+                      break;
                     }
                   }
                 } else if (pfArgs.size() == paArgs.size()) {
@@ -575,20 +580,21 @@ aspect GenericMethodsInference {
                     convertibleFrom(W, U);
                   }
                 }
-              }
-            } else if (T instanceof WildcardSuperType) {
-              TypeDecl U = ((WildcardSuperType) T).superType();
-              if (G.instanceOf(H)) {
+              } else if (T instanceof WildcardSuperType) {
+                TypeDecl U = ((WildcardSuperType) T).superType();
                 if (H != G) {
                   for (ParTypeDecl V : parameterizedSupertypes(F)) {
-                    if (!V.isRawType() && V.genericDecl() == H) {
-                      // Replace type argument Un with ? super Un in V.
-                      ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-                      for (TypeDecl vArg : V.getParameterization().args) {
-                        list.add(vArg.asWildcardExtends());
+                    if (V.genericDecl() == H) {
+                      if (!V.isRawType()) {
+                        // Replace type argument Un with ? super Un in V.
+                        ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
+                        for (TypeDecl vArg : V.getParameterization().args) {
+                          list.add(vArg.asWildcardExtends());
+                        }
+                        TypeDecl typeV = ((GenericTypeDecl) H).lookupParTypeDecl(list);
+                        convertibleFrom(A, typeV);
                       }
-                      TypeDecl typeV = ((GenericTypeDecl) H).lookupParTypeDecl(list);
-                      convertibleFrom(A, typeV);
+                      break;
                     }
                   }
                 } else if (pfArgs.size() == paArgs.size()) {
