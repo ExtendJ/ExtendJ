@@ -391,21 +391,21 @@ aspect GenericMethodsInference {
      */
     public void convertibleTo(TypeDecl A, TypeDecl F) {
       if (!F.involvesTypeParameters()) {
-        // If F does not involve a type parameter Tj then no constraint is implied on Tj.
+        // F does not involve a type parameter Tj. No constraint is implied on Tj.
         return;
       }
       if (A.isNull()) {
-        // If A is the type of null, no constraint is implied on Tj.
+        // A is the type of null. No constraint is implied on Tj.
         return;
       }
       if (A.isUnboxedPrimitive()) {
-        // If A is a primitive type, then A is converted to a reference type U
+        // A is a primitive type. A is converted to a reference type U
         // via boxing conversion and this algorithm is applied recursively to
         // the constraint U << F.
         TypeDecl U = A.boxed();
         convertibleTo(U, F);
       } else if (F instanceof TypeVariable) {
-        // If F = Tj, then the constraint Tj :> A is implied.
+        // F = Tj implies the constraint Tj :> A.
         if (typeVariables.contains(F)) {
           addSupertypeConstraint(F, A);
         }
@@ -492,10 +492,10 @@ aspect GenericMethodsInference {
      */
     public void convertibleFrom(TypeDecl A, TypeDecl F) {
       if (!F.involvesTypeParameters()) {
-        // If F does not involve a type parameter Tj then no constraint is implied on Tj.
+        // F does not involve a type parameter Tj. No constraint is implied on Tj.
         return;
       } else if (A.isNull()) {
-        // If A is the type of null, no constraint is implied on Tj.
+        // A is the type of null. No constraint is implied on Tj.
         return;
       } else if (F instanceof TypeVariable) {
         if (typeVariables.contains(F)) {
@@ -529,13 +529,15 @@ aspect GenericMethodsInference {
           for (int i = 0; i < pfArgs.size(); i++) {
             TypeDecl T = pfArgs.get(i);
             if (T.involvesTypeParameters()) {
-              // If F has the form G<...,U,...> where U is a type expression that involves Tj.
+              // F has the form G<...,U,...> where U is a type expression that involves Tj.
               if (!T.isWildcard()) {
                 TypeDecl U = T;
                 if (H != G) {
                   for (ParTypeDecl V : parameterizedSupertypes(F)) {
                     if (V.genericDecl() == H) {
                       if (!V.isRawType()) {
+                        // TODO(joqvist): must substitute type parameter i of G for T in H to get V!
+                        // See JLS7 §15.12.2.7: https://docs.oracle.com/javase/specs/jls/se7/html/jls-15.html#jls-15.12.2.7
                         if (F.subtype((TypeDecl) V)) {
                           convertibleFrom(A, (TypeDecl) V);
                         }
@@ -557,6 +559,8 @@ aspect GenericMethodsInference {
                   }
                 }
               } else if (T instanceof WildcardExtendsType) {
+                // F has the form G<..., ? extends U, ...> where U is a type expression
+                // that involves Tj.
                 TypeDecl U = ((WildcardExtendsType) T).extendsType();
                 if (H != G) {
                   for (ParTypeDecl V : parameterizedSupertypes(F)) {
@@ -581,6 +585,8 @@ aspect GenericMethodsInference {
                   }
                 }
               } else if (T instanceof WildcardSuperType) {
+                // F has the form G<..., ? super U, ...> where U is a type expression
+                // that involves Tj.
                 TypeDecl U = ((WildcardSuperType) T).superType();
                 if (H != G) {
                   for (ParTypeDecl V : parameterizedSupertypes(F)) {
@@ -617,11 +623,11 @@ aspect GenericMethodsInference {
      * T = A : T and A are the same type.
      */
     public void constraintEqual(TypeDecl A, TypeDecl F) {
-      // If F does not involve a type parameter Tj then no constraint is implied on Tj.
       if (!F.involvesTypeParameters()) {
+        // F does not involve a type parameter Tj. No constraint is implied on Tj.
         return;
       } else if (A.isNull()) {
-        // If A is the type of null, no constraint is implied on Tj.
+        // A is the type of null. No constraint is implied on Tj.
         return;
       } else if (F instanceof TypeVariable) {
         if (typeVariables.contains(F)) {
@@ -643,16 +649,16 @@ aspect GenericMethodsInference {
             }
           }
         }
-      } else if (F instanceof ParTypeDecl && !F.isRawType()) {
-        if (A instanceof ParTypeDecl) {
-          ParTypeDecl PF = (ParTypeDecl) F;
-          ParTypeDecl PA = (ParTypeDecl) A;
-          java.util.List<TypeDecl> pfArgs = PF.getParameterization().args;
-          java.util.List<TypeDecl> paArgs = PA.getParameterization().args;
-          if (PF.genericDecl() == PA.genericDecl()) {
-            if (A.isRawType()) {
-              rawAccess = true;
-            } else
+      } else if (F instanceof ParTypeDecl && !F.isRawType()
+          && A instanceof ParTypeDecl) {
+        ParTypeDecl PF = (ParTypeDecl) F;
+        ParTypeDecl PA = (ParTypeDecl) A;
+        java.util.List<TypeDecl> pfArgs = PF.getParameterization().args;
+        java.util.List<TypeDecl> paArgs = PA.getParameterization().args;
+        if (PF.genericDecl() == PA.genericDecl()) {
+          if (A.isRawType()) {
+            rawAccess = true;
+          } else {
             for (int i = 0; i < pfArgs.size(); i++) {
               TypeDecl T = pfArgs.get(i);
               if (T.involvesTypeParameters()) {
