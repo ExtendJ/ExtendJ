@@ -51,16 +51,16 @@ public class ExtendJVersion {
     ResourceBundle resources = null;
     try {
       resources = ResourceBundle.getBundle("Version");
+      version = resources.getString("version");
     } catch (MissingResourceException e) {
-      throw new Error("Could not open Version resource bundle");
+      version = "version ?";
     }
-    version = resources.getString("version");
     try {
       resources = ResourceBundle.getBundle("BuildInfo");
+      version +=  " " + resources.getString("moduleName");
     } catch (MissingResourceException e) {
-      throw new Error("Could not open BuildInfo resource bundle");
     }
-    versionString = version +  " " + resources.getString("moduleName");
+    versionString = version;
   }
 
   /**
