@@ -1,4 +1,4 @@
-/* Copyright (c) 2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+/* Copyright (c) 2013-2018, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -39,6 +39,8 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Scanner;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Counts Java tokens in the files listed on the command line.  Excludes
@@ -48,9 +50,9 @@ import java.util.Scanner;
  * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class TokenCounter {
-  private int tokens = 0;
-  private int lines = 0;
-  private int imports = 0;
+  private int allTokens = 0;
+  private int allLines = 0;
+  private int allImports = 0;
 
   /**
    * Count tokens in some Java source files.
@@ -61,18 +63,34 @@ public class TokenCounter {
       printHelp();
       System.exit(1);
     }
+    List<String> filteredArgs = new ArrayList<String>();
+    boolean csvOption = false;
     for (String arg: args) {
       if (arg.equals("-h")) {
         printHelp();
         System.exit(0);
       }
+      if (arg.equals("--csv")) {
+        csvOption = true;
+      } else {
+        filteredArgs.add(arg);
+      }
     }
-    TokenCounter counter = new TokenCounter();
-    counter.processArgs(args);
+    TokenCounter counter = new TokenCounter(csvOption);
+    counter.processArgs(filteredArgs);
+  }
+
+  private final boolean csv;
+
+  public TokenCounter(boolean csv) {
+    this.csv = csv;
   }
 
   public static void printHelp() {
-    System.out.println("Usage: TokenCounter <Java files> [@filelist]");
+    System.out.println("Usage: TokenCounter [OPTIONS] <Java files> [@filelist]");
+    System.out.println();
+    System.out.println("OPTIONS:");
+    System.out.println("  --csv    CSV output with one line per input file.");
     System.out.println();
     System.out.println("Counts Java tokens in the files listed on the command line.");
     System.out.println("Excludes whitespace, comments, curly braces, and parenthesis.");
@@ -80,7 +98,10 @@ public class TokenCounter {
     System.out.println("character increases the total token count by one.");
   }
 
-  public void processArgs(String[] args) {
+  public void processArgs(List<String> args) {
+    if (csv) {
+      System.out.println("file,tokens,lines,imports");
+    }
     for (String arg : args) {
       if (arg.startsWith("@")) {
         processFileList(arg.substring(1));
@@ -88,9 +109,11 @@ public class TokenCounter {
         processFile(arg);
       }
     }
-    System.out.println("tokens: " + tokens);
-    System.out.println("lines: " + lines);
-    System.out.println("imports: " + imports);
+    if (!csv) {
+      System.out.println("tokens: " + allTokens);
+      System.out.println("lines: " + allLines);
+      System.out.println("imports: " + allImports);
+    }
   }
 
   /**
@@ -112,6 +135,7 @@ public class TokenCounter {
    * @return number of tokens in the file
    */
   public void processFile(String filename) {
+    int tokens = 0, lines = 0, imports = 0;
     File file = new File(filename);
     if (!file.isFile()) {
       System.err.println("Warning: could not open file " + filename);
@@ -155,11 +179,17 @@ public class TokenCounter {
                 }
             }
           } catch (beaver.Scanner.Exception e) {
-            System.err.println("Warning "+filename+":"+e.line+":"+e.column+": " + e.getMessage());
+            System.err.format("Warning %s:%d:%d: %s%n", filename, e.line, e.column, e.getMessage());
             tokens += 1;
           }
         }
         is.close();
+        if (csv) {
+          System.out.format("%s,%d,%d,%d%n", filename, tokens, lines, imports);
+          allTokens += tokens;
+          allLines += lines;
+          allImports += imports;
+        }
       } catch (IOException e) {
         System.err.println("Warning: could not count tokens of " + filename);
         System.err.println(e.getMessage());
