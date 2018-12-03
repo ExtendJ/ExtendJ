@@ -186,10 +186,10 @@ public class TokenCounter {
         is.close();
         if (csv) {
           System.out.format("%s,%d,%d,%d%n", filename, tokens, lines, imports);
-          allTokens += tokens;
-          allLines += lines;
-          allImports += imports;
         }
+        allTokens += tokens;
+        allLines += lines;
+        allImports += imports;
       } catch (IOException e) {
         System.err.println("Warning: could not count tokens of " + filename);
         System.err.println(e.getMessage());
