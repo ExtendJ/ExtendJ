@@ -35,24 +35,24 @@ aspect TypeConversion {
   // 5.1.1 Identity Conversion.
   syn boolean TypeDecl.identityConversionTo(TypeDecl type) = this == type;
 
-  syn boolean TypeDecl.wideningConversionTo(TypeDecl type) = instanceOf(type);
-  syn lazy boolean TypeDecl.narrowingConversionTo(TypeDecl type) = instanceOf(type);
+  syn boolean TypeDecl.wideningConversionTo(TypeDecl type) = subtype(type);
+  syn lazy boolean TypeDecl.narrowingConversionTo(TypeDecl type) = subtype(type);
 
   // 5.1.2 Widening Primitive Conversions.
-  eq PrimitiveType.wideningConversionTo(TypeDecl type) = instanceOf(type);
+  eq PrimitiveType.wideningConversionTo(TypeDecl type) = subtype(type);
 
   // 5.1.3 Narrowing Primitive Conversion.
-  eq PrimitiveType.narrowingConversionTo(TypeDecl type) = type.instanceOf(this);
+  eq PrimitiveType.narrowingConversionTo(TypeDecl type) = type.subtype(this);
   eq ShortType.narrowingConversionTo(TypeDecl type) = type.isByte() || type.isChar();
   eq CharType.narrowingConversionTo(TypeDecl type) =  type.isByte() || type.isShort();
   eq ByteType.narrowingConversionTo(TypeDecl type) = type.isChar();
 
   // 5.1.4 Widening Reference Conversions.
-  eq ReferenceType.wideningConversionTo(TypeDecl type) = instanceOf(type);
+  eq ReferenceType.wideningConversionTo(TypeDecl type) = subtype(type);
 
   // 5.1.5 Narrowing Reference Conversions.
   eq ReferenceType.narrowingConversionTo(TypeDecl type) {
-    if (type.instanceOf(this)) {
+    if (type.subtype(this)) {
       return true;
     }
     if (isClassDecl() && !getModifiers().isFinal() && type.isInterfaceDecl()) {
@@ -61,7 +61,7 @@ aspect TypeConversion {
     if (isInterfaceDecl() && type.isClassDecl() && !type.getModifiers().isFinal()) {
       return true;
     }
-    if (isInterfaceDecl() && type.instanceOf(this)) {
+    if (isInterfaceDecl() && type.subtype(this)) {
       return true;
     }
     if (fullName().equals("java.lang.Object") && type.isInterfaceDecl()) {
@@ -69,7 +69,7 @@ aspect TypeConversion {
     }
     // Dragons
     // TODO: Check if both are interfaces with compatible methods
-    if (isArrayDecl() && type.isArrayDecl() && elementType().instanceOf(type.elementType())) {
+    if (isArrayDecl() && type.isArrayDecl() && elementType().subtype(type.elementType())) {
       return true;
     }
     return false;
@@ -104,9 +104,9 @@ aspect TypeConversion {
     if (type.isArrayDecl()) {
       return isObject();
     } else if (type.isClassDecl()) {
-      return this == type || instanceOf(type) || type.instanceOf(this);
+      return this == type || subtype(type) || type.subtype(this);
     } else if (type.isInterfaceDecl()) {
-      return !isFinal() || instanceOf(type);
+      return !isFinal() || subtype(type);
     } else return super.castingConversionTo(type);
   }
 
@@ -114,9 +114,9 @@ aspect TypeConversion {
 
   eq InterfaceDecl.castingConversionTo(TypeDecl type) {
     if (type.isArrayDecl()) {
-      return type.instanceOf(this);
+      return type.subtype(this);
     } else if (type.isClassDecl()) {
-      return !type.isFinal() || type.instanceOf(this);
+      return !type.isFinal() || type.subtype(this);
     } else if (type.isInterfaceDecl()) {
       for (MethodDecl m : methods()) {
         for (MethodDecl n : type.methodsSignature(m.signature())) {
@@ -168,7 +168,7 @@ aspect NumericPromotion {
     if (!type.isNumericType()) {
       return unknownType();
     }
-     return unaryNumericPromotion().instanceOf(type) ? type : unaryNumericPromotion();
+     return unaryNumericPromotion().subtype(type) ? type : unaryNumericPromotion();
   }
 }
 
@@ -437,98 +437,108 @@ aspect TypeAnalysis {
   eq ClassAccess.type() = lookupType("java.lang", "Class");
 }
 
-aspect TypeWideningAndIdentity {
+aspect Subtyping {
 
-  syn lazy boolean TypeDecl.instanceOf(TypeDecl type);
-  eq TypeDecl.instanceOf(TypeDecl type) = type == this;
-  eq ClassDecl.instanceOf(TypeDecl type) = type.isSupertypeOfClassDecl(this);
-  eq InterfaceDecl.instanceOf(TypeDecl type) = type.isSupertypeOfInterfaceDecl(this);
-  eq ArrayDecl.instanceOf(TypeDecl type) = type.isSupertypeOfArrayDecl(this);
-  eq PrimitiveType.instanceOf(TypeDecl type) = type.isSupertypeOfPrimitiveType(this);
-  eq NullType.instanceOf(TypeDecl type) = type.isSupertypeOfNullType(this);
-  eq VoidType.instanceOf(TypeDecl type) = type.isSupertypeOfVoidType(this);
+  /**
+   * Deprecated variant of the subtype attribute.
+   * @deprecated use the subtype attribute instead.
+   */
+  syn boolean TypeDecl.instanceOf(TypeDecl type) = subtype(type);
 
-  eq UnknownType.instanceOf(TypeDecl type) = true;
-  eq UnknownType.isSupertypeOfClassDecl(ClassDecl type) = true;
-  eq UnknownType.isSupertypeOfInterfaceDecl(InterfaceDecl type) = true;
-  eq UnknownType.isSupertypeOfArrayDecl(ArrayDecl type) = true;
-  eq UnknownType.isSupertypeOfPrimitiveType(PrimitiveType type) = true;
-  eq UnknownType.isSupertypeOfNullType(NullType type) = true;
+  // TODO(joqvist): investigate removing circular here and only introducing it
+  // for relevant attributes in Java 5.
+  /**
+   * Determine if this type is a subtype of the argument type.
+   *
+   * Note: this attribute is declared circular only because subtyping becomes
+   * circular in the Java 5 extension.
+   */
+  syn lazy boolean TypeDecl.subtype(TypeDecl type) circular [true] = type == this;
 
-  syn boolean TypeDecl.isSupertypeOfClassDecl(ClassDecl type) = type == this;
-  eq ClassDecl.isSupertypeOfClassDecl(ClassDecl type) {
-    if (super.isSupertypeOfClassDecl(type)) {
-      return true;
-    }
-    return type.hasSuperclass() && type.superclass().instanceOf(this);
-  }
-  eq InterfaceDecl.isSupertypeOfClassDecl(ClassDecl type) {
-    if (super.isSupertypeOfClassDecl(type)) {
+  eq ClassDecl.subtype(TypeDecl type) = type.supertypeClassDecl(this);
+  eq InterfaceDecl.subtype(TypeDecl type) = type.supertypeInterfaceDecl(this);
+  eq ArrayDecl.subtype(TypeDecl type) = type.supertypeArrayDecl(this);
+  eq PrimitiveType.subtype(TypeDecl type) = type.supertypePrimitiveType(this);
+  eq NullType.subtype(TypeDecl type) = type.supertypeNullType(this);
+  eq VoidType.subtype(TypeDecl type) = type.supertypeVoidType(this);
+
+  eq UnknownType.subtype(TypeDecl type) = false;
+  eq UnknownType.supertypeClassDecl(ClassDecl type) = true;
+  eq UnknownType.supertypeInterfaceDecl(InterfaceDecl type) = true;
+  eq UnknownType.supertypeArrayDecl(ArrayDecl type) = true;
+  eq UnknownType.supertypePrimitiveType(PrimitiveType type) = true;
+  eq UnknownType.supertypeNullType(NullType type) = true;
+
+  syn boolean TypeDecl.supertypeClassDecl(ClassDecl type) = type == this;
+  eq ClassDecl.supertypeClassDecl(ClassDecl type) =
+      super.supertypeClassDecl(type) || type.hasSuperclass() && type.superclass().subtype(this);
+  eq InterfaceDecl.supertypeClassDecl(ClassDecl type) {
+    if (super.supertypeClassDecl(type)) {
       return true;
     }
     for (InterfaceDecl iface : type.superInterfaces()) {
-      if (iface.instanceOf(this)) {
+      if (iface.subtype(this)) {
         return true;
       }
     }
-    return type.hasSuperclass() && type.superclass().instanceOf(this);
+    return type.hasSuperclass() && type.superclass().subtype(this);
   }
 
-  syn boolean TypeDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) = type == this;
-  eq ClassDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) = isObject();
-  eq InterfaceDecl.isSupertypeOfInterfaceDecl(InterfaceDecl type) {
-    if (super.isSupertypeOfInterfaceDecl(type)) {
+  syn boolean TypeDecl.supertypeInterfaceDecl(InterfaceDecl type) = type == this;
+  eq ClassDecl.supertypeInterfaceDecl(InterfaceDecl type) = isObject();
+  eq InterfaceDecl.supertypeInterfaceDecl(InterfaceDecl type) {
+    if (super.supertypeInterfaceDecl(type)) {
       return true;
     }
     for (InterfaceDecl superinterface : type.superInterfaces()) {
-      if (superinterface.instanceOf(this)) {
+      if (superinterface.subtype(this)) {
         return true;
       }
     }
     return false;
   }
 
-  syn boolean TypeDecl.isSupertypeOfArrayDecl(ArrayDecl type) = this == type;
-  eq ClassDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
-    if (super.isSupertypeOfArrayDecl(type)) {
+  syn boolean TypeDecl.supertypeArrayDecl(ArrayDecl type) = this == type;
+  eq ClassDecl.supertypeArrayDecl(ArrayDecl type) {
+    if (super.supertypeArrayDecl(type)) {
       return true;
     }
-    return type.hasSuperclass() && type.superclass().instanceOf(this);
+    return type.hasSuperclass() && type.superclass().subtype(this);
   }
-  eq InterfaceDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
-    if (super.isSupertypeOfArrayDecl(type)) {
+  eq InterfaceDecl.supertypeArrayDecl(ArrayDecl type) {
+    if (super.supertypeArrayDecl(type)) {
       return true;
     }
     for (InterfaceDecl iface : type.superInterfaces()) {
-      if (iface.instanceOf(this)) {
+      if (iface.subtype(this)) {
         return true;
       }
     }
     return false;
   }
-  eq ArrayDecl.isSupertypeOfArrayDecl(ArrayDecl type) {
+  eq ArrayDecl.supertypeArrayDecl(ArrayDecl type) {
     if (type.elementType().isPrimitive() && elementType().isPrimitive()) {
       return type.dimension() == dimension() && type.elementType() == elementType();
     }
-    return type.componentType().instanceOf(componentType());
+    return type.componentType().subtype(componentType());
   }
 
-  syn boolean TypeDecl.isSupertypeOfPrimitiveType(PrimitiveType type) = type == this;
+  syn boolean TypeDecl.supertypePrimitiveType(PrimitiveType type) = type == this;
 
-  eq PrimitiveType.isSupertypeOfPrimitiveType(PrimitiveType type) {
-    if (super.isSupertypeOfPrimitiveType(type)) {
+  eq PrimitiveType.supertypePrimitiveType(PrimitiveType type) {
+    if (super.supertypePrimitiveType(type)) {
       return true;
     }
     return type.hasSuperclass() && type.superclass().isPrimitive()
-        && type.superclass().instanceOf(this);
+        && type.superclass().subtype(this);
   }
 
-  syn boolean TypeDecl.isSupertypeOfNullType(NullType type) = false;
-  eq ReferenceType.isSupertypeOfNullType(NullType type) = true;
-  eq NullType.isSupertypeOfNullType(NullType type) = true;
+  syn boolean TypeDecl.supertypeNullType(NullType type) = false;
+  eq ReferenceType.supertypeNullType(NullType type) = true;
+  eq NullType.supertypeNullType(NullType type) = true;
 
-  syn boolean TypeDecl.isSupertypeOfVoidType(VoidType type) = false;
-  eq VoidType.isSupertypeOfVoidType(VoidType type) = true;
+  syn boolean TypeDecl.supertypeVoidType(VoidType type) = false;
+  eq VoidType.supertypeVoidType(VoidType type) = true;
 }
 
 aspect NestedTypes {
@@ -545,7 +555,7 @@ aspect NestedTypes {
    * a subtype of the given type, or equal to the given type.
    */
   syn boolean TypeDecl.hasEnclosingType(TypeDecl type) =
-      isInnerType() && (enclosingType().instanceOf(type)
+      isInnerType() && (enclosingType().subtype(type)
           || enclosingType().hasEnclosingType(type));
 
   inh TypeDecl TypeDecl.enclosingType();
@@ -608,7 +618,7 @@ aspect NestedTypes {
   eq LocalClassDeclStmt.getClassDecl().isLocalClass() = true;
 
   syn TypeDecl TypeDecl.withinBodyThatSubclasses(TypeDecl type) {
-    if (instanceOf(type)) {
+    if (subtype(type)) {
       return this;
     }
     if (!isTopLevelType()) {

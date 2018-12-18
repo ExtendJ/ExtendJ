@@ -29,6 +29,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * Adds subtyping equations for generic types.
+ * See java4/frontend/TypeAnalsys.jrag, Subtyping aspect.
+ */
 aspect GenericsSubtype {
   // Use of this in generic classes.
   // All references to this are compatible with the raw counterpart.
@@ -452,147 +456,7 @@ aspect GenericsSubtype {
     return type == lookupGLBType(bounds);
   }
 
-  // Refine rules to use a circular subtype attribute.
-
-  refine TypeWideningAndIdentity eq TypeDecl.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq ClassDecl.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq InterfaceDecl.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq ArrayDecl.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq PrimitiveType.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq NullType.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq VoidType.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  refine TypeWideningAndIdentity eq UnknownType.instanceOf(TypeDecl type) {
-    return subtype(type);
-  }
-
-  eq GenericClassDecl.instanceOf(TypeDecl type) = subtype(type);
-  eq GenericInterfaceDecl.instanceOf(TypeDecl type) = subtype(type);
-  eq ParClassDecl.instanceOf(TypeDecl type) = subtype(type);
-  eq RawClassDecl.instanceOf(TypeDecl type) = subtype(type);
-  eq ParInterfaceDecl.instanceOf(TypeDecl type) = subtype(type);
-  eq RawInterfaceDecl.instanceOf(TypeDecl type) = subtype(type);
-  eq TypeVariable.instanceOf(TypeDecl type) = subtype(type);
-  eq WildcardType.instanceOf(TypeDecl type) = subtype(type);
-  eq WildcardExtendsType.instanceOf(TypeDecl type) = subtype(type);
-  eq WildcardSuperType.instanceOf(TypeDecl type) = subtype(type);
-
-  syn boolean TypeDecl.subtype(TypeDecl type) circular [true] = type == this;
-  eq ClassDecl.subtype(TypeDecl type) = type.supertypeClassDecl(this);
-  eq InterfaceDecl.subtype(TypeDecl type) = type.supertypeInterfaceDecl(this);
-  eq ArrayDecl.subtype(TypeDecl type) = type.supertypeArrayDecl(this);
-  eq PrimitiveType.subtype(TypeDecl type) = type.supertypePrimitiveType(this);
-  eq NullType.subtype(TypeDecl type) = type.supertypeNullType(this);
-  eq VoidType.subtype(TypeDecl type) = type.supertypeVoidType(this);
-
-  eq UnknownType.subtype(TypeDecl type) = false;
-  eq UnknownType.supertypeClassDecl(ClassDecl type) = true;
-  eq UnknownType.supertypeInterfaceDecl(InterfaceDecl type) = true;
-  eq UnknownType.supertypeArrayDecl(ArrayDecl type) = true;
-  eq UnknownType.supertypePrimitiveType(PrimitiveType type) = true;
-  eq UnknownType.supertypeNullType(NullType type) = true;
-
-  syn boolean TypeDecl.supertypeClassDecl(ClassDecl type) = type == this;
-  eq ClassDecl.supertypeClassDecl(ClassDecl type) =
-      super.supertypeClassDecl(type) || type.hasSuperclass() && type.superclass().subtype(this);
-
-  eq InterfaceDecl.supertypeClassDecl(ClassDecl type) {
-    if (super.supertypeClassDecl(type)) {
-      return true;
-    }
-    for (InterfaceDecl iface : type.superInterfaces()) {
-      if (iface.subtype(this)) {
-        return true;
-      }
-    }
-    return type.hasSuperclass() && type.superclass().subtype(this);
-  }
-
-  syn boolean TypeDecl.supertypeInterfaceDecl(InterfaceDecl type) = type == this;
-
-  eq ClassDecl.supertypeInterfaceDecl(InterfaceDecl type) = isObject();
-
-  eq InterfaceDecl.supertypeInterfaceDecl(InterfaceDecl type) {
-    if (super.supertypeInterfaceDecl(type)) {
-      return true;
-    }
-    for (InterfaceDecl superinterface : type.superInterfaces()) {
-      if (superinterface.subtype(this)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  syn boolean TypeDecl.supertypeArrayDecl(ArrayDecl type) = this == type;
-
-  eq ClassDecl.supertypeArrayDecl(ArrayDecl type) {
-    if (super.supertypeArrayDecl(type)) {
-      return true;
-    }
-    return type.hasSuperclass() && type.superclass().subtype(this);
-  }
-
-  eq InterfaceDecl.supertypeArrayDecl(ArrayDecl type) {
-    if (super.supertypeArrayDecl(type)) {
-      return true;
-    }
-    for (InterfaceDecl iface : type.superInterfaces()) {
-      if (iface.subtype(this)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  eq ArrayDecl.supertypeArrayDecl(ArrayDecl type) {
-    if (type.elementType().isPrimitive() && elementType().isPrimitive()) {
-      return type.dimension() == dimension() && type.elementType() == elementType();
-    }
-    return type.componentType().subtype(componentType());
-  }
-
-  syn boolean TypeDecl.supertypePrimitiveType(PrimitiveType type) = type == this;
-  eq PrimitiveType.supertypePrimitiveType(PrimitiveType type) {
-    if (super.supertypePrimitiveType(type)) {
-      return true;
-    }
-    return type.hasSuperclass() && type.superclass().isPrimitive()
-        && type.superclass().subtype(this);
-  }
-
-  syn boolean TypeDecl.supertypeNullType(NullType type) = false;
   eq AbstractWildcardType.supertypeNullType(NullType type) = true;
-  eq ReferenceType.supertypeNullType(NullType type) = true;
-  eq NullType.supertypeNullType(NullType type) = true;
-
-  syn boolean TypeDecl.supertypeVoidType(VoidType type) = false;
-  eq VoidType.supertypeVoidType(VoidType type) = true;
-
-  eq ClassDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
-  eq InterfaceDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
-  eq GenericClassDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
-  eq GenericInterfaceDeclSubstituted.instanceOf(TypeDecl type) = subtype(type);
 
   eq ClassDeclSubstituted.subtype(TypeDecl type) = type.supertypeClassDeclSubstituted(this);
 
