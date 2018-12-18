@@ -25,14 +25,7 @@
   \'{LineTerminator}             { error("unterminated character literal at end of line"); }
 
   /* 3.10.5 String Literals */
-  \" {
-    yybegin(STRING);
-    /* remember start position of string literal so we can */
-    /* set its position correctly in the end */
-    strlit_start_line = yyline+1;
-    strlit_start_column = yycolumn+1;
-    strbuf.setLength(0);
-  }
+  \" { stringStart(); }
 
   /* 3.10.7 The Null Literal */
   "null"                         { return sym(Terminals.NULL_LITERAL); }
@@ -40,8 +33,7 @@
 
 /* 3.10.5 String Literals */
 <STRING> {
-  \"                             { yybegin(YYINITIAL);
-                                   return sym(Terminals.STRING_LITERAL, strbuf.toString(), strlit_start_line, strlit_start_column, strbuf.length()+2); }
+  \"                             { return stringEnd(); }
 
   {StringCharacter}+             { strbuf.append(str()); }
 

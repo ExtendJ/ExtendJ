@@ -8,7 +8,7 @@ import java.io.*;
 
 %public
 %final
-%class JavaScanner
+%class OriginalScanner
 %extends Scanner
 
 %type Symbol
