@@ -405,14 +405,15 @@ aspect CreateBCode {
       index = gen.constantPool().addMethodref(classname, "append", desc);
       gen.INVOKEVIRTUAL(index, 2, builderType);
 
-      getSource().createBCode(gen);
-
       // Call append(source).
-      argumentType = getSource().type().stringPromotion();
-      getSource().emitCastTo(gen, argumentType);
-      desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
-      index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.INVOKEVIRTUAL(index, 2, builderType);
+      getSource().createBCode(gen);
+      if (!getSource().isStringAdd()) {
+        argumentType = getSource().type().stringPromotion();
+        getSource().emitCastTo(gen, argumentType);
+        desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
+        index = gen.constantPool().addMethodref(classname, "append", desc);
+        gen.INVOKEVIRTUAL(index, 2, builderType);
+      }
 
       // Call toString().
       desc = "()" + type().typeDescriptor();
@@ -1104,6 +1105,22 @@ aspect CreateBCode {
     emitShiftExpr(gen);
   }
 
+  syn boolean Expr.isStringAdd() = false;
+  eq AddExpr.isStringAdd() = type().isString() && !isConstant();
+  eq ParExpr.isStringAdd() = getExpr().isStringAdd();
+
+  /**
+   * Used to decide for which sub-expressions to create a new StringBuilder
+   * to perform string concatentations.
+   */
+  inh boolean Expr.inStringAdd();
+  eq AddExpr.getChild().inStringAdd() = isStringAdd();
+  eq ParExpr.getExpr().inStringAdd() = inStringAdd();
+  eq Expr.getChild().inStringAdd() = false;
+  eq AssignPlusExpr.getSource().inStringAdd() = getDest().type().isString();
+  eq Stmt.getChild().inStringAdd() = false;
+  eq CompilationUnit.getChild().inStringAdd() = false;
+
   public void AddExpr.createBCode(CodeGeneration gen) {
     if (!type().isString()) {
       super.createBCode(gen);
@@ -1113,33 +1130,43 @@ aspect CreateBCode {
       TypeDecl stringType = typeString();
       TypeDecl builderType = lookupType("java.lang", "StringBuilder");
 
+      // To avoid redundant StringBuilders, only create a new one for the outermost string add.
+      boolean outerStringAdd = !inStringAdd();
+
       String classname = builderType.constantPoolName();
       String desc;
       int index;
       TypeDecl argumentType;
-      if (firstStringAddPart()) {
+      if (outerStringAdd) {
         gen.NEW(builderType); // new StringBuilder()
         gen.DUP();
         desc = "()V";
         index = gen.constantPool().addMethodref(classname, "<init>", desc);
         gen.INVOKESPECIAL_void(index, 1); // StringBuilder.<init>()
         gen.initializedRef(builderType);
-        getLeftOperand().createBCode(gen);
-        argumentType = getLeftOperand().type().stringPromotion();
-        getLeftOperand().emitCastTo(gen, argumentType);
+      }
+
+      // Left subexpression.
+      left().createBCode(gen);
+      if (!left().isStringAdd()) {
+        argumentType = left().type().stringPromotion();
+        left().emitCastTo(gen, argumentType);
         desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "append", desc);
         gen.INVOKEVIRTUAL(index, 2, builderType); // StringBuilder.append(left)
-      } else {
-        getLeftOperand().createBCode(gen);
       }
-      getRightOperand().createBCode(gen);
-      argumentType = getRightOperand().type().stringPromotion();
-      getRightOperand().emitCastTo(gen, argumentType);
-      desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
-      index = gen.constantPool().addMethodref(classname, "append", desc);
-      gen.INVOKEVIRTUAL(index, 2, builderType);
-      if (lastStringAddPart()) {
+
+      // Right subexpression.
+      right().createBCode(gen);
+      if (!right().isStringAdd()) {
+        argumentType = right().type().stringPromotion();
+        right().emitCastTo(gen, argumentType);
+        desc = "(" + argumentType.typeDescriptor() + ")" + builderType.typeDescriptor();
+        index = gen.constantPool().addMethodref(classname, "append", desc);
+        gen.INVOKEVIRTUAL(index, 2, builderType);
+      }
+
+      if (outerStringAdd) {
         desc = "()" + type().typeDescriptor();
         index = gen.constantPool().addMethodref(classname, "toString", desc);
         gen.INVOKEVIRTUAL(index, 1, stringType);
