@@ -1,40 +1,32 @@
 #!/usr/bin/env groovy
 
-// Builds extendj and deploys artifacts to the CI artifact server (Artifactory).
-node {
-  env.JAVA_HOME="${tool 'oracle-jdk-8'}"
-  env.PATH="${env.JAVA_HOME}/bin:${env.PATH}"
+// Builds ExtendJ with Gradle and installs Maven artifacts.
+pipeline {
+  agent any
 
-  def server
-  def buildInfo
-  def rtGradle
-  stage('Artifactory Conf') {
-    // Obtain an Artifactory server instance, defined in Jenkins --> Manage:
-    server = Artifactory.server 'ij'
-
-    rtGradle = Artifactory.newGradleBuild()
-    rtGradle.tool = 'gradle-4.4.1' // Tool name from Jenkins configuration
-    rtGradle.deployer repo: 'libs-release-local', server: server
-    rtGradle.resolver repo: 'libs-release', server: server
-    rtGradle.deployer.deployMavenDescriptors = true
-    rtGradle.deployer.deployArtifacts = false // Disable artifacts deployment during Gradle run
-
-    buildInfo = Artifactory.newBuildInfo()
+  options {
+    buildDiscarder(logRotator(numToKeepStr: '10'))
   }
 
-  stage('Checkout') {
-    checkout scm
+  tools {
+    jdk 'oracle-jdk-8'
   }
 
-  stage('Build') {
-    rtGradle.run buildFile: 'build.gradle', tasks: 'clean artifactoryPublish', buildInfo: buildInfo
-    rtGradle.deployer.deployArtifacts buildInfo
+  triggers {
+    pollSCM('H/10 * * * *')
   }
 
-  stage ('Publish build info') {
-    // Retention policy is no longer in the free version of Artifactory. =(
-    //buildInfo.retention maxBuilds: 10, deleteBuildArtifacts: true
-    server.publishBuildInfo buildInfo
+  stages {
+    stage('Clean') {
+      steps {
+        sh './gradlew clean'
+      }
+    }
+
+    stage('Install') {
+      steps {
+        sh './gradlew install'
+      }
+    }
   }
 }
-
