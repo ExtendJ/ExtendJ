@@ -12,7 +12,7 @@ fi
 ASPECTGEN="aspectgen/aspectgen.jar"
 if [ ! -e "aspectgen/aspectgen.jar" ]; then
 	echo "Building Aspect Generator..."
-	(cd aspectgen; gradle jar)
+	(cd aspectgen; ./gradlew jar)
 fi
 
 if [ ! -e "$ASPECTGEN" ]; then
