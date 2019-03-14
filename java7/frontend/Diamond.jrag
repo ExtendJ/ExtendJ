@@ -116,38 +116,26 @@ aspect Diamond {
 
     GenericClassDecl genericType = (GenericClassDecl) ((ParClassDecl) type).genericDecl();
 
-    List<MethodDecl> placeholderMethods = genericType.getStandInMethodList();
+    List<MethodDecl> placeholderMethods = genericType.getSurrogateMethodList();
     return methodAccess().maxSpecific(placeholderMethods);
   }
 
   /**
-   * The stand-in method list for the constructors of this generic
-   * class.  One stand-in method is generated for each constructor
+   * Builds the stand-in method list for the constructors of this generic
+   * class.
+   *
+   * <p>One stand-in method is generated for each constructor
    * of the generic class.
+   * Each stand-in method has one type parameter for each type parameter of the
+   * generic class and for each generic parameter of the original constructor.
+   *
+   * The process for generating stand-in methods is a kind of inverse type
+   * variable substitution. The new type variables will have fresh names.
    *
    * @return list of stand-in methods
    */
-  syn nta List<MethodDecl> GenericClassDecl.getStandInMethodList() {
+  syn nta List<MethodDecl> GenericClassDecl.getSurrogateMethodList() {
     List<MethodDecl> methods = new List<MethodDecl>();
-    List<TypeVariable> typeParams = getTypeParameterList();
-    List<TypeVariable> classTypeVars = new List<TypeVariable>();
-    List<Access> typeArgs = new List<Access>();
-
-    // Copy the list of type parameters.
-    int arg = 0;
-    for (TypeVariable typeVar : typeParams) {
-      String substName = "#" + (arg++);
-      typeArgs.add(new TypeAccess(substName));
-      classTypeVars.add(new TypeVariable(
-          new Modifiers(),
-          substName,
-          new List<BodyDecl>(),
-          typeVar.getBoundList().treeCopyNoTransform()));
-    }
-
-    ParTypeAccess returnType = new ParTypeAccess(
-        createQualifiedAccess(),
-        typeArgs);
 
     for (ConstructorDecl decl : constructors()) {
       if (decl instanceof ConstructorDeclSubstituted) {
@@ -159,51 +147,66 @@ aspect Diamond {
         continue;
       }
 
-      Collection<TypeVariable> originalTypeVars = new LinkedList<TypeVariable>();
-      List<TypeVariable> typeVars = new List<TypeVariable>();
-      for (TypeVariable typeVar : typeParams) {
-        originalTypeVars.add(typeVar);
+      java.util.List<TypeVariable> originalVars = new ArrayList<TypeVariable>();
+      for (TypeVariable typeVar : getTypeParameterList()) {
+        originalVars.add(typeVar);
       }
-      for (TypeVariable typeVar : classTypeVars) {
-        typeVars.add((TypeVariable) typeVar.treeCopyNoTransform());
-      }
-
       if (decl.isGeneric()) {
         GenericConstructorDecl genericDecl = decl.genericDecl();
-        List<TypeVariable> typeVariables = new List<TypeVariable>();
-        for (int i = 0; i < genericDecl.getNumTypeParameter(); ++i) {
-          String substName = "#" + (arg+i);
-
-          TypeVariable typeVar = genericDecl.getTypeParameter(i);
-          originalTypeVars.add(typeVar);
-          typeVars.add(new TypeVariable(
-                new Modifiers(),
-                substName,
-                new List<BodyDecl>(),
-                typeVar.getBoundList().treeCopyNoTransform()));
+        for (TypeVariable typeVar : genericDecl.getTypeParameterList()) {
+          originalVars.add(typeVar);
         }
       }
 
+      List<Access> typeArgs = new List<Access>();
+      for (int i = 0; i < getNumTypeParameter(); ++i) {
+        String newName = "#" + (i + 1);
+        typeArgs.add(new TypeAccess(newName));
+      }
+
+      Map<TypeVariable, String> substitution =
+          new IdentityHashMap<TypeVariable, String>(originalVars.size());
+
+      for (TypeVariable typeVar : originalVars) {
+        String newName = "#" + (substitution.size() + 1);
+        substitution.put(typeVar, newName);
+      }
+
+      List<TypeVariable> typeVars = new List<TypeVariable>();
+
+      for (TypeVariable typeVar : originalVars) {
+        List<Access> bounds = new List<Access>();
+        for (Access bound : typeVar.getBoundList()) {
+          bounds.add(bound.substituted(substitution));
+        }
+        typeVars.add(new TypeVariable(
+              new Modifiers(),
+              substitution.get(typeVar),
+              new List<BodyDecl>(),
+              bounds));
+      }
+
+      ParTypeAccess returnType = new ParTypeAccess(createQualifiedAccess(), typeArgs);
+
       List<ParameterDeclaration> substParameters = new List<ParameterDeclaration>();
       for (ParameterDeclaration param : decl.getParameterList()) {
-        substParameters.add(param.substituted(originalTypeVars, typeVars));
+        substParameters.add(param.substituted(substitution));
       }
 
       List<Access> substExceptions = new List<Access>();
       for (Access exception : decl.getExceptionList()) {
-        substExceptions.add(exception.substituted(originalTypeVars, typeVars));
+        substExceptions.add(exception.substituted(substitution));
       }
 
-      StandInMethodDecl standInMethod = new StandInMethodDecl(
-          (Modifiers) decl.getModifiers().treeCopyNoTransform(),
-          (Access) returnType.treeCopyNoTransform(),
-          "#" + getID(),
-          substParameters,
-          substExceptions,
-          new Opt(new Block()),
-          typeVars);
-
-      methods.add(standInMethod);
+      methods.add(
+          new StandInMethodDecl(
+              (Modifiers) decl.getModifiers().treeCopyNoTransform(),
+              (Access) returnType.treeCopyNoTransform(),
+              "#" + getID(),
+              substParameters,
+              substExceptions,
+              new Opt(new Block()),
+              typeVars));
     }
     return methods;
   }
@@ -218,20 +221,20 @@ aspect Diamond {
    *
    * @return the substituted ParameterDeclaration node
    */
-  public ParameterDeclaration ParameterDeclaration.substituted(Collection<TypeVariable> original,
-      List<TypeVariable> substitution) {
+  public ParameterDeclaration ParameterDeclaration.substituted(
+      Map<TypeVariable, String>  substitution) {
     return new ParameterDeclaration(
         (Modifiers) getModifiers().treeCopyNoTransform(),
-        getTypeAccess().substituted(original, substitution),
+        getTypeAccess().substituted(substitution),
         getID());
   }
 
   @Override
   public ParameterDeclaration VariableArityParameterDeclaration.substituted(
-      Collection<TypeVariable> original, List<TypeVariable> substitution) {
+      Map<TypeVariable, String>  substitution) {
     return new VariableArityParameterDeclaration(
         (Modifiers) getModifiers().treeCopyNoTransform(),
-        getTypeAccess().substituted(original, substitution),
+        getTypeAccess().substituted(substitution),
         getID());
   }
 
@@ -245,33 +248,34 @@ aspect Diamond {
    *
    * @return the substituted Access node
    */
-  public Access Access.substituted(Collection<TypeVariable> original,
-      List<TypeVariable> substitution) {
+  public Access Access.substituted(Map<TypeVariable, String>  substitution) {
     return (Access) treeCopyNoTransform();
   }
 
-  @Override
-  public Access TypeAccess.substituted(Collection<TypeVariable> original,
-      List<TypeVariable> substitution) {
-    TypeDecl decl = decl();
-    int i = 0;
-    for (TypeVariable typeVar : original) {
-      if (typeVar == decl) {
-        return new TypeAccess(substitution.getChild(i).getID());
-      }
-      i += 1;
-    }
-    return super.substituted(original, substitution);
+  public Access WildcardExtends.substituted(Map<TypeVariable, String>  substitution) {
+    return new WildcardExtends(getAccess().substituted(substitution));
+  }
+
+  public Access WildcardSuper.substituted(Map<TypeVariable, String>  substitution) {
+    return new WildcardSuper(getAccess().substituted(substitution));
   }
 
   @Override
-  public Access ParTypeAccess.substituted(Collection<TypeVariable> original,
-      List<TypeVariable> substitution) {
+  public Access TypeAccess.substituted(Map<TypeVariable, String>  substitution) {
+    String substName = substitution.get(decl());
+    if (substName != null) {
+      return new TypeAccess(substName);
+    }
+    return super.substituted(substitution);
+  }
+
+  @Override
+  public Access ParTypeAccess.substituted(Map<TypeVariable, String>  substitution) {
     List<Access> substArgs = new List<Access>();
     for (Access arg : getTypeArgumentList()) {
-      substArgs.add(arg.substituted(original, substitution));
+      substArgs.add(arg.substituted(substitution));
     }
-    return new ParTypeAccess(getTypeAccess().substituted(original, substitution), substArgs);
+    return new ParTypeAccess(getTypeAccess().substituted(substitution), substArgs);
   }
 
   /**
