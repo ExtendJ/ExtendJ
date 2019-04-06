@@ -33,7 +33,7 @@ import beaver.Symbol;
 
 import org.extendj.parser.JavaParser.Terminals;
 import org.extendj.scanner.JavaScanner;
-import org.extendj.scanner.Unicode;
+import org.extendj.scanner.UnicodeEscapeReader;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -142,7 +142,7 @@ public class TokenCounter {
     } else {
       try {
         FileInputStream is = new FileInputStream(file);
-        JavaScanner scanner = new JavaScanner(new Unicode(is));
+        JavaScanner scanner = new JavaScanner(new UnicodeEscapeReader(is));
         boolean inImport = false;
         int prevLine = 0;
         while (true) {
