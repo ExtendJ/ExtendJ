@@ -32,8 +32,6 @@
 import java.util.*;
 
 aspect GenericMethodsInference {
-  syn boolean TypeDecl.isUnboxedPrimitive() = this instanceof PrimitiveType && isPrimitive();
-
   syn boolean TypeDecl.involvesTypeParameters() circular [false] = false;
 
   eq TypeVariable.involvesTypeParameters() = true;
@@ -61,49 +59,6 @@ aspect GenericMethodsInference {
   eq WildcardExtendsType.involvesTypeParameters() = extendsType().involvesTypeParameters();
 
   eq WildcardSuperType.involvesTypeParameters() = superType().involvesTypeParameters();
-
-  // TODO(joqvist): should assignConvertedType return the void type instead of null type?
-  /**
-   * The assign converted type is used in type inference to get the
-   * target type of an inferred method invocation.
-   *
-   * Returns the null type if there is no target type.
-   */
-  inh TypeDecl Expr.assignConvertedType();
-
-  // Default equation:
-  eq Program.getChild().assignConvertedType() = typeNull();
-
-  // Left side of a dot has no assign converted type:
-  eq Dot.getLeft().assignConvertedType() = typeNull();
-
-  eq Declarator.getInit().assignConvertedType() = type();
-  eq AssignSimpleExpr.getSource().assignConvertedType() = getDest().type();
-  eq ArrayInit.getInit().assignConvertedType() = declType().componentType();
-  eq ReturnStmt.getResult().assignConvertedType() = returnType();
-  eq EnhancedForStmt.getExpr().assignConvertedType() = iterableTypeAccess().type();
-
-  /**
-   * Creates a synthetic access to the type {@code java.lang.Iterable<X>},
-   * where {@code X} is the loop variable type.
-   */
-  syn nta Access EnhancedForStmt.iterableTypeAccess() =
-      new ParTypeAccess(
-          new TypeAccess("java.lang", "Iterable"),
-          new List<Access>(
-              getTypeAccess().treeCopyNoTransform()));
-
-  // Any reference type can be used in string concatenation.
-  eq AddExpr.getLeftOperand().assignConvertedType() =
-      getRightOperand().type().isString() ? typeObject() : typeNull();
-
-  // Any reference type can be used in string concatenation.
-  eq AddExpr.getRightOperand().assignConvertedType() =
-      getLeftOperand().type().isString() ? typeObject() : typeNull();
-
-  eq MethodAccess.getArg(int index).assignConvertedType() = typeObject();
-
-  inh TypeDecl Expr.typeObject();
 
   /*
    * Collects bounds on inferred type variables to find matching types.
