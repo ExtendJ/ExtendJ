@@ -1,5 +1,5 @@
 /* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
- *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2017-2019, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,14 +27,30 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * Computes the target type to be used in type inference and for finding
+ * functional interfaces for lambda expressions.
+ */
 aspect TargetType {
+  // TODO(joqvist): should targetType return the void type instead of null type?
+  /**
+   * Computes the target type of this expression.
+   *
+   * <p>The target type depends on the context of the expression and is used for
+   * inferring type parameters and finding functional interfaces for lambda expressions.
+   *
+   * <p>Returns the null type if there is no target type.
+   */
   inh lazy TypeDecl Expr.targetType();
 
+  // Default equation:
   eq Program.getChild().targetType() = typeNull();
+
+  // Left side of a dot has no target type:
+  eq Dot.getLeft().targetType() = typeNull();
 
   eq ConditionalExpr.getTrueExpr().targetType() = targetType();
   eq ConditionalExpr.getFalseExpr().targetType() = targetType();
-  eq Dot.getRight().targetType() = targetType();
   eq ParExpr.getExpr().targetType() = targetType();
   eq AssignExpr.getSource().targetType() = getDest().type();
   eq Declarator.getInit().targetType() = getTypeAccess().type();
@@ -51,6 +67,7 @@ aspect TargetType {
       return targetType();
     }
   }
+
   eq AddExpr.getRightOperand().targetType() {
     if (getRightOperand().stringContext()) {
       return getLeftOperand().type();
@@ -270,6 +287,7 @@ aspect Contexts {
     }
     return false;
   }
+
   eq AddExpr.getRightOperand().stringContext() {
     if (!getRightOperand().isPolyExpression() && !getLeftOperand().isPolyExpression()) {
       if (getLeftOperand().type().isString() && !getRightOperand().type().isString()) {
