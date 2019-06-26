@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2011-2014, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011-2019, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,8 +34,10 @@ import org.extendj.ast.CompilationUnit;
 import org.extendj.ast.Frontend;
 import org.extendj.ast.Problem;
 import org.extendj.ast.Program;
+import org.extendj.ast.AbstractClassfileParser;
 
 import java.util.Collection;
+import java.util.Iterator;
 
 /**
  * Dump the parsed AST for some Java source files.
@@ -76,46 +78,60 @@ public class JavaDumpTree extends Frontend {
    * @return 0 on success, 1 on error, 2 on configuration error, 3 on system
    */
   public int run(String args[]) {
-    return run(args, Program.defaultBytecodeReader(), Program.defaultJavaParser());
-  }
+    program.initBytecodeReader(Program.defaultBytecodeReader());
+    program.initJavaParser(Program.defaultJavaParser());
 
-  @Override
-  protected int processCompilationUnit(CompilationUnit unit) {
-    if (unit != null && unit.fromSource()) {
-      try {
-        Collection<Problem> errors = unit.parseErrors();
-        if (!errors.isEmpty()) {
-          processErrors(errors, unit);
-          return EXIT_ERROR;
+    initOptions();
+    int argResult = processArgs(args);
+    if (argResult != 0) {
+      return argResult;
+    }
+
+    Collection<String> files = program.options().files();
+
+    if (program.options().hasOption("-version")) {
+      printVersion();
+      return EXIT_SUCCESS;
+    }
+
+    if (program.options().hasOption("-help") || files.isEmpty()) {
+      printUsage();
+      return EXIT_SUCCESS;
+    }
+
+    try {
+      for (String file : files) {
+        program.addSourceFile(file);
+      }
+
+      int compileResult = EXIT_SUCCESS;
+
+      // Process source compilation units.
+      Iterator<CompilationUnit> iter = program.compilationUnitIterator();
+      while (iter.hasNext()) {
+        CompilationUnit unit = iter.next();
+        for (Problem error : unit.parseErrors()) {
+          System.err.println(error);
         }
-      } catch (Throwable t) {
-        System.err.println("Errors:");
-        System.err.format("Fatal exception while processing %s:\n", unit.pathName());
-        t.printStackTrace(System.err);
-        return EXIT_UNHANDLED_ERROR;
+        if (program.options().hasOption("-notransform")) {
+          System.out.println(unit.dumpTreeNoRewrite());
+        } else {
+          System.out.println(unit.dumpTree());
+        }
+      }
+    } catch (AbstractClassfileParser.ClassfileFormatError e) {
+      System.err.println(e.getMessage());
+      return EXIT_UNHANDLED_ERROR;
+    } catch (Throwable t) {
+      System.err.println("Fatal exception:");
+      t.printStackTrace(System.err);
+      return EXIT_UNHANDLED_ERROR;
+    } finally {
+      if (program.options().hasOption("-profile")) {
+        program.printStatistics(System.out);
       }
     }
     return EXIT_SUCCESS;
-  }
-
-  @SuppressWarnings("rawtypes")
-  @Override
-  protected void processErrors(Collection<Problem> errors, CompilationUnit unit) {
-    super.processErrors(errors, unit);
-    if (program.options().hasOption("-notransform")) {
-      System.out.println(unit.dumpTreeNoRewrite());
-    } else {
-      System.out.println(unit.dumpTree());
-    }
-  }
-
-  @Override
-  protected void processNoErrors(CompilationUnit unit) {
-    if (program.options().hasOption("-notransform")) {
-      System.out.println(unit.dumpTreeNoRewrite());
-    } else {
-      System.out.println(unit.dumpTree());
-    }
   }
 
   @Override
