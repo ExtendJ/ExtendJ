@@ -65,6 +65,32 @@ To build the Java 8 version of ExtendJ with Gradle, use the following command:
 
     gradle clean :java8:jar
 
+## Building with a custom JastAdd2 version
+
+If you need to build ExtendJ with a custom build of JastAdd2, you can place a
+new `jastadd2.jar` file in the `tools` directory in ExtendJ and update
+build.gradle to add the following parts inside the `subprojects` block:
+
+    repositories {
+      flatDir { dirs rootProject.file("tools") }
+    }
+
+    dependencies {
+      jastadd2 name: "jastadd2"
+    }
+
+
+An alternative method is to install a new version of JastAdd2 to your local
+Maven repository and point to the relevant local Maven version. For example,
+like this:
+
+    repositories {
+      mavenLocal()
+    }
+
+    dependencies {
+      jastadd2 "org.jastadd:jastadd:2.3.5"
+    }
 
 Running
 -------
