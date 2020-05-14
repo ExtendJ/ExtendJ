@@ -1,10 +1,8 @@
-ExtendJ
-========
+# ExtendJ
 
 The JastAdd extensible Java compiler.
 
-License & Copyright
--------------------
+## License & Copyright
 
 * Copyright (c) 2005-2008, Torbjörn Ekman
 * Copyright (c) 2005-2016, ExtendJ Committers
@@ -14,8 +12,7 @@ All rights reserved.
 ExtendJ is covered by the Modified BSD License. The full license text is
 distributed with this software. See the `LICENSE` file.
 
-Tools Used
-----------
+## Tools Used
 
 ExtendJ uses these libraries:
 
@@ -38,8 +35,7 @@ Exception. See the file `licenses/RagDoll-GPL` for the full license text.
 The only library used by ExtendJ at runtime is the Beaver runtime component
 `beaver-rt.jar`.
 
-Building
---------
+## Building
 
 ExtendJ is built using Apache Ant or Gradle.
 
@@ -92,10 +88,10 @@ like this:
       jastadd2 "org.jastadd:jastadd:2.3.5"
     }
 
-Running
--------
 
-Usage:
+## Running
+
+Command-line synopsis for running a compiled version of ExtendJ:
 
     java JavaCompiler <options> <source files>
       -verbose                  Output messages about what the compiler is doing
@@ -108,8 +104,8 @@ Usage:
       -help                     Print a synopsis of standard options
       -version                  Print version information
 
-Extensions
-----------
+
+## Extensions
 
 ExtendJ is intended to be an extensible compiler. By using JastAdd to build ExtendJ,
 you can modify nearly anything through an extension. Since nearly every core part of
@@ -129,8 +125,7 @@ extension keeps working.
 an extension from an older version of ExtendJ to the latest development
 version.
 
-Development
------------
+## Development
 
 For new ExtendJ developers, we recommend that you look at the ExtendJ website (extendj.org),
 in particular the [Getting Started Guide][4].
