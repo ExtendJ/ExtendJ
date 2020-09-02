@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2013-2015, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2013-2020, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,7 @@
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
+import java.net.URL;
 
 /**
  * PathPart classes are used to represent parts of the bootclasspath and user
@@ -252,6 +253,30 @@ aspect PathPart {
     @Override
     public String pathName() {
       return filePath;
+    }
+  }
+
+  public class URLBytecodeClassSource extends BytecodeClassSource {
+    private final URL url;
+
+    public URLBytecodeClassSource(PathPart sourcePath, URL path) {
+      super(sourcePath);
+      this.url = path;
+    }
+
+    @Override
+    public long lastModified() {
+      return 0;
+    }
+
+    @Override
+    public InputStream openInputStream() throws IOException {
+      return url.openStream();
+    }
+
+    @Override
+    public String pathName() {
+      return url.toString();
     }
   }
 
@@ -625,4 +650,44 @@ aspect PathPart {
     }
   }
 
+  /**
+   * A class loader that uses default system resources.
+   * This class loader will be used on Java 9 and later platforms.
+   */
+  public class SystemResourceClassLoader extends PathPart {
+
+    public SystemResourceClassLoader() {
+      super(false);
+    }
+
+    @Override
+    public String getPath() {
+      // TODO(joqvist): rename?
+      return "<system>";
+    }
+
+    /**
+     * This does currently not work.
+     */
+    @Override
+    public boolean hasPackage(String name) {
+      return false;
+    }
+
+    @Override
+    public ClassSource findSource(String name) {
+      String filePath = name.replace('.', File.separatorChar) + ".class";
+      URL url = ClassLoader.getSystemResource(filePath);
+      if (url != null) {
+        return new URLBytecodeClassSource(this, url);
+      }
+      return ClassSource.NONE;
+    }
+
+    @Override
+    public String toString() {
+      // TODO(joqvist): rename?
+      return "<system>";
+    }
+  }
 }
