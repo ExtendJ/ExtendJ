@@ -213,6 +213,7 @@ aspect CreateBCode {
   }
 
   public void ConstructorDecl.createBCode(CodeGeneration gen) {
+    TypeDecl hostType = hostType();
     try {
       boolean needsInit = true;
 
@@ -228,22 +229,22 @@ aspect CreateBCode {
         }
       }
 
-      gen.initializedThis(0, hostType());
+      gen.initializedThis(0, hostType);
 
       if (needsEnclosing()) {
-        gen.ALOAD(0, hostType());
+        gen.ALOAD(0, hostType);
         gen.ALOAD(1, enclosing());
-        String classname = hostType().constantPoolName();
+        String classname = hostType.constantPoolName();
         String name = "this$0";
         int index = gen.constantPool().addFieldref(classname, name, enclosing());
         gen.PUTFIELD(index);
       }
 
       int localIndex = offsetFirstEnclosingVariable();
-      for (Variable v : hostType().enclosingVariables()) {
-        gen.ALOAD(0, hostType());
+      for (Variable v : hostType.enclosingVariables()) {
+        gen.ALOAD(0, hostType);
         v.type().emitLoadLocal(gen, localIndex);
-        String classname = hostType().constantPoolName();
+        String classname = hostType.constantPoolName();
         String name = "val$" + v.name();
         int index = gen.constantPool().addFieldref(classname, name, v.type());
         gen.PUTFIELD(index);
@@ -251,29 +252,34 @@ aspect CreateBCode {
       }
 
       if (needsInit) {
-        TypeDecl typeDecl = hostType();
-        for (BodyDecl b : typeDecl.getBodyDeclList()) {
-          if (b instanceof FieldDecl) {
-            FieldDecl field = (FieldDecl) b;
-            if (!field.isStatic()) {
-              for (FieldDeclarator decl : field.getDeclaratorList()) {
-                if (decl.hasInit()) {
-                  gen.ALOAD(0, hostType());
-                  decl.emitInitializerBCode(gen);
-                  decl.emitStoreField(gen, hostType());
-                }
-              }
-            }
-          } else if (b instanceof InstanceInitializer) {
-            b.createBCode(gen);
-          }
+        for (BodyDecl b : hostType.getBodyDeclList()) {
+          b.createInstanceInitializer(gen, hostType);
         }
       }
       getBlock().createBCode(gen);
     } catch (Error e) {
-      System.err.println(hostType().typeName() + ": " + this);
+      System.err.println(hostType.typeName() + ": " + this);
       throw e;
     }
+  }
+
+  public void BodyDecl.createInstanceInitializer(CodeGeneration gen, TypeDecl hostType) {
+  }
+
+  public void FieldDecl.createInstanceInitializer(CodeGeneration gen, TypeDecl hostType) {
+    if (!isStatic()) {
+      for (FieldDeclarator decl : getDeclaratorList()) {
+        if (decl.hasInit()) {
+          gen.ALOAD(0, hostType);
+          decl.emitInitializerBCode(gen);
+          decl.emitStoreField(gen, hostType);
+        }
+      }
+    }
+  }
+
+  public void InstanceInitializer.createInstanceInitializer(CodeGeneration gen, TypeDecl hostType) {
+    createBCode(gen);
   }
 
   public void ASTNode.createBCode(CodeGeneration gen) {
