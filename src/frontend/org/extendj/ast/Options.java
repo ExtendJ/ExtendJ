@@ -170,6 +170,7 @@ public class Options {
       if (arg.startsWith("-")) {
         if (!optionDescriptions.containsKey(arg)) {
           if (arg.startsWith("-X")) {
+            System.err.println("WARNING: unknown command-line option " + arg);
             continue;
           }
           throw new Error("Command line argument error: option " + arg + " is not defined");
