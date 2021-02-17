@@ -1,5 +1,5 @@
 /* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2011-2019, Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ *               2011-2021, Jesper Öqvist <jesper.oqvist@cs.lth.se>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -96,6 +96,7 @@ public class JavaDumpTree extends Frontend {
 
     if (program.options().hasOption("-help") || files.isEmpty()) {
       printUsage();
+      System.out.println("  -norewrite                Disable transforms");
       return EXIT_SUCCESS;
     }
 
@@ -113,7 +114,8 @@ public class JavaDumpTree extends Frontend {
         for (Problem error : unit.parseErrors()) {
           System.err.println(error);
         }
-        if (program.options().hasOption("-notransform")) {
+        if (program.options().hasOption("-notransform")
+            || program.options().hasOption("-norewrite")) {
           System.out.println(unit.dumpTreeNoRewrite());
         } else {
           System.out.println(unit.dumpTree());
@@ -138,5 +140,6 @@ public class JavaDumpTree extends Frontend {
   protected void initOptions() {
     super.initOptions();
     program.options().addKeyOption("-notransform");
+    program.options().addKeyOption("-norewrite");
   }
 }
