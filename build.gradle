@@ -1,8 +1,7 @@
-buildscript {
-  repositories.mavenCentral()
-  dependencies {
-    classpath 'org.jastadd:jastaddgradle:1.13.3'
-  }
+plugins {
+  id 'application'
+  id 'signing'
+  id 'maven-publish'
 }
 
 repositories {
@@ -42,14 +41,6 @@ if (hasProperty('newVersion')) {
 println "Building ExtendJ version ${fullVersion}"
 
 subprojects {
-  apply plugin: 'java'
-  apply plugin: 'application'
-  apply plugin: 'jastadd'
-  apply plugin: 'maven'
-  apply plugin: 'signing'
-
-  mainClassName = 'org.extendj.JavaCompiler'
-
   sourceCompatibility = targetCompatibility = '1.6'
   compileJava.options.encoding = 'UTF-8'
 
@@ -57,42 +48,10 @@ subprojects {
   group = rootProject.group
   version = rootProject.version
 
-  sourceSets {
-    main.java {
-      srcDir rootProject.file('src/backend-main')
-      srcDir rootProject.file('src/frontend-main')
-      srcDir 'src/gen'
-    }
-    main.resources {
-      srcDir 'src/gen-res' // JastAdd buildInfo directory.
-    }
-  }
-
   clean.dependsOn 'cleanGeneratedJava'
   task cleanGeneratedJava(type: Delete) {
     description 'Remove generated Java code.'
     delete file('src/gen')
-  }
-
-  jar {
-    archiveName = 'extendj.jar'
-    manifest.attributes 'Main-Class': mainClassName
-    destinationDir = projectDir
-  }
-
-  task sourcesJar(type: Jar) {
-    classifier = 'sources'
-    from sourceSets.main.allSource
-  }
-
-  // We generate this empty Jar to satisfy sonatype.
-  // We have our own generated documentation at https://extendj.org/doc2/
-  task fakeJavadocJar(type: Jar) {
-    classifier = 'javadoc'
-  }
-
-  artifacts {
-    archives fakeJavadocJar, sourcesJar
   }
 
   processResources.dependsOn 'updateVersionString'
@@ -115,57 +74,76 @@ subprojects {
     }
   }
 
-  signing {
-    // Require keyId to sign:
-    required { project.hasProperty('signing.keyId') }
-    sign configurations.archives
+  java {
+    withSourcesJar()
   }
+}
 
+// We generate this empty Jar to satisfy sonatype.
+// We have our own generated documentation at https://extendj.org/doc2/
+task emptyJavaDocJar(type: Jar) {
+  classifier = 'javadoc'
+}
+
+afterEvaluate {
   // Only configure the artifact uploading if the OSSRH credentials are available.
-  if (project.hasProperty('ossrhUsername')) {
-    uploadArchives {
-      repositories.mavenDeployer {
-        beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+  publishing {
+    publications {
+      mavenJava(MavenPublication) {
+        artifactId = 'extendj'
+        from components.java
+        artifact emptyJavaDocJar
 
-        repository(url: 'https://oss.sonatype.org/service/local/staging/deploy/maven2') {
-          authentication(userName: ossrhUsername, password: ossrhPassword)
-        }
-
-        snapshotRepository(url: 'https://oss.sonatype.org/content/repositories/snapshots') {
-          authentication(userName: ossrhUsername, password: ossrhPassword)
-        }
-
-        pom.project {
-          name 'ExtendJ'
-          packaging 'jar'
-          description 'Extensible Java Compiler'
-          url 'https://extendj.org'
-          organization {
-            name 'ExtendJ Committers'
-            url 'https://extendj.org'
+        versionMapping {
+          usage('java-api') {
+            fromResolutionOf('runtimeClasspath')
           }
+          usage('java-runtime') {
+            fromResolutionResult()
+          }
+        }
+
+        pom {
+          name = 'ExtendJ'
+          description = 'Extensible Java Compiler.'
+          url = 'https://extendj.org'
           licenses {
             license {
-              name 'Modified BSD License'
-              url 'http://opensource.org/licenses/BSD-3-Clause'
-              distribution 'repo'
+              name = 'Modified BSD License'
+              url = 'http://opensource.org/licenses/BSD-3-Clause'
+              distribution = 'repo'
             }
           }
           developers {
             developer {
-              name 'Torbjörn Ekman'
+              name = 'Torbjörn Ekman'
             }
             developer {
-              name 'Jesper Öqvist'
-              email 'jesper.oqvist@cs.lth.se'
+              name = 'Jesper Öqvist'
+              email = 'jesper.oqvist@cs.lth.se'
             }
           }
           scm {
-            connection 'scm:git:https://bitbucket.org/extendj/extendj.git'
-            url 'https://bitbucket.org/extendj/extendj'
+            connection = 'scm:git:https://bitbucket.org/extendj/extendj.git'
+            url = 'https://bitbucket.org/extendj/extendj'
           }
         }
       }
     }
+    repositories {
+      maven {
+        url = 'https://oss.sonatype.org/service/local/staging/deploy/maven2'
+        credentials {
+          username = ossrhUsername
+          password = ossrhPassword
+        }
+      }
+    }
+  }
+
+  signing {
+    // Require keyId to sign:
+    required { project.hasProperty('signing.keyId') }
+    sign publishing.publications.mavenJava
   }
 }
