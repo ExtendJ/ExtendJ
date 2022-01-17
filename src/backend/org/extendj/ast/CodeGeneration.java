@@ -404,7 +404,7 @@ public class CodeGeneration {
   public int addressOf(int label) {
     Integer label_object = label;
     if (!address.containsKey(label_object)) {
-      throw new Error("Can not compute address of unplaced label (id: " + label + ")");
+      throw new Error("Cannot compute address of unplaced label (id: " + label + ")");
     }
     return address.get(label_object);
   }
