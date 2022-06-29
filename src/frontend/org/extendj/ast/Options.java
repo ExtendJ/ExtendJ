@@ -49,6 +49,13 @@ import java.util.Set;
  * <p>The list of filename arguments to ExtendJ is accessed via the files() method.
  */
 public class Options {
+  /** Thrown when there is a problem during command line parsing. */
+  public static class CommandLineError extends Error {
+    public CommandLineError(String message) {
+      super("Command line error: " + message);
+    }
+  }
+
   static class Option {
     public String name;
 
@@ -126,7 +133,7 @@ public class Options {
    *
    * @param args command-line arguments
    */
-  public void addOptions(String[] args) {
+  public void addOptions(String[] args) throws CommandLineError {
     java.util.List<String> argList = new ArrayList<String>();
 
     // Expand argument files.
@@ -173,22 +180,22 @@ public class Options {
             System.err.println("WARNING: unknown command-line option " + arg);
             continue;
           }
-          throw new Error("Command line argument error: option " + arg + " is not defined");
+          throw new CommandLineError("option " + arg + " is not defined");
         }
         Option o = (Option) optionDescriptions.get(arg);
 
         if (!o.isCollection && options.containsKey(arg)) {
-          throw new Error("Command line argument error: option " + arg + " is multiply defined");
+          throw new CommandLineError("option " + arg + " is multiply defined");
         }
 
         if (o.hasValue) {
           String value = null;
           if (!all.hasNext()) {
-            throw new Error("Command line argument error: value missing for key " + arg);
+            throw new CommandLineError("value missing for key " + arg);
           }
           value = all.next();
           if (value.startsWith("-")) {
-            throw new Error("Command line argument error: expected value for key " + arg
+            throw new CommandLineError("expected value for key " + arg
                 + ", but found option " + value);
           }
 
@@ -225,7 +232,7 @@ public class Options {
 
   public String getValueForOption(String name) {
     if (!hasValueForOption(name)) {
-      throw new Error("Command line argument error: key " + name + " does not have a value");
+      throw new CommandLineError("key " + name + " does not have a value");
     }
     return (String) options.get(name);
   }
@@ -236,7 +243,7 @@ public class Options {
 
   public Collection<String> getValueCollectionForOption(String name) {
     if (!hasValueForOption(name)) {
-      throw new Error("Command line argument error: key " + name + " does not have a value");
+      throw new CommandLineError("key " + name + " does not have a value");
     }
     return (Collection<String>) options.get(name);
   }
