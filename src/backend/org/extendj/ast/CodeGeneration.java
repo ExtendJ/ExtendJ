@@ -98,7 +98,7 @@ public class CodeGeneration {
     }
 
     @Override public String toString() {
-      return String.format("%d..%d => L%d", start_pc, end_pc, handler_lbl);
+      return String.format("(%d) %d..%d -> L%d", catch_type, start_pc, end_pc, handler_lbl);
     }
   }
 
@@ -190,7 +190,12 @@ public class CodeGeneration {
 
   public Collection<ExceptionEntry> exceptions = new ArrayList<ExceptionEntry>();
 
+  /**
+   * Maps label IDs to bytecode address.
+   */
   private Map<Integer, Integer> address = new HashMap<Integer, Integer>();
+
+  private int lastLabel = 0;
 
   private Map<Integer, Collection<Jump>> uses = new HashMap<Integer, Collection<Jump>>();
 
@@ -201,7 +206,11 @@ public class CodeGeneration {
   /** Maps bytecode locations to basic blocks. */
   private ArrayList<BasicBlock> blocks = new ArrayList<BasicBlock>();
 
-  private int nextBlock = 1;
+  /**
+   * Block -1 is the entry block.
+   * Block -2 is the second unlabelled block, etc.
+   */
+  private int nextBlock = 2;
 
   /** Maps labels to basic blocks. */
   private Map<Integer, BasicBlock> blockLabels = new HashMap<Integer, BasicBlock>();
@@ -362,6 +371,15 @@ public class CodeGeneration {
   }
 
   /**
+   * Add a label at the specified PC.
+   */
+  public void addLabel(int label, int pc) {
+    // TODO: check for duplicate labels?
+    address.put(label, pc);
+    lastLabel = Math.max(lastLabel, label);
+  }
+
+  /**
    * Add a label at the current PC.
    *
    * <p>This back-patches the label address to previous jumps that use this
@@ -372,8 +390,8 @@ public class CodeGeneration {
    * address is not yet known.
    */
   public void addLabel(int label) {
+    addLabel(label, pos());
     Integer key = Integer.valueOf(label);
-    address.put(key, pos());
     if (uses.containsKey(key)) {
       // Update all jumps to this label.
       for (Jump jump : uses.get(key)) {
@@ -1970,7 +1988,7 @@ public class CodeGeneration {
    * Prints bytecodes disassembly to a print stream.
    */
   public void printBytecodes(PrintStream out) throws IOException {
-    BytecodeDebug.printBytecodes(out, bytes.toArray());
+    BytecodeDebug.printBytecodes(out, bytes.toArray(), "\t");
   }
 
 
@@ -2044,7 +2062,11 @@ public class CodeGeneration {
     maxLocals = entry.entryStack.maxLocals();
     for (BasicBlock bb : blocks) {
       if (DEBUG) {
-        System.out.println("  " + bb);
+        System.out.print("  " + bb);
+        if (!bb.reachable) {
+          System.out.print(" DELETED");
+        }
+        System.out.println("");
       }
       if (bb.reachable) {
         if (DEBUG) {
@@ -2059,6 +2081,11 @@ public class CodeGeneration {
               jump.target = deleted.start;
               patch(jump);
             }
+          }
+          // If the previous block was unlabelled, add a label for it.
+          if (deleted.label < 0) {
+            deleted.label = lastLabel + 1;
+            addLabel(deleted.label, deleted.start);
           }
           // Extend exception ranges that start at this block.
           for (ExceptionEntry e : exceptions) {
@@ -2100,12 +2127,13 @@ public class CodeGeneration {
         maxStack = Math.max(maxStack, bb.exitStack().maxStack());
       } else {
         if (DEBUG) {
-          System.out.println("  deleted");
+          printBlock(bb);
         }
         delete(bb);
         if (deleted == null) {
           deleted = bb;
         } else {
+          // Extend the previous deleted block to cover this one, too.
           deleted.end = bb.end;
           bb = deleted;
         }
@@ -2157,13 +2185,14 @@ public class CodeGeneration {
 
     if (DEBUG) {
       for (ExceptionEntry e : exceptions) {
-        System.out.format("  exception %d..%d -> L%d%n", e.start_pc, e.end_pc, e.handler_lbl);
+        System.out.format("  exception %s%n", e);
       }
     }
   }
 
   private void printBlock(BasicBlock bb) {
-    BytecodeDebug.printBytecodes(System.out, bytes.toArray(), bb.start, bb.end);
+    BytecodeDebug.printBytecodes(System.out, bytes.toArray(),
+        bb.reachable ? "\t" : "--\t", bb.start, bb.end);
   }
 
   /**
@@ -2175,6 +2204,9 @@ public class CodeGeneration {
     }
   }
 
+  /**
+   * Propagate types, discover reachable blocks and track max stack size.
+   */
   private void search(BasicBlock block, LinkedList<BasicBlock> worklist) {
     if (block.reachable) {
       // Already visited.

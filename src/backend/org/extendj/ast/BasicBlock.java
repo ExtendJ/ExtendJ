@@ -101,6 +101,11 @@ class BasicBlock {
     return String.format("%s (%d..%d)", name(), start, end);
   }
 
+  /**
+   * Block S is the start block (label = -1).
+   * Blocks named Bn are blocks without label numbered with n increasing sequentially.
+   * Blocks named Ln are labeld blocks with n = label index.
+   */
   public String name() {
     if (label < 0) {
       if (label == -1) {
