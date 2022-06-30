@@ -29,6 +29,9 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 aspect NameCheck {
   public TypeDecl ASTNode.extractSingleType(SimpleSet<TypeDecl> types) {
     return types.isSingleton() ? types.singletonValue() : null;
@@ -382,6 +385,12 @@ aspect NameCheck {
 
   TypeDecl contributes each nameProblems() to CompilationUnit.problems();
 
+  /**
+   * Regular expression to match the name of a source file without file extension.
+   */
+  static final Pattern TypeDecl.sourceNamePattern =
+      Pattern.compile("^(.*[/\\\\])?([^./\\\\]+).java$");
+
   syn Collection<Problem> TypeDecl.nameProblems() {
     Collection<Problem> problems = new LinkedList<Problem>();
     if (isTopLevelType() && lookupType(packageName(), name()) != this) {
@@ -413,6 +422,19 @@ aspect NameCheck {
     if (hasEnclosingTypeDecl(name())) {
       problems.add(error(
           "type may not have the same simple name as an enclosing type declaration"));
+    }
+
+    // Public top-level from-source type must be declared in a file with matching name.
+    if (isPublic() && isTopLevelType() && compilationUnit().fromSource()) {
+      Matcher matcher = sourceNamePattern.matcher(compilationUnit().pathName());
+      // If we cannot match the filename, we do not report an error.
+      if (matcher.find()) {
+        String sourceName = matcher.group(2);
+        if (!sourceName.equals(name())) {
+          problems.add(errorf(
+                "public type %s must be decalred in a file with matching name", name()));
+        }
+      }
     }
     return problems;
   }
