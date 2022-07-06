@@ -149,6 +149,7 @@ public class RobustLinkedList<V> implements Collection<V> {
       ptr.succ = null;
       ptr = succ;
     }
+    tail.pred = null;
     head = tail;
     size = 0;
   }
