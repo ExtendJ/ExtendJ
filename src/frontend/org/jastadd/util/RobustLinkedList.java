@@ -47,7 +47,7 @@ import java.util.Iterator;
  */
 public class RobustLinkedList<V> implements Collection<V> {
 
-  private static final class Node<V> {
+  protected static final class Node<V> {
     public V datum;
     Node<V> succ = null;
     Node<V> pred = null;
@@ -112,12 +112,12 @@ public class RobustLinkedList<V> implements Collection<V> {
   }
 
   /** Sentinel empty tail node. Not part of the list. */
-  private Node<V> tail = new Node<V>(null);
+  protected Node<V> tail = new Node<V>(null);
 
   /** Head node. Points to tail node if list is empty. */
-  private Node<V> head = tail;
+  protected Node<V> head = tail;
 
-  private int size;
+  protected int size;
 
   @Override
   public synchronized boolean add(V v) {
