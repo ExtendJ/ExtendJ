@@ -2,7 +2,9 @@ plugins {
   id 'application'
   id 'signing'
   id 'maven-publish'
-  id 'org.jastadd' version '1.15.0' apply false /* Applied in subprojects. */
+
+  // Applied in subprojects:
+  id 'org.jastadd' version '1.15.0' apply false
 }
 
 repositories {
@@ -52,8 +54,27 @@ if (hasProperty('newVersion')) {
 println "Building ExtendJ version ${fullVersion}"
 
 subprojects {
+  apply plugin: 'application'
+  apply plugin: 'java'
+  apply plugin: 'org.jastadd'
+
   sourceCompatibility = targetCompatibility = '1.6'
   compileJava.options.encoding = 'UTF-8'
+
+  dependencies {
+    jastadd2 "org.jastadd:jastadd:2.3.5"
+  }
+
+  application {
+    mainClass = 'org.extendj.JavaCompiler'
+  }
+
+  jar {
+    archiveFileName = 'extendj.jar'
+    manifest.attributes 'Main-Class': application.mainClass
+    destinationDirectory = projectDir
+  }
+
 
   // Copy version info from parent project.
   group = rootProject.group
@@ -82,7 +103,19 @@ subprojects {
     }
   }
 
-  clean.dependsOn "${project.name}:cleanGeneratedJava"
+  clean.dependsOn cleanGeneratedJava
+  processResources.dependsOn updateVersionString
+
+  sourceSets {
+    main.java {
+      srcDir rootProject.file('src/backend-main')
+      srcDir rootProject.file('src/frontend-main')
+      srcDir 'src/gen'
+    }
+    main.resources {
+      srcDir 'src/gen-res' // JastAdd buildInfo directory.
+    }
+  }
 
   java {
     withSourcesJar()
