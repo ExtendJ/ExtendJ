@@ -1,0 +1,39 @@
+/*
+ *
+
+  * 
+ * https://stackoverflow.com/questions/22200647/why-cant-java-7-diamond-operator-be-used-with-anonymous-classes
+ * The solution for JDK 9 is as simple as one can imagine: just allow it only for denotable types.
+ * The big irony is that the problem they wanted to avoid, is already there. Consider 
+ * public class Foo<T> { 
+ *      Foo(T t) {} 
+        public static void main(String... arg) { 
+ *      System.out.println( new Foo<>("".getClass()).new Inner() {} 
+ *          .getClass().getGenericSuperclass()); } class Inner {} }. 
+ * 
+ * This captures a non-denotable type that can't be expressed in bytecode. Prior to JDK 11, it will 
+ * produce invalid bytecode, starting with JDK 11, it produces the compiler error "illegal signature
+ *  attribute" without explanation
+*/
+
+aspect Java9Diamond{
+    refine Diamond eq DiamondAccess.typeProblems() {
+        Collection<Problem> problems = new LinkedList<Problem>();
+        if (isAnonymousDecl()) {
+            // and non-denotable
+            problems.add(error("the diamond operator cannot be used with anonymous classes"));
+        }
+        if (isExplicitGenericConstructorAccess()) {
+            problems.add(error("the diamond operator may not be used with generic "
+              + "constructors with explicit type parameters"));
+        }
+        if (getClassInstanceExpr() == null) {
+            problems.add(error("the diamond operator can only be used in class instance expressions"));
+        }
+        if (!(getTypeAccess().type() instanceof ParClassDecl)) {
+            problems.add(error("the diamond operator can only be used to instantiate generic classes"));
+        }
+        return problems;
+      }
+
+}
