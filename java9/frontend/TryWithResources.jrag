@@ -33,10 +33,30 @@
 
 aspect Java9TryWithResources{
 
-    /*
-    Type problems, can move it to Resource instead?
-    */
+    ResourceUse contributes each typeProblems() to CompilationUnit.problems();
 
+  /**
+   * Type checking for TWR.
+   */
+  syn Collection<Problem> ResourceUse.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
+    TypeDecl typeAutoCloseable = lookupType("java.lang", "AutoCloseable");
+    if (typeAutoCloseable.isUnknown()) {
+      problems.add(error("java.lang.AutoCloseable not found"));
+    } else if (!type().subtype(typeAutoCloseable)) {
+      problems.add(error("Resource specification must declare an AutoCloseable resource"));
+    }
+    if(!getVarAccess().decl().isEffectivelyFinal()){
+        problems.add(error("Resource must be final or effectively final"));
+    }
+    if(!getVarAccess().decl().isLocalVariable()
+        &&!getVarAccess().decl().isField()
+        && !getVarAccess().decl().isMethodParameter()
+        && !getVarAccess().decl().isConstructorParameter()){ // TODO more types?
+        problems.add(error("Resource must be a field or a local variable"));
+    }
+    return problems;
+  }
 
     /*
     Problems:
@@ -44,12 +64,13 @@ aspect Java9TryWithResources{
     How do we rename in the block? Is there a smarter way to achieve same result?
     How do we generate a unique name? If we follow type system generation where do we set the attribute nextIndex?
 
-
+    Thoughts: hard to rename, declaration must not be moved into try stmt
+    --> don't create temporary, just make sure it is closed in finally
     */
 
-    eq ResourceUse.getModifiers() = getDeclarator().getModifiers();
+    eq ResourceUse.getModifiers() = getVarAccess().decl().getModifiers();
 
-    eq ResourceUse.declaresVariable(String name) = getVarAccess().name().equals(name);  //Technically we don't declare anything here??
+    eq ResourceUse.declaresVariable(String name) = false; //name().equals(name);  //Technically we don't declare anything here??
 
     eq ResourceUse.getVarAccess().nameType() = NameType.TYPE_NAME;
 
@@ -57,27 +78,24 @@ aspect Java9TryWithResources{
 
     eq ResourceUse.getID() = getVarAccess().getID();
 
-    eq ResourceUse.getDimsList() = new List<Dims>();
+    eq ResourceUse.getDimsList() = new List<Dims>(); //getVarAccess().decl().getDimsList();// // can use dims from declaration?
 
-
-    // TEST this for resourceUse and ResourceDeclaration?
-    eq ResourceUse.modifiedInScope(Variable var) = 
-        getDeclarator().hasInit() && getDeclarator().getInit().modifiedInScope(var);
-
-
-    eq ResourceUse.name() = "unique_temporary_name";
-
-    eq ResourceUse.getDeclarator() = declarator().getVariableDeclarator();
-
-    syn nta ResourceDeclaration ResourceUse.declarator() {
-        ResourceDeclaration decl = new ResourceDeclaration(
-            new VariableDeclarator(name(), new List<Dims>(), new Opt(getVarAccess())), 
-            new ResourceModifiers(null), 
-            getVarAccess().decl().type().boundAccess());
-        return decl;
+    eq ResourceUse.assignedAfter(Variable v){
+        return assignedBefore(v); // test
     }
+    // TEST this for resourceUse and ResourceDeclaration?
+    eq ResourceUse.modifiedInScope(Variable var) = false; // ?
+        // getDeclarator().hasInit() && getDeclarator().getInit().modifiedInScope(var);
 
-    eq ResourceUse.getResourceType() = getVarAccess();
+    eq ResourceUse.name() = getVarAccess().name();
+
+    // eq ResourceUse.getDeclarator() = getVarAccess().decl(); //decl is a variable 
+
+    // ResourceUse does not declare a variable, 
+    // use on a resource together with declaresVariable() to avoid null pointer exception
+    eq ResourceUse.getDeclarator() = null; 
+
+    // eq ResourceUse.getResourceType() = getVarAccess().getTypeAccess(); // is a typeaccess
 
 
 }
