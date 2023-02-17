@@ -1,24 +1,115 @@
+/* Copyright (c) 2023, David Björk <david.castor.bjork@gmail.com>, Johannes Aronsson <aronsson.developer@gmail.com>
+
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ 
+* Tests needed for when the methods refined here have contents and when they don't
+*/
+
 /*
+Left to do:
+    Create expected fail output for tests
+    Test var x = new ArrayList<>();
+    Ask Idriss about type intersection
+    Fix circular type dependencies for array and diamond access etc. 
+    Clean up this file and parser/grammar
+    Add test (failing) using var in lambda
+    Compare extendj with javac for Java10
 
 */
 
 
 aspect Var{
+    syn boolean Access.isVar() = false;
+    eq TypeAccess.isVar() = getID().equals("var");
+
     syn boolean VarDeclStmt.isVar() {
-        Access acc = getTypeAccess();
-        if(acc.isTypeAccess()){ // TODO better way?
-            TypeAccess typeacc = ((TypeAccess) acc);
-            if(typeacc.getID().equals("var")){
-                typeacc.decls().add(inferredType());
-                return true;
-            }
-            return false;
-        }
-        return false;
+        return getTypeAccess().isVar();
     }
-        
-    // getTypeAccess() is of type Access
-    
+
+    inh TypeDecl Declarator.varType();
+
+    eq Program.getChild().varType() = null;
+
+    eq VarDeclStmt.getDeclarator(int index).varType() = type();
+
+    refine TypeAnalysis eq Declarator.type() {
+        if(varType() != null){
+            return varType();
+        }else{
+            return getTypeAccess().type();
+        }
+    }
+
+    refine TypeAnalysis eq VarDeclStmt.type() {
+        if(isVar()){
+            return typeVar();
+        }else{
+            return getTypeAccess().type();
+        }
+    }
+
+    refine NameCheck eq TypeAccess.nameProblems() {
+        if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
+          return Collections.singletonList(
+              errorf("the type %s is not accessible in this context", decl().typeName()));
+        }
+
+        /* If it is a VarDeclStmt using var in Java 10 the decl checks are skipped*/
+        if(isVar()){
+            return Collections.emptyList();
+        }
+        // Type lookup for an unknown type can result in either an empty set or
+        // a set containing the unknown type.
+        // The empty set is returned for an unqualified type lookup, and the
+        // unknown type is returned for qualified type lookup.
+        // TODO(joqvist): Make qualified and unqualified type lookup behave the same on failure.
+        SimpleSet<TypeDecl> decls = decls();
+        if (decls.isSingleton()) {
+          if (decls.singletonValue().isUnknown()) {
+            return Collections.singletonList(
+                errorf("SINGLETON no visible type named %s", typeName()));
+          } else {
+            return Collections.emptyList();
+          }
+        } else if (decls.isEmpty()) {
+          return Collections.singletonList(
+              errorf("ISEMPTY no visible type named %s", typeName()));
+        } else {
+          StringBuilder sb = new StringBuilder();
+          sb.append("multiple types named " + name() + " are visible:");
+          for (TypeDecl type : decls) {
+            sb.append(" " + type.typeName());
+          }
+          return Collections.singletonList(error(sb.toString()));
+        }
+      }
+
     syn TypeDecl VarDeclStmt.inferredType() {
         if(isVar()){
             if(getDeclaratorList().getChild(0).hasInit()){
@@ -32,17 +123,34 @@ aspect Var{
         }
     }
 
-    syn nta TypeDecl VarDeclStmt.typeVar() {
-        // ShortType type = new ShortType();
-        // type.setModifiers(new Modifiers(new List().add(new Modifier("public"))));
-        // type.setID("var");
+    syn TypeDecl VarDeclStmt.typeVar() {
         TypeDecl type = inferredType();
         return type;
     }
 
-    // syn void VarDeclStmt.getTypeAccess() {
-    //     if (getID().equals("var")){
+    ClassDecl contributes
+        error("As of release 10, 'var' is a restricted local variable type and cannot be used for type declarations")
+        when name().equals("var")
+        to CompilationUnit.problems();
 
-    //     }
-    // }
+    VarDeclStmt contributes each typeProblems() to CompilationUnit.problems();
+
+    syn Collection<Problem> VarDeclStmt.typeProblems(){
+        Collection<Problem> problems = new LinkedList<Problem>();
+        if(getNumDeclarator() != 1){
+            problems.add(error("'var' is not allowed in a compound declaration"));
+        }
+        if(!getDeclaratorList().getChild(0).hasInit()){
+            problems.add(error("cannot use 'var' on variable without initializer"));
+        }
+        if(getDeclaratorList().getChild(0).hasInit() 
+            && getDeclaratorList().getChild(0).getInit().type().isArrayDecl()){
+            problems.add(error("Initializer to a 'var' cannot be an array"));
+        }
+        if(getDeclarator(0).getNumDims() != 0 ){
+            problems.add(error("'var' is not allowed as an element type of an array"));
+        }
+
+        return problems;
+    }
 }
