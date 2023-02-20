@@ -86,6 +86,9 @@ aspect Var{
     syn TypeDecl VarDeclStmt.inferredType() {
         if(isVar()){
             if(getDeclaratorList().getChild(0).hasInit()){
+                if(getDeclaratorList().getChild(0).getInit().needTypeInferred()){
+                    return null;
+                }
                 return getDeclaratorList().getChild(0).getInit().type(); // TODO is correct?
             }else{
                 return null; // TODO does this work, it is an error if we end up here
@@ -94,6 +97,11 @@ aspect Var{
             return null;
         }
     }
+
+
+    syn boolean Expr.needTypeInferred() = false;
+    eq ArrayInit.needTypeInferred() = true;
+    eq ClassInstanceExpr.needTypeInferred() = getAccess().isDiamond();
 
     refine NameCheck eq TypeAccess.nameProblems() {
         if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
@@ -148,8 +156,16 @@ aspect Var{
                 problems.add(error("cannot use 'var' on variable without initializer"));
             }
             if(getDeclaratorList().getChild(0).hasInit() 
-                && getDeclaratorList().getChild(0).getInit().type().isArrayDecl()){
+                && getDeclaratorList().getChild(0).getInit().type().isArrayDecl()){ // TODO can this actually be an initializer?
                 problems.add(error("Initializer to a 'var' cannot be an array"));
+            }
+            if(getDeclaratorList().getChild(0).hasInit() 
+                && getDeclaratorList().getChild(0).getInit().needTypeInferred()){
+                problems.add(error("Initializer to a 'var' cannot be an expression without a decidable type"));
+        }
+            if(getDeclaratorList().getChild(0).hasInit() 
+                && getDeclaratorList().getChild(0).getInit().type().isNull()){
+                problems.add(error("Initializer to a 'var' cannot be null"));
             }
             if(getDeclarator(0).getNumDims() != 0 ){
                 problems.add(error("'var' is not allowed as an element type of an array"));
