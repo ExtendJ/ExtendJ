@@ -27,21 +27,8 @@
  * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
- 
-* Tests needed for when the methods refined here have contents and when they don't
 */
 
-/*
-Left to do:
-    Create expected fail output for tests
-    Test var x = new ArrayList<>();
-    Ask Idriss about type intersection
-    Fix circular type dependencies for array and diamond access etc. 
-    Clean up this file and parser/grammar
-    Add test (failing) using var in lambda
-    Compare extendj with javac for Java10
-
-*/
 
 
 aspect Var{
@@ -80,9 +67,6 @@ aspect Var{
         
     }
 
-    // No difference
-    // refine TypeAnalysis eq VarDeclStmt.getDeclarator().declType() = type();
-
     refine TypeAnalysis eq Declarator.type() {
         if(varType() != null){
             return varType();
@@ -108,32 +92,26 @@ aspect Var{
                 }
                 return init.type();
             }else{
-                return null; // TODO does this work, it is an error if we end up here
+                return null;
             }
         }else{
             return null;
         }
     }
 
-    // True if name occurs in any part of the Expr
+    /* 
+        True if name occurs in any part of the Expr 
+    */
     syn boolean Expr.varOccurs(String name) = false; // need more impl?
     eq VarAccess.varOccurs(String name){
         if(isRightChildOfDot()){ // if in a dot expr and not in beginning
             return false;
         }
         return name.equals(getID());
-        
-
     } 
     eq ParExpr.varOccurs(String name) = getExpr().varOccurs(name);
-    eq Dot.varOccurs(String name) {
-        // if(isArrayAccess()){
-            return getLeft().varOccurs(name) || getRight().varOccurs(name);
-        // }else{
-        //     return getLeft().varOccurs(name);
-        // }
-    }
-    eq ArrayAccess.varOccurs(String name) = getExpr().varOccurs(name); // TODO doesn't work?
+    eq Dot.varOccurs(String name) = getLeft().varOccurs(name) || getRight().varOccurs(name);
+    eq ArrayAccess.varOccurs(String name) = getExpr().varOccurs(name);
     eq Unary.varOccurs(String name) = getOperand().varOccurs(name);
     eq CastExpr.varOccurs(String name) = getExpr().varOccurs(name);
     eq InstanceOfExpr.varOccurs(String name) = getExpr().varOccurs(name);
