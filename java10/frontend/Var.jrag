@@ -45,6 +45,18 @@ Left to do:
 
 
 aspect Var{
+
+    inh String Expr.getVarInitId();
+    eq Program.getChild().getVarInitId() = "";
+    eq Declarator.getInit().getVarInitId() {
+        if(isVar()){
+            return getID();
+        }else{
+            return "";
+        }
+    }
+
+
     syn boolean Access.isVar() = false;
     eq TypeAccess.isVar() = getID().equals("var");
 
@@ -54,7 +66,11 @@ aspect Var{
 
     inh TypeDecl Declarator.varType();
 
-    eq Program.getChild().varType() = null;
+    inh boolean Declarator.isVar();
+
+    eq Program.getChild().isVar() = false; // is there a way to not need this?
+    eq VarDeclStmt.getDeclarator(int index).isVar() = isVar();
+    eq Program.getChild().varType() = null; // is there a way to not need this?
 
     eq VarDeclStmt.getDeclarator(int index).varType() {
         if(isVar()){
@@ -86,10 +102,11 @@ aspect Var{
     syn TypeDecl VarDeclStmt.inferredType() {
         if(isVar()){
             if(getDeclaratorList().getChild(0).hasInit()){
-                if(getDeclaratorList().getChild(0).getInit().needTypeInferred()){
+                Expr init = getDeclaratorList().getChild(0).getInit();
+                if(init.needTypeInferred() || init.varOccurs(init.getVarInitId())){
                     return null;
                 }
-                return getDeclaratorList().getChild(0).getInit().type(); // TODO is correct?
+                return init.type();
             }else{
                 return null; // TODO does this work, it is an error if we end up here
             }
@@ -97,6 +114,83 @@ aspect Var{
             return null;
         }
     }
+
+    // True if name occurs in any part of the Expr
+    syn boolean Expr.varOccurs(String name) = false; // need more impl?
+    eq VarAccess.varOccurs(String name){
+        if(isRightChildOfDot()){ // if in a dot expr and not in beginning
+            return false;
+        }
+        return name.equals(getID());
+        
+
+    } 
+    eq ParExpr.varOccurs(String name) = getExpr().varOccurs(name);
+    eq Dot.varOccurs(String name) {
+        // if(isArrayAccess()){
+            return getLeft().varOccurs(name) || getRight().varOccurs(name);
+        // }else{
+        //     return getLeft().varOccurs(name);
+        // }
+    }
+    eq ArrayAccess.varOccurs(String name) = getExpr().varOccurs(name); // TODO doesn't work?
+    eq Unary.varOccurs(String name) = getOperand().varOccurs(name);
+    eq CastExpr.varOccurs(String name) = getExpr().varOccurs(name);
+    eq InstanceOfExpr.varOccurs(String name) = getExpr().varOccurs(name);
+    eq ConditionalExpr.varOccurs(String name) = 
+        getCondition().varOccurs(name) || getTrueExpr().varOccurs(name) || getFalseExpr().varOccurs(name);
+    eq AssignExpr.varOccurs(String name) = getDest().varOccurs(name) || getSource().varOccurs(name);
+    eq Binary.varOccurs(String name) = getLeftOperand().varOccurs(name)|| getRightOperand().varOccurs(name);
+    eq ClassInstanceExpr.varOccurs(String name) {
+        if(getAccess().varOccurs(name)){
+            return true;
+        }
+        for(int i = 0; i < getNumArg(); i++){
+            if(getArg(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    eq MethodAccess.varOccurs(String name) {
+        for(int i = 0; i < getNumArg(); i++){
+            if(getArg(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+    eq ConstructorAccess.varOccurs(String name) {
+        for(int i = 0; i < getNumArg(); i++){
+            if(getArg(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+    eq ArrayCreationExpr.varOccurs(String name){
+        return hasArrayInit() ? getArrayInit().varOccurs(name) : false;
+    }
+    eq ArrayInit.varOccurs(String name){
+        for(int i = 0; i < getNumInit(); i++){
+            if(getInit(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+    eq Literal.varOccurs(String name) = false;
+    eq Access.varOccurs(String name) = false; // 
+    // Missing for:
+    // ClassReference
+    // ArrayReference
+    // IntersectionCastExpr
+    // LambdaExpr
+    // ExprMethodReference
+    // TypeMethodReference
+    // AmbiguousMethodReference
+    
 
 
     syn boolean Expr.needTypeInferred() = false;
@@ -152,24 +246,26 @@ aspect Var{
             if(getNumDeclarator() != 1){
                 problems.add(error("'var' is not allowed in a compound declaration"));
             }
-            if(!getDeclaratorList().getChild(0).hasInit()){
-                problems.add(error("cannot use 'var' on variable without initializer"));
-            }
-            if(getDeclaratorList().getChild(0).hasInit() 
-                && getDeclaratorList().getChild(0).getInit().type().isArrayDecl()){ // TODO can this actually be an initializer?
-                problems.add(error("Initializer to a 'var' cannot be an array"));
-            }
-            if(getDeclaratorList().getChild(0).hasInit() 
-                && getDeclaratorList().getChild(0).getInit().needTypeInferred()){
-                problems.add(error("Initializer to a 'var' cannot be an expression without a decidable type"));
-        }
-            if(getDeclaratorList().getChild(0).hasInit() 
-                && getDeclaratorList().getChild(0).getInit().type().isNull()){
-                problems.add(error("Initializer to a 'var' cannot be null"));
-            }
             if(getDeclarator(0).getNumDims() != 0 ){
                 problems.add(error("'var' is not allowed as an element type of an array"));
             }
+            if(!getDeclaratorList().getChild(0).hasInit()){
+                problems.add(error("Cannot use 'var' on variable without initializer"));
+            }else{
+                Expr init = getDeclaratorList().getChild(0).getInit();
+                if(init.type().isArrayDecl()){ // TODO can this actually be an initializer?
+                    problems.add(error("Initializer to a 'var' cannot be an array"));
+                }
+                if(init.needTypeInferred()){
+                    problems.add(error("Initializer to a 'var' cannot be an expression without a decidable type"));
+                }
+                if(init.type().isNull()){
+                    problems.add(error("Initializer to a 'var' cannot be null"));
+                }
+                if(init.varOccurs(init.getVarInitId())){
+                    problems.add(error("Initializer to the 'var' '"+init.getVarInitId()+"' cannot contain the variable being declared "));
+                }
+        }
         }
 
         return problems;
