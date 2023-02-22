@@ -30,6 +30,44 @@
  */
 
 aspect Java9Diamond{
+
+    /**
+   * If this DiamondAccess node constitutes a legal use of
+   * the diamond operator, the inferred generic type for the
+   * enclosing class instance expression is returned.
+   */
+  refine Diamond eq DiamondAccess.type() {
+    TypeDecl accessType = getTypeAccess().type();
+
+    // In Java 9 we allow the diamond operator to be used with anonymous generic classes if the inferred type is denotable
+    if (isAnonymousDecl() && !(accessType.isPrimitiveType() || accessType.isClassDecl() || accessType.isInterfaceDecl())) {
+      return accessType;
+    }
+
+    if (getClassInstanceExpr() == null) {
+      // It is an error if the DiamondAccess does not occurr
+      // within a class instance creation expression, but this
+      // error is handled in typeCheck.
+      return accessType;
+    }
+
+    if (!(accessType instanceof ParClassDecl)) {
+      // It is an error if the TypeDecl of a DiamondAccess is not
+      // a generic type, but this error is handled in typeCheck.
+      return accessType;
+    }
+
+    SimpleSet<MethodDecl> maxSpecific = chooseConstructor();
+
+    if (maxSpecific.isEmpty()) {
+      return getTypeAccess().type();
+    }
+
+    MethodDecl constructor = maxSpecific.iterator().next();
+    return constructor.type();
+  }
+
+
     refine Diamond eq DiamondAccess.typeProblems() {
         Collection<Problem> problems = new LinkedList<Problem>();
         if (isAnonymousDecl()) {
