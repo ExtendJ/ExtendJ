@@ -43,18 +43,21 @@ aspect Java9TryWithResources{
     TypeDecl typeAutoCloseable = lookupType("java.lang", "AutoCloseable");
     if (typeAutoCloseable.isUnknown()) {
       problems.add(error("java.lang.AutoCloseable not found"));
-    } else if (!type().subtype(typeAutoCloseable)) {
+    } else if (type() != null && !type().subtype(typeAutoCloseable)) {
       problems.add(error("Resource specification must declare an AutoCloseable resource"));
     }
-    if(!getVarAccess().decl().isEffectivelyFinal()){
+    if(getAccess().varDecl() !=null){
+      if(!getAccess().varDecl().isEffectivelyFinal()){
         problems.add(error("Resource must be final or effectively final"));
-    }
-    if(!getVarAccess().decl().isLocalVariable()
-        &&!getVarAccess().decl().isField()
-        && !getVarAccess().decl().isMethodParameter()
-        && !getVarAccess().decl().isConstructorParameter()){ // TODO more types?
+      }
+      if(!getAccess().varDecl().isLocalVariable()
+      &&!getAccess().varDecl().isField()
+      && !getAccess().varDecl().isMethodParameter()
+      && !getAccess().varDecl().isConstructorParameter()){ // TODO more types?
         problems.add(error("Resource must be a field or a local variable"));
+      }
     }
+    // TODO if varDecl is null --> error?
     return problems;
   }
 
@@ -68,15 +71,27 @@ aspect Java9TryWithResources{
     --> don't create temporary, just make sure it is closed in finally
     */
 
-    eq ResourceUse.getModifiers() = getVarAccess().decl().getModifiers();
+    eq ResourceUse.getModifiers() = getAccess().varDecl().getModifiers();
 
     eq ResourceUse.declaresVariable(String name) = false; //name().equals(name);  //Technically we don't declare anything here??
 
-    eq ResourceUse.getVarAccess().nameType() = NameType.TYPE_NAME;
+    eq ResourceUse.getAccess().nameType() = NameType.EXPRESSION_NAME;
 
-    eq ResourceUse.type() = getVarAccess().decl().type();
+    eq ResourceUse.type() {
+      if(getAccess().varDecl() != null){
+        return getAccess().varDecl().type();
+      }else{
+        return null;
+      }
+    }
 
-    eq ResourceUse.getID() = getVarAccess().getID();
+    eq ResourceUse.getID() {
+      if(getAccess().varDecl() != null){
+        return getAccess().varDecl().name();
+      }else{
+        return null;
+      }
+    }
 
     eq ResourceUse.getDimsList() = new List<Dims>(); //getVarAccess().decl().getDimsList();// // can use dims from declaration?
 
@@ -87,8 +102,13 @@ aspect Java9TryWithResources{
     eq ResourceUse.modifiedInScope(Variable var) = false; // ?
         // getDeclarator().hasInit() && getDeclarator().getInit().modifiedInScope(var);
 
-    eq ResourceUse.name() = getVarAccess().name();
-
+    eq ResourceUse.name(){
+      if(getAccess().varDecl() != null){
+        return getAccess().varDecl().name();
+      }else{
+        return null;
+      }
+    }
     // eq ResourceUse.getDeclarator() = getVarAccess().decl(); //decl is a variable 
 
     // ResourceUse does not declare a variable, 
