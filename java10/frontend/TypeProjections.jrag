@@ -35,12 +35,114 @@
 */
 
 aspect TypeProjections{
-    /*
-    public TypeDecl upwardsProjection(TypeDecl type){
 
-        return type;
-    }
+    /*
+    It is sometimes necessary to find a close supertype of a type, where that supertype
+    does not mention certain synthetic type variables. This is achieved with an upward
+    projection applied to the type.
+    For types that are not sythetic type variables the function is the identity function.
     */
+    syn TypeDecl TypeDecl.upProjection() = this;
+
+    /* Can we use lookupwildcardsextends in genereics, are we a wildcardcompilation unit? */
+    
+
+    /**
+        ParClassDecl contains a list of TypeVariables, some of which can be synthetic
+        in an upwards projection we are to replace the synthetic ones with other types
+        according to the java specification. However these new types are often wildcard types
+        that are not TypeVariables and can therefore not take the place of the type variable 
+        in a new ParClassDecl. 
+    */
+
+    /** TODO: Creation of resulting ParClassDecl, Wildcard creation, subtype function works like this?  */
+    eq ParClassDecl.upProjection() {
+        List<TypeDecl> resultList = new List<TypeDecl>();
+        for(int i = 0; i < getNumTypeParameter(); i++){
+            TypeDecl upType = getTypeParameter(i).upProjection();
+            boolean found = false;
+            if(!upType.isObject()){
+                if(!getTypeParameter(i).subtype(upType)){
+                    found = true;
+                    resultList.add(new WildcardExtendsType(
+                        new Modifiers(new List().add(new Modifier("public"))),
+                        "? extends " + upType.name(),
+                        new List(),
+                        upType.createBoundAccess()));  
+                 }else{
+                 // if the declared bound of the ith parameter of G, mentions a type parameter of G,
+                    for(int j = 0; j < getTypeParameter(i).getNumBound() && !found; j++){
+                        for(int k = 0; k < getNumTypeParameter() && !found; k++){
+                            if(getTypeParameter(i).getBound(j).varDecl() != null
+                                && getTypeParameter(i).getBound(j).varDecl().type() == getTypeParameter(k)){
+                                found = true;
+                                resultList.add(new WildcardExtendsType(
+                                    new Modifiers(new List().add(new Modifier("public"))),
+                                    "? extends " + upType.name(),
+                                    new List(),
+                                    upType.createBoundAccess()));
+                            }
+                        }
+                    }
+                }
+            }
+            if(!found){
+            TypeDecl downType = getTypeParameter(i).downProjection();
+            if(downType != null){ // null check correct?
+                resultList.add( new WildcardSuperType(
+                    new Modifiers(new List().add(new Modifier("public"))),
+                    "? super " + downType.name(),
+                    new List(),
+                    downType.createBoundAccess()));
+                    found = true;
+                }
+                resultList.add(new WildcardType(
+                    new Modifiers(new List().add(new Modifier("public"))),
+                    "?",
+                    new List()));
+            }
+        }
+    
+        // from Generics.jrag, Does this work?
+        ParClassDecl newDecl = new ParClassDecl(
+            getModifiers().treeCopyNoTransform(),
+            getID(),
+            resultList, // Type error List<TypeDecl> instead of List<TypeVariable>
+            getParameterization(),
+            getSuperClassOpt().treeCopyNoTransform(),
+            getImplementsList().treeCopyNoTransform());
+
+        return this;
+    }
+
+    eq ParInterfaceDecl.upProjection() {
+
+        return this;
+    }
+
+    eq ArrayDecl.upProjection() {
+        // TypeDecl.arrayType() creates an array type for a given component type
+        return componentType().upProjection().arrayType() 
+    }
+
+    // eq IntersectionType.upProjection(){}  // ???
+
+    eq TypeVariable.upProjection() {
+        // if synthetic type variable
+        return lubType().upProjection();
+        //else
+        //return this;
+    }
+
+    //ClassDecl, GLBType, InterfaceDecl, LUBType, TypeVariable
+
+    /*
+    A downward projection may be applied to find a close subtype of a type,
+    where that subtype does not mention certain synthetic type variables. Because such
+    a type does not always exist, downward projection is a partial function.
+    For types that are not sythetic type variables the function is the identity function.
+    */
+    syn TypeDecl TypeDecl.downProjection() = this;
 
     // How do we find synthetic type variables? Are they instances of SyntheticTypeAccess maybe?
 
