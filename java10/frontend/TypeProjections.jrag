@@ -44,75 +44,23 @@ aspect TypeProjections{
     */
     syn TypeDecl TypeDecl.upProjection() = this;
 
-    /* Can we use lookupwildcardsextends in generics, are we a wildcardcompilation unit? */
-    
-
-    /**
-        ParClassDecl contains a list of TypeVariables, some of which can be synthetic
-        in an upwards projection we are to replace the synthetic ones with other types
-        according to the java specification. However these new types are often wildcard types
-        that are not TypeVariables and can therefore not take the place of the type variable 
-        in a new ParClassDecl. 
-    */
-
     /** TODO: Creation of resulting ParClassDecl, Wildcard creation, subtype function works like this?  */
     eq ParClassDecl.upProjection() {
-        List<TypeDecl> resultList = new List<TypeDecl>();
+        ArrayList<TypeDecl> resultList = new ArrayList<TypeDecl>();
+        boolean changed = false;
         for(int i = 0; i < getNumTypeParameter(); i++){
             TypeDecl curr = getTypeParameter(i);
-            if(getParameterization().substitute(curr.name()) != null){ // is this if stmt needed?
-                curr = getParameterization().substitute(curr.name());
-            }
-            if(!curr.isSynthetic()){ // can be non synthetic but contain synthetic? List<#A>
-                resultList.add(curr); // TODO
+            resultList.add(getParameterization().substitute(curr.name()));
+            curr = getParameterization().substitute(curr.name());
+
+            TypeDecl upType = curr.upProjection();
+            // upProjection changes nothing on a non synthetic containing type.
+            // "if Ai does not mention a restricted type variable A'i = Ai"
+            if(curr == upType){
+                resultList.add(curr);
                 continue;
             }
-            TypeDecl upType = curr.upProjection();
-            boolean found = false;
-            if(!upType.isObject()){
-                if(!curr.subtype(upType)){
-                    found = true;
-                    resultList.add(lookupWildcardExtends(upType)); 
-                 }else{
-                 // if the declared bound of the ith parameter of G, mentions a type parameter of G,
-                    for(int j = 0; j < getTypeParameter(i).getNumBound() && !found; j++){
-                        for(int k = 0; k < getNumTypeParameter() && !found; k++){
-                            if(getTypeParameter(i).getBound(j).varDecl() != null
-                                && getTypeParameter(i).getBound(j).varDecl().type() == getTypeParameter(k)){
-                                found = true;
-                                resultList.add(lookupWildcardExtends(upType));
-                            }
-                        }
-                    }
-                }
-            }
-            if(!found){
-            TypeDecl downType = curr.downProjection();
-            if(downType != null){ // null check correct?
-                resultList.add(lookupWildcardSuper(downType));
-                    found = true;
-                }else{
-                    resultList.add(typeWildcard());
-                }
-            }
-        }
-        // Parameterization parameterization = new Parameterization(getTypeParameterList(), resultList);
-        return upProjectionType(resultList);
-    }
-
-
-    eq ParInterfaceDecl.upProjection() {
-        List<TypeDecl> resultList = new List<TypeDecl>();
-        for(int i = 0; i < getNumTypeParameter(); i++){
-            TypeDecl curr = getTypeParameter(i);
-            if(getParameterization().substitute(curr.name()) != null){ // is this if stmt needed?
-                curr = getParameterization().substitute(curr.name());
-            }
-            if(!curr.isSynthetic()){
-                resultList.add(curr); // TODO
-                continue;
-            }
-            TypeDecl upType = curr.upProjection();
+            changed = true;
             boolean found = false;
             if(!upType.isObject()){
                 if(!curr.subtype(upType)){
@@ -141,23 +89,67 @@ aspect TypeProjections{
                 }
             }
         }
-        // Parameterization parameterization = new Parameterization(getTypeParameterList(), resultList);
-
-        return upProjectionType(resultList);
+        if(changed){
+            ParClassDecl decl = upProjectionType(resultList);
+            return decl;
+        }
+        return this;
     }
 
-    // inh ParInterfaceDecl ParInterfaceDecl.upProjectionType(Parameterization)
 
-    // syn nta ParInterfaceDecl ParInterfaceDecl.upProjectionType(Parameterization parameterization) {
-    //     return new ParInterfaceDecl(
-    //         getModifiers().treeCopyNoTransform(),
-    //         getID(),
-    //         getTypeParameterList().treeCopyNoTransform(),
-    //         parameterization,
-    //         getSuperInterfaceList().treeCopyNoTransform());
-    // }
-    syn nta ParInterfaceDecl ParInterfaceDecl.upProjectionType(List<TypeDecl> typeArgs) {
-        Parameterization parameterization = new Parameterization(getTypeParameterList(), typeArgs); // no diff moving it here?
+    eq ParInterfaceDecl.upProjection() {
+        ArrayList<TypeDecl> resultList = new ArrayList<TypeDecl>();
+        boolean changed = false;
+        for(int i = 0; i < getNumTypeParameter(); i++){
+            TypeDecl curr = getTypeParameter(i);
+            resultList.add(getParameterization().substitute(curr.name()));
+            curr = getParameterization().substitute(curr.name());
+
+            TypeDecl upType = curr.upProjection();
+            // upProjection changes nothing on a non synthetic containing type.
+            // "if Ai does not mention a restricted type variable A'i = Ai"
+            if(curr == upType){
+                resultList.add(curr);
+                continue;
+            }
+            changed = true;
+            boolean found = false;
+            if(!upType.isObject()){
+                if(!curr.subtype(upType)){
+                    found = true;
+                    resultList.add(lookupWildcardExtends(upType));
+                 }else{
+                 // if the declared bound of the ith parameter of G, mentions a type parameter of G,
+                    for(int j = 0; j < getTypeParameter(i).getNumBound() && !found; j++){
+                        for(int k = 0; k < getNumTypeParameter() && !found; k++){
+                            if(getTypeParameter(i).getBound(j).varDecl() != null
+                                && getTypeParameter(i).getBound(j).varDecl().type() == getTypeParameter(k)){ // use paramterization here too?
+                                found = true;
+                                resultList.add(lookupWildcardExtends(upType));
+                            }
+                        }
+                    }
+                }
+            }
+            if(!found){
+                TypeDecl downType = curr.downProjection();
+                if(downType != null){ // null check correct?
+                    resultList.add(lookupWildcardSuper(downType));
+                        found = true;
+                }else{
+                    resultList.add(typeWildcard());
+                }
+            }
+        }
+        if(changed){
+            ParInterfaceDecl decl = upProjectionType(resultList);
+            return decl;
+        }
+        return this;
+    }
+
+    syn nta ParInterfaceDecl ParInterfaceDecl.upProjectionType(Iterable<TypeDecl> typeArgs) {
+        Parameterization parameterization = new Parameterization(getTypeParameterList(), typeArgs);
         return new ParInterfaceDecl(
             getModifiers().treeCopyNoTransform(),
             getID(),
@@ -165,7 +157,7 @@ aspect TypeProjections{
             parameterization,
             getSuperInterfaceList().treeCopyNoTransform());
     }
-    syn nta ParClassDecl ParClassDecl.upProjectionType(List<TypeDecl> typeArgs) {
+    syn nta ParClassDecl ParClassDecl.upProjectionType(Iterable<TypeDecl> typeArgs) {
         Parameterization parameterization = new Parameterization(getTypeParameterList(), typeArgs);
         return new ParClassDecl(
             getModifiers().treeCopyNoTransform(),
@@ -175,26 +167,14 @@ aspect TypeProjections{
             getSuperClassOpt().treeCopyNoTransform(),
             getImplementsList().treeCopyNoTransform());
     }
-   
-    // syn nta ParClassDecl ParClassDecl.upProjectionType(Parameterization parameterization) {
-    //     return new ParClassDecl(
-    //         getModifiers().treeCopyNoTransform(),
-    //         getID(),
-    //         getTypeParameterList().treeCopyNoTransform(),
-    //         parameterization,
-    //         getSuperClassOpt().treeCopyNoTransform(),
-    //         getImplementsList().treeCopyNoTransform());
-    // }
 
-    eq ParClassDecl.getTypeParameter().isNestedType() = true;  // no difference
-    eq ParInterfaceDecl.getTypeParameter().isNestedType() = true;  // no difference
 
     eq ArrayDecl.upProjection() {
         // TypeDecl.arrayType() creates an array type for a given component type
+
+        // return this;
         return componentType().upProjection().arrayType();
     }
-
-    // eq IntersectionType.upProjection(){}  // ???
 
     eq TypeVariable.upProjection() {
         // if synthetic type variable
@@ -217,9 +197,6 @@ aspect TypeProjections{
     eq ParClassDecl.downProjection() {
         return this;
     }
-
-    // How do we find synthetic type variables? Are they instances of SyntheticTypeAccess maybe?
-
     // syn lazy nta TypeDecl VarDeclStmt.upwardsProjection() {
     //     TypeDecl projectedType = new TypeDecl(); // copy of inferredType?
         /*
