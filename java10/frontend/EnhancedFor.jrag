@@ -35,8 +35,12 @@ aspect Java10EnhancedFor {
      * If loop variable is declared using var the type becomes the same as the expressions iterableElementType
      */
     syn TypeDecl EnhancedForStmt.varType() {
-        if(getTypeAccess().isVar()){
-            return getExpr().type().iterableElementType(); // projection?
+        if(getTypeAccess().isVar()) {
+            TypeDecl exprType = getExpr().type();
+            if (exprType.isArrayDecl()) {
+              return exprType.componentType();
+            }
+            return exprType.iterableElementType(); // projection?
         }else{
             return getTypeAccess().type();
         }
@@ -66,68 +70,5 @@ aspect Java10EnhancedFor {
           }
         }
         return problems;
-    }
-
-
-    refine EnhancedForToBytecode eq EnhancedForStmt.getStmt().localNum() = getVariableDecl().localNum() + varType().variableSize();
-    
-    refine EnhancedForToBytecode public void EnhancedForStmt.createBCode(CodeGeneration gen) {
-        VariableDeclarator var = getVariableDecl();
-        gen.addLocalVariableEntryAtCurrentPC(var.name(), var.type(),
-            extraLocalIndex(), variableScopeEndLabel(gen));
-        TypeDecl exprType = getExpr().type();
-        TypeDecl targetType = varType();
-        if (exprType.isArrayDecl()) {
-          getExpr().createBCode(gen);
-          getExpr().emitCastTo(gen, exprType); // The expression may need a cast.
-          gen.ASTORE(extraLocalIndex(), exprType);
-          IntegerLiteral.push(gen, 0);
-          gen.ISTORE(extraLocalIndex() + 1);
-          gen.addLabel(cond_label());
-          gen.ILOAD(extraLocalIndex() + 1);
-          gen.ALOAD(extraLocalIndex(), exprType);
-          gen.ARRAYLENGTH();
-          gen.IF_ICMPGE(end_label());
-          gen.ALOAD(extraLocalIndex(), exprType);
-          gen.ILOAD(extraLocalIndex() + 1);
-          exprType.componentType().emitArrayLoad(gen);
-          exprType.componentType().emitCastTo(gen, targetType);
-          targetType.emitStoreLocal(gen, var.localNum());
-          getStmt().createBCode(gen);
-          gen.addLabel(update_label());
-          gen.IINC(extraLocalIndex() + 1, 1);
-          gen.GOTO(cond_label());
-          gen.addLabel(end_label());
-        } else {
-          TypeDecl typeIterable = lookupType("java.lang", "Iterable");
-          TypeDecl typeIterator = lookupType("java.util", "Iterator");
-          MethodDecl iteratorMethod = getMethod(typeIterable, "iterator");
-          MethodDecl hasNextMethod = getMethod(typeIterator, "hasNext");
-          MethodDecl nextMethod = getMethod(typeIterator, "next");
-          getExpr().createBCode(gen);
-          iteratorMethod.emitInvokeMethod(gen, typeIterable);
-          gen.ASTORE(extraLocalIndex(), typeIterator);
-          gen.addLabel(cond_label());
-          gen.ALOAD(extraLocalIndex(), typeIterator);
-          hasNextMethod.emitInvokeMethod(gen, typeIterator);
-          gen.IFEQ(end_label());
-          gen.ALOAD(extraLocalIndex(), typeIterator);
-          nextMethod.emitInvokeMethod(gen, typeIterator);
-          if (!targetType.boxed().isUnknown()) {
-            gen.CHECKCAST(targetType.boxed());
-            targetType.boxed().emitCastTo(gen, targetType);
-            targetType.emitStoreLocal(gen, var.localNum());
-          } else {
-            gen.CHECKCAST(targetType);
-            gen.ASTORE(var.localNum(), targetType);
-          }
-          getStmt().createBCode(gen);
-          gen.addLabel(update_label());
-          gen.GOTO(cond_label());
-          gen.addLabel(end_label());
-        }
-        gen.addVariableScopeLabel(variableScopeEndLabel(gen));
-      }
-    
-    
+    }    
 }
