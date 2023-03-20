@@ -35,7 +35,7 @@
 aspect Var{
 
     refine LambdaToClass protected List<ParameterDeclaration> DeclaredLambdaParameters.toParameterList() {
-        if(getNumParameter() > 0 && getParameter(0).getTypeAccess() != null && getParameter(0).getTypeAccess().isVar()){ // does this work?
+        if(getNumParameter() > 0 && getParameter(0).getTypeAccess() != null && getParameter(0).getTypeAccess().isVar()){
           List<ParameterDeclaration> paramList = new List<ParameterDeclaration>();
           FunctionDescriptor fd = enclosingLambda().targetInterface().functionDescriptor();
           if (fd.method.hasValue()) {
@@ -54,14 +54,12 @@ aspect Var{
         }
     }
 
-    inh lazy TypeDecl ParameterDeclaration.inferredType2(); // missing eq:s, not with the row below active
-    eq Program.getChild().inferredType2() {
-        // System.err.println("err inftype2 ");
-        return unknownType(); // needed?
+    inh lazy TypeDecl ParameterDeclaration.inferredType();
+    eq Program.getChild().inferredType() {
+        return unknownType();
     }
-    eq DeclaredLambdaParameters.getParameter(int i).inferredType2() {
-        // System.err.println("enter correct inftype2 ");
 
+    eq DeclaredLambdaParameters.getParameter(int i).inferredType() {
       if (enclosingLambda().targetInterface() == null) {
         return unknownType();
       }
@@ -86,13 +84,11 @@ aspect Var{
     }
 
     /**
-     * ...
+     * Infers the type if the parameter is declared with "var"
      */
     refine TypeAnalysis eq ParameterDeclaration.type() {
         if(getTypeAccess() != null && getTypeAccess().isVar()){
-            // System.err.println("   entering inftype2:  " +  this + " " + getParent() +  " gp: " + getParent().getParent());
-
-            return inferredType2();
+            return inferredType();
         }
         return getTypeAccess().type();
     }
@@ -138,7 +134,7 @@ aspect Var{
     refine TypeCheck eq LambdaExpr.typeProblems() {
         Collection<Problem> problems = new LinkedList<Problem>();
         
-        /*Additionnal check added in Java 11 to make sure var cannot be mixed with other types */
+        /*Additional check added in Java 11 to make sure var cannot be mixed with other types */
         if(getLambdaParameters().mixesVarAndTypes()){
             problems.add(error("Can't mix types with var declarations in lambda expressions"));
         }
