@@ -104,6 +104,10 @@ Command-line synopsis for running a compiled version of ExtendJ:
       -help                     Print a synopsis of standard options
       -version                  Print version information
 
+Command-line synopsis for running a compiled version of ExtendJ in a jar format:
+
+    java -jar extendj.jar <options> <source files>
+
 
 ## Extensions
 
