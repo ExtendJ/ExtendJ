@@ -1,0 +1,236 @@
+/* Copyright (c) 2023, David Björk <david.castor.bjork@gmail.com>, Johannes Aronsson <aronsson.developer@gmail.com>
+
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+*/
+
+
+
+aspect Var{
+
+    inh String Expr.getVarInitId();
+    eq Program.getChild().getVarInitId() = "";
+    eq Declarator.getInit().getVarInitId() {
+        if(isVar()){
+            return getID();
+        }else{
+            return "";
+        }
+    }
+
+
+    syn boolean Access.isVar() = false;
+    eq TypeAccess.isVar() = getID().equals("var");
+
+    syn boolean VarDeclStmt.isVar() {
+        return getTypeAccess().isVar();
+    }
+
+    inh TypeDecl Declarator.varType();
+
+    inh boolean Declarator.isVar();
+
+    eq Program.getChild().isVar() = false; // is there a way to not need this?
+    eq VarDeclStmt.getDeclarator(int index).isVar() = isVar();
+    eq Program.getChild().varType() = null; // is there a way to not need this?
+
+    // inh TypeDecl VariableDeclarator.enhancedForStmtType();
+    // eq Program.getChild().enhancedForStmtType() = null;
+    // eq EnhancedForStmt.getVariableDecl().enhancedForStmtType() = getExpr().type().iterableElementType();
+
+    eq VarDeclStmt.getDeclarator(int index).varType() {
+        if(isVar()){
+            return type();
+        }
+        return null;
+        
+    }
+
+    refine TypeAnalysis eq Declarator.type() {
+        if(varType() != null){
+            return varType();
+        }else{
+            return getTypeAccess().type();
+        }
+    }
+
+    refine TypeAnalysis eq VarDeclStmt.type() {
+        if(isVar()){
+            return inferredType();
+        }else{
+            return getTypeAccess().type();
+        }
+    }
+
+    syn TypeDecl VarDeclStmt.inferredType() {
+        if(isVar()){
+            if(getDeclaratorList().getChild(0).hasInit()){
+                Expr init = getDeclaratorList().getChild(0).getInit();
+                if(init.needTypeInferred() || init.varOccurs(init.getVarInitId())){
+                    return null;
+                }
+                return init.type();
+            }else{
+                return null;
+            }
+        }else{
+            return null;
+        }
+    }
+
+    /* 
+        True if name occurs in any part of the Expr 
+    */
+    syn boolean Expr.varOccurs(String name) = false; // need more impl?
+    eq VarAccess.varOccurs(String name){
+        if(isRightChildOfDot()){ // if in a dot expr and not in beginning
+            return false;
+        }
+        return name.equals(getID());
+    } 
+    eq ParExpr.varOccurs(String name) = getExpr().varOccurs(name);
+    eq Dot.varOccurs(String name) = getLeft().varOccurs(name) || getRight().varOccurs(name);
+    eq ArrayAccess.varOccurs(String name) = getExpr().varOccurs(name);
+    eq Unary.varOccurs(String name) = getOperand().varOccurs(name);
+    eq CastExpr.varOccurs(String name) = getExpr().varOccurs(name);
+    eq InstanceOfExpr.varOccurs(String name) = getExpr().varOccurs(name);
+    eq ConditionalExpr.varOccurs(String name) = 
+        getCondition().varOccurs(name) || getTrueExpr().varOccurs(name) || getFalseExpr().varOccurs(name);
+    eq AssignExpr.varOccurs(String name) = getDest().varOccurs(name) || getSource().varOccurs(name);
+    eq Binary.varOccurs(String name) = getLeftOperand().varOccurs(name)|| getRightOperand().varOccurs(name);
+    eq ClassInstanceExpr.varOccurs(String name) {
+        if(getAccess().varOccurs(name)){
+            return true;
+        }
+        for(int i = 0; i < getNumArg(); i++){
+            if(getArg(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+
+    eq MethodAccess.varOccurs(String name) {
+        for(int i = 0; i < getNumArg(); i++){
+            if(getArg(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+    eq ConstructorAccess.varOccurs(String name) {
+        for(int i = 0; i < getNumArg(); i++){
+            if(getArg(i).varOccurs(name)){
+                return true;
+            }
+        }
+        return false;
+    }
+    eq ArrayCreationExpr.varOccurs(String name){
+        return hasArrayInit() ? getArrayInit().varOccurs(name) : false;
+    }
+
+    eq Literal.varOccurs(String name) = false;
+    eq Access.varOccurs(String name) = false;
+
+    syn boolean Expr.needTypeInferred() = false;
+    eq ArrayInit.needTypeInferred() = true;
+    eq LambdaExpr.needTypeInferred() = true;
+
+
+    refine NameCheck eq TypeAccess.nameProblems() {
+        if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
+          return Collections.singletonList(
+              errorf("the type %s is not accessible in this context", decl().typeName()));
+        }
+
+        /* If it is a VarDeclStmt using var in Java 10 the decl checks are skipped*/
+        if(isVar()){
+            return Collections.emptyList();
+        }
+        // Type lookup for an unknown type can result in either an empty set or
+        // a set containing the unknown type.
+        // The empty set is returned for an unqualified type lookup, and the
+        // unknown type is returned for qualified type lookup.
+        // TODO(joqvist): Make qualified and unqualified type lookup behave the same on failure.
+        SimpleSet<TypeDecl> decls = decls();
+        if (decls.isSingleton()) {
+          if (decls.singletonValue().isUnknown()) {
+            return Collections.singletonList(
+                errorf("no visible type named %s", typeName()));
+          } else {
+            return Collections.emptyList();
+          }
+        } else if (decls.isEmpty()) {
+          return Collections.singletonList(
+              errorf("no visible type named %s", typeName()));
+        } else {
+          StringBuilder sb = new StringBuilder();
+          sb.append("multiple types named " + name() + " are visible:");
+          for (TypeDecl type : decls) {
+            sb.append(" " + type.typeName());
+          }
+          return Collections.singletonList(error(sb.toString()));
+        }
+      }
+
+    ClassDecl contributes
+        error("As of release 10, 'var' is a restricted local variable type and cannot be used for type declarations")
+        when name().equals("var")
+        to CompilationUnit.problems();
+
+    VarDeclStmt contributes each typeProblems() to CompilationUnit.problems();
+
+    syn Collection<Problem> VarDeclStmt.typeProblems(){
+        Collection<Problem> problems = new LinkedList<Problem>();
+        if(isVar()){
+            if(getNumDeclarator() != 1){
+                problems.add(error("'var' is not allowed in a compound declaration"));
+            }
+            if(getDeclarator(0).getNumDims() != 0 ){
+                problems.add(error("'var' is not allowed as an element type of an array"));
+            }
+            if(!getDeclaratorList().getChild(0).hasInit()){
+                problems.add(error("Cannot use 'var' on variable without initializer"));
+            }else{
+                Expr init = getDeclaratorList().getChild(0).getInit();
+                if(init.needTypeInferred()){
+                    problems.add(error("Initializer to a 'var' cannot be an expression without a decidable type"));
+                }
+                if(init.type().isNull()){
+                    problems.add(error("Initializer to a 'var' cannot be null"));
+                }
+                if(init.varOccurs(init.getVarInitId())){
+                    problems.add(error("Initializer to the 'var' '"+init.getVarInitId()+"' cannot contain the variable being declared "));
+                }
+        }
+        }
+
+        return problems;
+    }
+}
