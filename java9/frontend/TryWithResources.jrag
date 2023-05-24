@@ -29,26 +29,79 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-/*
-    In Java 9 try-with-resources statements can use resources declared outsice the parameter list if 
-    they are final or effectively final. A new parser rule was added for this as well.
-*/
 
-/*
+
 aspect Java9TryWithResources{
-    refine TryWithResources eq TryWithResources.getResource(int index).declarationType() {
-        if(getResource(index).getChild(3) == null){
-            String id = getResource(index).getID();
-            // return new VarAccess(getChild(0)).decl().getType(); // TODO
-            // return new lookup(getChild(0)).decl().getType(); // TODO
-            // return lookupType(id); // return SimpleSet<TypeDecl> want Access
-            return null
 
-        }
-        return getResource(index).getResourceType();
+  ResourceUse contributes each typeProblems() to CompilationUnit.problems();
+
+  /**
+   * Type checking for ResourceUse in TWR.
+   */
+  syn Collection<Problem> ResourceUse.typeProblems() {
+    Collection<Problem> problems = new LinkedList<Problem>();
+    TypeDecl typeAutoCloseable = lookupType("java.lang", "AutoCloseable");
+    if (typeAutoCloseable.isUnknown()) {
+      problems.add(error("java.lang.AutoCloseable not found"));
+    } else if (type() != null && !type().subtype(typeAutoCloseable)) {
+      problems.add(error("Resource specification must declare an AutoCloseable resource"));
     }
+    if(getAccess().varDecl() !=null){
+      if(!getAccess().varDecl().isEffectivelyFinal()){
+        problems.add(error("Resource must be final or effectively final"));
+      }
+      if(!getAccess().varDecl().isLocalVariable()
+      &&!getAccess().varDecl().isField()
+      && !getAccess().varDecl().isMethodParameter()
+      && !getAccess().varDecl().isConstructorParameter()){ // TODO more types?
+        problems.add(error("Resource must be a field or a local variable"));
+      }
+    }
+    return problems;
+  }
 
+  eq ResourceUse.getModifiers() = getAccess().varDecl().getModifiers();
 
+  eq ResourceUse.declaresVariable(String name) = false;
+
+  eq ResourceUse.getAccess().nameType() = NameType.EXPRESSION_NAME;
+
+  eq ResourceUse.type() {
+    if(getAccess().varDecl() != null){
+      return getAccess().varDecl().type();
+    }else{
+      return null;
+    }
+  }
+
+  eq ResourceUse.getID() {
+    if(getAccess().varDecl() != null){
+      return getAccess().varDecl().name();
+    }else{
+      return null;
+    }
+  }
+
+  eq ResourceUse.getDimsList() = new List<Dims>();
+
+  eq ResourceUse.assignedAfter(Variable v) = assignedBefore(v); 
+  
+  eq ResourceUse.modifiedInScope(Variable var) = false;
+
+  eq ResourceUse.name(){
+    if(getAccess().varDecl() != null){
+      return getAccess().varDecl().name();
+    }else{
+      return null;
+    }
+  }
+
+  /**
+    * ResourceUse does not declare a variable, 
+    * use on a resource together with declaresVariable() to avoid null pointer exception
+    */ 
+  eq ResourceUse.getDeclarator() = null; 
 }
 
-*/
+
+    
