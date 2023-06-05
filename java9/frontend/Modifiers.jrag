@@ -1,5 +1,4 @@
-/* Copyright (c) 2023, David Björk <david.castor.bjork@gmail.com>, Johannes Aronsson <aronsson.developer@gmail.com>
-
+/* Copyright (c) 2023, ExtendJ Committers
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,21 +33,20 @@
  */
 aspect Java9Modifiers{
 
-    refine Java8Modifiers eq MethodDecl.isAbstract() {
-      return getModifiers().isAbstract() || (hostType().isInterfaceDecl() && !isStatic() && !isDefault() && !isPrivate());
-    }
-    
-    refine Modifiers eq MethodDecl.isPublic() {
-      return getModifiers().isPublic() || (hostType().isInterfaceDecl() && !isPrivate());
-    }
+  refine Java8Modifiers eq MethodDecl.isAbstract() =
+      getModifiers().isAbstract() || (hostType().isInterfaceDecl() && !isStatic() && !isDefault() && !isPrivate());
+
+  refine Modifiers eq MethodDecl.isPublic() =
+      getModifiers().isPublic() || (hostType().isInterfaceDecl() && !isPrivate());
 
 
-    refine Modifiers eq ClassDecl.unimplementedMethods() {
-      Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
-      for (MethodDecl m : interfacesMethods()) {
-        // Previously interface methods could only be concrete if they were default
-        // Now they can be concrete and private which makes the assignment below neccessary
-        boolean implemented = !m.isAbstract(); // this was "= false" in java 4 implementation
+  refine Modifiers eq ClassDecl.unimplementedMethods() {
+    Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
+    for (MethodDecl m : interfacesMethods()) {
+      // Previously interface methods could only be concrete if they were default
+      // Now they can be concrete and private which makes the assignment below necessary
+      boolean implemented = !m.isAbstract(); // this was "= false" in java 4 implementation
+      if (!implemented) {
         SimpleSet<MethodDecl> result = localMethodsSignature(m.signature());
         if (result.isSingleton()) {
           MethodDecl n = result.singletonValue();
@@ -65,107 +63,52 @@ aspect Java9Modifiers{
             }
           }
         }
-        if (!implemented) {
-          methods.add(m);
-        }
       }
-  
-      if (hasSuperclass()) {
-        for (MethodDecl m : superclass().unimplementedMethods()) {
-          SimpleSet<MethodDecl> result = localMethodsSignature(m.signature());
-          if (result.isSingleton()) {
-            MethodDecl n = result.singletonValue();
-            if (n.isAbstract() || !n.overrides(m)) {
-              methods.add(m);
-            }
-          } else {
-            methods.add(m);
-          }
-        }
+      if (!implemented) {
+        methods.add(m);
       }
-  
-      for (MethodDecl m : localMethods()) {
-        if (m.isAbstract()) {
-          methods.add(m);
-        }
-      }
-      return methods;
     }
 
-    refine Java8Modifiers eq MethodDecl.modifierProblems() {
-        Collection<Problem> problems = new LinkedList<Problem>();
-        if (hostType().isClassDecl()) {
-          // 8.4.3.1
-          if (!hostType().isEnumDecl() && isAbstract() && !hostType().isAbstract()) {
-            problems.add(error("class must be abstract to include abstract methods"));
+    if (hasSuperclass()) {
+      for (MethodDecl m : superclass().unimplementedMethods()) {
+        SimpleSet<MethodDecl> result = localMethodsSignature(m.signature());
+        if (result.isSingleton()) {
+          MethodDecl n = result.singletonValue();
+          if (n.isAbstract() || !n.overrides(m)) {
+            methods.add(m);
           }
-          // 8.4.3.1
-          if (isAbstract() && isPrivate()) {
-            problems.add(error("method may not be abstract and private"));
-          }
-          // 8.4.3.1
-          // 8.4.3.2
-          if (isAbstract() && isStatic()) {
-            problems.add(error("method may not be abstract and static"));
-          }
-          if (isAbstract() && isSynchronized()) {
-            problems.add(error("method may not be abstract and synchronized"));
-          }
-          // 8.4.3.4
-          if (isAbstract() && isNative()) {
-            problems.add(error("method may not be abstract and native"));
-          }
-          if (isAbstract() && isStrictfp()) {
-            problems.add(error("method may not be abstract and strictfp"));
-          }
-          if (isNative() && isStrictfp()) {
-            problems.add(error("method may not be native and strictfp"));
-          }
-          if (isDefault()) {
-            problems.add(error("non-interface methods may not use the default modifier"));
-          }
+        } else {
+          methods.add(m);
         }
-        if (hostType().isInterfaceDecl()) {
-          // 9.4
-          if (isAbstract()) {
-            if (isStatic()) {
-              problems.add(errorf("interface method %s in %s cannot be both abstract and static",
-                  signature(), hostType().typeName()));
-            }
-            if (isDefault()) {
-              problems.add(errorf("interface method %s in %s cannot be both abstract and default",
-                  signature(), hostType().typeName()));
-            }
-            if (isStrictfp()) {
-              problems.add(errorf("interface method %s in %s cannot be both abstract and strictfp",
-                  signature(), hostType().typeName()));
-            }
-          }
-          if (isStatic() && isDefault()) {
-            problems.add(errorf("interface method %s in %s cannot be both static and default",
-                signature(), hostType().typeName()));
-          }
-          if (isNative()) {
-            problems.add(errorf("interface method %s in %s may not be native",
-                signature(), hostType().typeName()));
-          }
-          if (isSynchronized()) {
-            problems.add(errorf("interface method %s in %s may not be synchronized",
-                signature(), hostType().typeName()));
-          }
-          if (isProtected()) {
-            problems.add(errorf("interface method %s in %s may not be protected",
-                signature(), hostType().typeName()));
-          }
-          if (isPrivate() && isAbstract()) {
-            // The line below is what changed in Java 9. Private interface methods are now allowed
-            problems.add(errorf("interface method %s in %s may not be abstract and private",
-                signature(), hostType().typeName()));
-          } else if (isFinal()) {
-            problems.add(errorf("interface method %s in %s may not be final",
-                signature(), hostType().typeName()));
-          }
-        }
-        return problems;
       }
+    }
+
+    for (MethodDecl m : localMethods()) {
+      if (m.isAbstract()) {
+        methods.add(m);
+      }
+    }
+    return methods;
+  }
+
+  refine Java8Modifiers eq MethodDecl.modifierProblems() {
+    Collection<Problem> problems = refined();
+    if (hostType().isInterfaceDecl()) {
+      // Filter the Java 8 errors to remove the error about interface methods being private.
+      Collection<Problem> filtered = new LinkedList<Problem>();
+      for (Problem problem : problems) {
+        if (problem.message().contains("may not be private")) {
+          if (getModifiers().isAbstract()) {
+            filtered.add(errorf("interface method %s in %s may not be abstract and private",
+                signature(), hostType().typeName()));
+          }
+        } else {
+          filtered.add(problem);
+        }
+      }
+      return filtered;
+    } else {
+      return problems;
+    }
+  }
 }
