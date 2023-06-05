@@ -39,72 +39,20 @@ aspect Java9Modifiers{
   refine Modifiers eq MethodDecl.isPublic() =
       getModifiers().isPublic() || (hostType().isInterfaceDecl() && !isPrivate());
 
-
-  refine Modifiers eq ClassDecl.unimplementedMethods() {
-    Collection<MethodDecl> methods = new ArrayList<MethodDecl>();
-    for (MethodDecl m : interfacesMethods()) {
-      // Previously interface methods could only be concrete if they were default
-      // Now they can be concrete and private which makes the assignment below necessary
-      boolean implemented = !m.isAbstract(); // this was "= false" in java 4 implementation
-      if (!implemented) {
-        SimpleSet<MethodDecl> result = localMethodsSignature(m.signature());
-        if (result.isSingleton()) {
-          MethodDecl n = result.singletonValue();
-          if (!n.isAbstract()) {
-            implemented = true;
-          }
-        }
-        if (!implemented) {
-          result = ancestorMethods(m.signature());
-          for (MethodDecl n : result) {
-            if (!n.isAbstract() && n.isPublic()) {
-              implemented = true;
-              break;
-            }
-          }
-        }
-      }
-      if (!implemented) {
-        methods.add(m);
-      }
-    }
-
-    if (hasSuperclass()) {
-      for (MethodDecl m : superclass().unimplementedMethods()) {
-        SimpleSet<MethodDecl> result = localMethodsSignature(m.signature());
-        if (result.isSingleton()) {
-          MethodDecl n = result.singletonValue();
-          if (n.isAbstract() || !n.overrides(m)) {
-            methods.add(m);
-          }
-        } else {
-          methods.add(m);
-        }
-      }
-    }
-
-    for (MethodDecl m : localMethods()) {
-      if (m.isAbstract()) {
-        methods.add(m);
-      }
-    }
-    return methods;
-  }
-
   refine Java8Modifiers eq MethodDecl.modifierProblems() {
     Collection<Problem> problems = refined();
     if (hostType().isInterfaceDecl()) {
       // Filter the Java 8 errors to remove the error about interface methods being private.
       Collection<Problem> filtered = new LinkedList<Problem>();
       for (Problem problem : problems) {
-        if (problem.message().contains("may not be private")) {
-          if (getModifiers().isAbstract()) {
-            filtered.add(errorf("interface method %s in %s may not be abstract and private",
-                signature(), hostType().typeName()));
-          }
-        } else {
+        if (!problem.message().contains("cannot be private")) {
           filtered.add(problem);
         }
+      }
+      // Add new Java 9 error message:
+      if (getModifiers().isAbstract()) {
+        filtered.add(errorf("Interface method %s in %s cannot be both abstract and private.",
+            signature(), hostType().typeName()));
       }
       return filtered;
     } else {
