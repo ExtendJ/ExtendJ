@@ -45,6 +45,7 @@ import java.util.ResourceBundle;
 public class ExtendJVersion {
 
   private static final String versionString;
+  private static final String javaVersion;
 
   static {
     String version;
@@ -55,12 +56,15 @@ public class ExtendJVersion {
     } catch (MissingResourceException e) {
       version = "version ?";
     }
+    String moduleName = "";
     try {
       resources = ResourceBundle.getBundle("BuildInfo");
-      version +=  " " + resources.getString("moduleName");
+      moduleName = resources.getString("moduleName");
+      version +=  " " + moduleName;
     } catch (MissingResourceException e) {
     }
     versionString = version;
+    javaVersion = moduleName;
   }
 
   /**
@@ -68,5 +72,12 @@ public class ExtendJVersion {
    */
   public static String getVersion() {
     return versionString;
+  }
+
+  /**
+   * @return compiler version string, including Java support level.
+   */
+  public static String getSupportedJavaVersion() {
+    return javaVersion;
   }
 }

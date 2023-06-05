@@ -9,7 +9,7 @@ pipeline {
   }
 
   tools {
-    jdk 'oracle-jdk-8'
+    jdk 'jdk-8'
   }
 
   triggers {
@@ -53,13 +53,15 @@ pipeline {
       }
     }
 
+    stage('ExtendJ9') {
+      steps {
+        sh './gradlew :java9:jar'
+      }
+    }
+
     stage('Archive') {
       steps {
-        archive 'java4/extendj.jar'
-        archive 'java5/extendj.jar'
-        archive 'java6/extendj.jar'
-        archive 'java7/extendj.jar'
-        archive 'java8/extendj.jar'
+        archiveArtifacts artifacts: '**/extendj.jar', followSymlinks: false
       }
     }
   }
