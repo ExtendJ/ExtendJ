@@ -43,6 +43,10 @@ aspect Var {
   syn boolean Access.isVar() = false;
   eq TypeAccess.isVar() = getID().equals("var");
 
+  inh TypeDecl TypeAccess.varType();
+
+  refine TypeAnalysis eq TypeAccess.type() = isVar() ? varType() : decl();
+
   syn boolean VarDeclStmt.isVar() = getTypeAccess().isVar();
 
   inh TypeDecl Declarator.varType();
@@ -51,50 +55,30 @@ aspect Var {
 
   eq Program.getChild().isVar() = false; // is there a way to not need this?
   eq VarDeclStmt.getDeclarator(int index).isVar() = isVar();
-  eq Program.getChild().varType() = null; // is there a way to not need this?
 
-  // inh TypeDecl VariableDeclarator.enhancedForStmtType();
-  // eq Program.getChild().enhancedForStmtType() = null;
-  // eq EnhancedForStmt.getVariableDecl().enhancedForStmtType() = getExpr().type().iterableElementType();
+  eq Program.getChild().varType() = unknownType();
+
+  eq VarDeclStmt.getTypeAccess().varType() = inferredType();
 
   eq VarDeclStmt.getDeclarator(int index).varType() {
-    if (isVar()) {
-      return type();
-    }
-    return null;
-
-  }
-
-  refine TypeAnalysis eq Declarator.type() {
-    if (varType() != null) {
-      return varType();
-    } else {
-      return getTypeAccess().type();
-    }
-  }
-
-  refine TypeAnalysis eq VarDeclStmt.type() {
-    if (isVar()) {
+    if (getDeclarator(index).getNumDims() == 0) {
       return inferredType();
-    } else {
-      return getTypeAccess().type();
     }
+    return unknownType();
   }
 
-  syn TypeDecl VarDeclStmt.inferredType() {
-    if (isVar()) {
-      if (getDeclaratorList().getChild(0).hasInit()) {
-        Expr init = getDeclaratorList().getChild(0).getInit();
-        if (init.needTypeInferred() || init.varOccurs(init.getVarInitId())) {
-          return null;
-        }
-        return init.type();
-      } else {
-        return null;
-      }
-    } else {
-      return null;
+  inh TypeDecl Stmt.unknownType();
+
+  /**
+   * Helper attrigute to infer a variable type.
+   * If the variable initi expression circularly depends on itself the
+   * type is undefined (definite assignment error).
+   */
+  syn TypeDecl VarDeclStmt.inferredType() circular [unknownType()] {
+    if (getDeclarator(0).hasInit()) {
+      return getDeclarator(0).getInit().type();
     }
+    return unknownType();
   }
 
   /**
@@ -190,7 +174,7 @@ aspect Var {
   }
 
   ClassDecl contributes
-      error("As of release 10, 'var' is a restricted local variable type and cannot be used for type declarations")
+      error("As of Java 10, 'var' is a restricted local variable type and cannot be used for type declarations.")
       when name().equals("var")
       to CompilationUnit.problems();
 
@@ -202,11 +186,11 @@ aspect Var {
       if (getNumDeclarator() != 1) {
         problems.add(error("'var' is not allowed in a compound declaration"));
       }
-      if (getDeclarator(0).getNumDims() != 0 ) {
+      if (getDeclarator(0).getNumDims() != 0) {
         problems.add(error("'var' is not allowed as an element type of an array"));
       }
       if (!getDeclaratorList().getChild(0).hasInit()) {
-        problems.add(error("Cannot use 'var' on variable without initializer"));
+        problems.add(error("Cannot infer type of variable without initializer."));
       } else {
         Expr init = getDeclaratorList().getChild(0).getInit();
         if (init.needTypeInferred()) {
@@ -216,7 +200,7 @@ aspect Var {
           problems.add(error("Initializer to a 'var' cannot be null"));
         }
         if (init.varOccurs(init.getVarInitId())) {
-          problems.add(error("Initializer to the 'var' '"+init.getVarInitId()+"' cannot contain the variable being declared "));
+          problems.add(error("Initializer to the 'var' '"+init.getVarInitId()+"' cannot contain the variable being declared"));
         }
       }
     }

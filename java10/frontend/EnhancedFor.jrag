@@ -30,40 +30,18 @@
 
 aspect Java10EnhancedFor {
 
+  eq EnhancedForStmt.getTypeAccess().varType() = varType();
+
+  eq EnhancedForStmt.getVariableDecl().varType() = varType();
+
   /**
    * If loop variable is declared using var the type becomes the same as the expressions iterableElementType
    */
   syn TypeDecl EnhancedForStmt.varType() {
-    if (getTypeAccess().isVar()) {
-      TypeDecl exprType = getExpr().type();
-      if (exprType.isArrayDecl()) {
-        return exprType.componentType();
-      }
-      return exprType.iterableElementType(); // projection?
-    } else {
-      return getTypeAccess().type();
-    }
-  }
-
-  eq EnhancedForStmt.getVariableDecl().varType() = varType();
-
-  refine EnhancedFor eq EnhancedForStmt.typeProblems() {
-    Collection<Problem> problems = new LinkedList<Problem>();
     TypeDecl exprType = getExpr().type();
-    if (!exprType.isArrayDecl() && !exprType.isIterable()) {
-      problems.add(errorf(
-          "type %s of expression in foreach is neither array type nor java.lang.Iterable",
-          exprType.name()));
-    } else if (exprType.isArrayDecl() && !exprType.componentType().assignConversionTo(varType(), null)) {
-      problems.add(errorf("parameter of type %s cannot be assigned an element of type %s",
-            varType().typeName(), exprType.componentType().typeName()));
-    } else if (exprType.isIterable() && !exprType.isUnknown()) {
-      TypeDecl componentType = exprType.iterableElementType();
-      if (!componentType.assignConversionTo(varType(), null)) {
-        problems.add(errorf("parameter of type %s cannot be assigned an element of type %s",
-              varType().typeName(), componentType.typeName()));
-      }
+    if (exprType.isArrayDecl()) {
+      return exprType.componentType();
     }
-    return problems;
+    return exprType.iterableElementType(); // projection?
   }
 }
