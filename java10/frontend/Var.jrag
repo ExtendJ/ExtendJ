@@ -62,59 +62,6 @@ aspect Var {
     return unknownType();
   }
 
-  /**
-   * True if name occurs in any part of the Expr
-   */
-  syn boolean Expr.varOccurs(String name) = false; // need more impl?
-  eq VarAccess.varOccurs(String name) {
-    if (isRightChildOfDot()) { // if in a dot expr and not in beginning
-      return false;
-    }
-    return name.equals(getID());
-  }
-  eq ParExpr.varOccurs(String name) = getExpr().varOccurs(name);
-  eq Dot.varOccurs(String name) = getLeft().varOccurs(name) || getRight().varOccurs(name);
-  eq ArrayAccess.varOccurs(String name) = getExpr().varOccurs(name);
-  eq Unary.varOccurs(String name) = getOperand().varOccurs(name);
-  eq CastExpr.varOccurs(String name) = getExpr().varOccurs(name);
-  eq InstanceOfExpr.varOccurs(String name) = getExpr().varOccurs(name);
-  eq ConditionalExpr.varOccurs(String name) =
-      getCondition().varOccurs(name) || getTrueExpr().varOccurs(name) || getFalseExpr().varOccurs(name);
-  eq AssignExpr.varOccurs(String name) = getDest().varOccurs(name) || getSource().varOccurs(name);
-  eq Binary.varOccurs(String name) = getLeftOperand().varOccurs(name)|| getRightOperand().varOccurs(name);
-  eq ClassInstanceExpr.varOccurs(String name) {
-    if (getAccess().varOccurs(name)) {
-      return true;
-    }
-    for (int i = 0; i < getNumArg(); i++) {
-      if (getArg(i).varOccurs(name)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  eq MethodAccess.varOccurs(String name) {
-    for (int i = 0; i < getNumArg(); i++) {
-      if (getArg(i).varOccurs(name)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  eq ConstructorAccess.varOccurs(String name) {
-    for (int i = 0; i < getNumArg(); i++) {
-      if (getArg(i).varOccurs(name)) {
-        return true;
-      }
-    }
-    return false;
-  }
-  eq ArrayCreationExpr.varOccurs(String name) = hasArrayInit() ? getArrayInit().varOccurs(name) : false;
-
-  eq Literal.varOccurs(String name) = false;
-  eq Access.varOccurs(String name) = false;
-
   syn boolean Expr.needTypeInferred() = false;
   eq ArrayInit.needTypeInferred() = true;
   eq LambdaExpr.needTypeInferred() = true;
@@ -125,7 +72,7 @@ aspect Var {
       // This is the 'var' keyword from Java 10, so the name checks do not apply.
       return Collections.emptyList();
     }
-    return refined();
+    return NameCheck.TypeAccess.nameProblems();
   }
 
   ClassDecl contributes
@@ -154,13 +101,37 @@ aspect Var {
         if (init.type().isNull()) {
           problems.add(error("Initializer to a 'var' cannot be null"));
         }
-        String name = getDeclarator(0).getID();
-        if (init.varOccurs(name)) {
-          problems.add(errorf("Initializer to the 'var' '%s' cannot contain the variable being declared", name));
-        }
       }
     }
+    return problems;
+  }
 
+  /** Check if the variable is a local variable declared with the Java 10 'var' keyword. */
+  syn boolean VarAccess.isInferredTypeVariable() {
+    Variable decl = decl();
+    return decl instanceof Declarator && ((Declarator) decl).getTypeAccess().isVar();
+  }
+
+  refine DefiniteAssignment eq VarAccess.definiteAssignmentProblems() {
+    if (isInferredTypeVariable()) {
+      return Collections.emptyList();
+    }
+    return DefiniteAssignment.VarAccess.definiteAssignmentProblems();
+  }
+
+  refine Java8NameCheck eq VarAccess.nameProblems() {
+    Collection<Problem> problems = NameCheck.VarAccess.nameProblems();
+    if (isInferredTypeVariable()) {
+      Variable decl = decl();
+      ASTNode parent = getParent();
+      while (parent != null) {
+        if (parent == decl) {
+          problems.add(errorf("Cannot use inferred-type variable '%s' within its own initializer expression.", getID()));
+          break;
+        }
+        parent = parent.getParent();
+      }
+    }
     return problems;
   }
 }
