@@ -30,31 +30,12 @@
 
 aspect Var {
 
-  inh String Expr.getVarInitId();
-  eq Program.getChild().getVarInitId() = "";
-  eq Declarator.getInit().getVarInitId() {
-    if (isVar()) {
-      return getID();
-    } else {
-      return "";
-    }
-  }
-
   syn boolean Access.isVar() = false;
   eq TypeAccess.isVar() = getID().equals("var");
 
   inh TypeDecl TypeAccess.varType();
 
   refine TypeAnalysis eq TypeAccess.type() = isVar() ? varType() : decl();
-
-  syn boolean VarDeclStmt.isVar() = getTypeAccess().isVar();
-
-  inh TypeDecl Declarator.varType();
-
-  inh boolean Declarator.isVar();
-
-  eq Program.getChild().isVar() = false; // is there a way to not need this?
-  eq VarDeclStmt.getDeclarator(int index).isVar() = isVar();
 
   eq Program.getChild().varType() = unknownType();
 
@@ -140,37 +121,11 @@ aspect Var {
 
 
   refine NameCheck eq TypeAccess.nameProblems() {
-    if (isQualified() && !qualifier().isTypeAccess() && !qualifier().isPackageAccess()) {
-      return Collections.singletonList(
-          errorf("the type %s is not accessible in this context", decl().typeName()));
-    }
-
-    /* If it is a VarDeclStmt using var in Java 10 the decl checks are skipped*/
     if (isVar()) {
+      // This is the 'var' keyword from Java 10, so the name checks do not apply.
       return Collections.emptyList();
     }
-    // Type lookup for an unknown type can result in either an empty set or
-    // a set containing the unknown type.
-    // The empty set is returned for an unqualified type lookup, and the
-    // unknown type is returned for qualified type lookup.
-    // TODO(joqvist): Make qualified and unqualified type lookup behave the same on failure.
-    SimpleSet<TypeDecl> decls = decls();
-    if (decls.isSingleton()) {
-      if (decls.singletonValue().isUnknown()) {
-        return Collections.singletonList(errorf("no visible type named %s", typeName()));
-      } else {
-        return Collections.emptyList();
-      }
-    } else if (decls.isEmpty()) {
-      return Collections.singletonList(errorf("no visible type named %s", typeName()));
-    } else {
-      StringBuilder sb = new StringBuilder();
-      sb.append("multiple types named " + name() + " are visible:");
-      for (TypeDecl type : decls) {
-        sb.append(" " + type.typeName());
-      }
-      return Collections.singletonList(error(sb.toString()));
-    }
+    return refined();
   }
 
   ClassDecl contributes
@@ -182,7 +137,7 @@ aspect Var {
 
   syn Collection<Problem> VarDeclStmt.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>();
-    if (isVar()) {
+    if (getTypeAccess().isVar()) {
       if (getNumDeclarator() != 1) {
         problems.add(error("'var' is not allowed in a compound declaration"));
       }
@@ -199,8 +154,9 @@ aspect Var {
         if (init.type().isNull()) {
           problems.add(error("Initializer to a 'var' cannot be null"));
         }
-        if (init.varOccurs(init.getVarInitId())) {
-          problems.add(error("Initializer to the 'var' '"+init.getVarInitId()+"' cannot contain the variable being declared"));
+        String name = getDeclarator(0).getID();
+        if (init.varOccurs(name)) {
+          problems.add(errorf("Initializer to the 'var' '%s' cannot contain the variable being declared", name));
         }
       }
     }
