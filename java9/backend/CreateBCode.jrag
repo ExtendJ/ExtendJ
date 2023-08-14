@@ -1,5 +1,4 @@
-/* Copyright (c) 2023, David Björk <david.castor.bjork@gmail.com>, Johannes Aronsson <aronsson.developer@gmail.com>
-
+/* Copyright (c) 2023, ExtendJ Committers
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -34,47 +33,47 @@ aspect Java9CreateBCode {
   /**
    * Refined in Java 9 for private interface methods
    */
-    refine GenericsCodegen
-    public void MethodAccess.createBCode(CodeGeneration gen) {
-      if (transformed() != this) {
-        // Ensure bytecode is generated for the transformed access.
-        transformed().createBCode(gen);
-        return;
-      }
-      MethodDecl decl = decl().erasedMethod();
-      createLoadQualifier(gen);
-  
-      if (program().options().hasOption("-debug")) {
-        printDiagnosticMessages();
-      }
-  
-      // Perform method invocation conversions.
-      for (int i = 0; i < getNumArg(); ++i) {
-        getArg(i).createBCode(gen);
-        // The cast or boxing/unboxing operation must know the bound rather than the erased type.
-        getArg(i).emitCastTo(gen, decl.paramType(i)); // Invocation conversion.
-      }
-      // This if statement was changed in Java 9
-      if (!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()
-          || isSuperAccessor || !decl.isStatic() && decl.isPrivate() && decl.hostType().isInterfaceDecl()) {
-        decl.emitInvokeSpecialMethod(gen, methodQualifierType());
-      } else {
-        decl.emitInvokeMethod(gen, methodQualifierType());
-      }
+  refine GenericsCodegen
+  public void MethodAccess.createBCode(CodeGeneration gen) {
+    if (transformed() != this) {
+      // Ensure bytecode is generated for the transformed access.
+      transformed().createBCode(gen);
+      return;
+    }
+    MethodDecl decl = decl().erasedMethod();
+    createLoadQualifier(gen);
+
+    if (program().options().hasOption("-debug")) {
+      printDiagnosticMessages();
     }
 
-    refine CodeGeneration
-    public void MethodDecl.emitInvokeSpecialMethod(CodeGeneration gen, TypeDecl hostType) {
-        String classname = hostType.constantPoolName();
-        String desc = descName();
-        String name = name();
-        int index;
-        if (hostType.isInterfaceDecl() && isPrivate()) { //From Java 9 onwards, we can have concrete private methods in our interfaces
-            index = gen.constantPool().addInterfaceMethodref(classname, name, desc);
-        } else {
-            index = gen.constantPool().addMethodref(classname, name, desc);
-        }
-        int numArg = 1 + getNumParameter();
-        gen.INVOKESPECIAL(index, numArg, type());
+    // Perform method invocation conversions.
+    for (int i = 0; i < getNumArg(); ++i) {
+      getArg(i).createBCode(gen);
+      // The cast or boxing/unboxing operation must know the bound rather than the erased type.
+      getArg(i).emitCastTo(gen, decl.paramType(i)); // Invocation conversion.
     }
+    // This if statement was changed in Java 9
+    if (!decl.isStatic() && isQualified() && prevExpr().isSuperAccess()
+        || isSuperAccessor || !decl.isStatic() && decl.isPrivate() && decl.hostType().isInterfaceDecl()) {
+      decl.emitInvokeSpecialMethod(gen, methodQualifierType());
+    } else {
+      decl.emitInvokeMethod(gen, methodQualifierType());
+    }
+  }
+
+  refine CodeGeneration
+  public void MethodDecl.emitInvokeSpecialMethod(CodeGeneration gen, TypeDecl hostType) {
+    String classname = hostType.constantPoolName();
+    String desc = descName();
+    String name = name();
+    int index;
+    if (hostType.isInterfaceDecl() && isPrivate()) { // From Java 9 onwards, we can have concrete private methods in our interfaces.
+      index = gen.constantPool().addInterfaceMethodref(classname, name, desc);
+    } else {
+      index = gen.constantPool().addMethodref(classname, name, desc);
+    }
+    int numArg = 1 + getNumParameter();
+    gen.INVOKESPECIAL(index, numArg, type());
+  }
 }

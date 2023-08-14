@@ -4,15 +4,21 @@ The JastAdd extensible Java compiler.
 
 ## License & Copyright
 
-* Copyright (c) 2005-2008, Torbjörn Ekman
-* Copyright (c) 2005-2016, ExtendJ Committers
-
-All rights reserved.
+Copyright (c) 2005-2023, ExtendJ Committers. All rights reserved.
 
 ExtendJ is covered by the Modified BSD License. The full license text is
 distributed with this software. See the `LICENSE` file.
 
-## Tools Used
+## Credits
+
+* Torbjörn Ekman developed the original compiler and support for Java 4 to 6
+  around 2005-2008.
+* Jesper Öqvist developed the Java 7 module around 2012-2013 and rewrote parts
+  of the compiler to modularize it further and remove side effects.
+* Erik Hogeman implemented the Java 8 module in 2014.
+* David Björk and Johannes Aronsson implemented Java 9, 10, and 11 support in 2023.
+
+### Tools Used
 
 ExtendJ uses these libraries:
 
