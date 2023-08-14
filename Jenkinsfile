@@ -65,6 +65,12 @@ pipeline {
       }
     }
 
+    stage('ExtendJ11') {
+      steps {
+        sh './gradlew :java11:jar'
+      }
+    }
+
     stage('Archive') {
       steps {
         archiveArtifacts artifacts: '**/extendj.jar', followSymlinks: false
