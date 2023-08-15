@@ -41,8 +41,7 @@ aspect Var {
         int i = 0;
         for (ParameterDeclaration Decl : getParameterList()) {
           ParameterDeclaration funcDecl = targetMethod.getParameter(i);
-          paramList.add(
-              new ParameterDeclaration(funcDecl.type().createQualifiedAccess(), Decl.name()));
+          paramList.add(new ParameterDeclaration(funcDecl.type().createQualifiedAccess(), Decl.name()));
           i += 1;
         }
       }
@@ -52,9 +51,7 @@ aspect Var {
   }
 
   inh lazy TypeDecl ParameterDeclaration.inferredType();
-  eq Program.getChild().inferredType() {
-    return unknownType();
-  }
+  eq Program.getChild().inferredType() = unknownType();
 
   eq DeclaredLambdaParameters.getParameter(int i).inferredType() {
     if (enclosingLambda().targetInterface() == null) {
@@ -82,38 +79,37 @@ aspect Var {
 
   eq ParameterDeclaration.getTypeAccess().varType() = inferredType();
 
-  refine LambdaExpr
-    eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
-      if (fd.method.hasValue()) {
-        MethodDecl targetMethod = fd.method.get();
-        if (numParameters() != targetMethod.getNumParameter()) {
-          return false;
-        }
-        if(numParameters() > 0 && getParameter(0).getTypeAccess() != null && getParameter(0).getTypeAccess().isVar()){
-          return true; // if a parameter is declared using "var" treat all parameters as var, mixing is not allowed
-        }
-        for (int i = 0; i < numParameters(); i++) {
-          // Lambdas can't declare type variables so that doesn't need to be taken into account.
-          if (getParameter(i).type() != targetMethod.getParameter(i).type() &&
-              getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
-            return false;
-              }
-        }
-        return true;
-      } else {
+  refine LambdaExpr eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.hasValue()) {
+      MethodDecl targetMethod = fd.method.get();
+      if (numParameters() != targetMethod.getNumParameter()) {
         return false;
       }
+      if (numParameters() > 0 && getParameter(0).getTypeAccess() != null && getParameter(0).getTypeAccess().isVar()) {
+        return true; // If a parameter is declared using "var" treat all parameters as var, mixing is not allowed.
+      }
+      for (int i = 0; i < numParameters(); i++) {
+        // Lambdas cannot declare type variables so that doesn't need to be taken into account.
+        if (getParameter(i).type() != targetMethod.getParameter(i).type()
+            && getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
+          return false;
+        }
+      }
+      return true;
+    } else {
+      return false;
     }
+  }
 
   syn boolean LambdaParameters.mixesVarAndTypes() = false;
 
   eq DeclaredLambdaParameters.mixesVarAndTypes() {
     boolean atLeastOneVar = false;
     boolean allVar = true;
-    for(int i = 0; i < getNumParameter(); i++){
-      if(getParameter(i).getTypeAccess() != null && getParameter(i).getTypeAccess().isVar()){
+    for (int i = 0; i < getNumParameter(); i++) {
+      if (getParameter(i).getTypeAccess() != null && getParameter(i).getTypeAccess().isVar()) {
         atLeastOneVar = true;
-      }else{
+      } else {
         allVar = false;
       }
     }
@@ -121,11 +117,10 @@ aspect Var {
   }
 
   refine TypeCheck eq LambdaExpr.typeProblems() {
-
     // Additional check added in Java 11 to make sure var cannot be mixed with other types.
     if (getLambdaParameters().mixesVarAndTypes()) {
       Collection<Problem> problems = new LinkedList<Problem>();
-      problems.add(error("Can't mix types with var declarations in lambda expressions"));
+      problems.add(error("Cannot mix types with var declarations in lambda expressions."));
       return problems;
     }
 
