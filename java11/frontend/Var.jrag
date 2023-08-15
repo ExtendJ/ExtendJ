@@ -80,15 +80,7 @@ aspect Var {
     }
   }
 
-  /**
-   * Infers the type if the parameter is declared with "var"
-   */
-  refine TypeAnalysis eq ParameterDeclaration.type() {
-    if (getTypeAccess() != null && getTypeAccess().isVar()) {
-      return inferredType();
-    }
-    return getTypeAccess().type();
-  }
+  eq ParameterDeclaration.getTypeAccess().varType() = inferredType();
 
   refine LambdaExpr
     eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
@@ -128,96 +120,16 @@ aspect Var {
     return atLeastOneVar && !allVar;
   }
 
-  // TODO(erik): Type check that works for wildcard-parameterized interfaces.
   refine TypeCheck eq LambdaExpr.typeProblems() {
-    Collection<Problem> problems = new LinkedList<Problem>();
 
-    /*Additional check added in Java 11 to make sure var cannot be mixed with other types */
+    // Additional check added in Java 11 to make sure var cannot be mixed with other types.
     if (getLambdaParameters().mixesVarAndTypes()) {
+      Collection<Problem> problems = new LinkedList<Problem>();
       problems.add(error("Can't mix types with var declarations in lambda expressions"));
       return problems;
     }
 
-    if (!assignmentContext() && !castContext() && !invocationContext()) {
-      // 15.27
-      problems.add(error("Lambda expressions must target a functional interface"));
-      return problems;
-    }
-
-    // This means there was an error in the overload resolution, will be reported elsewhere
-    if (invocationContext() && targetType() == unknownType()) {
-      return Collections.emptyList();
-    }
-
-    if (!targetType().isFunctionalInterface()) {
-      // 15.27
-      problems.add(error("Lambda expressions must target a functional interface"));
-      return problems;
-    }
-
-    InterfaceDecl iDecl = targetInterface();
-
-    if (!iDecl.isFunctional()) {
-      // 15.27
-      problems.add(errorf(
-            "Interface %s is not functional and can therefore not be targeted by a lambda expression",
-            iDecl.typeName()));
-      return problems;
-    }
-
-    FunctionDescriptor fd = iDecl.functionDescriptor();
-    if (!fd.method.hasValue()) {
-      problems.add(errorf(
-            "Found no matching method in the interface %s for this lambda expression.",
-            iDecl.typeName()));
-    } else {
-      MethodDecl targetMethod = fd.method.get();
-
-      if (fd.isGeneric()) {
-        // 15.27
-        problems.add(errorf("Illegal lambda expression: Method %s in interface %s is generic",
-              targetMethod.name(), iDecl.typeName()));
-        return problems;
-      }
-
-      if (!getLambdaParameters().congruentTo(fd)) {
-        problems.add(errorf("Lambda expression parameters incompatible with"
-              + " parameters in method %s in interface %s",
-              targetMethod.name(), iDecl.typeName()));
-      }
-
-      if (getLambdaBody() instanceof ExprLambdaBody) {
-        ExprLambdaBody exprBody = (ExprLambdaBody) getLambdaBody();
-        if (targetMethod.type().isVoid()) {
-          if (!exprBody.getExpr().stmtCompatible()) {
-            problems.add(errorf("Lambda expression body must be a statement expression,"
-                  + " because the method %s in interface %s has return type void",
-                  targetMethod.name(), iDecl.typeName()));
-          }
-        } else {
-          if (!exprBody.getExpr().type().assignConversionTo(targetMethod.type(), exprBody.getExpr())) {
-            problems.add(errorf("Lambda expression body is not compatible with"
-                  + " the return type %s in method %s in interface %s",
-                  targetMethod.type().typeName(), targetMethod.name(), iDecl.typeName()));
-          }
-        }
-      } else {
-        BlockLambdaBody blockBody = (BlockLambdaBody) getLambdaBody();
-        if (targetMethod.type().isVoid()) {
-          if (!blockBody.voidCompatible()) {
-            problems.add(errorf("Lambda expression body is not allowed to return a value,"
-                  + " because the method %s in interface %s has return type void",
-                  targetMethod.name(), iDecl.typeName()));
-          }
-        } else if (!blockBody.valueCompatible()) {
-          problems.add(errorf("Lambda expression body must not complete normally or contain empty return"
-                + " statments, because the method %s in interface"
-                + " %s has a return type which is non-void",
-                targetMethod.name(), iDecl.typeName()));
-        }
-      }
-    }
-    return problems;
+    return TypeCheck.LambdaExpr.typeProblems();
   }
 
 }
