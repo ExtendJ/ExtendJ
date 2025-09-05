@@ -1,0 +1,202 @@
+
+// Implements parts of the API in https://codeprober.org/docs/config/ast_api.html
+aspect CodeProberAPI {
+
+  // Avoid adjusting TAL steps for external files
+  syn boolean CompilationUnit.cpr_isInsideExternalFile() {
+    // The CodeProber CompilationUnit is always the last one
+    return this != program().getCompilationUnit(program().getNumCompilationUnit() - 1);
+  }
+  syn boolean Program.cpr_isInsideExternalFile() = false;
+  syn boolean ASTNode.cpr_isInsideExternalFile() {
+    CompilationUnit cu = compilationUnit();
+    return cu != null && cu.cpr_isInsideExternalFile();
+  }
+
+  // Avoid showing "external" files when doing right click -> Create Probe
+  syn boolean CompilationUnit.cpr_cutoffNodeListTree() {
+    return cpr_isInsideExternalFile();
+  }
+
+  // See "externalFileRoot" in Section 5.5 of https://doi.org/10.1016/j.jss.2024.111980
+  syn boolean CompilationUnit.cpr_isTALRoot() {
+    return true;
+  }
+
+  syn int ASTNode.cpr_getStartLine() = getStart() >> 12;
+  syn int ASTNode.cpr_getStartColumn() = getStart() & 0xFFF;
+  syn int ASTNode.cpr_getEndLine() = getEnd() >> 12;
+  syn int ASTNode.cpr_getEndColumn() = getEnd() & 0xFFF;
+
+  // Make Program have the same line/col as the CompilationUnit visible in the CodeProber text editor.
+  eq Program.cpr_getStartLine() {
+        CompilationUnit cu = getCompilationUnit(getNumCompilationUnit() - 1);
+        if (cu == null || cu.getEnd() == 0) {
+          return 0;
+        }
+        return Math.max(1, cu.getStart() >> 12);
+  }
+  eq Program.cpr_getStartColumn() {
+        CompilationUnit cu = getCompilationUnit(getNumCompilationUnit() - 1);
+        if (cu == null || cu.getEnd() == 0) {
+          return 0;
+        }
+        return Math.max(1, cu.getStart() & 0xFFF);
+  }
+  eq Program.cpr_getEndLine() {
+        CompilationUnit cu = getCompilationUnit(getNumCompilationUnit() - 1);
+        if (cu == null || cu.getEnd() == 0) {
+          return 0;
+        }
+        return Math.max(1, cu.getEnd() >> 12);
+  }
+  eq Program.cpr_getEndColumn() {
+        CompilationUnit cu = getCompilationUnit(getNumCompilationUnit() - 1);
+        if (cu == null || cu.getEnd() == 0) {
+          return 0;
+        }
+        return Math.max(1, cu.getEnd() & 0xFFF);
+  }
+
+  // Make squiggly lines appear in the CodeProber editor when probing CompilationUnit.problems
+  public String Problem.cpr_getOutput() {
+    String location = "";
+    if (line != -1 && column != -1) {
+      location = line + "," + column + ":";
+    } else if (line != -1) {
+      location = line + ":";
+    }
+    return String.format("%s %s: %s", location, severity, message);
+  }
+  public String Problem.cpr_getDiagnostic() {
+    int packedStart = (line << 12) + (column == -1 ? 0 : column);
+    int packedEnd;
+    if (endLine == -1) {
+      packedEnd = ((line + 1) << 12) - 1;
+    } else {
+      packedEnd = (endLine << 12) + (endColumn == -1 ? 0xFFF : endColumn);
+    }
+    return String.format("%s@%d;%d;%s", severity == Severity.ERROR ? "ERR" : "WARN", packedStart, packedEnd, message);
+  }
+
+  // Uncomment cpr_setTraceReceiver if using tracing. Tracing be added by doing one of the following:
+  // 1) In `build.gradle` inside the `jastadd` block add: extraJastAddOptions=["--tracing=all"]
+  // 2) In `gradle.properties` add: extraJastAddOptions=--tracing=all
+  /*
+  public void Program.cpr_setTraceReceiver(final java.util.function.Consumer<Object[]> recv) {
+    trace().setReceiver(new ASTState.Trace.Receiver() {
+      @Override
+      public void accept(ASTState.Trace.Event event, ASTNode node, String attribute, Object params, Object value) {
+        recv.accept(new Object[] { event, node, attribute, params, value });
+      }
+    });
+  }
+  // */
+}
+
+// Rich pretty printing support. Also part of the CodeProber API, but is fairly big so it is kept
+// in a separate astpect. Full coverage of all AST types is not necessary. CodeProber defaults
+// to rendering the AST node names so the feature is still usable without the custom strings below.
+aspect CodeProberPrettyPrint {
+  // Some lists are wrapped in parens, some in brackets. Some are joined by whitespace, others by commas, ...
+  // Define inherited attributes to let each list context define how to print the list
+  inh String List.cpr_ppPrefix();
+  inh String List.cpr_ppInfix(int idx);
+  inh String List.cpr_ppSuffix();
+  eq ASTNode.getChild().cpr_ppPrefix() = null;
+  eq ASTNode.getChild().cpr_ppInfix(int idx) = null;
+  eq ASTNode.getChild().cpr_ppSuffix() = null;
+
+  syn String Modifier.cpr_ppPrefix() = getID();
+  syn String Annotation.cpr_ppPrefix() = "@";
+  eq Modifiers.getModifier().cpr_ppInfix(int idx) = " ";
+
+  syn String VarAccess.cpr_ppPrefix() = getID();
+  syn String MethodAccess.cpr_ppPrefix() = getID() +"(";
+  syn String MethodAccess.cpr_ppSuffix() = ")";
+  syn String ClassDecl.cpr_ppInfix(int idx) {
+    ASTNode child = getChild(idx);
+    if (child == getModifiers()) {
+      String cls = "class " + getID();
+      if (hasSuperClass()) {
+        return cls +" extends";
+      }
+      return cls;
+    }
+    if (child == getSuperClassOpt()) { return getNumImplements() > 0 ? "\nimplements " : null; }
+    if (child == getImplementsList()) { return "\n{"; }
+    return null;
+  }
+  syn String ConstructorDecl.cpr_ppInfix(int idx) {
+    ASTNode child = getChild(idx);
+    if (child == getModifiers()) {
+      return hostType().getID();
+    }
+    return null;
+  }
+  eq ClassDecl.getImplements().cpr_ppInfix(int idx) = ",";
+  syn String ClassDecl.cpr_ppSuffix() = "\n}";
+  syn String PackageAccess.cpr_ppPrefix() = getPackage();
+  syn String TypeAccess.cpr_ppPrefix() {
+    String pkg = getPackage();
+    if (pkg.length() == 0 || pkg.startsWith("@")) {
+      return getID();
+    }
+    return pkg + "." + getID();
+  }
+  syn String ArrayTypeAccess.cpr_ppPrefix() = null;
+  syn String ArrayTypeAccess.cpr_ppSuffix() = "[]";
+  syn String ParTypeAccess.cpr_ppInfix(int idx) = "<";
+  syn String ParTypeAccess.cpr_ppSuffix() = ">";
+  syn String InferredParameterDeclaration.cpr_ppPrefix() = getID();
+  syn String ParameterDeclaration.cpr_ppSuffix() = getID();
+  syn String WildcardExtends.cpr_ppPrefix() = "? extends";
+  syn String LambdaExpr.cpr_ppInfix(int idx) {
+    if (getChild(idx) == getLambdaParameters()) {
+      return "->";
+    }
+    return null;
+  }
+  syn String Dot.cpr_ppInfix(int idx) = idx == 0 ? "." : null;
+  syn String MethodDecl.cpr_ppInfix(int idx) {
+    final ASTNode child = getChild(idx);
+    if (child == getTypeAccess()) {
+      return getID();
+    }
+    if (child == getExceptionList()) {
+      if (hasBlock() && getBlock().getNumStmt() > 0) {
+        return "{\n";
+      }
+    }
+    return null;
+  }
+  syn String MethodDecl.cpr_ppSuffix() = (hasBlock() && getBlock().getNumStmt() > 0) ? "\n}" : null;
+  eq MethodDecl.getParameter().cpr_ppPrefix() = "(";
+  eq MethodDecl.getParameter().cpr_ppSuffix() = ")";
+  eq ConstructorDecl.getParameter().cpr_ppPrefix() = "(";
+  eq ConstructorDecl.getParameter().cpr_ppSuffix() = ")";
+  syn String VarDeclStmt.cpr_ppSuffix() = ";";
+  syn String FieldDecl.cpr_ppSuffix() = ";";
+  syn String Literal.cpr_ppPrefix() = getLITERAL();
+  syn String StringLiteral.cpr_ppPrefix() = "\"" + getLITERAL() + "\"";
+  syn String VariableDeclarator.cpr_ppInfix(int idx) = hasInit() ? "=" : null;
+  syn String VariableDeclarator.cpr_ppPrefix() = getID();
+  syn String FieldDeclarator.cpr_ppInfix(int idx) = hasInit() ? "=" : null;
+  syn String FieldDeclarator.cpr_ppPrefix() = getID();
+  syn String Binary.cpr_ppInfix(int idx) = printOp();
+  syn String ReturnStmt.cpr_ppPrefix() = "return";
+
+  eq Block.getChild().cpr_ppPrefix() = "";
+  eq Block.getChild().cpr_ppSuffix() = "";
+  eq ClassDecl.getBodyDecl().cpr_ppInfix(int idx) = "\n";
+  syn String ImportDecl.cpr_ppPrefix() = "import ";
+  syn String StaticImportDecl.cpr_ppPrefix() = "import static ";
+  syn String TypeImportOnDemandDecl.cpr_ppSuffix() = ".*";
+  syn String StaticImportOnDemandDecl.cpr_ppSuffix() = ".*";
+  eq CompilationUnit.getImportDecl().cpr_ppInfix(int idx) = "\n";
+  syn String CompilationUnit.cpr_ppInfix(int idx) {
+    if (getChild(idx) == getImportDeclList() && getNumImportDecl() > 0) { return "\n"; }
+    return null;
+  }
+  eq CompilationUnit.getTypeDecl().cpr_ppInfix(int idx) = "\n";
+}

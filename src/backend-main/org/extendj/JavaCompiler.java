@@ -51,6 +51,7 @@ public class JavaCompiler extends Frontend {
     PRETTY_PRINT,
     DUMP_TREE,
     STRUCTURED_PRINT,
+    PARSE_ONLY,
   }
 
   /**
@@ -62,6 +63,11 @@ public class JavaCompiler extends Frontend {
     if (exitCode != 0) {
       System.exit(exitCode);
     }
+  }
+
+  public static Object CodeProber_parse(String[] args) {
+    new JavaCompiler().run(args);
+    return Frontend.DrAST_root_node;
   }
 
   private Mode mode = Mode.COMPILE;
@@ -103,18 +109,21 @@ public class JavaCompiler extends Frontend {
 
   @Override
   protected int processCompilationUnit(CompilationUnit unit) {
-    if (mode != Mode.STRUCTURED_PRINT) {
-      return super.processCompilationUnit(unit);
-    } else {
-      if (unit != null && unit.fromSource()) {
-        try {
-          System.out.println(unit.structuredPrettyPrint());
-        } catch (IOException e) {
-          e.printStackTrace(System.err);
-          return EXIT_ERROR;
+    switch (mode) {
+      case PARSE_ONLY:
+        return EXIT_SUCCESS;
+      case STRUCTURED_PRINT:
+        if (unit != null && unit.fromSource()) {
+          try {
+            System.out.println(unit.structuredPrettyPrint());
+          } catch (IOException e) {
+            e.printStackTrace(System.err);
+            return EXIT_ERROR;
+          }
         }
-      }
-      return EXIT_SUCCESS;
+        return EXIT_SUCCESS;
+      default:
+        return super.processCompilationUnit(unit);
     }
   }
 
@@ -139,6 +148,8 @@ public class JavaCompiler extends Frontend {
   @Override
   protected void processNoErrors(CompilationUnit unit) {
     switch (mode) {
+      case PARSE_ONLY:
+        return;
       case COMPILE:
         unit.generateClassfile();
         return;
@@ -159,6 +170,7 @@ public class JavaCompiler extends Frontend {
   protected void initOptions() {
     super.initOptions();
     program.options().addKeyOption("-XstructuredPrint");
+    program.options().addKeyOption("-XparseOnly");
   }
 
   /**
@@ -184,6 +196,8 @@ public class JavaCompiler extends Frontend {
       mode = Mode.DUMP_TREE;
     } else if (program.options().hasOption("-XstructuredPrint")) {
       mode = Mode.STRUCTURED_PRINT;
+    } else if (program.options().hasOption("-XparseOnly")) {
+      mode = Mode.PARSE_ONLY;
     }
     return EXIT_SUCCESS;
   }
