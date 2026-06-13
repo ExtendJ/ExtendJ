@@ -3,6 +3,7 @@
 import java.util.function.Function;
 
 public class Test {
-  // The cast is necessary for the inner lambda expression to have correct target type.
-  Function<String, Object> svamp = agaricus -> (Function<String, String>) bisporus -> agaricus + bisporus;
+  // The cast is necessary for the lambda expression to have correct target type.
+  // Without the cast we would not have a functional interface for the lambda.
+  Object svamp = (Function<String, Integer>) bisporus -> bisporus.length();
 }
