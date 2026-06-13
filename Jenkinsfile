@@ -8,10 +8,6 @@ pipeline {
     buildDiscarder(logRotator(numToKeepStr: '10'))
   }
 
-  tools {
-    jdk 'jdk-8'
-  }
-
   triggers {
     pollSCM('H/10 * * * *')
   }
@@ -20,54 +16,85 @@ pipeline {
     stage('Clean') {
       steps {
         sh './gradlew clean'
+        dir("rtest/lib") {
+          sh "curl -sSLO https://repo1.maven.org/maven2/junit/junit/4.11/junit-4.11.jar"
+          sh "curl -sSLO https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar"
+          sh "curl -sSLO https://repo1.maven.org/maven2/org/apache/ant/ant/1.10.5/ant-1.10.5.jar"
+          sh "curl -sSLO https://repo1.maven.org/maven2/org/apache/ant/ant-junit/1.10.5/ant-junit-1.10.5.jar"
+        }
       }
     }
 
-    stage('ExtendJ4') {
+    stage('Build') {
+      tools {
+        jdk 'jdk-8'
+      }
       steps {
-        sh './gradlew :java4:jar'
+        sh './gradlew jar'
       }
     }
 
-    stage('ExtendJ5') {
+    stage('Test8') {
+      tools {
+        jdk 'jdk-8'
+        ant 'ant-1.10.5'
+      }
       steps {
-        sh './gradlew :java5:jar'
+        sh "cp java8/extendj.jar rtest/"
+        dir("rtest") {
+          sh "ant clean"
+          sh "rm -r reports"
+          sh "ant java8"
+          junit 'reports/**/*.xml'
+        }
       }
     }
 
-    stage('ExtendJ6') {
+    stage('Test9') {
+      tools {
+        jdk 'jdk-9'
+        ant 'ant-1.10.5'
+      }
       steps {
-        sh './gradlew :java6:jar'
+        sh "cp java9/extendj.jar rtest/"
+        dir("rtest") {
+          sh "ant clean"
+          sh "rm -r reports"
+          sh "ant java9"
+          junit 'reports/**/*.xml'
+        }
       }
     }
 
-    stage('ExtendJ7') {
+    stage('Test10') {
+      tools {
+        jdk 'jdk-10'
+        ant 'ant-1.10.5'
+      }
       steps {
-        sh './gradlew :java7:jar'
+        sh "cp java10/extendj.jar rtest/"
+        dir("rtest") {
+          sh "ant clean"
+          sh "rm -r reports"
+          sh "ant java10"
+          junit 'reports/**/*.xml'
+        }
       }
     }
 
-    stage('ExtendJ8') {
-      steps {
-        sh './gradlew :java8:jar'
+    stage('Test11') {
+      tools {
+        jdk 'jdk-11'
+        ant 'ant-1.10.5'
       }
-    }
-
-    stage('ExtendJ9') {
       steps {
-        sh './gradlew :java9:jar'
-      }
-    }
-
-    stage('ExtendJ10') {
-      steps {
-        sh './gradlew :java10:jar'
-      }
-    }
-
-    stage('ExtendJ11') {
-      steps {
-        sh './gradlew :java11:jar'
+        sh "cp java11/extendj.jar rtest/"
+        dir("rtest") {
+          sh "ant clean"
+          sh "rm -r reports"
+          sh "ant java11"
+          junit 'reports/**/*.xml'
+        }
       }
     }
 

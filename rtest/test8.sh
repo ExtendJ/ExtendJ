@@ -6,6 +6,19 @@ CONTAINER_NAME="extendj-test8"
 IMAGE_NAME="extendj-test8-run"
 SHOULD_BUILD=false
 
+if [ ! -f "lib/junit-4.11.jar" ]; then
+  (cd lib; curl -sSLO https://repo1.maven.org/maven2/junit/junit/4.11/junit-4.11.jar)
+fi
+if [ ! -f "lib/hamcrest-core-1.3.jar" ]; then
+  (cd lib; curl -sSLO https://repo1.maven.org/maven2/org/hamcrest/hamcrest-core/1.3/hamcrest-core-1.3.jar)
+fi
+if [ ! -f "lib/ant-1.10.5.jar" ]; then
+  (cd lib; curl -sSLO https://repo1.maven.org/maven2/org/apache/ant/ant/1.10.5/ant-1.10.5.jar)
+fi
+if [ ! -f "lib/ant-junit-1.10.5.jar" ]; then
+  (cd lib; curl -sSLO https://repo1.maven.org/maven2/org/apache/ant/ant-junit/1.10.5/ant-junit-1.10.5.jar)
+fi
+
 if [[ "$(docker images -q $IMAGE_NAME 2> /dev/null)" == "" ]]; then
   echo "Image does not exist."
   SHOULD_BUILD=true
@@ -41,7 +54,6 @@ else
     --name "$CONTAINER_NAME" \
     --user "$(id -u):$(id -g)" \
     -v "$PWD:/test/regtest" \
-    -v "$PWD/lib:/test/regtest/lib" \
     -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
     -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
     $IMAGE_NAME
