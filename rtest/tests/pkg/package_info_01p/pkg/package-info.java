@@ -1,0 +1,2 @@
+@PackageAnnot package pkg;
+

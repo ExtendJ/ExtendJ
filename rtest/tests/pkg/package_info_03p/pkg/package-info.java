@@ -1,0 +1,5 @@
+/**
+ * test
+ */
+@PackageAnnot package pkg;
+
