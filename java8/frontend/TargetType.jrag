@@ -60,23 +60,27 @@ aspect TargetType {
   eq EnhancedForStmt.getExpr().targetType() = iterableTypeAccess().type();
 
   eq AddExpr.getLeftOperand().targetType() {
-    if (getLeftOperand().stringContext()) {
-      return getRightOperand().type();
-    } else if (!getLeftOperand().isPolyExpression() && !getRightOperand().isPolyExpression()) {
-      return type();
-    } else {
+    if (left().isPolyExpression() || right().isPolyExpression()) {
       return targetType();
     }
+    if (!left().type().isString() && right().type().isString()) {
+      // In binary + expressions where one operand is String and the other is not,
+      // there is String conversion of the non-String operand. (JLSv8 5.4)
+      return getRightOperand().type();
+    }
+    return type();
   }
 
   eq AddExpr.getRightOperand().targetType() {
-    if (getRightOperand().stringContext()) {
-      return getLeftOperand().type();
-    } else if (!getLeftOperand().isPolyExpression() && !getRightOperand().isPolyExpression()) {
-      return type();
-    } else {
+    if (left().isPolyExpression() || right().isPolyExpression()) {
       return targetType();
     }
+    if (left().type().isString() && !right().type().isString()) {
+      // In binary + expressions where one operand is String and the other is not,
+      // there is String conversion of the non-String operand. (JLSv8 5.4)
+      return typeString();
+    }
+    return type();
   }
 
   eq ArithmeticExpr.getLeftOperand().targetType() {
@@ -253,50 +257,27 @@ aspect Contexts {
   inh lazy boolean Expr.assignmentContext();
   inh lazy boolean Expr.invocationContext();
   inh lazy boolean Expr.castContext();
-  inh lazy boolean Expr.stringContext();
   inh lazy boolean Expr.numericContext();
 
   eq CompilationUnit.getChild().assignmentContext() = false;
   eq CompilationUnit.getChild().invocationContext() = false;
   eq CompilationUnit.getChild().castContext() = false;
-  eq CompilationUnit.getChild().stringContext() = false;
   eq CompilationUnit.getChild().numericContext() = false;
 
   eq ExprLambdaBody.getExpr().assignmentContext() = true;
   eq ExprLambdaBody.getExpr().invocationContext() = false;
   eq ExprLambdaBody.getExpr().castContext() = false;
-  eq ExprLambdaBody.getExpr().stringContext() = false;
   eq ExprLambdaBody.getExpr().numericContext() = false;
 
   eq BlockLambdaBody.getBlock().assignmentContext() = false;
   eq BlockLambdaBody.getBlock().invocationContext() = false;
   eq BlockLambdaBody.getBlock().castContext() = false;
-  eq BlockLambdaBody.getBlock().stringContext() = false;
   eq BlockLambdaBody.getBlock().numericContext() = false;
 
   eq Binary.getChild().assignmentContext() = false;
   eq Binary.getChild().invocationContext() = false;
   eq Binary.getChild().castContext() = false;
-  eq Binary.getChild().stringContext() = false;
   eq Binary.getChild().numericContext() = false;
-
-  eq AddExpr.getLeftOperand().stringContext() {
-    if (!getRightOperand().isPolyExpression() && !getLeftOperand().isPolyExpression()) {
-      if (getRightOperand().type().isString() && !getLeftOperand().type().isString()) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  eq AddExpr.getRightOperand().stringContext() {
-    if (!getRightOperand().isPolyExpression() && !getLeftOperand().isPolyExpression()) {
-      if (getLeftOperand().type().isString() && !getRightOperand().type().isString()) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   eq ArithmeticExpr.getRightOperand().numericContext() = true;
   eq ArithmeticExpr.getLeftOperand().numericContext() = true;
@@ -304,125 +285,104 @@ aspect Contexts {
   eq Unary.getOperand().assignmentContext() = false;
   eq Unary.getOperand().invocationContext() = false;
   eq Unary.getOperand().castContext() = false;
-  eq Unary.getOperand().stringContext() = false;
   eq Unary.getOperand().numericContext() = false;
 
   eq InstanceOfExpr.getExpr().assignmentContext() = false;
   eq InstanceOfExpr.getExpr().invocationContext() = false;
   eq InstanceOfExpr.getExpr().castContext() = false;
-  eq InstanceOfExpr.getExpr().stringContext() = false;
   eq InstanceOfExpr.getExpr().numericContext() = false;
 
   eq ConditionalExpr.getCondition().assignmentContext() = false;
   eq ConditionalExpr.getCondition().invocationContext() = false;
   eq ConditionalExpr.getCondition().castContext() = false;
   eq ConditionalExpr.getCondition().numericContext() = false;
-  eq ConditionalExpr.getCondition().stringContext() = false;
 
   // 15.25.3
   eq ConditionalExpr.getTrueExpr().castContext() = false;
-  eq ConditionalExpr.getTrueExpr().stringContext() = false;
   eq ConditionalExpr.getTrueExpr().numericContext() = false;
 
   // 15.25.3
   eq ConditionalExpr.getFalseExpr().castContext() = false;
-  eq ConditionalExpr.getFalseExpr().stringContext() = false;
   eq ConditionalExpr.getFalseExpr().numericContext() = false;
 
   eq ArrayAccess.getExpr().assignmentContext() = false;
   eq ArrayAccess.getExpr().invocationContext() = false;
   eq ArrayAccess.getExpr().castContext() = false;
-  eq ArrayAccess.getExpr().stringContext() = false;
   eq ArrayAccess.getExpr().numericContext() = false;
 
   eq Dot.getLeft().assignmentContext() = false;
   eq Dot.getLeft().invocationContext() = false;
   eq Dot.getLeft().castContext() = false;
-  eq Dot.getLeft().stringContext() = false;
   eq Dot.getLeft().numericContext() = false;
 
   // 15.8.5
   eq CastExpr.getExpr().assignmentContext() = false;
   eq CastExpr.getExpr().invocationContext() = false;
   eq CastExpr.getExpr().castContext() = true;
-  eq CastExpr.getExpr().stringContext() = false;
   eq CastExpr.getExpr().numericContext() = false;
 
   eq AssignExpr.getDest().assignmentContext() = false;
   eq AssignExpr.getDest().invocationContext() = false;
   eq AssignExpr.getDest().castContext() = false;
   eq AssignExpr.getDest().numericContext() = false;
-  eq AssignExpr.getDest().stringContext() = false;
 
   eq AssignExpr.getSource().assignmentContext() = true;
   eq AssignExpr.getSource().invocationContext() = false;
   eq AssignExpr.getSource().castContext() = false;
-  eq AssignExpr.getSource().stringContext() = false;
   eq AssignExpr.getSource().numericContext() = false;
 
   eq ClassInstanceExpr.getArg().assignmentContext() = false;
   eq ClassInstanceExpr.getArg().invocationContext() = true;
   eq ClassInstanceExpr.getArg().castContext() = false;
-  eq ClassInstanceExpr.getArg().stringContext() = false;
   eq ClassInstanceExpr.getArg().numericContext() = false;
 
   eq MethodAccess.getArg().assignmentContext() = false;
   eq MethodAccess.getArg().invocationContext() = true;
   eq MethodAccess.getArg().castContext() = false;
-  eq MethodAccess.getArg().stringContext() = false;
   eq MethodAccess.getArg().numericContext() = false;
 
   eq ConstructorAccess.getArg().assignmentContext() = false;
   eq ConstructorAccess.getArg().invocationContext() = true;
   eq ConstructorAccess.getArg().castContext() = false;
-  eq ConstructorAccess.getArg().stringContext() = false;
   eq ConstructorAccess.getArg().numericContext() = false;
 
   eq ArrayInit.getInit().assignmentContext() = true;
   eq ArrayInit.getInit().invocationContext() = false;
   eq ArrayInit.getInit().castContext() = false;
-  eq ArrayInit.getInit().stringContext() = false;
   eq ArrayInit.getInit().numericContext() = false;
 
   eq ReturnStmt.getResult().assignmentContext() = true;
   eq ReturnStmt.getResult().invocationContext() = false;
   eq ReturnStmt.getResult().castContext() = false;
-  eq ReturnStmt.getResult().stringContext() = false;
   eq ReturnStmt.getResult().numericContext() = false;
 
   eq Declarator.getInit().assignmentContext() = true;
   eq Declarator.getInit().invocationContext() = false;
   eq Declarator.getInit().castContext() = false;
-  eq Declarator.getInit().stringContext() = false;
   eq Declarator.getInit().numericContext() = false;
 
   eq ArrayTypeWithSizeAccess.getExpr().assignmentContext() = false;
   eq ArrayTypeWithSizeAccess.getExpr().invocationContext() = false;
   eq ArrayTypeWithSizeAccess.getExpr().castContext() = false;
-  eq ArrayTypeWithSizeAccess.getExpr().stringContext() = false;
   eq ArrayTypeWithSizeAccess.getExpr().numericContext() = false;
 
   eq Dims.getExpr().assignmentContext() = false;
   eq Dims.getExpr().invocationContext() = false;
   eq Dims.getExpr().castContext() = false;
-  eq Dims.getExpr().stringContext() = false;
   eq Dims.getExpr().numericContext() = false;
 
   eq ExprMethodReference.getExpr().assignmentContext() = false;
   eq ExprMethodReference.getExpr().invocationContext() = false;
   eq ExprMethodReference.getExpr().castContext() = false;
-  eq ExprMethodReference.getExpr().stringContext() = false;
   eq ExprMethodReference.getExpr().numericContext() = false;
 
   eq TypeMethodReference.getTypeAccess().assignmentContext() = false;
   eq TypeMethodReference.getTypeAccess().invocationContext() = false;
   eq TypeMethodReference.getTypeAccess().castContext() = false;
-  eq TypeMethodReference.getTypeAccess().stringContext() = false;
   eq TypeMethodReference.getTypeAccess().numericContext() = false;
 
   eq ConstructorReference.getTypeAccess().assignmentContext() = false;
   eq ConstructorReference.getTypeAccess().invocationContext() = false;
   eq ConstructorReference.getTypeAccess().castContext() = false;
-  eq ConstructorReference.getTypeAccess().stringContext() = false;
   eq ConstructorReference.getTypeAccess().numericContext() = false;
 }
