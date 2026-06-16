@@ -3,7 +3,7 @@ FROM ubuntu:26.04
 # Avoid prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt update && apt install -y --no-install-recommends \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     ca-certificates \
@@ -12,18 +12,30 @@ RUN apt update && apt install -y --no-install-recommends \
     python3-pip \
     vim \
     openssh-client \
-    locales \
-    openjdk-8-jdk
+    locales
 
 # Use UTF-8 locale so that UTF-8 codepoints are printed correctly in Java stdout tests.
 RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen \
     && locale-gen
 
-RUN rm -rf /var/lib/apt/lists/*
-
 ENV LANG=en_US.UTF-8
 ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
+
+WORKDIR /test
+
+# Obtain Apache Ant
+RUN curl -O https://dlcdn.apache.org//ant/binaries/apache-ant-1.10.17-bin.tar.gz
+RUN tar xvf apache-ant-1.10.17-bin.tar.gz
+
+# Install JDK package
+ARG JDK_VERSION=8
+ENV JDK_VERSION=${JDK_VERSION}
+
+RUN apt-get install -y --no-install-recommends \
+    openjdk-${JDK_VERSION}-jdk
+
+RUN rm -rf /var/lib/apt/lists/*
 
 # Docker build arguments
 ARG USER_ID=1000
@@ -38,10 +50,6 @@ RUN if getent passwd ubuntu; then userdel -r ubuntu; fi && \
 # Switch to the new user
 USER yot
 
-WORKDIR /test
-
-RUN curl -O https://dlcdn.apache.org//ant/binaries/apache-ant-1.10.17-bin.tar.gz
-RUN tar xvf apache-ant-1.10.17-bin.tar.gz
 RUN <<CONFIG cat >> $HOME/.profile
 ANT_HOME="/test/apache-ant-1.10.17"
 PATH="\$ANT_HOME/bin:\$PATH"
@@ -49,4 +57,4 @@ CONFIG
 
 WORKDIR /test/regtest
 
-ENTRYPOINT ["bash", "-l", "test8-entry.sh"]
+ENTRYPOINT ["bash", "-l", "-c", "ant java${JDK_VERSION}"]

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -eu
-JDK_VERSION=8 ./test.sh
+JDK_VERSION=11 ./test.sh
