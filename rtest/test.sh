@@ -58,7 +58,5 @@ else
     --name "$CONTAINER_NAME" \
     --user "$(id -u):$(id -g)" \
     -v "$PWD:/test/regtest" \
-    -v $SSH_AUTH_SOCK:$SSH_AUTH_SOCK \
-    -e SSH_AUTH_SOCK=$SSH_AUTH_SOCK \
     $IMAGE_NAME
 fi
