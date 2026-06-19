@@ -43,7 +43,7 @@ pipeline {
         sh "cp java8/extendj.jar rtest/"
         dir("rtest") {
           sh "ant clean"
-          sh "rm -r reports"
+          sh "rm -r reports || true"
           sh "ant java8"
           junit 'reports/**/*.xml'
         }
