@@ -77,34 +77,20 @@ aspect TargetType {
     return type();
   }
 
-  eq ArithmeticExpr.getLeftOperand().targetType() {
-    if (!getLeftOperand().isPolyExpression() && !getRightOperand().isPolyExpression()) {
-      return type();
-    } else {
-      return targetType();
-    }
-  }
-
-  eq ArithmeticExpr.getRightOperand().targetType() {
-    if (!getLeftOperand().isPolyExpression() && !getRightOperand().isPolyExpression()) {
-      return type();
-    } else {
-      return targetType();
-    }
-  }
+  eq ArithmeticExpr.getChild().targetType() = type();
 
   eq ArrayInit.getInit().targetType() {
-    if (!(targetType() instanceof ArrayDecl)) {
-      return targetType();
-    } else {
-      return ((ArrayDecl) targetType()).componentType();
+    TypeDecl tt = targetType();
+    if (tt instanceof ArrayDecl) {
+      return ((ArrayDecl) tt).componentType();
     }
+    return tt;
   }
 
   eq MethodAccess.getArg(int i).targetType() {
     MethodDecl decl = decl();
     if (decl.unknownMethod() == decl) {
-      return decl.type().unknownType();
+      return unknownType();
     }
 
     if (decl.isVariableArity() && i >= decl.arity() - 1) {
@@ -117,7 +103,7 @@ aspect TargetType {
   eq ConstructorAccess.getArg(int i).targetType() {
     ConstructorDecl decl = decl();
     if (unknownConstructor() == decl) {
-      return decl.type().unknownType();
+      return unknownType();
     }
 
     if (decl.isVariableArity() && i >= decl.arity() - 1) {
@@ -130,7 +116,7 @@ aspect TargetType {
   eq ClassInstanceExpr.getArg(int i).targetType() {
     ConstructorDecl decl = decl();
     if (unknownConstructor() == decl) {
-      return decl.type().unknownType();
+      return unknownType();
     }
 
     if (decl.isVariableArity() && i >= decl.arity() - 1) {
@@ -141,54 +127,30 @@ aspect TargetType {
   }
 
   eq ExprLambdaBody.getExpr().targetType() {
-    TypeDecl decl = enclosingLambda().targetType();
-    if (decl.isNull()) {
+    TypeDecl tt = enclosingLambda().targetType();
+    if (!tt.isFunctionalInterface()) {
       return unknownType();
-    } else if (!(decl instanceof InterfaceDecl)) {
-      return unknownType();
-    } else {
-      InterfaceDecl iDecl = (InterfaceDecl) decl;
-      if (!iDecl.isFunctional()) {
-        return unknownType();
-      } else {
-        FunctionDescriptor fd = iDecl.functionDescriptor();
-        if (fd.method.hasValue()) {
-          return fd.method.get().type();
-        } else {
-          return unknownType();
-        }
-      }
     }
+    FunctionDescriptor fd = ((InterfaceDecl) tt).functionDescriptor();
+    if (!fd.method.hasValue()) {
+      return unknownType();
+    }
+    return fd.method.get().type();
   }
 
   syn lazy InterfaceDecl LambdaExpr.targetInterface() {
-    if (targetType().isNull()) {
-      return null;
-    } else if (!(targetType() instanceof InterfaceDecl)) {
-      return null;
-    } else {
-      return (InterfaceDecl) targetType();
-    }
+    TypeDecl tt = targetType();
+    return (tt instanceof InterfaceDecl) ?  (InterfaceDecl) tt : null;
   }
 
   syn lazy InterfaceDecl MethodReference.targetInterface() {
-    if (targetType().isNull()) {
-      return null;
-    } else if (!(targetType() instanceof InterfaceDecl)) {
-      return null;
-    } else {
-      return (InterfaceDecl) targetType();
-    }
+    TypeDecl tt = targetType();
+    return (tt instanceof InterfaceDecl) ?  (InterfaceDecl) tt : null;
   }
 
   syn lazy InterfaceDecl ConstructorReference.targetInterface() {
-    if (targetType().isNull()) {
-      return null;
-    } else if (!(targetType() instanceof InterfaceDecl)) {
-      return null;
-    } else {
-      return (InterfaceDecl) targetType();
-    }
+    TypeDecl tt = targetType();
+    return (tt instanceof InterfaceDecl) ?  (InterfaceDecl) tt : null;
   }
 
   // Java 8 extends the analysis of assign converted types.
