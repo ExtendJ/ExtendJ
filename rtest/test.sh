@@ -47,13 +47,15 @@ if [ "$SHOULD_BUILD" = true ]; then
     -t $IMAGE_NAME .
 fi
 
+# Build the compiler under test
+(cd ..; ./gradlew :java${JDK_VERSION}:jar)
+cp ../java${JDK_VERSION}/extendj.jar . || { echo "Missing ExtendJ jar file."; exit 1; }
+
 # Run the container
 if [ "$(docker ps -a -q -f name=^/${CONTAINER_NAME}$)" ]; then
   echo "Found existing container. Restarting..."
   docker start -ai "$CONTAINER_NAME"
 else
-  (cd ..; ./gradlew :java${JDK_VERSION}:jar)
-  cp ../java${JDK_VERSION}/extendj.jar . || { echo "Missing ExtendJ jar file."; exit 1; }
   docker run -it \
     --name "$CONTAINER_NAME" \
     --user "$(id -u):$(id -g)" \
