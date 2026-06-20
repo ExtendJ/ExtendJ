@@ -32,99 +32,6 @@
  * functional interfaces for lambda expressions.
  */
 aspect TargetType {
-  /**
-   * Computes the target type of this expression.
-   *
-   * This is used in finding the functional interface of a lambda expression.
-   *
-   * If evaluated in a type inference context, {@code targetType} can circularly
-   * depend on itself.
-   *
-   * @return {@code unknownType()} if there is no target type.
-   */
-  inh TypeDecl Expr.targetType() circular [unknownType()];
-
-  // Default equation:
-  eq Program.getChild().targetType() = unknownType();
-
-  // Left side of a dot has no target type.
-  eq Dot.getLeft().targetType() = unknownType();
-
-  eq ConditionalExpr.getTrueExpr().targetType() = targetType();
-  eq ConditionalExpr.getFalseExpr().targetType() = targetType();
-  eq ParExpr.getExpr().targetType() = targetType();
-  eq AssignExpr.getSource().targetType() = getDest().type();
-  eq Declarator.getInit().targetType() = getTypeAccess().type();
-  eq ReturnStmt.getResult().targetType() = returnType();
-  eq CastExpr.getExpr().targetType() = type();
-  eq EnhancedForStmt.getExpr().targetType() = iterableTypeAccess().type();
-
-  eq AddExpr.getLeftOperand().targetType() {
-    if (!left().type().isString() && right().type().isString()) {
-      // In binary + expressions where one operand is String and the other is not,
-      // there is String conversion of the non-String operand. (JLSv8 5.4)
-      return getRightOperand().type();
-    }
-    return type();
-  }
-
-  eq AddExpr.getRightOperand().targetType() {
-    if (left().type().isString() && !right().type().isString()) {
-      // In binary + expressions where one operand is String and the other is not,
-      // there is String conversion of the non-String operand. (JLSv8 5.4)
-      return typeString();
-    }
-    return type();
-  }
-
-  eq ArithmeticExpr.getChild().targetType() = type();
-
-  eq ArrayInit.getInit().targetType() {
-    TypeDecl tt = targetType();
-    if (tt instanceof ArrayDecl) {
-      return ((ArrayDecl) tt).componentType();
-    }
-    return tt;
-  }
-
-  eq MethodAccess.getArg(int i).targetType() {
-    MethodDecl decl = decl();
-    if (decl.unknownMethod() == decl) {
-      return unknownType();
-    }
-
-    if (decl.isVariableArity() && i >= decl.arity() - 1) {
-      return decl.getParameter(decl.arity() - 1).type().componentType();
-    } else {
-      return decl.getParameter(i).type();
-    }
-  }
-
-  eq ConstructorAccess.getArg(int i).targetType() {
-    ConstructorDecl decl = decl();
-    if (unknownConstructor() == decl) {
-      return unknownType();
-    }
-
-    if (decl.isVariableArity() && i >= decl.arity() - 1) {
-      return decl.getParameter(decl.arity() - 1).type().componentType();
-    } else {
-      return decl.getParameter(i).type();
-    }
-  }
-
-  eq ClassInstanceExpr.getArg(int i).targetType() {
-    ConstructorDecl decl = decl();
-    if (unknownConstructor() == decl) {
-      return unknownType();
-    }
-
-    if (decl.isVariableArity() && i >= decl.arity() - 1) {
-      return decl.getParameter(decl.arity() - 1).type().componentType();
-    } else {
-      return decl.getParameter(i).type();
-    }
-  }
 
   eq ExprLambdaBody.getExpr().targetType() {
     TypeDecl tt = enclosingLambda().targetType();
@@ -153,84 +60,59 @@ aspect TargetType {
     return (tt instanceof InterfaceDecl) ?  (InterfaceDecl) tt : null;
   }
 
-  // Java 8 extends the analysis of assign converted types.
-  eq BoundMethodAccess.getArg(int index).assignConvertedType() = decl().paramType(index);
-
-  eq MethodAccess.boundAccess().assignConvertedType() = assignConvertedType();
-
-  refine AssignConvertedType
-  eq MethodAccess.getArg(int index).assignConvertedType() = decl().paramType(index);
-
-
   // This is required for type inference to work with method references.
-  syn lazy TypeDecl MethodReferenceAccess.assignConvertedType() {
-    if (targetDescriptor.method.isPresent()) {
-      return targetDescriptor.method.get().type();
-    } else {
+  eq MethodReference.getChild().targetType() {
+    InterfaceDecl target = targetInterface();
+    if (target == null || !target.isFunctional()) {
       return unknownType();
     }
+    FunctionDescriptor fd = target.functionDescriptor();
+    if (fd.method.isPresent()) {
+      return fd.method.get().type();
+    }
+    return unknownType();
   }
 
-  syn lazy TypeDecl ParMethodReferenceAccess.assignConvertedType() {
-    if (targetDescriptor.method.isPresent()) {
-      return targetDescriptor.method.get().type();
-    } else {
+  eq ConstructorReference.getChild().targetType() {
+    InterfaceDecl target = targetInterface();
+    if (target == null || !target.isFunctional()) {
       return unknownType();
     }
-  }
-
-  // Required for diamond type inference to work.
-  eq ClassInstanceExpr.getAccess().assignConvertedType() = targetType();
-
-  syn lazy TypeDecl ConstructorReferenceAccess.targetType() {
-    if (targetDescriptor.method.isPresent()) {
-      return targetDescriptor.method.get().type();
-    } else {
-      return unknownType();
+    FunctionDescriptor fd = target.functionDescriptor();
+    if (fd.method.isPresent()) {
+      return fd.method.get().type();
     }
-  }
-
-  syn lazy TypeDecl ParConstructorReferenceAccess.targetType() {
-    if (targetDescriptor.method.isPresent()) {
-      return targetDescriptor.method.get().type();
-    } else {
-      return unknownType();
-    }
-  }
-
-  eq ConstructorReferenceAccess.getAccess().targetType() {
-    if (targetDescriptor.method.isPresent()) {
-      return targetDescriptor.method.get().type();
-    } else {
-      return unknownType();
-    }
+    return unknownType();
   }
 }
 
-
 aspect Contexts {
+  refine InferenceContext
+  eq Expr.targetTypeInference() = assignmentContext() || invocationContext();
+
+  eq ExprLambdaBody.getExpr().assignmentContext() = true;
+  eq BlockLambdaBody.getBlock().assignmentContext() = false;
+  eq ExprMethodReference.getExpr().assignmentContext() = false;
+  eq TypeMethodReference.getTypeAccess().assignmentContext() = false;
+  eq ConstructorReference.getTypeAccess().assignmentContext() = false;
+
   // Ch 5
-  inh lazy boolean Expr.assignmentContext();
   inh lazy boolean Expr.invocationContext();
   inh lazy boolean Expr.castContext();
   inh lazy boolean Expr.numericContext();
 
-  eq CompilationUnit.getChild().assignmentContext() = false;
   eq CompilationUnit.getChild().invocationContext() = false;
   eq CompilationUnit.getChild().castContext() = false;
   eq CompilationUnit.getChild().numericContext() = false;
 
-  eq ExprLambdaBody.getExpr().assignmentContext() = true;
   eq ExprLambdaBody.getExpr().invocationContext() = false;
   eq ExprLambdaBody.getExpr().castContext() = false;
   eq ExprLambdaBody.getExpr().numericContext() = false;
 
-  eq BlockLambdaBody.getBlock().assignmentContext() = false;
   eq BlockLambdaBody.getBlock().invocationContext() = false;
   eq BlockLambdaBody.getBlock().castContext() = false;
   eq BlockLambdaBody.getBlock().numericContext() = false;
 
-  eq Binary.getChild().assignmentContext() = false;
   eq Binary.getChild().invocationContext() = false;
   eq Binary.getChild().castContext() = false;
   eq Binary.getChild().numericContext() = false;
@@ -238,17 +120,14 @@ aspect Contexts {
   eq ArithmeticExpr.getRightOperand().numericContext() = true;
   eq ArithmeticExpr.getLeftOperand().numericContext() = true;
 
-  eq Unary.getOperand().assignmentContext() = false;
   eq Unary.getOperand().invocationContext() = false;
   eq Unary.getOperand().castContext() = false;
   eq Unary.getOperand().numericContext() = false;
 
-  eq InstanceOfExpr.getExpr().assignmentContext() = false;
   eq InstanceOfExpr.getExpr().invocationContext() = false;
   eq InstanceOfExpr.getExpr().castContext() = false;
   eq InstanceOfExpr.getExpr().numericContext() = false;
 
-  eq ConditionalExpr.getCondition().assignmentContext() = false;
   eq ConditionalExpr.getCondition().invocationContext() = false;
   eq ConditionalExpr.getCondition().castContext() = false;
   eq ConditionalExpr.getCondition().numericContext() = false;
@@ -261,83 +140,67 @@ aspect Contexts {
   eq ConditionalExpr.getFalseExpr().castContext() = false;
   eq ConditionalExpr.getFalseExpr().numericContext() = false;
 
-  eq ArrayAccess.getExpr().assignmentContext() = false;
   eq ArrayAccess.getExpr().invocationContext() = false;
   eq ArrayAccess.getExpr().castContext() = false;
   eq ArrayAccess.getExpr().numericContext() = false;
 
-  eq Dot.getLeft().assignmentContext() = false;
   eq Dot.getLeft().invocationContext() = false;
   eq Dot.getLeft().castContext() = false;
   eq Dot.getLeft().numericContext() = false;
 
   // 15.8.5
-  eq CastExpr.getExpr().assignmentContext() = false;
   eq CastExpr.getExpr().invocationContext() = false;
   eq CastExpr.getExpr().castContext() = true;
   eq CastExpr.getExpr().numericContext() = false;
 
-  eq AssignExpr.getDest().assignmentContext() = false;
   eq AssignExpr.getDest().invocationContext() = false;
   eq AssignExpr.getDest().castContext() = false;
   eq AssignExpr.getDest().numericContext() = false;
 
-  eq AssignExpr.getSource().assignmentContext() = true;
   eq AssignExpr.getSource().invocationContext() = false;
   eq AssignExpr.getSource().castContext() = false;
   eq AssignExpr.getSource().numericContext() = false;
 
-  eq ClassInstanceExpr.getArg().assignmentContext() = false;
   eq ClassInstanceExpr.getArg().invocationContext() = true;
   eq ClassInstanceExpr.getArg().castContext() = false;
   eq ClassInstanceExpr.getArg().numericContext() = false;
 
-  eq MethodAccess.getArg().assignmentContext() = false;
   eq MethodAccess.getArg().invocationContext() = true;
   eq MethodAccess.getArg().castContext() = false;
   eq MethodAccess.getArg().numericContext() = false;
 
-  eq ConstructorAccess.getArg().assignmentContext() = false;
   eq ConstructorAccess.getArg().invocationContext() = true;
   eq ConstructorAccess.getArg().castContext() = false;
   eq ConstructorAccess.getArg().numericContext() = false;
 
-  eq ArrayInit.getInit().assignmentContext() = true;
   eq ArrayInit.getInit().invocationContext() = false;
   eq ArrayInit.getInit().castContext() = false;
   eq ArrayInit.getInit().numericContext() = false;
 
-  eq ReturnStmt.getResult().assignmentContext() = true;
   eq ReturnStmt.getResult().invocationContext() = false;
   eq ReturnStmt.getResult().castContext() = false;
   eq ReturnStmt.getResult().numericContext() = false;
 
-  eq Declarator.getInit().assignmentContext() = true;
   eq Declarator.getInit().invocationContext() = false;
   eq Declarator.getInit().castContext() = false;
   eq Declarator.getInit().numericContext() = false;
 
-  eq ArrayTypeWithSizeAccess.getExpr().assignmentContext() = false;
   eq ArrayTypeWithSizeAccess.getExpr().invocationContext() = false;
   eq ArrayTypeWithSizeAccess.getExpr().castContext() = false;
   eq ArrayTypeWithSizeAccess.getExpr().numericContext() = false;
 
-  eq Dims.getExpr().assignmentContext() = false;
   eq Dims.getExpr().invocationContext() = false;
   eq Dims.getExpr().castContext() = false;
   eq Dims.getExpr().numericContext() = false;
 
-  eq ExprMethodReference.getExpr().assignmentContext() = false;
   eq ExprMethodReference.getExpr().invocationContext() = false;
   eq ExprMethodReference.getExpr().castContext() = false;
   eq ExprMethodReference.getExpr().numericContext() = false;
 
-  eq TypeMethodReference.getTypeAccess().assignmentContext() = false;
   eq TypeMethodReference.getTypeAccess().invocationContext() = false;
   eq TypeMethodReference.getTypeAccess().castContext() = false;
   eq TypeMethodReference.getTypeAccess().numericContext() = false;
 
-  eq ConstructorReference.getTypeAccess().assignmentContext() = false;
   eq ConstructorReference.getTypeAccess().invocationContext() = false;
   eq ConstructorReference.getTypeAccess().castContext() = false;
   eq ConstructorReference.getTypeAccess().numericContext() = false;

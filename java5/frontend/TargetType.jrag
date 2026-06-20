@@ -1,0 +1,128 @@
+/* Copyright (c) 2019-2026, ExtendJ Committers
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ * this list of conditions and the following disclaimer.
+ *
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ * this list of conditions and the following disclaimer in the documentation
+ * and/or other materials provided with the distribution.
+ *
+ * 3. Neither the name of the copyright holder nor the names of its
+ * contributors may be used to endorse or promote products derived from this
+ * software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
+
+aspect TargetType {
+  /**
+   * Computes the target type of this expression.
+   *
+   * In Java 5-7, this is used for computing the target type in generic
+   * method type inference in an assignment context.
+   *
+   * In Java 8, this is used for generic method inference in assignment/invocation
+   * contexts as well as for finding the target functional interface of lambda expressions.
+   *
+   * If evaluated in a type inference context, {@code targetType} can circularly
+   * depend on itself.
+   *
+   * @return {@code unknownType()} if there is no target type.
+   */
+  inh TypeDecl Expr.targetType() circular [unknownType()];
+
+  eq Program.getChild().targetType() = unknownType();
+  eq Declarator.getInit().targetType() = getTypeAccess().type();
+  eq AssignExpr.getSource().targetType() = getDest().type();
+  eq ReturnStmt.getResult().targetType() = returnType();
+  eq EnhancedForStmt.getExpr().targetType() = iterableTypeAccess().type();
+  eq ConditionalExpr.getTrueExpr().targetType() = targetType();
+  eq ConditionalExpr.getFalseExpr().targetType() = targetType();
+  eq ParExpr.getExpr().targetType() = targetType();
+  eq CastExpr.getExpr().targetType() = type();
+  eq ArithmeticExpr.getChild().targetType() = type();
+
+  /** Left side of a qualified expression has no target type. */
+  eq Dot.getLeft().targetType() = unknownType();
+
+  eq ArrayInit.getInit().targetType() {
+    TypeDecl tt = targetType();
+    if (tt instanceof ArrayDecl) {
+      return ((ArrayDecl) tt).componentType();
+    }
+    return tt;
+  }
+
+  eq AddExpr.getLeftOperand().targetType() {
+    if (!left().type().isString() && right().type().isString()) {
+      // In binary + expressions where one operand is String and the other is not,
+      // there is String conversion of the non-String operand. (JLSv8 5.4)
+      return getRightOperand().type();
+    }
+    return type();
+  }
+
+  eq AddExpr.getRightOperand().targetType() {
+    if (left().type().isString() && !right().type().isString()) {
+      // In binary + expressions where one operand is String and the other is not,
+      // there is String conversion of the non-String operand. (JLSv8 5.4)
+      return typeString();
+    }
+    return type();
+  }
+
+  eq MethodAccess.getArg(int i).targetType() {
+    MethodDecl decl = decl();
+    if (decl.unknownMethod() == decl) {
+      return unknownType();
+    }
+
+    if (decl.isVariableArity() && i >= decl.arity() - 1) {
+      return decl.getParameter(decl.arity() - 1).type().componentType();
+    } else {
+      return decl.getParameter(i).type();
+    }
+  }
+
+  eq BoundMethodAccess.getArg(int index).targetType() = decl().paramType(index);
+
+  eq ConstructorAccess.getArg(int i).targetType() {
+    ConstructorDecl decl = decl();
+    if (unknownConstructor() == decl) {
+      return unknownType();
+    }
+
+    if (decl.isVariableArity() && i >= decl.arity() - 1) {
+      return decl.getParameter(decl.arity() - 1).type().componentType();
+    } else {
+      return decl.getParameter(i).type();
+    }
+  }
+
+  eq ClassInstanceExpr.getArg(int i).targetType() {
+    ConstructorDecl decl = decl();
+    if (unknownConstructor() == decl) {
+      return unknownType();
+    }
+
+    if (decl.isVariableArity() && i >= decl.arity() - 1) {
+      return decl.getParameter(decl.arity() - 1).type().componentType();
+    } else {
+      return decl.getParameter(i).type();
+    }
+  }
+}

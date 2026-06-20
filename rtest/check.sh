@@ -34,9 +34,12 @@ if [ -d "$TMPDIR" ]; then
 fi
 mkdir -p $TMPDIR
 
+: "${SOURCE:=8}"
+: "${TARGET:=8}"
+
 JAVAC="javac"
 EXTENDJ="java $JVMFLAGS -jar extendj.jar"
-$JAVAC -d tmp $TEST/Test.java 2>javac.err
+$JAVAC -source $SOURCE -target $TARGET -d tmp $TEST/Test.java 2>javac.err
 ref=$?
 if [ "$ref" == "0" ]; then
   if [ -s javac.err ]; then
