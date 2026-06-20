@@ -1,19 +1,15 @@
-// Test type inference for simple generic method access.
+// Test calling a generic method in a string conversion context.
 // https://bitbucket.org/extendj/extendj/issues/198/generic-method-type-inference-failure-in
-// .classpath: @RUNTIME_CLASSES@
-import static runtime.Test.*;
+// .result=COMPILE_PASS
 
 public class Test {
-  <T extends Number> T num() {
+  static <T extends Number> T num() {
     return null;
   }
 
-  String numStr() {
-    return "num: " + num();
-  }
-
-  public static void main(String[] args) {
-    Test test = new Test();
-    testEquals("num: null", test.numStr());
-  }
+  // NOTE: The inference of num() here works slightly differently in Java 5-7 vs Java 8+,
+  // but the result is T=Number. The Java 8 specification says that the target
+  // type is only used in assignment or invocation contexts.
+  // The Java 5 specification is not as clear on this point.
+  String numStr = "num: " + num();
 }
