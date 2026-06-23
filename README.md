@@ -147,6 +147,16 @@ repository][2].
 
 If you want to submit a patch to ExtendJ, please follow our [code style guide][3].
 
+### Testing
+
+Regression tests are located in `rtest/` with individula test cases organized into
+subdirectories of `rtest/tests/`. The regression test suite can be run with Apache Ant
+inside the `rtest` directory. For example
+
+    ant java8 # Run Java8 regression tests
+
+For more details on regression testing see `rtest/README.md`.
+
 ### Debugging
 
 In the case that ExtendJ generates faulty
