@@ -73,12 +73,8 @@ public interface Tests {
     "extendj/err_14f", // https://bitbucket.org/extendj/extendj/issues/317/extendj-classes-accessible-by-code-being
     "generics/bounds_05f", // Compilation should fail on cyclic type variable bounds.
     "generics/bounds_06f", // Compilation should fail on cyclic type variable bounds.
-    "enum/enumset_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
-    "enum/switch_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
-    "enum/switch_02p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
     "java10/var/var_17",  // https://bitbucket.org/extendj/extendj/issues/319/type-cast-to-intersection-type-has-no
     "jsr335/intersection",  // https://bitbucket.org/extendj/extendj/issues/319/type-cast-to-intersection-type-has-no
-    "java9/diamond/diamond_06", // Bug in Java 9 diamond access implementation
     "java10/var/var_14", // https://bitbucket.org/extendj/extendj/issues/340/type-intersection-parsing-issue
     "java10/var/var_27", // https://bitbucket.org/extendj/extendj/issues/340/type-intersection-parsing-issue
     "java10/var/var_22", // https://bitbucket.org/extendj/extendj/issues/338/capture-types-becomes-too-general
@@ -158,6 +154,10 @@ public interface Tests {
     "codegen/annotation01", // Annotations changed toString() output.
     "jsr334/diamond/diamond_03f", // Diamond is allowed in anonymous class instance expressions.
     "jsr334/safe-varargs/nonfinal_01f", // @SafeVarargs is allowed on static non-final methods.
+    "enum/enumset_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
+    "enum/switch_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
+    "enum/switch_02p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
+    "java9/diamond/diamond_06", // Bug in Java 9 diamond access implementation
   };
 
   /*
