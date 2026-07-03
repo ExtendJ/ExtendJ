@@ -26,8 +26,25 @@ only be used with Java 7 or higher. For Java 5 or 6 you must use Ant.
     * Copy an existing test suite.
     * Change it to include and exclude parts of the full test suite.
 
-Test Organization
------------------
+## Quick Compile Diff Testing Tool
+
+`DiffRunner.java` is a standalone tool for quickly comparing two ExtendJ
+versions. It compiles every regression test with two different builds
+of ExtendJ in a single JVM and reports the tests where the builds disagree on
+whether compilation succeeds.
+
+    javac DiffRunner.java
+    java DiffRunner <[label=]classpath> <[label=]classpath> [testsRoot]
+
+For example, comparing a baseline jar against the current build:
+
+    java DiffRunner baseline.jar ../java8/extendj.jar
+
+Note that DiffRunner only diffs compile pass/fail. It does not check expected
+results, error output, or execution. It is mainly useful for running quick
+regression testing during development and does not replace the JUnit testing framework.
+
+## Test Organization
 
 Tests are organized into subdirectories according to which feature they are
 intended to test. The test directory names end with a number to accomodate
@@ -45,8 +62,7 @@ Each directory can have a `description` file, which is processed by
 and included in the generated file `index.html`. Generate the index file
 by the script `gendoc.sh`.
 
-Test Suites
------------
+## Test Suites
 
 Test suites are located in `src/tests/jastadd2`. Each test suite is a regular
 parameterized JUnit test. All test suites are identical except for their
@@ -70,8 +86,7 @@ include/exclude individual tests. Test properties on the other hand configure a
 single test.
 
 
-Test Folder Structure
----------------------
+## Test Folder Structure
 
 The test folder must contain a file named `Test.java` or `Test.properties`.
 Additional test metadata files:
@@ -80,8 +95,7 @@ Additional test metadata files:
 * `err.expected` - expected standard error output.
 * `extendj.err.expected` - expected standard error output when compiling with ExtendJ.
 
-Test Properties
----------------
+## Test Properties
 
 Each test can have an optional `Test.properties` file that defines options for
 that particular test. These options are available:
@@ -105,8 +119,7 @@ for example,
     options = tracing=compute | tracing=compute componentCheck
 
 
-Test Running
-------------
+## Test Running
 
 The following operations are performed for each test:
 
