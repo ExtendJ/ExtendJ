@@ -88,11 +88,11 @@ aspect PolyExpressions {
   eq ConditionalExpr.isPolyExpression() =
       isReferenceConditional() && (assignmentContext() || invocationContext());
 
-  // 15.9
+  // JLS SE8 §15.9
   eq ClassInstanceExpr.isPolyExpression() =
       (getAccess() instanceof DiamondAccess) && (assignmentContext() || invocationContext());
 
-  // 15.8.5
+  // JLS SE8 §15.8.5
   eq ParExpr.isPolyExpression() =
       getExpr().isPolyExpression();
 
@@ -100,17 +100,28 @@ aspect PolyExpressions {
   eq MethodReference.isPolyExpression() = true;
   eq ConstructorReference.isPolyExpression() = true;
 
-  // 15.12
+  // JLS SE8 §15.12
   eq ParMethodAccess.isPolyExpression() = false;
+
+  // JLS SE8 §15.12: qualified method invocation
+  eq Dot.isPolyExpression() = getRight().isPolyExpression();
 
   eq MethodAccess.isPolyExpression() {
     if (!assignmentContext() && !invocationContext()) {
       return false;
     }
-    if (!decl().isGeneric()) {
+    // JLS SE8 §15.12: the method to be invoked is generic and uses a type variable in the return type.
+    // If decl() has resolved to an instantiation of a generic method we need to look
+    // at the original declaration return type.
+    MethodDecl decl = decl();
+    GenericMethodDecl genericDecl;
+    if (decl.isGeneric()) {
+      genericDecl = decl.genericDecl();
+    } else if (decl instanceof ParMethodDecl) {
+      genericDecl = ((ParMethodDecl) decl).genericMethodDecl();
+    } else {
       return false;
     }
-    GenericMethodDecl genericDecl = decl().genericDecl();
     return genericDecl.typeVariableInReturn();
   }
 
