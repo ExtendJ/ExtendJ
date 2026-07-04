@@ -1,0 +1,68 @@
+aspect Assign {
+
+    public boolean InstanceInitializer.assign(Variable v){
+        return getBlock().assign(v);
+    }
+
+    syn boolean Expr.assign(Variable v) = false;
+    eq AssignExpr.assign(Variable v) {
+        if(getDest() instanceof VarAccess){
+            return ((VarAccess) getDest()).decl() == v;
+        }
+        return false;
+    }
+
+    static boolean Stmt.assign(List<Stmt> stmts, Variable v){
+        for(Stmt s : stmts){
+            if(s.assign(v))
+                return true;
+        }
+        return false;
+    }
+
+    syn boolean Stmt.assign(Variable v) = false;
+    eq ExprStmt.assign(Variable v) = getExpr().assign(v);
+
+    eq SwitchStmt.assign(Variable v) = getExpr().assign(v) || getBlock().assign(v);
+    eq ConstCase.assign(Variable v) = getValue().assign(v);
+    eq Block.assign(Variable v) = assign(getStmts(), v);
+
+    eq IfStmt.assign(Variable v) =
+        getCondition().assign(v) || getThen().assign(v) ||
+            (hasElse() && getElse().assign(v));
+
+    eq WhileStmt.assign(Variable v) =
+        getCondition().assign(v) || getStmt().assign(v);
+    eq DoStmt.assign(Variable v) =
+        getStmt().assign(v) || getCondition().assign(v);
+    eq ForStmt.assign(Variable v) =
+        assign(getInitStmts(), v) || (hasCondition() && getCondition().assign(v)) ||
+        assign(getUpdateStmts(), v) || getStmt().assign(v);
+
+
+    eq BreakStmt.assign(Variable v) = hasFinally() && getFinally().assign(v);
+    eq ContinueStmt.assign(Variable v) = hasFinally() && getFinally().assign(v);
+    eq ReturnStmt.assign(Variable v) = hasResult() && getResult().assign(v) ||
+        hasFinally() && getFinally().assign(v);
+
+    eq ThrowStmt.assign(Variable v) = getExpr().assign(v);
+    eq SynchronizedStmt.assign(Variable v) =
+        getExpr().assign(v) || getBlock().assign(v) || getMonitorExit().assign(v);
+
+    eq TryStmt.assign(Variable v) {
+        if(getBlock().assign(v))
+            return true;
+
+        List<CatchClause> ccs =  getCatchClauses();
+        for(CatchClause cc : ccs){
+            if(cc.assign(v))
+                return true;
+        }
+        return hasFinally() && getFinally().assign(v) ||
+                getExceptionHandler().assign(v);
+    }
+    eq AssertStmt.assign(Variable v) = getCondition().assign(v) || hasMessage() && getMessage().assign(v);
+
+
+    syn boolean CatchClause.assign(Variable v) = getBlock().assign(v);
+}
