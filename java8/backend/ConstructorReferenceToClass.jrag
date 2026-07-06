@@ -57,9 +57,9 @@ aspect ConstructorReferenceToClass {
   /** Build an anonymous inner class for bytecode generation. */
   syn nta lazy ClassInstanceExpr ConstructorReference.toClass() {
     List<Access> implementsList = new List<Access>();
-    InterfaceDecl iDecl = targetInterface();
+    TypeDecl tt = targetType();
 
-    if (iDecl == null) {
+    if (!tt.hasFunctionDescriptor()) {
       // The target type is not available. This could be due to a
       // type analysis error or incomplete type inference. Either
       // way we need to create an empty class to avoid NPE.
@@ -70,7 +70,7 @@ aspect ConstructorReferenceToClass {
     }
 
     // First compute the interface implemented by the anonymous class.
-    TypeDecl nonWildcard = iDecl.nonWildcardParameterization().orElse(unknownType());
+    TypeDecl nonWildcard = tt.nonWildcardParameterization().orElse(unknownType());
     implementsList.add(nonWildcard.createQualifiedAccess());
 
     // Next, compute the BodyDecls for the anonymous class.
@@ -78,11 +78,11 @@ aspect ConstructorReferenceToClass {
 
     // Which means we must build the method overriding the abstract methods.
     Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-    MethodDecl targetMethod = iDecl.functionDescriptor().method;
+    MethodDecl targetMethod = tt.functionDescriptor().method;
     Access returnType = new SyntheticTypeAccess(targetMethod.type());
     List<ParameterDeclaration> methodParams = toParameterList();
     List<Access> methodThrows = new List<Access>();
-    for (TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+    for (TypeDecl throwsType : tt.functionDescriptor().throwsList) {
       methodThrows.add(new SyntheticTypeAccess(throwsType));
     }
     Opt<Block> methodBlock = new Opt<Block>(toBlock());
@@ -99,7 +99,7 @@ aspect ConstructorReferenceToClass {
         "ConstructorReference", implementsList, bodyDecls);
 
     return new ClassInstanceExpr(
-        iDecl.createQualifiedAccess(),
+        tt.createQualifiedAccess(),
         new List<Expr>(),
         new Opt<TypeDecl>(anonymousDecl));
   }
@@ -108,7 +108,7 @@ aspect ConstructorReferenceToClass {
 
   syn lazy List<ParameterDeclaration> ConstructorReference.toParameterList() {
     List<ParameterDeclaration> list = new List<ParameterDeclaration>();
-    MethodDecl targetMethod = targetInterface().functionDescriptor().method;
+    MethodDecl targetMethod = targetType().functionDescriptor().method;
     for (ParameterDeclaration param : targetMethod.getParameters()) {
       list.add(new ParameterDeclaration(new SyntheticTypeAccess(param.type()), param.name()));
     }
@@ -117,7 +117,7 @@ aspect ConstructorReferenceToClass {
 
   eq ArrayCtorRef.toBlock() {
     // First, build an ArrayCreationExpr used in the block.
-    MethodDecl targetMethod = targetInterface().functionDescriptor().method;
+    MethodDecl targetMethod = targetType().functionDescriptor().method;
     String paramName = targetMethod.getParameter(0).name();
     VarAccess paramAccess = new VarAccess(paramName);
     ArrayCreationExpr arrayExpr = new ArrayCreationExpr(getArrayTypeWithSizeAccess(paramAccess),
@@ -137,7 +137,7 @@ aspect ConstructorReferenceToClass {
 
   eq ClassReference.toBlock() {
     List<Expr> arguments = new List<Expr>();
-    MethodDecl targetMethod = targetInterface().functionDescriptor().method;
+    MethodDecl targetMethod = targetType().functionDescriptor().method;
     for (ParameterDeclaration param : targetMethod.getParameters()) {
       arguments.add(new VarAccess(param.name()));
     }

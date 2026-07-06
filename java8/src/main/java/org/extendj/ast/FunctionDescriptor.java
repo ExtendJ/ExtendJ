@@ -16,10 +16,12 @@ import java.util.*;
 class FunctionDescriptor {
   public final java.util.List<TypeDecl> throwsList;
   public final MethodDecl method;
-  public final InterfaceDecl fromInterface;
 
-  public FunctionDescriptor(InterfaceDecl fromInterface, MethodDecl method, java.util.List<TypeDecl> throwsList) {
-    this.fromInterface = fromInterface;
+  public FunctionDescriptor(MethodDecl method) {
+    this(method, Collections.emptyList());
+  }
+
+  public FunctionDescriptor(MethodDecl method, java.util.List<TypeDecl> throwsList) {
     Optional<MethodDecl> nw = method.nonWildcardParameterization();
     this.method = nw.isPresent() ? nw.get() : method.unknownMethod();
     this.throwsList = throwsList;
@@ -27,10 +29,6 @@ class FunctionDescriptor {
 
   public boolean isGeneric() {
     return method.isGeneric();
-  }
-
-  public InterfaceDecl fromInterface() {
-    return this.fromInterface;
   }
 
   public String toString() {
@@ -55,13 +53,11 @@ class FunctionDescriptor {
       return false;
     }
     FunctionDescriptor o = (FunctionDescriptor) other;
-    return fromInterface == o.fromInterface
-        && method == o.method
-        && throwsList.equals(o.throwsList);
+    return method == o.method && throwsList.equals(o.throwsList);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(fromInterface, method.hashCode());
+    return Objects.hash(method, throwsList);
   }
 }

@@ -51,16 +51,13 @@ aspect TypeCheck {
     if (!assignmentContext() && !castContext() && !invocationContext()) {
       return unknownType();
     }
-    if (targetInterface() == null) {
-      return unknownType();
-    }
 
-    InterfaceDecl iDecl = targetInterface();
-    if (!iDecl.isFunctional()) {
+    TypeDecl tt = targetType();
+    if (!tt.hasFunctionDescriptor()) {
       return unknownType();
     }
-    if (congruentTo(iDecl.functionDescriptor())) {
-      return iDecl;
+    if (congruentTo(tt.functionDescriptor())) {
+      return tt;
     } else {
       return unknownType();
     }
@@ -71,17 +68,14 @@ aspect TypeCheck {
     if (!assignmentContext() && !castContext() && !invocationContext()) {
       return unknownType();
     }
-    if (targetInterface() == null) {
+
+    TypeDecl tt = targetType();
+    if (!tt.hasFunctionDescriptor()) {
       return unknownType();
     }
 
-    InterfaceDecl iDecl = targetInterface();
-    if (!iDecl.isFunctional()) {
-      return unknownType();
-    }
-
-    if (congruentTo(iDecl.functionDescriptor())) {
-      return iDecl;
+    if (congruentTo(tt.functionDescriptor())) {
+      return tt;
     } else {
       return unknownType();
     }
@@ -92,16 +86,13 @@ aspect TypeCheck {
     if (!assignmentContext() && !castContext() && !invocationContext()) {
       return unknownType();
     }
-    if (targetInterface() == null) {
+
+    TypeDecl tt = targetType();
+    if (!tt.hasFunctionDescriptor()) {
       return unknownType();
     }
 
-    InterfaceDecl iDecl = targetInterface();
-    if (!iDecl.isFunctional()) {
-      return unknownType();
-    }
-
-    return iDecl;
+    return tt;
   }
 
   LambdaExpr contributes each typeProblems() to CompilationUnit.problems();
@@ -126,35 +117,34 @@ aspect TypeCheck {
       return problems;
     }
 
-    InterfaceDecl iDecl = targetInterface();
-
-    if (!iDecl.isFunctional()) {
+    TypeDecl tt = targetType();
+    if (!tt.isFunctionalInterface()) {
       // 15.27
       problems.add(errorf(
           "Interface %s is not functional and can therefore not be targeted by a lambda expression",
-          iDecl.typeName()));
+          tt.typeName()));
       return problems;
     }
 
-    FunctionDescriptor fd = iDecl.functionDescriptor();
+    FunctionDescriptor fd = tt.functionDescriptor();
     if (fd.method.isUnknown()) {
       problems.add(errorf(
             "Found no matching method in the interface %s for this lambda expression.",
-            iDecl.typeName()));
+            tt.typeName()));
     } else {
       MethodDecl targetMethod = fd.method;
 
       if (fd.isGeneric()) {
         // 15.27
         problems.add(errorf("Illegal lambda expression: Method %s in interface %s is generic",
-            targetMethod.name(), iDecl.typeName()));
+            targetMethod.name(), tt.typeName()));
         return problems;
       }
 
       if (!getLambdaParameters().congruentTo(fd)) {
         problems.add(errorf("Lambda expression parameters incompatible with"
             + " parameters in method %s in interface %s",
-            targetMethod.name(), iDecl.typeName()));
+            targetMethod.name(), tt.typeName()));
       }
 
       if (getLambdaBody() instanceof ExprLambdaBody) {
@@ -163,13 +153,13 @@ aspect TypeCheck {
           if (!exprBody.getExpr().stmtCompatible()) {
             problems.add(errorf("Lambda expression body must be a statement expression,"
                 + " because the method %s in interface %s has return type void",
-                targetMethod.name(), iDecl.typeName()));
+                targetMethod.name(), tt.typeName()));
           }
         } else {
           if (!exprBody.getExpr().type().assignConversionTo(targetMethod.type(), exprBody.getExpr())) {
             problems.add(errorf("Lambda expression body is not compatible with"
                 + " the return type %s in method %s in interface %s",
-                targetMethod.type().typeName(), targetMethod.name(), iDecl.typeName()));
+                targetMethod.type().typeName(), targetMethod.name(), tt.typeName()));
           }
         }
       } else {
@@ -178,13 +168,13 @@ aspect TypeCheck {
           if (!blockBody.voidCompatible()) {
             problems.add(errorf("Lambda expression body is not allowed to return a value,"
                 + " because the method %s in interface %s has return type void",
-                targetMethod.name(), iDecl.typeName()));
+                targetMethod.name(), tt.typeName()));
           }
         } else if (!blockBody.valueCompatible()) {
           problems.add(errorf("Lambda expression body must not complete normally or contain empty return"
               + " statments, because the method %s in interface"
               + " %s has a return type which is non-void",
-              targetMethod.name(), iDecl.typeName()));
+              targetMethod.name(), tt.typeName()));
         }
       }
     }
@@ -253,19 +243,18 @@ aspect TypeCheck {
       return problems;
     }
 
-    InterfaceDecl iDecl = targetInterface();
-
-    if (!iDecl.isFunctional()) {
+    TypeDecl tt = targetType();
+    if (!tt.isFunctionalInterface()) {
       problems.add(errorf("Interface %s is not functional and can therefore not be targeted by a method reference",
-          iDecl.typeName()));
+          tt.typeName()));
       return problems;
     }
 
-    FunctionDescriptor fd = iDecl.functionDescriptor();
+    FunctionDescriptor fd = tt.functionDescriptor();
     if (fd.method.isUnknown()) {
       problems.add(errorf(
             "Found no matching method in the interface %s for this method reference.",
-            iDecl.typeName()));
+            tt.typeName()));
     } else {
       MethodDecl targetMethod = fd.method;
       MethodDecl found = null;
@@ -276,7 +265,7 @@ aspect TypeCheck {
         if (found.isUnknown()) {
           // 15.13.1
           problems.add(errorf("Found no method %s that is compatible with the method %s in the interface %s",
-              name(), targetMethod.fullSignature(), iDecl.typeName()));
+              name(), targetMethod.fullSignature(), tt.typeName()));
         } else if (found.isStatic()) {
           problems.add(errorf("The method %s in type %s must be accessed in a static way",
               found.fullSignature(), found.hostType().typeName()));
@@ -317,7 +306,7 @@ aspect TypeCheck {
         } else if (staticMethod.isUnknown() && instanceMethod.isUnknown()) {
           problems.add(errorf(
               "Found no method %s that is compatible with the method %s in the interface %s",
-              name(), targetMethod.fullSignature(), iDecl.typeName()));
+              name(), targetMethod.fullSignature(), tt.typeName()));
            return problems;
         } else if (ref.validStaticMethod(fd)) {
           if (ref.getTypeAccess() instanceof ParTypeAccess) {
@@ -349,7 +338,7 @@ aspect TypeCheck {
                 + "return type %s of method %s in interface %s",
                 found.type().typeName(), found.fullSignature(),
                 targetMethod.type().typeName(), targetMethod.fullSignature(),
-                iDecl.typeName()));
+                tt.typeName()));
           }
         }
 
@@ -360,7 +349,7 @@ aspect TypeCheck {
           }
 
           boolean legalException = false;
-          for (TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
+          for (TypeDecl descriptorThrows : tt.functionDescriptor().throwsList) {
             if (exception.strictSubtype(descriptorThrows)) {
               legalException = true;
               break;
@@ -396,19 +385,19 @@ aspect TypeCheck {
       problems.add(error("Constructor references must target a functional interface"));
       return problems;
     }
-    InterfaceDecl iDecl = targetInterface();
 
-    if (!iDecl.isFunctional()) {
+    TypeDecl tt = targetType();
+    if (!tt.isFunctionalInterface()) {
       problems.add(errorf("Interface %s is not functional and can therefore not be targeted by a constructor reference",
-          iDecl.typeName()));
+          tt.typeName()));
       return problems;
     }
 
-    FunctionDescriptor fd = iDecl.functionDescriptor();
+    FunctionDescriptor fd = tt.functionDescriptor();
     if (fd.method.isUnknown()) {
       problems.add(errorf(
             "Found no matching method in the interface %s for this constructor reference.",
-            iDecl.typeName()));
+            tt.typeName()));
     } else {
       MethodDecl targetMethod = fd.method;
       if (this instanceof ClassReference) {
@@ -417,7 +406,7 @@ aspect TypeCheck {
         if (unknownConstructor() == decl) {
           problems.add(errorf("Found no constructor for the type %s that is compatible with "
               + "the method %s in interface %s",
-              getTypeAccess().type().typeName(), targetMethod.fullSignature(), iDecl.typeName()));
+              getTypeAccess().type().typeName(), targetMethod.fullSignature(), tt.typeName()));
         }
         if (!targetMethod.type().isVoid()) {
           // 15.13.1
@@ -426,7 +415,7 @@ aspect TypeCheck {
             problems.add(errorf(
                 "Return type %s of method %s in interface %s is not compatible with"
                 + " referenced constructor which has return type: %s",
-                targetMethod.type().typeName(), targetMethod.fullSignature(), iDecl.typeName(),
+                targetMethod.type().typeName(), targetMethod.fullSignature(), tt.typeName(),
                 returnType.typeName()));
           }
         }
@@ -437,7 +426,7 @@ aspect TypeCheck {
           }
 
           boolean legalException = false;
-          for (TypeDecl descriptorThrows : iDecl.functionDescriptor().throwsList) {
+          for (TypeDecl descriptorThrows : tt.functionDescriptor().throwsList) {
             if (exception.strictSubtype(descriptorThrows)) {
               legalException = true;
               break;
@@ -455,20 +444,20 @@ aspect TypeCheck {
         if (targetMethod.getNumParameter() != 1) {
           problems.add(errorf("Array reference not compatible with method %s in interface %s,"
               + " should have a single parameter of type int",
-              targetMethod.fullSignature(), iDecl.typeName()));
+              targetMethod.fullSignature(), tt.typeName()));
           return problems;
         }
-        if (!targetMethod.paramType(0).assignConversionTo(iDecl.typeInt(), null)) {
+        if (!targetMethod.paramType(0).assignConversionTo(tt.typeInt(), null)) {
           problems.add(errorf("Array reference not compatible with method %s in interface %s,"
               + " should have a single parameter of type int",
-              targetMethod.fullSignature(), iDecl.typeName()));
+              targetMethod.fullSignature(), tt.typeName()));
           return problems;
         }
         if (!targetMethod.type().isVoid()) {
           if (!getTypeAccess().type().assignConversionTo(targetMethod.type(), null)) {
             problems.add(errorf("Return type %s of method %s in interface %s is not compatible with"
                 + " the array reference type %s",
-                targetMethod.type().typeName(), targetMethod.fullSignature(), iDecl.typeName(),
+                targetMethod.type().typeName(), targetMethod.fullSignature(), tt.typeName(),
                 getTypeAccess().type().typeName()));
           }
         }
@@ -497,25 +486,14 @@ aspect TypeCheck {
 aspect LambdaParametersInference {
   inh lazy TypeDecl InferredParameterDeclaration.inferredType();
   eq InferredLambdaParameters.getParameter(int i).inferredType() {
-    if (enclosingLambda().targetInterface() == null) {
-      return unknownType();
-    }
-    InterfaceDecl iDecl = (InterfaceDecl) enclosingLambda().targetInterface();
-    if (!iDecl.isFunctional()) {
+    TypeDecl tt = enclosingLambda().targetType();
+    if (!tt.hasFunctionDescriptor()) return unknownType();
+    FunctionDescriptor fd = tt.functionDescriptor();
+    if (fd.method.getNumParameter() < i + 1) {
       return unknownType();
     } else {
-      FunctionDescriptor fd = iDecl.functionDescriptor();
-      if (!fd.method.isUnknown()) {
-        if (fd.method.getNumParameter() < i + 1) {
-          return unknownType();
-        } else {
-          // The target functional interface matches this lambda.
-          return fd.method.getParameter(i).type();
-        }
-      } else {
-        // No target method.
-        return unknownType();
-      }
+      // The target functional interface matches this lambda.
+      return fd.method.getParameter(i).type();
     }
   }
 

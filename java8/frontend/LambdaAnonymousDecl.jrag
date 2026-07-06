@@ -30,7 +30,7 @@ aspect LambdaToClass {
   /** Constructs an anonymous class instance expression based on this lambda. */
   syn nta ClassInstanceExpr LambdaExpr.toClass() =
       new ClassInstanceExpr(
-          targetInterface().createQualifiedAccess(),
+          targetType().createQualifiedAccess(),
           new List<Expr>(),
           new Opt<TypeDecl>(buildAnonymousDecl()));
 
@@ -43,20 +43,20 @@ aspect LambdaToClass {
    */
   protected TypeDecl LambdaExpr.buildAnonymousDecl() {
     List<Access> implementsList = new List<Access>();
-    InterfaceDecl iDecl = targetInterface();
+    TypeDecl tt = targetType();
 
     // Compute the interface type implemented by the anonymous class:
-    iDecl = (InterfaceDecl) iDecl.nonWildcardParameterization().orElse(iDecl);
-    implementsList.add(iDecl.createQualifiedAccess());
+    tt = tt.nonWildcardParameterization().orElse(tt);
+    implementsList.add(tt.createQualifiedAccess());
 
     // Now we will build the single method of the anonymous class.
     List<BodyDecl> bodyDecls = new List<BodyDecl>();
     Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-    FunctionDescriptor fd = iDecl.functionDescriptor();
+    FunctionDescriptor fd = tt.functionDescriptor();
     Access returnType = fd.method.type().createQualifiedAccess();
     List<ParameterDeclaration> methodParams = getLambdaParameters().toParameterList();
     List<Access> methodThrows = new List<Access>();
-    for (TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+    for (TypeDecl throwsType : tt.functionDescriptor().throwsList) {
       methodThrows.add(throwsType.createQualifiedAccess());
     }
     Opt<Block> methodBlock = new Opt<Block>(getLambdaBody().toBlock());
@@ -83,7 +83,7 @@ aspect LambdaToClass {
   protected Block ExprLambdaBody.toBlock() {
     List<Stmt> stmtList = new List<Stmt>();
     Expr expr = getExpr().treeCopyNoTransform();
-    FunctionDescriptor fd = enclosingLambda().targetInterface().functionDescriptor();
+    FunctionDescriptor fd = enclosingLambda().targetType().functionDescriptor();
     if (fd.method.type().isVoid()) {
       // Return type is void: insert ExprStmt in list.
       stmtList.add(new ExprStmt(expr));
@@ -105,7 +105,7 @@ aspect LambdaToClass {
 
   protected List<ParameterDeclaration> InferredLambdaParameters.toParameterList() {
     List<ParameterDeclaration> paramList = new List<ParameterDeclaration>();
-    FunctionDescriptor fd = enclosingLambda().targetInterface().functionDescriptor();
+    FunctionDescriptor fd = enclosingLambda().targetType().functionDescriptor();
     if (!fd.method.isUnknown()) {
       int i = 0;
       for (InferredParameterDeclaration infDecl : getParameterList()) {

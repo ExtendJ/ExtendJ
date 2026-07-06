@@ -49,10 +49,10 @@ aspect MethodReferenceToClass {
    */
   syn nta lazy ClassInstanceExpr ExprMethodReference.toClass() {
     List<Access> implementsList = new List<Access>();
-    InterfaceDecl iDecl = targetInterface();
+    TypeDecl tt = targetType();
 
     // First compute the interface implemented by the anonymous class.
-    TypeDecl nonWildcard = targetInterface().nonWildcardParameterization().orElse(unknownType());
+    TypeDecl nonWildcard = targetType().nonWildcardParameterization().orElse(unknownType());
     implementsList.add(nonWildcard.createQualifiedAccess());
 
     // Next, compute the BodyDecls for the anonymous class.
@@ -75,11 +75,11 @@ aspect MethodReferenceToClass {
 
     // Then we must build the method overriding the abstract methods.
     Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-    MethodDecl targetMethod = iDecl.functionDescriptor().method;
+    MethodDecl targetMethod = tt.functionDescriptor().method;
     Access returnType = new SyntheticTypeAccess(targetMethod.type());
     List<ParameterDeclaration> methodParams = toParameterList();
     List<Access> methodThrows = new List<Access>();
-    for (TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+    for (TypeDecl throwsType : tt.functionDescriptor().throwsList) {
       methodThrows.add(new SyntheticTypeAccess(throwsType));
     }
     Opt<Block> methodBlock = new Opt<Block>(toBlock());
@@ -95,13 +95,13 @@ aspect MethodReferenceToClass {
         "MethodReference", implementsList, bodyDecls);
 
     return new ClassInstanceExpr(
-        iDecl.createQualifiedAccess(),
+        tt.createQualifiedAccess(),
         new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
   }
 
   syn lazy List<ParameterDeclaration> MethodReference.toParameterList() {
     List<ParameterDeclaration> list = new List<ParameterDeclaration>();
-    MethodDecl targetMethod = targetInterface().functionDescriptor().method;
+    MethodDecl targetMethod = targetType().functionDescriptor().method;
     for (ParameterDeclaration param : targetMethod.getParameters()) {
       list.add(new ParameterDeclaration(new SyntheticTypeAccess(param.type()), param.name()));
     }
@@ -117,7 +117,7 @@ aspect MethodReferenceToClass {
     }
 
     List<Expr> arguments = new List<Expr>();
-    MethodDecl targetMethod = targetInterface().functionDescriptor().method;
+    MethodDecl targetMethod = targetType().functionDescriptor().method;
     for (ParameterDeclaration param : targetMethod.getParameters()) {
       arguments.add(new VarAccess(param.name()));
     }
@@ -143,9 +143,9 @@ aspect MethodReferenceToClass {
 
   syn nta lazy ClassInstanceExpr TypeMethodReference.toClass() {
     List<Access> implementsList = new List<Access>();
-    InterfaceDecl iDecl = targetInterface();
+    TypeDecl tt = targetType();
 
-    if (iDecl == null) {
+    if (!tt.hasFunctionDescriptor()) {
       // The target type is not available. This could be due to a
       // type analysis error or incomplete type inference. Either
       // way we need to create an empty class to avoid NPE.
@@ -156,7 +156,7 @@ aspect MethodReferenceToClass {
     }
 
     // First compute the interface implemented by the anonymous class.
-    TypeDecl nonWildcard = iDecl.nonWildcardParameterization().orElse(unknownType());
+    TypeDecl nonWildcard = tt.nonWildcardParameterization().orElse(unknownType());
     implementsList.add(nonWildcard.createQualifiedAccess());
 
     // Next, compute the BodyDecl for the anonymous class.
@@ -164,11 +164,11 @@ aspect MethodReferenceToClass {
 
     // For TypeMethodReferenes, there is only one body decl.
     Modifiers methodModifiers = new Modifiers(new List<Modifier>().add(new Modifier("public")));
-    MethodDecl targetMethod = iDecl.functionDescriptor().method;
+    MethodDecl targetMethod = tt.functionDescriptor().method;
     Access returnType = new SyntheticTypeAccess(targetMethod.type());
     List<ParameterDeclaration> methodParams = toParameterList();
     List<Access> methodThrows = new List<Access>();
-    for (TypeDecl throwsType : iDecl.functionDescriptor().throwsList) {
+    for (TypeDecl throwsType : tt.functionDescriptor().throwsList) {
       methodThrows.add(new SyntheticTypeAccess(throwsType));
     }
     Opt<Block> methodBlock = new Opt<Block>(toBlock());
@@ -184,15 +184,15 @@ aspect MethodReferenceToClass {
         "MethodReference", implementsList, bodyDecls);
 
     return new ClassInstanceExpr(
-        iDecl.createQualifiedAccess(),
+        tt.createQualifiedAccess(),
         new List<Expr>(), new Opt<TypeDecl>(anonymousDecl));
   }
 
   syn lazy Block TypeMethodReference.toBlock() {
     Expr qualifier = null;
     List<Expr> arguments = new List<Expr>();
-    FunctionDescriptor f = targetInterface().functionDescriptor();
-    MethodDecl targetMethod = targetInterface().functionDescriptor().method;
+    FunctionDescriptor f = targetType().functionDescriptor();
+    MethodDecl targetMethod = targetType().functionDescriptor().method;
     if (!validStaticMethod(f)) {
       // Should create access to instance method.
       qualifier = new VarAccess(targetMethod.getParameter(0).name());
