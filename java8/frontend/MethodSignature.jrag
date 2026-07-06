@@ -46,13 +46,31 @@ aspect MethodSignature18 {
    * @return a BoundMethodAccess with the argument method as the target
    * declaration.
    */
-  syn nta MethodAccess MethodAccess.boundAccess(MethodDecl decl) {
-    return new BoundMethodAccess(name(), getArgList().treeCopyNoTransform(), decl);
-  }
+  syn nta MethodAccess MethodAccess.boundAccess(MethodDecl decl) =
+      new BoundMethodAccess(name(), getArgList().treeCopyNoTransform(), decl);
 
   // Propagate type lookups correctly for the bound access:
   eq MethodAccess.boundAccess().lookupType(String name) =
       unqualifiedScope().lookupType(name);
+
+  syn nta ConstructorAccess Expr.boundAccess(ConstructorDecl decl) {
+    throw new Error("Cannot create a synthetic constructor for this expression: " + this);
+  }
+
+  eq ConstructorAccess.boundAccess(ConstructorDecl decl) =
+      new BoundCtorAccess(getID(), getArgList().treeCopyNoTransform(), decl);
+
+  eq ClassInstanceExpr.boundAccess(ConstructorDecl decl) =
+      new BoundCtorAccess(getAccess().type().name(), getArgList().treeCopyNoTransform(), decl);
+
+  public BoundCtorAccess.BoundCtorAccess(String name, List args, ConstructorDecl decl) {
+    this(name, args);
+    this.decl = decl;
+  }
+
+  private ConstructorDecl BoundCtorAccess.decl;
+
+  eq BoundCtorAccess.decl() = decl;
 
   /** Used to compute compatibility during phase 1 of overload resolution. */
   syn lazy boolean Expr.compatibleStrictContext(TypeDecl type) = type().subtype(type);
@@ -996,7 +1014,7 @@ aspect MethodSignature18 {
     // First phase.
     SimpleSet<ConstructorDecl> maxSpecific = emptySet();
     for (ConstructorDecl decl : potentiallyApplicable) {
-      if (decl.applicableByStrictInvocation(this, argList)) {
+      if (boundAccess(decl).applicableByStrictInvocation(this)) {
         maxSpecific = mostSpecific(maxSpecific, decl, argList);
       }
     }
@@ -1004,7 +1022,7 @@ aspect MethodSignature18 {
     // Second phase.
     if (maxSpecific.isEmpty()) {
       for (ConstructorDecl decl : potentiallyApplicable) {
-        if (decl.applicableByLooseInvocation(this, argList)) {
+        if (boundAccess(decl).applicableByLooseInvocation(this)) {
           maxSpecific = mostSpecific(maxSpecific, decl, argList);
         }
       }
@@ -1013,7 +1031,8 @@ aspect MethodSignature18 {
     // Third phase.
     if (maxSpecific.isEmpty()) {
       for (ConstructorDecl decl : potentiallyApplicable) {
-        if (decl.isVariableArity() && decl.applicableByVariableArityInvocation(this, argList)) {
+        if (decl.isVariableArity()
+            && boundAccess(decl).applicableByVariableArityInvocation(this)) {
           maxSpecific = mostSpecific(maxSpecific, decl, argList);
         }
       }
@@ -1065,54 +1084,57 @@ aspect MethodSignature18 {
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableByStrictInvocation(Expr expr, List<Expr> argList) {
-    if (getNumParameter() != argList.getNumChild()) {
+  syn boolean ConstructorAccess.applicableByStrictInvocation(Expr expr) {
+    ConstructorDecl decl = decl();
+    if (decl.getNumParameter() != getNumArg()) {
       return false;
     }
-    for (int i = 0; i < getNumParameter(); i++) {
-      Expr arg = argList.getChild(i);
-      if (!arg.pertinentToApplicability(expr, this, i)) {
+    for (int i = 0; i < getNumArg(); i++) {
+      Expr arg = getArg(i);
+      if (!arg.pertinentToApplicability(expr, decl, i)) {
         continue;
       }
-      if (!arg.compatibleStrictContext(getParameter(i).type())) {
+      if (!arg.compatibleStrictContext(decl.getParameter(i).type())) {
         return false;
       }
     }
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableByLooseInvocation(Expr expr, List<Expr> argList) {
-    if (getNumParameter() != argList.getNumChild()) {
+  syn boolean ConstructorAccess.applicableByLooseInvocation(Expr expr) {
+    ConstructorDecl decl = decl();
+    if (decl.getNumParameter() != getNumArg()) {
       return false;
     }
-    for (int i = 0; i < getNumParameter(); i++) {
-      Expr arg = argList.getChild(i);
-      if (!arg.pertinentToApplicability(expr, this, i)) {
+    for (int i = 0; i < getNumArg(); i++) {
+      Expr arg = getArg(i);
+      if (!arg.pertinentToApplicability(expr, decl, i)) {
         continue;
       }
-      if (!arg.compatibleLooseContext(getParameter(i).type())) {
+      if (!arg.compatibleLooseContext(decl.getParameter(i).type())) {
         return false;
       }
     }
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableByVariableArityInvocation(Expr expr, List<Expr> argList) {
-    for (int i = 0; i < getNumParameter() - 1; i++) {
-      Expr arg = argList.getChild(i);
-      if (!arg.pertinentToApplicability(expr, this, i)) {
+  syn boolean ConstructorAccess.applicableByVariableArityInvocation(Expr expr) {
+    ConstructorDecl decl = decl();
+    for (int i = 0; i < decl.getNumParameter() - 1; i++) {
+      Expr arg = getArg(i);
+      if (!arg.pertinentToApplicability(expr, decl, i)) {
         continue;
       }
-      if (!arg.compatibleLooseContext(getParameter(i).type())) {
+      if (!arg.compatibleLooseContext(decl.getParameter(i).type())) {
         return false;
       }
     }
-    for (int i = getNumParameter() - 1; i < argList.getNumChild(); i++) {
-      Expr arg = argList.getChild(i);
-      if (!arg.pertinentToApplicability(expr, this, i)) {
+    for (int i = decl.getNumParameter() - 1; i < getNumArg(); i++) {
+      Expr arg = getArg(i);
+      if (!arg.pertinentToApplicability(expr, decl, i)) {
         continue;
       }
-      if (!arg.compatibleLooseContext(lastParameter().type().componentType())) {
+      if (!arg.compatibleLooseContext(decl.lastParameter().type().componentType())) {
         return false;
       }
     }
