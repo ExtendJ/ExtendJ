@@ -27,9 +27,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 aspect MethodReference {
-
-  inh MethodDecl MethodReference.unknownMethod();
-
   syn lazy MethodDecl ExprMethodReference.targetMethod(FunctionDescriptor fd) = syntheticMethodAccess(fd).decl();
 
   syn nta lazy Access ExprMethodReference.syntheticAccess(FunctionDescriptor fd) {
@@ -93,12 +90,12 @@ aspect MethodReference {
 
   syn lazy boolean TypeMethodReference.validStaticMethod(FunctionDescriptor fd) {
     MethodDecl decl = targetStaticMethod(fd);
-    return !(decl == unknownMethod() || !decl.isStatic());
+    return !(decl.isUnknown() || !decl.isStatic());
   }
 
   syn lazy boolean TypeMethodReference.validInstanceMethod(FunctionDescriptor fd) {
     MethodDecl decl = targetInstanceMethod(fd);
-    return !(decl == unknownMethod() || decl.isStatic());
+    return !(decl.isUnknown() || decl.isStatic());
   }
 
   /* This attribute is used for method references when the reference type must be inferred.  The
@@ -235,9 +232,9 @@ aspect MethodReference {
 
     TypeDecl methodType = fd.method.get().type();
     MethodDecl decl = targetMethod(fd);
-    if (unknownMethod() == decl) return false;
-    if     (methodType.isVoid()) return true;
-    if    (decl.type().isVoid()) return false;
+    if     (decl.isUnknown()) return false;
+    if  (methodType.isVoid()) return true;
+    if (decl.type().isVoid()) return false;
     return decl.type().assignConversionTo(methodType, null);
   }
 
@@ -250,23 +247,18 @@ aspect MethodReference {
     TypeDecl methodType = fd.method.get().type();
     MethodDecl staticMethod = targetStaticMethod(fd);
     MethodDecl instanceMethod = targetInstanceMethod(fd);
-    if (unknownMethod() != staticMethod && unknownMethod() != instanceMethod) {
-      return false;
-    } else if (unknownMethod() == staticMethod && unknownMethod() == instanceMethod) {
-      return false;
-    }
+    boolean hasStatic = !staticMethod.isUnknown();
+    boolean hasInstance = !instanceMethod.isUnknown();
     MethodDecl found;
-    if (unknownMethod() != staticMethod) {
+    if (hasStatic && !hasInstance) {
       found = staticMethod;
-    } else {
+    } else if (!hasStatic && hasInstance) {
       found = instanceMethod;
-    }
-    if (methodType.isVoid()) {
-      return true;
-    }
-    if (found.type().isVoid()) {
+    } else {
       return false;
     }
+    if   (methodType.isVoid()) return true;
+    if (found.type().isVoid()) return false;
     return found.type().assignConversionTo(methodType, null);
   }
 
@@ -342,7 +334,7 @@ aspect MethodReference {
   syn lazy boolean MethodReference.isExact();
   syn lazy MethodDecl MethodReference.exactCompileTimeDeclaration();
 
-  eq MethodReference.isExact() = exactCompileTimeDeclaration() != unknownMethod();
+  eq MethodReference.isExact() = !exactCompileTimeDeclaration().isUnknown();
 
   eq ExprMethodReference.exactCompileTimeDeclaration() {
     Collection<MethodDecl> col = getExpr().type().memberMethods(name());
