@@ -36,3 +36,89 @@ aspect CaptureConversion {
   eq   WildcardSuperType.captureType() = lookupCaptureType(this);
   eq        WildcardType.captureType() = lookupCaptureType(this);
 }
+
+// Implementation of JLS SE8 type inference.
+aspect TypeInference_SE8 {
+  /**
+   * The result type of the referenced method given the targeted function descriptor
+   * {@code fd}, used to reduce a method reference compatibility constraint during
+   * type inference.
+   *
+   * @return {@code UnknownType} when no applicable referenced method is found.
+   */
+  syn TypeDecl MethodReference.invocationType(FunctionDescriptor fd) = unknownType();
+
+  eq ExprMethodReference.invocationType(FunctionDescriptor fd) {
+    // TODO(jesper): Investigate if we can use implicitInvocation().type() instead.
+    if (!fd.method.isPresent()) {
+      return unknownType();
+    }
+    if (isExact()) {
+      // The referenced method is determined without inference (JLS SE8 §15.13.1), so its
+      // result type is available even when the descriptor parameter types still
+      // mention inference variables.
+      return exactCompileTimeDeclaration().type();
+    }
+    MethodDecl decl = targetMethod(fd);
+    return unknownMethod() == decl ? unknownType() : decl.type();
+  }
+
+  eq TypeMethodReference.invocationType(FunctionDescriptor fd) {
+    // TODO(jesper): Investigate if we can use implicitInvocation().type() instead.
+    if (!fd.method.isPresent()) {
+      return unknownType();
+    }
+    if (isExact()) {
+      // The referenced method is determined without inference (JLS SE8 §15.13.1), so its
+      // result type is available even when the descriptor parameter types still
+      // mention inference variables.
+      return exactCompileTimeDeclaration().type();
+    }
+    MethodDecl staticMethod = targetStaticMethod(fd);
+    MethodDecl instanceMethod = targetInstanceMethod(fd);
+    boolean hasStatic = unknownMethod() != staticMethod;
+    boolean hasInstance = unknownMethod() != instanceMethod;
+    if (hasStatic && !hasInstance) return staticMethod.type();
+    if (!hasStatic && hasInstance) return instanceMethod.type();
+    return unknownType();
+  }
+
+  /** See {@code MethodReference.invocationType}. */
+  syn TypeDecl ConstructorReference.invocationType(FunctionDescriptor fd) = unknownType();
+
+  eq ClassReference.invocationType(FunctionDescriptor fd) {
+    if (!fd.method.isPresent()) {
+      return unknownType();
+    }
+    ConstructorDecl decl = targetConstructor(fd);
+    return unknownConstructor() == decl ? unknownType() : syntheticInstanceExpr(fd).type();
+  }
+
+  eq ArrayCtorRef.invocationType(FunctionDescriptor fd) = getTypeAccess().type();
+
+  /**
+   * Create a synthetic {@code MethodAccess} representing the implicit invocation
+   * that would be used to call the method reference given the target function descriptor {@code fd}.
+   *
+   * <p>This is used in lifting bounds from the target function descriptor into
+   * an enclosing bound set during type inference.
+   *
+   * @return {@code null} if the target method is unknown.
+   */
+  syn MethodAccess MethodReference.implicitInvocation(FunctionDescriptor fd) = null;
+
+  eq ExprMethodReference.implicitInvocation(FunctionDescriptor fd) {
+    if (!fd.method.isPresent()) return null;
+    return syntheticMethodAccess(fd);
+  }
+
+  eq TypeMethodReference.implicitInvocation(FunctionDescriptor fd) {
+    if (!fd.method.isPresent()) return null;
+    boolean hasStatic = targetStaticMethod(fd) != unknownMethod();
+    boolean hasInstance = targetInstanceMethod(fd) != unknownMethod();
+    if (hasStatic && !hasInstance) return syntheticStaticMethodAccess(fd);
+    if (!hasStatic && hasInstance) return syntheticInstanceMethodAccess(fd);
+    return null;
+  }
+
+}
