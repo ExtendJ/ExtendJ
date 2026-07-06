@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: BSD-3-Clause
+
+/**
+ * Capture conversion has been part of the Java specification since Java 5,
+ * but ExtendJ's java5 module did not instantiate capture converted types.
+ * If the java5 module is ever updated to handle capture conversion, this aspect
+ * could be moved to the java5 module.
+ */
+aspect CaptureConversion {
+  /**
+   * Instantiate the capture variable of a wildcard type argument inside a capture converted
+   * type (JLS SE8 §5.1.10).
+   * Indexed by wildcard node so that the same wildcard yields the
+   * same capture variable.
+   */
+  syn nta TypeVariable WildcardsCompilationUnit.lookupCaptureType(TypeDecl wildcard) {
+    Access boundAccess;
+    if (wildcard instanceof WildcardExtendsType) {
+      boundAccess = ((WildcardExtendsType) wildcard).extendsType().createBoundAccess();
+    } else {
+      boundAccess = wildcard.typeObject().createBoundAccess();
+    }
+    return new TypeVariable(
+        new Modifiers(new List().add(new Modifier("public"))),
+        "capture#" + System.identityHashCode(wildcard),
+        new List<BodyDecl>(),
+        new List<Access>().add(boundAccess));
+  }
+
+  eq Program.getChild().lookupCaptureType(TypeDecl wildcard) = wildcards().lookupCaptureType(wildcard);
+
+  inh TypeVariable TypeDecl.lookupCaptureType(TypeDecl wildcard);
+
+  syn TypeDecl  TypeDecl.captureType() = this;
+  eq WildcardExtendsType.captureType() = lookupCaptureType(this);
+  eq   WildcardSuperType.captureType() = lookupCaptureType(this);
+  eq        WildcardType.captureType() = lookupCaptureType(this);
+}
