@@ -42,12 +42,12 @@ aspect Var {
     if (hasVarParameters()) {
       List<ParameterDeclaration> paramList = new List<ParameterDeclaration>();
       FunctionDescriptor fd = enclosingLambda().targetInterface().functionDescriptor();
-      if (fd.method.isPresent()) {
-        MethodDecl targetMethod = fd.method.get();
+      if (!fd.method.isUnknown()) {
+        MethodDecl targetMethod = fd.method;
         int i = 0;
-        for (ParameterDeclaration Decl : getParameterList()) {
+        for (ParameterDeclaration param : getParameterList()) {
           ParameterDeclaration funcDecl = targetMethod.getParameter(i);
-          paramList.add(new ParameterDeclaration(funcDecl.type().createQualifiedAccess(), Decl.name()));
+          paramList.add(new ParameterDeclaration(funcDecl.type().createQualifiedAccess(), param.name()));
           i += 1;
         }
       }
@@ -68,17 +68,16 @@ aspect Var {
       return unknownType();
     } else {
       FunctionDescriptor fd = iDecl.functionDescriptor();
-      if (fd.method.isPresent()) {
-        MethodDecl targetMethod = fd.method.get();
-        if (targetMethod.getNumParameter() < i + 1) {
-          return unknownType();
-        } else {
-          // The target functional interface matches this lambda.
-          return targetMethod.getParameter(i).type();
-        }
-      } else {
+      if (fd.method.isUnknown()) {
         // No target method.
         return unknownType();
+      }
+      MethodDecl targetMethod = fd.method;
+      if (targetMethod.getNumParameter() < i + 1) {
+        return unknownType();
+      } else {
+        // The target functional interface matches this lambda.
+        return targetMethod.getParameter(i).type();
       }
     }
   }
@@ -86,25 +85,23 @@ aspect Var {
   eq ParameterDeclaration.getTypeAccess().varType() = inferredType();
 
   refine LambdaExpr eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      MethodDecl targetMethod = fd.method.get();
-      if (numParameters() != targetMethod.getNumParameter()) {
-        return false;
-      }
-      if (hasVarParameters()) {
-        return true; // If a parameter is declared using "var" treat all parameters as var, mixing is not allowed.
-      }
-      for (int i = 0; i < numParameters(); i++) {
-        // Lambdas cannot declare type variables so that doesn't need to be taken into account.
-        if (getParameter(i).type() != targetMethod.getParameter(i).type()
-            && getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
-          return false;
-        }
-      }
-      return true;
-    } else {
+    if (fd.method.isUnknown()) return false;
+
+    MethodDecl targetMethod = fd.method;
+    if (numParameters() != targetMethod.getNumParameter()) {
       return false;
     }
+    if (hasVarParameters()) {
+      return true; // If a parameter is declared using "var" treat all parameters as var, mixing is not allowed.
+    }
+    for (int i = 0; i < numParameters(); i++) {
+      // Lambdas cannot declare type variables so that doesn't need to be taken into account.
+      if (getParameter(i).type() != targetMethod.getParameter(i).type()
+          && getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
+        return false;
+      }
+    }
+    return true;
   }
 
   syn boolean LambdaParameters.mixesVarAndTypes() = false;

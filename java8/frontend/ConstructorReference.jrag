@@ -34,11 +34,9 @@ aspect ConstructorReference {
 
   syn nta lazy ClassInstanceExpr ClassReference.syntheticInstanceExpr(FunctionDescriptor fd) {
     List<Expr> arguments = new List<Expr>();
-    if (fd.method.isPresent()) {
-      MethodDecl targetMethod = fd.method.get();
-      for (int i = 0; i < targetMethod.getNumParameter(); i++) {
-        TypeDecl argumentType = targetMethod.getParameter(i).type();
-        arguments.add(new SyntheticTypeAccess(argumentType));
+    if (!fd.method.isUnknown()) {
+      for (ParameterDeclaration param : fd.method.getParameters()) {
+        arguments.add(new SyntheticTypeAccess(param.type()));
       }
     }
 
@@ -76,41 +74,38 @@ aspect ConstructorReference {
     if (unknownConstructor() == decl) {
       return false;
     }
-    if (fd.method.isPresent()) {
-      MethodDecl targetMethod = fd.method.get();
-      if (!targetMethod.type().isVoid()) {
-        TypeDecl returnType = syntheticInstanceExpr(fd).type();
-        if (!returnType.assignConversionTo(targetMethod.type(), null)) {
-          return false;
-        }
-      }
-      return true;
-    } else {
+    if (fd.method.isUnknown()) {
       // No target method.
       return false;
     }
+    if (!fd.method.type().isVoid()) {
+      TypeDecl returnType = syntheticInstanceExpr(fd).type();
+      if (!returnType.assignConversionTo(fd.method.type(), null)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   eq ArrayCtorRef.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      MethodDecl targetMethod = fd.method.get();
-      if (targetMethod.getNumParameter() != 1) {
-        return false;
-      }
-      if (!targetMethod.getParameter(0).type()
-          .assignConversionTo(fd.fromInterface().typeInt(), null)) {
-        return false;
-      }
-      if (!targetMethod.type().isVoid()) {
-        if (!getTypeAccess().type().assignConversionTo(targetMethod.type(), null)) {
-          return false;
-        }
-      }
-      return true;
-    } else {
+    if (fd.method.isUnknown()) {
       // No target method.
       return false;
     }
+
+    if (fd.method.getNumParameter() != 1) {
+      return false;
+    }
+    if (!fd.method.getParameter(0).type()
+        .assignConversionTo(fd.fromInterface().typeInt(), null)) {
+      return false;
+    }
+    if (!fd.method.type().isVoid()) {
+      if (!getTypeAccess().type().assignConversionTo(fd.method.type(), null)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /**
@@ -119,34 +114,33 @@ aspect ConstructorReference {
    */
   syn lazy java.util.List<ConstructorDecl> ClassReference.potentiallyApplicableConstructors(
       FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      MethodDecl targetMethod = fd.method.get();
-      TypeDecl classType = syntheticInstanceExpr(fd).type();
-      Collection<ConstructorDecl> col = classType.constructors();
-      ArrayList<ConstructorDecl> applicable = new ArrayList<ConstructorDecl>();
-      for (ConstructorDecl decl : col) {
-        if (!decl.accessibleFrom(hostType())) {
-          continue;
-        }
-        if (!(decl.arity() == targetMethod.arity())) {
-          continue;
-        }
-        if (hasTypeArgument()) {
-          if (!decl.isGeneric()) {
-            continue;
-          }
-          GenericConstructorDecl genDecl = decl.genericDecl();
-          if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
-            continue;
-          }
-        }
-        applicable.add(decl);
-      }
-      return applicable;
-    } else {
+    if (fd.method.isUnknown()) {
       // No target method.
       return Collections.emptyList();
     }
+
+    TypeDecl classType = syntheticInstanceExpr(fd).type();
+    Collection<ConstructorDecl> col = classType.constructors();
+    ArrayList<ConstructorDecl> applicable = new ArrayList<ConstructorDecl>();
+    for (ConstructorDecl decl : col) {
+      if (!decl.accessibleFrom(hostType())) {
+        continue;
+      }
+      if (!(decl.arity() == fd.method.arity())) {
+        continue;
+      }
+      if (hasTypeArgument()) {
+        if (!decl.isGeneric()) {
+          continue;
+        }
+        GenericConstructorDecl genDecl = decl.genericDecl();
+        if (!(getNumTypeArgument() == genDecl.getNumTypeParameter())) {
+          continue;
+        }
+      }
+      applicable.add(decl);
+    }
+    return applicable;
   }
 
   // 15.13.1

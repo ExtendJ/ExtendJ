@@ -52,74 +52,60 @@ aspect LambdaExpr {
 
   syn lazy boolean LambdaParameters.congruentTo(FunctionDescriptor fd);
 
-  // 15.27.3
-  eq InferredLambdaParameters.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      return numParameters() == fd.method.get().getNumParameter();
-    } else {
+  // JLS SE8 §15.27.3
+  eq InferredLambdaParameters.congruentTo(FunctionDescriptor fd) =
+      !fd.method.isUnknown() && numParameters() == fd.method.getNumParameter();
+
+  // JLS SE8 §15.27.3
+  eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
+    if (fd.method.isUnknown()) return false;
+
+    MethodDecl targetMethod = fd.method;
+    if (numParameters() != targetMethod.getNumParameter()) {
       return false;
     }
-  }
-
-  // 15.27.3
-  eq DeclaredLambdaParameters.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      MethodDecl targetMethod = fd.method.get();
-      if (numParameters() != targetMethod.getNumParameter()) {
+    for (int i = 0; i < numParameters(); i++) {
+      // Lambdas can't declare type variables so that doesn't need to be taken into account.
+      if (getParameter(i).type() != targetMethod.getParameter(i).type() &&
+          getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
         return false;
       }
-      for (int i = 0; i < numParameters(); i++) {
-        // Lambdas can't declare type variables so that doesn't need to be taken into account.
-        if (getParameter(i).type() != targetMethod.getParameter(i).type() &&
-            getParameter(i).type() != targetMethod.getParameter(i).type().erasure()) {
-          return false;
-        }
-      }
-      return true;
-    } else {
-      return false;
     }
+    return true;
   }
 
-  syn lazy boolean LambdaExpr.isImplicit() =
-      getLambdaParameters() instanceof InferredLambdaParameters;
+  syn lazy boolean LambdaExpr.isImplicit() = getLambdaParameters() instanceof InferredLambdaParameters;
 
   syn lazy boolean LambdaExpr.isExplicit() = !isImplicit();
 
   syn lazy boolean LambdaBody.congruentTo(FunctionDescriptor fd);
 
-  // 15.27.3
+  // JLS SE8 §15.27.3
   eq ExprLambdaBody.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      if (fd.method.get().type().isVoid()) {
-        return getExpr().stmtCompatible();
-      } else {
-        return getExpr().assignConversionTo(fd.method.get().type());
-      }
+    if (fd.method.isUnknown()) return false;
+    if (fd.method.type().isVoid()) {
+      return getExpr().stmtCompatible();
     } else {
-      return false;
+      return getExpr().assignConversionTo(fd.method.type());
     }
   }
 
-  // 15.27.3
+  // JLS SE8 §15.27.3
   eq BlockLambdaBody.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isPresent()) {
-      TypeDecl methodType = fd.method.get().type();
-      if (methodType.isVoid()) {
-        return voidCompatible();
-      } else {
-        if (!valueCompatible()) {
+    if (fd.method.isUnknown()) return false;
+    TypeDecl methodType = fd.method.type();
+    if (methodType.isVoid()) {
+      return voidCompatible();
+    } else {
+      if (!valueCompatible()) {
+        return false;
+      }
+      for (ReturnStmt returnStmt : lambdaReturns()) {
+        if (!returnStmt.getResult().assignConversionTo(methodType)) {
           return false;
         }
-        for (ReturnStmt returnStmt : lambdaReturns()) {
-          if (!returnStmt.getResult().assignConversionTo(methodType)) {
-            return false;
-          }
-        }
-        return true;
       }
-    } else {
-      return false;
+      return true;
     }
   }
 
