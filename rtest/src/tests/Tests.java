@@ -81,6 +81,7 @@ public interface Tests {
     // Tests requiring improved Java 8 type inference:
     "jsr335/diamond/type_inf_01p",
     "jsr335/diamond/type_inf_02p",
+    "jsr335/inference/array_ctor_ref_01p",
     "jsr335/inference/ctor_ref_01p",
     "jsr335/inference/lambda_01p",
     "jsr335/inference/passthrough_02p",
