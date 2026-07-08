@@ -202,6 +202,7 @@ public interface Tests {
     "annotation/param_02p", // Annotations changed toString() output.
     "codegen/annotation01", // Annotations changed toString() output.
     "jsr334/diamond/diamond_03f", // Diamond is allowed in anonymous class instance expressions.
+    "jsr334/diamond/diamond_25f", // Error message changed in Java 9.
     "jsr334/safe-varargs/nonfinal_01f", // @SafeVarargs is allowed on static non-final methods.
     "enum/enumset_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
     "enum/switch_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
