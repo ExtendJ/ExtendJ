@@ -1,38 +1,25 @@
-/* Copyright (c) 2005-2008, Torbjorn Ekman
- * All rights reserved.
+// SPDX-License-Identifier: BSD-3-Clause
+
+/**
+ * If the last formal parameter of a method or constructor is a variable arity parameter ({@code T...}),
+ * the method/constructor can be called either using fixed arity invocation with an array argument ({@code T[]}), or
+ * using variable arity invocation with multiple additional arguments.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * <p>To keep generic method inference as simple as possible, the distinction between the two calling conventions
+ * is made using the method declaration itself: the base declaration is used only for fixed arity invocation and
+ * a new synthetic NTA declaration ({@code variableArityDecl()}) is used for variable arity invocation.
  *
- * 1. Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
+ * <p>The attribute {@code isVariableArity()} discriminates between the calling convention used
+ * for the method declaration. If the attribute is {@code true}, then it is the synthetic declaration
+ * only used for variable arity calls.
  *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
+ * <p>The attribute {@code hasVarargsParameter()} discrimiates between methods/constructors that
+ * have a variable arity parameter vs those that do not (regardless of calling convention).
  *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from this
- * software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * <p>Note variable arity invocation is purely syntactic sugar. In bytecode there only
+ * exists fixed arity invocations (all variable arity arguments are lumped into an array).
  */
-
 aspect VariableArityParameters {
-  // 8.4.1
-
-  /* The last formal parameter in a list is special; it may be a variable arity
-  parameter, indicated by an elipsis following the type.*/
   VariableArityParameterDeclaration contributes
       error("only the last formal paramater may be of variable arity")
       when !variableArityValid()
@@ -43,79 +30,84 @@ aspect VariableArityParameters {
   eq BasicCatch.getParameter().variableArityValid() = false;
   eq Program.getChild().variableArityValid() = false;
 
+  /** If true, this method declaration is invoked as a variable arity method. */
+  protected boolean MethodDecl.variableArityDecl;
+
+  /** If true, this constructor declaration is invoked as a variable arity constructor. */
+  protected boolean ConstructorDecl.variableArityDecl;
+
   inh boolean VariableArityParameterDeclaration.variableArityValid();
 
-  /* If the last formal parameter is a variable arity parameter of type T, it is
-  considered to define a formal parameter of type T[].*/
   eq VariableArityParameterDeclaration.type() = super.type().arrayType();
 
-  /* The method is then a variable arity method. Otherwise, it is a fixed arity method.*/
-  syn boolean MethodDecl.isVariableArity() =
+  syn nta MethodDecl MethodDecl.variableArityDecl() {
+    MethodDecl copy = signatureCopy();
+    copy.variableArityDecl = true;
+    return copy;
+  }
+
+  syn nta ConstructorDecl ConstructorDecl.variableArityDecl() {
+    ConstructorDecl copy = signatureCopy();
+    copy.variableArityDecl = true;
+    return copy;
+  }
+
+  /**
+   * True if this method/constructor declares a trailing variable arity
+   * parameter, i.e. it can be invoked using a variable arity call.
+   */
+  syn boolean MethodDecl.hasVarargsParameter() =
+      getNumParameter() > 0 && getParameter(getNumParameter() - 1).isVariableArity();
+  syn boolean ConstructorDecl.hasVarargsParameter() =
       getNumParameter() > 0 && getParameter(getNumParameter() - 1).isVariableArity();
 
-  syn boolean ConstructorDecl.isVariableArity() =
-      getNumParameter() == 0 ? false : getParameter(getNumParameter() - 1).isVariableArity();
+  /* The method is then a variable arity method. Otherwise, it is a fixed arity method.*/
+  syn boolean MethodDecl.isVariableArity() = variableArityDecl;
+  syn boolean ConstructorDecl.isVariableArity() = variableArityDecl;
 
   syn boolean ParameterDeclaration.isVariableArity() = false;
-
   eq VariableArityParameterDeclaration.isVariableArity() = true;
 
   syn ParameterDeclaration MethodDecl.lastParameter() = getParameter(getNumParameter() - 1);
 
+  /** Returns {@code true} for variable arity methods invoked with fixed arity (<em>as-array</em> invocation). */
   syn boolean MethodAccess.invokesVariableArityAsArray() {
-    if (!decl().isVariableArity()) {
-      return false;
-    }
-    if (arity() != decl().arity()) {
-      return false;
-    }
-    return getArg(getNumArg()-1).type().methodInvocationConversionTo(decl().lastParameter().type());
+    MethodDecl decl = decl();
+    return decl.hasVarargsParameter() && !decl.isVariableArity();
   }
 
+  /** Returns {@code true} for variable arity constructors invoked with fixed arity (<em>as-array</em> invocation). */
   syn boolean ConstructorAccess.invokesVariableArityAsArray() {
-    if (!decl().isVariableArity()) {
-      return false;
-    }
-    if (arity() != decl().arity()) {
-      return false;
-    }
-    return getArg(getNumArg()-1).type().methodInvocationConversionTo(decl().lastParameter().type());
+    ConstructorDecl decl = decl();
+    return decl.hasVarargsParameter() && !decl.isVariableArity();
   }
 
+  /** Returns {@code true} for variable arity constructors invoked with fixed arity (<em>as-array</em> invocation). */
   syn boolean ClassInstanceExpr.invokesVariableArityAsArray() {
-    if (!decl().isVariableArity()) {
-      return false;
-    }
-    if (arity() != decl().arity()) {
-      return false;
-    }
-    return getArg(getNumArg()-1).type().methodInvocationConversionTo(decl().lastParameter().type());
+    ConstructorDecl decl = decl();
+    return decl.hasVarargsParameter() && !decl.isVariableArity();
   }
 
   syn ParameterDeclaration ConstructorDecl.lastParameter() = getParameter(getNumParameter() - 1);
 
-  // §15.12.2
   refine AnonymousClasses
   protected List AnonymousDecl.constructorParameterList(ConstructorDecl decl) {
-    List parameterList = new List();
-    for (int i = 0; i < decl.getNumParameter(); i++) {
-      ParameterDeclaration param = decl.getParameter(i);
+    List params = new List();
+    for (ParameterDeclaration param : decl.getParameters()) {
       if (param instanceof VariableArityParameterDeclaration) {
-        parameterList.add(
+        params.add(
             new VariableArityParameterDeclaration(
               new Modifiers(new List()),
               ((ArrayDecl) param.type()).componentType().createBoundAccess(),
               param.name()
               ));
       } else {
-        parameterList.add(
-            new ParameterDeclaration(
+        params.add(new ParameterDeclaration(
               param.type().createBoundAccess(),
               param.name()
               ));
       }
     }
-
-    return parameterList;
+    return params;
   }
 }

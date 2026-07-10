@@ -749,8 +749,10 @@ aspect MethodSignature18 {
     // Third phase.
     if (maxSpecific.isEmpty()) {
       for (MethodDecl method : potentiallyApplicable) {
-        if (method.isVariableArity() && boundAccess(method).applicableVariableArity(method)) {
-          maxSpecific = mostSpecific(maxSpecific, method);
+        if (method.hasVarargsParameter()
+            && boundAccess(method.variableArityDecl())
+                .applicableVariableArity(method.variableArityDecl())) {
+          maxSpecific = mostSpecific(maxSpecific, method.variableArityDecl());
         }
       }
     }
@@ -759,6 +761,9 @@ aspect MethodSignature18 {
 
   refine MethodSignature15
   eq MethodAccess.applicableBySubtyping(MethodDecl m) {
+    if (m.isVariableArity()) {
+      return false;
+    }
     if (m.getNumParameter() != getNumArg()) {
       return false;
     }
@@ -774,6 +779,9 @@ aspect MethodSignature18 {
 
   refine MethodSignature15
   eq MethodAccess.applicableByMethodInvocationConversion(MethodDecl m) {
+    if (m.isVariableArity()) {
+      return false;
+    }
     if (m.getNumParameter() != getNumArg()) {
       return false;
     }
@@ -789,6 +797,9 @@ aspect MethodSignature18 {
 
   refine MethodSignature15
   eq MethodAccess.applicableVariableArity(MethodDecl m) {
+    if (!m.isVariableArity()) {
+      return false;
+    }
     for (int i = 0; i < m.getNumParameter() - 1; i++) {
       if (!getArg(i).pertinentToApplicability(this, m, i)) {
         continue;
@@ -917,7 +928,7 @@ aspect MethodSignature18 {
     if (!m.accessibleFrom(hostType())) {
       return false;
     }
-    if (!m.isVariableArity()) {
+    if (!m.hasVarargsParameter()) {
       if (arity() != m.arity()) {
         return false;
       }
@@ -927,7 +938,7 @@ aspect MethodSignature18 {
         }
       }
     }
-    if (m.isVariableArity()) {
+    if (m.hasVarargsParameter()) {
       if (!(arity() >= m.arity() - 1)) {
         return false;
       }
@@ -1027,9 +1038,10 @@ aspect MethodSignature18 {
     // Third phase.
     if (maxSpecific.isEmpty()) {
       for (ConstructorDecl decl : potentiallyApplicable) {
-        if (decl.isVariableArity()
-            && boundAccess(decl).applicableByVariableArityInvocation(this)) {
-          maxSpecific = mostSpecific(maxSpecific, decl, argList);
+        if (decl.hasVarargsParameter()
+            && boundAccess(decl.variableArityDecl())
+                .applicableByVariableArityInvocation(this)) {
+          maxSpecific = mostSpecific(maxSpecific, decl.variableArityDecl(), argList);
         }
       }
     }
@@ -1039,7 +1051,7 @@ aspect MethodSignature18 {
   refine MethodSignature15
   eq ConstructorDecl.potentiallyApplicable(List<Expr> argList) {
     int argArity = argList.getNumChild();
-    if (!isVariableArity()) {
+    if (!hasVarargsParameter()) {
       if (argArity != arity()) {
         return false;
       }
@@ -1049,39 +1061,40 @@ aspect MethodSignature18 {
           return false;
         }
       }
-    } else {
-    //if (isVariableArity()) {
-      if (!(argArity >= arity() - 1)) {
+      return true;
+    }
+    if (argArity < arity() - 1) {
+      return false;
+    }
+    for (int i = 0; i < arity() - 1; i++) {
+      Expr expr = argList.getChild(i);
+      if (!expr.potentiallyCompatible(getParameter(i).type(), this)) {
         return false;
       }
-      for (int i = 0; i < arity() - 2; i++) {
-        Expr expr = argList.getChild(i);
-        if (!expr.potentiallyCompatible(getParameter(i).type(), this)) {
-          return false;
-        }
+    }
+    TypeDecl varArgType = getParameter(arity() - 1).type();
+    if (argArity == arity()) {
+      Expr expr = argList.getChild(argArity - 1);
+      if (!expr.potentiallyCompatible(varArgType, this)
+          && !expr.potentiallyCompatible(varArgType.componentType(), this)) {
+        return false;
       }
-      TypeDecl varArgType = getParameter(arity() - 1).type();
-      if (argArity == arity()) {
-        Expr expr = argList.getChild(argArity - 1);
-        if (!expr.potentiallyCompatible(varArgType, this)
-            && !expr.potentiallyCompatible(varArgType.componentType(), this)) {
+    } else if (argArity > arity()) {
+      for (int i = arity() - 1; i < argArity; i++) {
+        Expr expr = argList.getChild(i);
+        if (!expr.potentiallyCompatible(varArgType.componentType(), this)) {
           return false;
-        }
-      } else if (argArity > arity()) {
-        for (int i = arity() - 1; i < argArity; i++) {
-          Expr expr = argList.getChild(i);
-          if (!expr.potentiallyCompatible(varArgType.componentType(), this)) {
-            return false;
-          }
         }
       }
     }
-
     return true;
   }
 
   syn boolean ConstructorAccess.applicableByStrictInvocation(Expr expr) {
     ConstructorDecl decl = decl();
+    if (decl.isVariableArity()) {
+      return false;
+    }
     if (decl.getNumParameter() != getNumArg()) {
       return false;
     }
@@ -1099,6 +1112,9 @@ aspect MethodSignature18 {
 
   syn boolean ConstructorAccess.applicableByLooseInvocation(Expr expr) {
     ConstructorDecl decl = decl();
+    if (decl.isVariableArity()) {
+      return false;
+    }
     if (decl.getNumParameter() != getNumArg()) {
       return false;
     }
@@ -1116,6 +1132,9 @@ aspect MethodSignature18 {
 
   syn boolean ConstructorAccess.applicableByVariableArityInvocation(Expr expr) {
     ConstructorDecl decl = decl();
+    if (!decl.isVariableArity()) {
+      return false;
+    }
     for (int i = 0; i < decl.getNumParameter() - 1; i++) {
       Expr arg = getArg(i);
       if (!arg.pertinentToApplicability(expr, decl, i)) {
