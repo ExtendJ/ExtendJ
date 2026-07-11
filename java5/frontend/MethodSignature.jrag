@@ -1,71 +1,128 @@
-/* Copyright (c) 2005-2008, Torbjorn Ekman
- *               2015-2018, Jesper Öqvist <jesper.oqvist@cs.lth.se>
- * All rights reserved.
+// SPDX-License-Identifier: BSD-3-Clause
+
+/**
+ * This aspect implements the Java 5 rules for choosing the most specific declaration
+ * for a method invocation or class instance expression (JLS3 §15.12.2).
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
+ * <p>To avoid repetition of attribute equations between the different AST classes
+ * used for method/constructor accesses and declarations,
+ * the interfaces {@code Caller} and {@code Callee}
+ * are used to implement the invocation resolution attributes.
+ * The relevant access/declaration nodes receive the attributes/methods for
+ * invocation resolution from the interfaces through JastAdd interface weaving.
  *
- * 1. Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
+ * <p>Since Java 5 and going forward, invocations are resolved by first
+ * gathering a set of candidates then filtering them by applicability in
+ * 3 phases:
+ * <ul>
+ *   <li>§15.12.2 Phase 1: applicability by strict invocation</li>
+ *   <li>§15.12.3 Phase 2: applicability by loose invocation</li>
+ *   <li>§15.12.4 Phase 2: applicability by variable arity invocation</li>
+ * </li>
  *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from this
- * software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
+ * <p><em>Note:</em> JLS3 and JLS SE8 name the invocation applicability
+ * rules differently but they refer to the same things.
+ * We use the JLS SE8 terminology here for consistency.
  */
-
 aspect MethodSignature15 {
-  refine LookupMethod
-  protected SimpleSet<MethodDecl> MethodAccess.maxSpecific(Iterable<MethodDecl> candidates) {
-    SimpleSet<MethodDecl> potentiallyApplicable = potentiallyApplicable(candidates);
-
-    // First phase.
-    SimpleSet<MethodDecl> maxSpecific = emptySet();
-    for (MethodDecl method : potentiallyApplicable) {
-      if (applicableBySubtyping(method)) {
-        maxSpecific = mostSpecific(maxSpecific, method);
-      }
-    }
-
-    // Second phase.
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl method : potentiallyApplicable) {
-        if (applicableByMethodInvocationConversion(method)) {
-          maxSpecific = mostSpecific(maxSpecific, method);
-        }
-      }
-    }
-
-    // Third phase.
-    if (maxSpecific.isEmpty()) {
-      for (MethodDecl method : potentiallyApplicable) {
-        if (method.hasVarargsParameter()
-            && applicableVariableArity(method.variableArityDecl())) {
-          maxSpecific = mostSpecific(maxSpecific, method.variableArityDecl());
-        }
-      }
-    }
-    return maxSpecific;
+  interface Caller {
+    int getNumArg();
+    Expr getArg(int i);
   }
 
-  protected SimpleSet<MethodDecl> MethodAccess.potentiallyApplicable(
-      Iterable<MethodDecl> candidates) {
-    SimpleSet<MethodDecl> potentiallyApplicable = emptySet();
+  MethodAccess implements Caller;
+  ConstructorAccess implements Caller;
+  ClassInstanceExpr implements Caller;
+
+  interface Callee {
+    int getNumParameter();
+    ParameterDeclaration getParameter(int i);
+    boolean isVariableArity();
+    boolean isGeneric();
+    ParameterDeclaration lastParameter();
+    boolean moreSpecificThan(Callee other);
+    boolean hasVarargsParameter();
+    Callee variableArityDecl();
+  }
+
+  MethodDecl implements Callee;
+  ConstructorDecl implements Callee;
+
+  public boolean Caller.moreSpecificThan(Callee m1, Callee m2) {
+    // Pointless delegation here but this method is refined in the java8 module.
+    return m1.moreSpecificThan(m2);
+  }
+
+  public boolean MethodDecl.moreSpecificThan(Callee other) {
+    return other instanceof MethodDecl && moreSpecificThan((MethodDecl) other);
+  }
+
+  public boolean ConstructorDecl.moreSpecificThan(Callee other) {
+    return other instanceof ConstructorDecl && moreSpecificThan((ConstructorDecl) other);
+  }
+
+  public <T extends Callee> SimpleSet<T> Caller.mostSpecific(SimpleSet<T> maxSpecific, T decl) {
+    SimpleSet<T> newMax = emptySet();
+    if (maxSpecific.isEmpty()) {
+      newMax = newMax.add(decl);
+    } else {
+      boolean foundStricter = false;
+      newMax = emptySet();
+      for (T toCompare : maxSpecific) {
+        if (!(moreSpecificThan(decl, toCompare) && !moreSpecificThan(toCompare, decl))) {
+          newMax = newMax.add(toCompare);
+        }
+        if (!moreSpecificThan(decl, toCompare) && moreSpecificThan(toCompare, decl)) {
+          foundStricter = true;
+        }
+      }
+      if (!foundStricter) {
+        newMax = newMax.add(decl);
+      }
+    }
+    return newMax;
+  }
+
+  /**
+   * Filter potentially applicable declarations by the three invocation
+   * applicability phases, keeping only the maximally specific declarations.
+   */
+  public <T extends Callee> SimpleSet<T> Caller.selectCandidates(SimpleSet<T> all) {
+    // Phase 1: applicability by strict invocation
+    SimpleSet<T> decls = emptySet();
+    for (T decl : all) {
+      if (boundCaller(decl).applicableByStrictInvocation(decl)) {
+        decls = mostSpecific(decls, decl);
+      }
+    }
+
+    // Phase 2: applicability by loose invocation
+    if (decls.isEmpty()) {
+      for (T decl : all) {
+        if (boundCaller(decl).applicableByLooseInvocation(decl)) {
+          decls = mostSpecific(decls, decl);
+        }
+      }
+    }
+
+    // Phase 3: applicability by variable arity invocation
+    if (decls.isEmpty()) {
+      for (T decl : all) {
+        if (decl.hasVarargsParameter()) {
+          T vad = (T) decl.variableArityDecl();
+          if (boundCaller(vad).applicableByVariableArity(vad)) {
+            decls = mostSpecific(decls, vad);
+          }
+        }
+      }
+    }
+    return decls;
+  }
+
+  refine LookupMethod
+  public SimpleSet<MethodDecl> MethodAccess.maxSpecific(Iterable<MethodDecl> candidates) {
+    SimpleSet<MethodDecl> subset = emptySet();
+
     // Select potentially applicable methods.
     for (MethodDecl method : candidates) {
       if (potentiallyApplicable(method) && accessible(method)) {
@@ -79,10 +136,10 @@ aspect MethodSignature15 {
               gm.getExceptionList());
           method = gm.lookupParMethodDecl(typeArguments);
         }
-        potentiallyApplicable = potentiallyApplicable.add(method);
+        subset = subset.add(method);
       }
     }
-    return potentiallyApplicable;
+    return selectCandidates(subset);
   }
 
   refine ConstructScope eq ClassInstanceExpr.decls() {
@@ -111,12 +168,12 @@ aspect MethodSignature15 {
     return unknownConstructor();
   }
 
-  protected SimpleSet<ConstructorDecl> Expr.chooseConstructor(
-      Collection<ConstructorDecl> constructors, List<Expr> argList) {
-    SimpleSet<ConstructorDecl> potentiallyApplicable = emptySet();
+  public SimpleSet<ConstructorDecl> Caller.chooseConstructor(Collection<ConstructorDecl> ctors,
+      List<Expr> argList) {
+    SimpleSet<ConstructorDecl> subset = emptySet();
 
     // Select potentially applicable constructors.
-    for (ConstructorDecl decl : constructors) {
+    for (ConstructorDecl decl : ctors) {
       if (decl.potentiallyApplicable(argList) && decl.accessibleFrom(hostType())) {
         if (decl.isGeneric()) {
           GenericConstructorDecl gc = decl.genericDecl();
@@ -128,67 +185,10 @@ aspect MethodSignature15 {
               gc.getExceptionList());
           decl = gc.lookupParConstructorDecl(typeArguments);
         }
-        potentiallyApplicable = potentiallyApplicable.add(decl);
+        subset = subset.add(decl);
       }
     }
-
-    // First phase.
-    SimpleSet<ConstructorDecl> maxSpecific = emptySet();
-    for (ConstructorDecl decl : potentiallyApplicable) {
-      if (decl.applicableBySubtyping(argList)) {
-        maxSpecific = mostSpecific(maxSpecific, decl);
-      }
-    }
-
-    // Second phase.
-    if (maxSpecific.isEmpty()) {
-      for (ConstructorDecl decl : potentiallyApplicable) {
-        if (decl.applicableByMethodInvocationConversion(argList)) {
-          maxSpecific = mostSpecific(maxSpecific, decl);
-        }
-      }
-    }
-
-    // Third phase.
-    if (maxSpecific.isEmpty()) {
-      for (ConstructorDecl decl : potentiallyApplicable) {
-        if (decl.hasVarargsParameter()
-            && decl.variableArityDecl().applicableVariableArity(argList)) {
-          maxSpecific = mostSpecific(maxSpecific, decl.variableArityDecl());
-        }
-      }
-    }
-    return maxSpecific;
-  }
-
-  protected static SimpleSet<ConstructorDecl> Expr.mostSpecific(
-      SimpleSet<ConstructorDecl> maxSpecific, ConstructorDecl decl) {
-    if (maxSpecific.isEmpty()) {
-      maxSpecific = maxSpecific.add(decl);
-    } else {
-      ConstructorDecl other = maxSpecific.iterator().next();
-      if (decl.moreSpecificThan(other)) {
-        maxSpecific = ASTNode.<ConstructorDecl>emptySet().add(decl);
-      } else if (!other.moreSpecificThan(decl)) {
-        maxSpecific = maxSpecific.add(decl);
-      }
-    }
-    return maxSpecific;
-  }
-
-  private static SimpleSet<MethodDecl> MethodAccess.mostSpecific(
-      SimpleSet<MethodDecl> maxSpecific, MethodDecl decl) {
-    if (maxSpecific.isEmpty()) {
-      maxSpecific = maxSpecific.add(decl);
-    } else {
-      MethodDecl other = maxSpecific.iterator().next();
-      if (decl.moreSpecificThan(other)) {
-        maxSpecific = decl;
-      } else if (!other.moreSpecificThan(decl)) {
-        maxSpecific = maxSpecific.add(decl);
-      }
-    }
-    return maxSpecific;
+    return selectCandidates(subset);
   }
 
   eq ParMethodDecl.lessSpecificThan(MethodDecl m) =
@@ -326,7 +326,14 @@ aspect MethodSignature15 {
     return false;
   }
 
-  syn boolean MethodAccess.applicableBySubtyping(MethodDecl m) {
+  /**
+   * A caller pinned to a candidate declaration, used to test applicability per
+   * candidate (JLS SE8 §15.12.2.2). Arguments are typed against the candidate
+   * rather than the enclosing (still unresolved) invocation.
+   */
+  syn Caller Caller.boundCaller(Callee callee) = this;
+
+  syn boolean Caller.applicableByStrictInvocation(Callee m) {
     if (m.getNumParameter() != getNumArg()) {
       return false;
     }
@@ -340,21 +347,7 @@ aspect MethodSignature15 {
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableBySubtyping(List<Expr> argList) {
-    if (getNumParameter() != argList.getNumChild()) {
-      return false;
-    }
-    for (int i = 0; i < getNumParameter(); i++) {
-      TypeDecl arg = argList.getChild(i).type();
-      TypeDecl param = getParameter(i).type();
-      if (!arg.subtype(param)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  syn boolean MethodAccess.applicableByMethodInvocationConversion(MethodDecl m) {
+  syn boolean Caller.applicableByLooseInvocation(Callee m) {
     if (m.getNumParameter() != getNumArg()) {
       return false;
     }
@@ -366,20 +359,7 @@ aspect MethodSignature15 {
     return true;
   }
 
-  syn boolean ConstructorDecl.applicableByMethodInvocationConversion(List<Expr> argList) {
-    if (getNumParameter() != argList.getNumChild()) {
-      return false;
-    }
-    for (int i = 0; i < getNumParameter(); i++) {
-      TypeDecl arg = argList.getChild(i).type();
-      if (!arg.methodInvocationConversionTo(getParameter(i).type())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  syn boolean MethodAccess.applicableVariableArity(MethodDecl m) {
+  syn boolean Caller.applicableByVariableArity(Callee m) {
     if (!m.isVariableArity()) return false;
     for (int i = 0; i < m.getNumParameter() - 1; i++) {
       if (!getArg(i).type().methodInvocationConversionTo(m.getParameter(i).type())) {
@@ -387,25 +367,7 @@ aspect MethodSignature15 {
       }
     }
     for (int i = m.getNumParameter() - 1; i < getNumArg(); i++) {
-      if (!getArg(i).type().methodInvocationConversionTo(
-          m.lastParameter().type().componentType())) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  syn boolean ConstructorDecl.applicableVariableArity(List argList) {
-    if (!isVariableArity()) return false;
-    for (int i = 0; i < getNumParameter() - 1; i++) {
-      TypeDecl arg = ((Expr) argList.getChild(i)).type();
-      if (!arg.methodInvocationConversionTo(getParameter(i).type())) {
-        return false;
-      }
-    }
-    for (int i = getNumParameter() - 1; i < argList.getNumChild(); i++) {
-      TypeDecl arg = ((Expr) argList.getChild(i)).type();
-      if (!arg.methodInvocationConversionTo(lastParameter().type().componentType())) {
+      if (!getArg(i).type().methodInvocationConversionTo(m.lastParameter().type().componentType())) {
         return false;
       }
     }
