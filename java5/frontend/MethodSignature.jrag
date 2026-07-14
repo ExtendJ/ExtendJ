@@ -35,30 +35,30 @@ aspect MethodSignature15 {
   ClassInstanceExpr implements Caller;
 
   interface Callee {
-    int getNumParameter();
-    ParameterDeclaration getParameter(int i);
     boolean isVariableArity();
     boolean isGeneric();
-    ParameterDeclaration lastParameter();
-    boolean moreSpecificThan(Callee other);
     boolean hasVarargsParameter();
+    ParameterDeclaration lastParameter();
     Callee variableArityDecl();
+
+    /**
+     * Returns the base generic declaration.
+     * For parameterized methods/constructors this equates to the generic
+     * declaration the parameterized declaration is a specialization of.
+     */
+    Callee unparameterized();
   }
 
-  MethodDecl implements Callee;
-  ConstructorDecl implements Callee;
+  syn MethodDecl MethodDecl.unparameterized() = this;
+  eq ParMethodDecl.unparameterized() = genericMethodDecl();
+
+  syn ConstructorDecl ConstructorDecl.unparameterized() = this;
+  eq ParConstructorDecl.unparameterized() = genericConstructorDecl();
+
 
   public boolean Caller.moreSpecificThan(Callee m1, Callee m2) {
     // Pointless delegation here but this method is refined in the java8 module.
     return m1.moreSpecificThan(m2);
-  }
-
-  public boolean MethodDecl.moreSpecificThan(Callee other) {
-    return other instanceof MethodDecl && moreSpecificThan((MethodDecl) other);
-  }
-
-  public boolean ConstructorDecl.moreSpecificThan(Callee other) {
-    return other instanceof ConstructorDecl && moreSpecificThan((ConstructorDecl) other);
   }
 
   public <T extends Callee> SimpleSet<T> Caller.mostSpecific(SimpleSet<T> maxSpecific, T decl) {
@@ -191,10 +191,6 @@ aspect MethodSignature15 {
     return selectCandidates(subset);
   }
 
-  eq ParMethodDecl.lessSpecificThan(MethodDecl m) =
-      genericMethodDecl().lessSpecificThan(m instanceof ParMethodDecl
-          ? ((ParMethodDecl) m).genericMethodDecl() : m );
-
   /**
    * Test if this method is less specific than the given constructor.
    *
@@ -202,8 +198,12 @@ aspect MethodSignature15 {
    * then neither may be nullary.
    * If one is nullary and the other is not, then a NullPointerException is thrown.
    */
-  refine MethodDecl eq MethodDecl.lessSpecificThan(MethodDecl m) {
-    // TODO(joqvist): fix code duplication between MethodDecl and ConstructorDecl.
+  refine LookupMethod eq Callee.lessSpecificThan(Callee m) {
+    if (unparameterized() != this) {
+      return unparameterized().lessSpecificThan(m);
+    }
+    m = m.unparameterized();
+
     // Here we have a non-obvious precondition: either both methods are
     // variable arity or both are fixed arity.
     // An applicable fixed arity method is always chosen instead of an
@@ -220,71 +220,6 @@ aspect MethodSignature15 {
       }
     } else {
       // Both methods have variable arity.
-      int numA = getNumParameter();
-      int numB = m.getNumParameter();
-      int num = Math.min(numA, numB);
-      for (int i = 0; i < num - 1; i++) {
-        TypeDecl t1 = getParameter(i).type();
-        TypeDecl t2 = m.getParameter(i).type();
-        if (!t1.subtype(t2) && !t1.withinBounds(t2)) {
-          return true;
-        }
-      }
-      if (numA <= numB) {
-        for (int i = num - 1; i < numB - 1; i++) {
-          TypeDecl t1 = getParameter(numA - 1).type().componentType();
-          TypeDecl t2 = m.getParameter(i).type();
-          if (!t1.subtype(t2) && !t1.withinBounds(t2)) {
-            return true;
-          }
-        }
-        TypeDecl t1 = getParameter(numA - 1).type().componentType();
-        TypeDecl t2 = m.getParameter(numB - 1).type().componentType();
-        if (!t1.subtype(t2) && !t1.withinBounds(t2)) {
-          return true;
-        }
-      } else {
-        for (int i = num - 1; i < numA - 1; i++) {
-          TypeDecl t1 = getParameter(i).type();
-          TypeDecl t2 = m.getParameter(numB - 1).type().componentType();
-          if (!t1.subtype(t2) && !t1.withinBounds(t2)) {
-            return true;
-          }
-        }
-        TypeDecl t1 = getParameter(numA - 1).type().componentType();
-        TypeDecl t2 = m.getParameter(numB - 1).type().componentType();
-        if (!t1.subtype(t2) && !t1.withinBounds(t2)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  /**
-   * Test if this constructor is less specific than the given constructor.
-   *
-   * <p>If the constructors being compared have different arity,
-   * then neither may be nullary.
-   * If one is nullary and the other is not, then a NullPointerException is thrown.
-   */
-  refine ConstructorDecl eq ConstructorDecl.lessSpecificThan(ConstructorDecl m) {
-    // Here we have a non-obvious precondition: either both constructors are
-    // variable arity or both are fixed arity.
-    // An applicable fixed arity constructors is always chosen instead of an
-    // applicable variable arity constructors, so a fixed arity constructors and
-    // a variable arity constructors will not be compared for most specificity.
-    if (!isVariableArity()) {
-      // Both constructors have fixed arity.
-      for (int i = 0; i < getNumParameter(); i++) {
-        TypeDecl t1 = getParameter(i).type();
-        TypeDecl t2 = m.getParameter(i).type();
-        if (!t1.subtype(t2) && !t1.withinBounds(t2)) {
-          return true;
-        }
-      }
-    } else {
-      // Both constructors have variable arity.
       int numA = getNumParameter();
       int numB = m.getNumParameter();
       int num = Math.min(numA, numB);
