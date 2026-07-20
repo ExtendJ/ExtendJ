@@ -174,7 +174,36 @@ ASM by OW2 Consortium can be used for advanced instrumentation and analysis
 of bytecode. There is also a useful plugin for eclipse called
 "Bytecode Outline" from OW2.
 
+### Exploring the AST with CodeProber
+
+[CodeProber][5] is a tool for interactively exploring the AST and attribute
+values of a program. The `codeprober` subproject launches CodeProber with a
+freshly built ExtendJ as the analyzed tool. To start it for the Java 11 version,
+run:
+
+    ./gradlew :codeprober:java11
+
+Use `:codeprober:java8` for the Java 8 version instead. Once started, open the
+printed `http://localhost:8000` URL in a browser.
+
+The launch can be customized with the following project properties:
+
+* `-PcodeproberJar=<path>` launches a locally built CodeProber jar instead of
+  the released version. When set, the released jar is not downloaded.
+* `-PcodeproberPort=<port>` makes CodeProber's web server listen on the given
+  port instead of the default 8000. CodeProber also opens a separate WebSocket
+  server on the following port, so running parallel instances requires ports
+  that are at least 2 apart.
+
+For example, to run the Java 8 version on port 8001:
+
+    ./gradlew :codeprober:java8 -PcodeproberPort=8001
+
+Each property may also be set in `gradle.properties` or
+`~/.gradle/gradle.properties`.
+
 [1]: https://bitbucket.org/extendj/extendj/src/HEAD/ExtensionMigrationGuide.md?at=master
 [2]: https://bitbucket.org/joqvist/jjscripts
 [3]: http://extendj.org/code_style.html
 [4]: http://extendj.org/getting_started.html
+[5]: https://codeprober.org/
