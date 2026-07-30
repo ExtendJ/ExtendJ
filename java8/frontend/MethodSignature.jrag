@@ -72,8 +72,16 @@ aspect MethodSignature18 {
 
   eq BoundCtorAccess.decl() = decl;
 
-  /** Used to compute compatibility during phase 1 of overload resolution. */
-  syn lazy boolean Expr.compatibleStrictContext(TypeDecl type) = type().subtype(type);
+  /**
+   * Compatibility in a strict invocation context, used in phase 1 of overload
+   * resolution (JLS SE8 §15.12.2.2). Poly expression arguments are reduced as
+   * described in §18.2.1.
+   *
+   * @param type the target type of the invocation. Supplied directly rather
+   * than via {@code targetType()} to avoid unnecessary circular evaluation.
+   */
+  syn lazy boolean Expr.compatibleStrictContext(TypeDecl type) =
+      capturedType().subtype(type);
 
   eq LambdaExpr.compatibleStrictContext(TypeDecl type) {
     if (!type.isFunctionalInterface()) {
@@ -115,11 +123,20 @@ aspect MethodSignature18 {
       ? assignConversionTo(type)
       : super.compatibleStrictContext(type);
 
-  /* Used to compute compatibility during phase 2 of overload resolution */
+  eq MethodAccess.compatibleStrictContext(TypeDecl type) =
+      isPolyExpression()
+      ? resolve(type) != MethodInferenceNode.UNRESOLVED
+      : super.compatibleStrictContext(type);
 
+  eq Dot.compatibleStrictContext(TypeDecl type) = getRight().compatibleStrictContext(type);
+
+  /**
+   * Compatibility in a loose invocation context, used in phases 2 and 3 of
+   * overload resolution (JLS SE8 §15.12.2.3, §15.12.2.4).
+   */
   syn lazy boolean Expr.compatibleLooseContext(TypeDecl type) =
-      type().methodInvocationConversionTo(type)
-      || type().boxed().withinBounds(type);
+      capturedType().methodInvocationConversionTo(type)
+      || capturedType().boxed().withinBounds(type);
 
   eq LambdaExpr.compatibleLooseContext(TypeDecl type) = compatibleStrictContext(type);
 
@@ -142,6 +159,13 @@ aspect MethodSignature18 {
       isPolyExpression()
       ? assignConversionTo(type)
       : super.compatibleLooseContext(type);
+
+  eq MethodAccess.compatibleLooseContext(TypeDecl type) =
+      isPolyExpression()
+      ? resolve(type) != MethodInferenceNode.UNRESOLVED
+      : super.compatibleLooseContext(type);
+
+  eq Dot.compatibleLooseContext(TypeDecl type) = getRight().compatibleLooseContext(type);
 
   /* Computes pertinent to applicability, defined in 15.12.2.2 */
 
@@ -789,6 +813,8 @@ aspect MethodSignature18 {
     return true;
   }
 
+  // Most specific method, with inference when the second method is generic
+  // (JLS SE8 §15.12.2.5, §18.5.4).
   refine MethodSignature15
   public boolean Caller.moreSpecificThan(Callee m1, Callee m2) {
     if (m1 instanceof ParMethodDecl || m1 instanceof ParConstructorDecl) {
@@ -907,35 +933,6 @@ aspect MethodSignature18 {
         }
       }
     }
-
-    if (m.isGeneric()) {
-      GenericMethodDecl gm = m.genericDecl();
-      MethodAccess inferenceNode;
-      if (this instanceof ParMethodAccess) {
-        // Type inference is not needed for a parameterized method access.
-        inferenceNode = this;
-      } else {
-        inferenceNode = boundAccess(gm);
-      }
-      ArrayList<TypeDecl> typeArguments = inferenceNode.inferTypeArguments(
-          gm.type(),
-          gm.getParameterList(),
-          inferenceNode.getArgList(),
-          gm.getTypeParameterList(),
-          gm.getExceptionList());
-      if (!typeArguments.isEmpty()) {
-        if (gm.getNumTypeParameter() != typeArguments.size()) {
-          return false;
-        }
-        ParMethodDecl parMethod = gm.lookupParMethodDecl(typeArguments);
-        for (int i = 0; i < gm.getNumTypeParameter(); i++) {
-          if (!((TypeDecl) typeArguments.get(i)).withinBounds(parMethod.getTypeParameter(i))) {
-            return false;
-          }
-        }
-      }
-    }
-
     return true;
   }
 

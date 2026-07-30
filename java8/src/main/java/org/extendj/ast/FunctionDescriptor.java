@@ -4,9 +4,9 @@ package org.extendj.ast;
 import java.util.*;
 
 /**
- * Describes a function type by pointing to a method declaration
- * representing the single abstract method of a functional interface
- * (JLS SE8 §9.8).
+ * Describes a function type (JLS SE8 §9.9) by pointing to a method
+ * declaration representing the single abstract method of a functional
+ * interface (§9.8).
  *
  * <p>The {@code method} field can point to {@code unknownMethod} if
  * the attribute producing this {@code FunctionDescriptor} failed to

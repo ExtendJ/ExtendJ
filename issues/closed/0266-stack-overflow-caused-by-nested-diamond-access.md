@@ -1,5 +1,7 @@
 # Stack Overflow caused by nested diamond access
 
+**Status:** resolved
+
 *ExtendJ 8.1.0-20-gdf98f7c Java SE 8*
 
 The following test causes a StackOverflowError:

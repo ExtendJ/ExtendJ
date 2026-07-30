@@ -1,5 +1,7 @@
 # Field lookup error in lambda with type inference
 
+**Status:** resolved
+
 *ExtendJ 8.0.1-174-g53debda Java SE 8*
 
 ExtendJ fails to find the `string` field in the following test case:

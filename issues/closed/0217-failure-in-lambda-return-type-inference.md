@@ -1,5 +1,7 @@
 # Failure in Lambda return type inference
 
+**Status:** resolved
+
 *ExtendJ 8.0.1-204-ga9ab455 Java SE 8*
 
 Test:

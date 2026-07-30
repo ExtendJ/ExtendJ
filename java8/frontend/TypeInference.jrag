@@ -8,36 +8,162 @@
  */
 aspect CaptureConversion {
   /**
-   * Instantiate the capture variable of a wildcard type argument inside a capture converted
-   * type (JLS SE8 §5.1.10).
-   * Indexed by wildcard node so that the same wildcard yields the
-   * same capture variable.
+   * Counts the capture variables instantiated so far, to number them in
+   * diagnostics. Each capture variable is instantiated once, since
+   * {@code lookupCaptureType} is a memoized nonterminal attribute.
    */
-  syn nta TypeVariable WildcardsCompilationUnit.lookupCaptureType(TypeDecl wildcard) {
-    Access boundAccess;
+  private int WildcardsCompilationUnit.captureCount = 0;
+
+  /**
+   * Instantiate the capture variable of the wildcard type argument at index
+   * {@code index} of the type {@code type} captured at the capture site
+   * {@code site} (JLS SE8 §5.1.10).
+   *
+   * <p>Capture conversion introduces fresh type variables each time it is
+   * applied, so the capture variables are indexed by the site the conversion is
+   * applied at. Wildcard and parameterized type nodes are shared between all
+   * occurrences of a type in the program and can not identify an occurrence:
+   * indexing by wildcard would give {@code Map<?, ?>} the same capture variable
+   * for both type arguments, and would let the two arguments of
+   * {@code h(box, box)} capture to a single variable.
+   *
+   * @param site The expression whose type is captured.
+   * @param type The captured type, which is a parameterization of a generic type.
+   * @param index The index of the captured type argument.
+   */
+  syn nta TypeVariable WildcardsCompilationUnit.lookupCaptureType(
+      ASTNode site, TypeDecl type, int index) {
+    ParTypeDecl parType = (ParTypeDecl) type;
+    TypeDecl wildcard = parType.getParameterization().args.get(index);
+    // The upper bound of the capture variable is the declared bound of the
+    // corresponding type parameter of the captured type.
+    TypeDecl bound = ((GenericTypeDecl) parType.genericDecl())
+        .getTypeParameter(index).firstBound().type();
+    List<Access> bounds = new List<Access>();
+    List<Access> lowerBounds = new List<Access>();
     if (wildcard instanceof WildcardExtendsType) {
-      boundAccess = ((WildcardExtendsType) wildcard).extendsType().createBoundAccess();
+      // Intersect the type parameter bound with the bound of the upper bounded wildcard.
+      TypeDecl extendsType = ((WildcardExtendsType) wildcard).extendsType();
+      bounds.add(extendsType.createBoundAccess());
+      if (!extendsType.subtype(bound)) {
+        bounds.add(bound.createBoundAccess());
+      }
     } else {
-      boundAccess = wildcard.typeObject().createBoundAccess();
+      bounds.add(bound.createBoundAccess());
+      if (wildcard instanceof WildcardSuperType) {
+        // The capture variable of a lower bounded wildcard has the bound of the
+        // wildcard as its lower bound.
+        lowerBounds.add(((WildcardSuperType) wildcard).superType().createBoundAccess());
+      }
     }
-    return new TypeVariable(
+    // The name is generated with an index so that diagnostics become understandable
+    // for the user.
+    // TODO(joqvist): This is done with a side effect which is not ideal, but this
+    // side effect is not used for anything inside any attribute evaluation so it seems
+    // fine for the time being. Should remove this eventually.
+    captureCount += 1;
+    return new CaptureVariable(
         new Modifiers(new List().add(new Modifier("public"))),
-        "capture#" + System.identityHashCode(wildcard),
+        "capture#" + captureCount + " of " + wildcard.typeName(),
         new List<BodyDecl>(),
-        new List<Access>().add(boundAccess));
+        bounds,
+        lowerBounds);
   }
 
-  eq Program.getChild().lookupCaptureType(TypeDecl wildcard) = wildcards().lookupCaptureType(wildcard);
+  // A capture variable is not declared in any type or member, so it has no
+  // context to qualify its name with.
+  eq CaptureVariable.fullName() = name();
 
-  inh TypeVariable TypeDecl.lookupCaptureType(TypeDecl wildcard);
+  /**
+   * Whether {@code type} is a subtype of one of the lower bounds of this capture
+   * variable, and thereby a subtype of the capture variable itself.
+   */
+  syn boolean CaptureVariable.aboveLowerBound(TypeDecl type) {
+    for (Access lowerBound : getLowerBoundList()) {
+      if (type.subtype(lowerBound.type())) {
+        return true;
+      }
+    }
+    return false;
+  }
 
-  syn TypeDecl  TypeDecl.captureType() = this;
-  eq WildcardExtendsType.captureType() = lookupCaptureType(this);
-  eq   WildcardSuperType.captureType() = lookupCaptureType(this);
-  eq        WildcardType.captureType() = lookupCaptureType(this);
+  // A capture variable, unlike a declared type variable, can be a strict
+  // supertype of a concrete type when it has a lower bound (§5.1.10).
+  eq CaptureVariable.supertypeClassDecl(ClassDecl type) =
+      aboveLowerBound(type) || super.supertypeClassDecl(type);
+
+  eq CaptureVariable.supertypeInterfaceDecl(InterfaceDecl type) =
+      aboveLowerBound(type) || super.supertypeInterfaceDecl(type);
+
+  eq CaptureVariable.supertypeArrayDecl(ArrayDecl type) =
+      aboveLowerBound(type) || super.supertypeArrayDecl(type);
+
+  eq CaptureVariable.supertypeTypeVariable(TypeVariable type) =
+      type == this || aboveLowerBound(type);
+
+  eq Program.getChild().lookupCaptureType(ASTNode site, TypeDecl type, int index) =
+      wildcards().lookupCaptureType(site, type, index);
+
+  inh TypeVariable Expr.lookupCaptureType(ASTNode site, TypeDecl type, int index);
+
+  /**
+   * Capture conversion of {@code type} with this expression as the capture site
+   * (JLS SE8 §5.1.10): each wildcard type argument is replaced by a capture
+   * variable of this site.
+   *
+   * <p>Capture converting the same type at the same site twice yields the same
+   * capture variables, so a type flowing through type inference and through the
+   * applicability check of the same invocation captures consistently.
+   */
+  syn lazy TypeDecl Expr.captureConversion(TypeDecl type) {
+    if (!(type instanceof ParTypeDecl) || type.isRawType()) {
+      return type;
+    }
+    ParTypeDecl parType = (ParTypeDecl) type;
+    if (!(parType.genericDecl() instanceof GenericTypeDecl)) {
+      return type;
+    }
+    ArrayList<TypeDecl> args = new ArrayList<TypeDecl>();
+    boolean captured = false;
+    int index = 0;
+    for (TypeDecl arg : parType.getParameterization().args) {
+      if (arg.isWildcard()) {
+        arg = lookupCaptureType(this, type, index);
+        captured = true;
+      }
+      args.add(arg);
+      index += 1;
+    }
+    return captured
+        ? ((GenericTypeDecl) parType.genericDecl()).lookupParTypeDecl(args)
+        : type;
+  }
+
+  /**
+   * The type of this expression after capture conversion (JLS SE8 §6.5.6.1,
+   * §15.11.1, §15.12.2.6).
+   */
+  syn lazy TypeDecl Expr.capturedType() = captureConversion(type());
+
+  /**
+   * The members of a qualified access are the members of the capture converted
+   * type of the qualifier expression (JLS SE8 §15.11.1, §15.12.2.1), so that a
+   * member of a wildcard parameterized type is typed by the capture variables
+   * of the qualifier rather than by the wildcards.
+   */
+  refine LookupMethod eq Dot.getRight().lookupMethod(String name) =
+      getLeft().capturedType().memberMethods(name);
+
+  refine VariableScope eq Expr.qualifiedLookupVariable(String name) {
+    if (type().accessibleFrom(hostType())) {
+      return keepAccessibleFields(capturedType().memberFields(name));
+    }
+    return emptySet();
+  }
 }
 
-// Implementation of JLS SE8 type inference.
+// Here are helper attributes for JLS SE8 type inference.
+// Most of the work is done inside the BoundSet class.
 aspect TypeInference_SE8 {
   /**
    * The result type of the referenced method given the targeted function descriptor
@@ -49,24 +175,22 @@ aspect TypeInference_SE8 {
   syn TypeDecl MethodReference.invocationType(FunctionDescriptor fd) = unknownType();
 
   eq ExprMethodReference.invocationType(FunctionDescriptor fd) {
-    // TODO(jesper): Investigate if we can use implicitInvocation().type() instead.
+    // TODO(joqvist): Investigate if we can use implicitInvocation().type() instead.
     if (fd.method.isUnknown()) return unknownType();
     if (isExact()) {
-      // The referenced method is determined without inference (JLS SE8 §15.13.1), so its
-      // result type is available even when the descriptor parameter types still
-      // mention inference variables.
+      // An exact method reference is resolved without inference (§15.13.1), so its
+      // result type is available even when the descriptor mentions inference variables.
       return exactCompileTimeDeclaration().type();
     }
     return targetMethod(fd).type();
   }
 
   eq TypeMethodReference.invocationType(FunctionDescriptor fd) {
-    // TODO(jesper): Investigate if we can use implicitInvocation().type() instead.
+    // TODO(joqvist): Investigate if we can use implicitInvocation().type() instead.
     if (fd.method.isUnknown()) return unknownType();
     if (isExact()) {
-      // The referenced method is determined without inference (JLS SE8 §15.13.1), so its
-      // result type is available even when the descriptor parameter types still
-      // mention inference variables.
+      // An exact method reference is resolved without inference (§15.13.1), so its
+      // result type is available even when the descriptor mentions inference variables.
       return exactCompileTimeDeclaration().type();
     }
     MethodDecl staticMethod = targetStaticMethod(fd);
@@ -114,4 +238,476 @@ aspect TypeInference_SE8 {
     return null;
   }
 
+  syn HashSet<MethodInferenceNode> MethodAccess.potentiallyApplicable(TypeDecl targetType) {
+    HashSet<MethodInferenceNode> methods = new HashSet<>();
+    Iterable<MethodDecl> candidates = lookupMethod(name());
+    for (MethodDecl method : candidates) {
+      if (potentiallyApplicable(method) && accessible(method)) {
+        if (!method.hasVarargsParameter()) {
+          addInferenceNode(methods, method, targetType);
+        } else {
+          if (getNumArg() == method.getNumParameter()) {
+            addInferenceNode(methods, method, targetType);
+          }
+          addInferenceNode(methods, method.variableArityDecl(), targetType);
+        }
+      }
+    }
+    return methods;
+  }
+
+  protected void MethodAccess.addInferenceNode(HashSet<MethodInferenceNode> methods,
+      MethodDecl method, TypeDecl targetType) {
+    if (!method.isGeneric()) {
+      methods.add(new MethodInferenceNode(method, new BoundSet()));
+      return;
+    }
+    GenericMethodDecl gm = method.genericDecl();
+    BoundSet bounds = gm.inferBounds(getArgList(), targetType, this);
+    if (bounds.satisfiable) {
+      methods.add(new MethodInferenceNode(gm, bounds));
+    }
+  }
+
+  /**
+   * Grounded lambda expression helps in binding a specific target type to a
+   * lambda expression in the middle of (circular) type inference.
+   */
+  syn nta GroundedLambda LambdaExpr.groundedLambda(TypeDecl groundType) =
+      new GroundedLambda(groundType.createBoundAccess(), (LambdaExpr) treeCopyNoTransform());
+
+  eq GroundedLambda.getLambda().targetType() = getGroundType().type();
+
+  /**
+   * Whether the functional interface {@code T} provides proper parameter types
+   * to this implicitly typed lambda.
+   */
+  syn boolean LambdaExpr.hasProperParameterTypes(TypeDecl T) {
+    if (!T.hasFunctionDescriptor()) {
+      return false;
+    }
+    FunctionDescriptor fd = T.functionDescriptor();
+    for (ParameterDeclaration param : fd.method.getParameters()) {
+      if (param.type().involvesTypeParameters()) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  eq GroundedLambda.type() = getGroundType().type();
+
+  // TODO(joqvist): if targetType is not compatible with the declared return type do we return an unsatisfiable bound set?
+  syn BoundSet MethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) = new BoundSet();
+
+  /** Infer type bounds based on actual arguments. */
+  eq GenericMethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) {
+    List<ParameterDeclaration> params = getParameterList();
+    BoundSet bounds = new BoundSet();
+    boolean hasDeferred = collectBounds(bounds, args, targetType, context);
+
+    // Incorporate variables excluded from applicability
+    // inference (implicitly typed lambdas and inexact method references).
+    // This does not affect already-resolved type arguments, only detects incompatible constraints.
+    if (hasDeferred && bounds.satisfiable) {
+      ParMethodDecl par = inferenceParMethodDecl();
+      for (int i = 0; i < args.getNumChild(); i++) {
+        int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
+        Expr ei = args.getChild(i);
+        if (ei.pertinentToApplicability(context, this, k)) {
+          continue;
+        }
+        TypeDecl Fk = par.formalType(i);
+        if (ei instanceof LambdaExpr && ((LambdaExpr) ei).isImplicit()) {
+          // Reduce an implicitly typed lambda only when the ground target gives it
+          // proper parameter types.
+          if (((LambdaExpr) ei).hasProperParameterTypes(Fk)) {
+            bounds.constraintExprCompat(((LambdaExpr) ei).groundedLambda(Fk), Fk);
+          }
+          continue;
+        }
+        bounds.constraintExprCompat(ei, Fk);
+      }
+    }
+    bounds.resolve();
+    return bounds;
+  }
+
+  /**
+   * The unresolved bound set of this generic method invoked with {@code args} and
+   * target type {@code type} in context {@code context}.
+   *
+   * <p>Lifted into the bound set of the ongoing inference which this is an argument of.
+   */
+  public BoundSet GenericMethodDecl.nestedInferenceBounds(List<Expr> args, TypeDecl type, Expr context) {
+    BoundSet bounds = new BoundSet();
+    collectBounds(bounds, args, type, context);
+    return bounds;
+  }
+
+  /**
+   * Fresh inference variables for this method's type parameters (JLS SE8 §18.1.1),
+   * distinct from the declared type parameters.
+   */
+  syn nta List<TypeVariable> GenericMethodDecl.inferenceVariables() {
+    // TODO(joqvist): each separate invocation needs fresh inference variables
+    List<TypeVariable> fresh = new List<TypeVariable>();
+    for (TypeVariable p : getTypeParameterList()) {
+      fresh.add((TypeVariable) p.treeCopyNoTransform());
+    }
+    return fresh;
+  }
+
+  /**
+   * A parameterization of this method by its fresh inference variables, so that
+   * the formal parameter types and the result type are expressed in terms of the
+   * fresh inference variables rather than the declared type parameters.
+   */
+  syn nta ParMethodDecl GenericMethodDecl.inferenceParMethodDecl() {
+    java.util.List<TypeDecl> args = new ArrayList<TypeDecl>();
+    for (TypeVariable a : inferenceVariables()) {
+      args.add(a);
+    }
+    return lookupParMethodDecl(args);
+  }
+
+  /**
+   * Add this generic method's applicability and invocation type
+   * inference constraints for {@code args} and {@code targetType} to {@code bounds},
+   * without resolving.
+   *
+   * Returns {@code true} if any argument was deferred (implicitly typed
+   * lambda or inexact method reference). They are left to be reduced in a top-level
+   * resolved invocation.
+   */
+  public boolean GenericMethodDecl.collectBounds(BoundSet bounds, List<Expr> args,
+      TypeDecl targetType, Expr context) {
+    List<ParameterDeclaration> params = getParameterList();
+    ParMethodDecl par = inferenceParMethodDecl(); // TODO(joqvist): need fresh inference variables?
+    List<TypeVariable> typeParams = inferenceVariables();
+    for (TypeVariable p : typeParams) {
+      bounds.addTypeVariable(p);
+    }
+    // §18.5.1 (initial bounds)
+    // For each type parameter P with bound B record constraint ‹P <: B›.
+    for (int k = 0; k < typeParams.getNumChild(); k++) {
+      TypeVariable p = typeParams.getChild(k);
+      TypeVariable substituted = getTypeParameter(k).substituted(par.getParameterization());
+      for (int i = 0; i < substituted.getNumTypeBound(); i++) {
+        bounds.constraintSubtype(p, substituted.getTypeBound(i).type());
+      }
+    }
+
+    // §18.5.1 (applicability inference), restricted to the arguments that are
+    // pertinent to applicability (§15.12.2.2).
+    boolean hasDeferred = false;
+    for (int i = 0; i < args.getNumChild(); i++) {
+      int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
+      Expr ei = args.getChild(i);
+      if (!ei.pertinentToApplicability(context, this, k)) {
+        hasDeferred = true;
+        continue;
+      }
+      bounds.constraintExprCompat(ei, par.formalType(i));
+    }
+
+    if (bounds.rawAccess) {
+      return hasDeferred;
+    }
+
+    // §18.5.2: constrain the result type R against the target type T.
+    TypeDecl T = targetType;
+    if (!T.isUnknown()) {
+      if (T.isUnboxedPrimitive()) {
+        T = T.boxed();
+      }
+      TypeDecl R = par.type();
+      if (R.isVoid()) {
+        R = typeObject();
+      }
+      // If R is parameterized by wildcards then fresh variables with bounds
+      // derived from the wildcards and the declared type parameter bounds are
+      // used in place of the wildcards (§18.5.2). The capture variables of R
+      // play the role of these fresh variables.
+      bounds.constraintTypeCompat(context.captureConversion(R), T);
+    }
+    return hasDeferred;
+  }
+
+  /**
+   * Reduce the bound set of this invocation, used as a poly-expression
+   * argument with target type {@code type}, into the enclosing bound set
+   * {@code outer}.
+   *
+   * <p>The default method resolves the invocation against the target type and merges its
+   * resolved bound set. {@link MethodAccess} and {@link ClassInstanceExpr} override
+   * this to lift an unresolved bound set instead, so the nested invocation is not
+   * resolved before the enclosing one.
+   *
+   * @return {@code false} if the invocation cannot be resolved.
+   */
+  public boolean Expr.reduceInvocationBounds(BoundSet outer, TypeDecl type) {
+    MethodInferenceNode node = resolve(type);
+    if (node == MethodInferenceNode.UNRESOLVED) {
+      return false;
+    }
+    outer.incorporateBounds(node.bounds);
+    return true;
+  }
+
+  public boolean Dot.reduceInvocationBounds(BoundSet outer, TypeDecl type) {
+    return getRight().reduceInvocationBounds(outer, type);
+  }
+
+  /**
+   * In Java 8 a diamond class instance creation is inferred using the assignment
+   * or invocation target type (§15.9.3).
+   */
+  refine Diamond eq DiamondAccess.type() {
+    TypeDecl result = refined();
+    if (getClassInstanceExpr() == null
+        || !(getTypeAccess().type() instanceof ParClassDecl)) {
+      return result;
+    }
+    // The Java 7 inference (refined() above) uses
+    // only the constructor arguments, which can yield a type that is not assignable
+    // to the target (e.g. HashSet<Sub> for a Set<Sup> target). In that case we re-infer
+    // the chosen constructor's type arguments with the bound-set inference, which
+    // incorporates the target type.
+    TypeDecl tt = getClassInstanceExpr().targetType();
+    if (tt.isUnknown() || result.isUnknown() || result.assignConversionTo(tt, getTypeAccess())) {
+      // Typical case - no type inference needed.
+      return result;
+    }
+    return targetInferredType(tt, result);
+  }
+
+  /**
+   * Infer the diamond's type arguments from the constructor arguments and the
+   * given target type (§15.9.3), returning {@code fallback} when no complete
+   * non-raw type can be inferred.
+   */
+  public TypeDecl DiamondAccess.targetInferredType(TypeDecl target, TypeDecl fallback) {
+    GenericMethodDecl gm = inferenceGenericMethod();
+    if (gm != null) {
+      BoundSet bounds = gm.inferBounds(methodAccess().getArgList(), target, methodAccess());
+      if (bounds.satisfiable && !bounds.rawAccess
+          && !bounds.typeArguments().contains(null)) {
+        TypeDecl inferred = gm.lookupParMethodDecl(bounds.typeArguments()).type();
+        if (!inferred.isUnknown()) {
+          return inferred;
+        }
+      }
+    }
+    return fallback;
+  }
+
+  /**
+   * The generic stand-in method (§15.9.3) of the chosen constructor for this
+   * diamond, used to drive diamond type inference, or {@code null} when the
+   * diamond does not resolve to a single generic constructor.
+   */
+  syn GenericMethodDecl DiamondAccess.inferenceGenericMethod() {
+    if (!(getTypeAccess().type() instanceof ParClassDecl)) {
+      return null;
+    }
+    SimpleSet<MethodDecl> ctor = chooseConstructor();
+    if (!ctor.isSingleton()) return null;
+    if (ctor.singletonValue() instanceof ParMethodDecl) {
+      return ((ParMethodDecl) ctor.singletonValue()).getGenericMethodDecl();
+    }
+    return null;
+  }
+
+  public boolean ClassInstanceExpr.reduceInvocationBounds(BoundSet outer, TypeDecl targetType) {
+    if (getAccess() instanceof DiamondAccess) {
+      // A diamond class instance creation used as a nested argument.
+      // Lift the bound set of its inferred constructor, targeting the enclosing formal
+      // type, into the enclosing set, so that the diamond's type arguments are solved
+      // together with the enclosing inference variables that the target mentions
+      // (e.g. a nested diamond new Con<>(new Domain<>())).
+      GenericMethodDecl gm = ((DiamondAccess) getAccess()).inferenceGenericMethod();
+      if (gm != null && !outer.infersVariables(gm.inferenceVariables())) {
+        MethodAccess synAccess = ((DiamondAccess) getAccess()).methodAccess();
+        BoundSet nested = gm.nestedInferenceBounds(synAccess.getArgList(), targetType, synAccess);
+        if (!nested.satisfiable) {
+          return false;
+        }
+        outer.incorporateBounds(nested); // Lift nested bounds.
+        return true;
+      }
+    }
+    // A non-diamond or unresolved constructor invocation, or one nested inside an
+    // inference of the same stand-in method, has a fixed result type.
+    TypeDecl type = type();
+    if (type.isUnknown()) {
+      return false;
+    }
+    // The result type of a class instance creation is capture converted (§15.9.3).
+    outer.constraintTypeCompat(capturedType(), targetType);
+    return true;
+  }
+
+  public boolean MethodAccess.reduceInvocationBounds(BoundSet outer, TypeDecl targetType) {
+    // Select the invoked method from its arguments alone (no target type).
+    // The target type mentions the enclosing inference variables, which a standalone
+    // resolution would treat as opaque and could spuriously reject.
+    MethodInferenceNode node = resolve(unknownType());
+    if (node == MethodInferenceNode.UNRESOLVED) {
+      return false;
+    }
+    MethodDecl decl = node.decl;
+    if (decl instanceof ParMethodDecl) {
+      GenericMethodDecl gm = ((ParMethodDecl) decl).getGenericMethodDecl();
+      if (!outer.infersVariables(gm.inferenceVariables())) {
+        // Lift the chosen generic method's unresolved bound set targeting the real
+        // target type.
+        BoundSet nested = gm.nestedInferenceBounds(getArgList(), targetType, this);
+        if (!nested.satisfiable) {
+          return false;
+        }
+        outer.incorporateBounds(nested);
+        return true;
+      }
+    }
+    // A non-generic invocation, or one nested inside an inference of the same
+    // generic method, has a fixed result type. The result type of a method
+    // invocation is capture converted (§15.12.2.6).
+    outer.constraintTypeCompat(capturedType(), targetType);
+    return true;
+  }
+
+  /**
+   * The formal parameter type that argument {@code i} is matched against, taking
+   * variable arity into account.
+   */
+  protected TypeDecl MethodDecl.formalType(int i) {
+    List<ParameterDeclaration> params = getParameterList();
+    int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
+    ParameterDeclaration param = params.getChild(k);
+    TypeDecl Fk = param.type();
+    if (param instanceof VariableArityParameterDeclaration && isVariableArity()) {
+      Fk = Fk.componentType();
+    }
+    return Fk;
+  }
+
+  /**
+   * The parameterization of a generic method applicable by inference: the method
+   * parameterized by the resolved type arguments, or the raw method when an
+   * unchecked (raw) argument left the inference variables uninstantiated (§18.5.2;
+   * the bound set is abandoned before resolution and the type arguments are null).
+   * rawAccess may also be set after a successful resolution, e.g. by an inexact
+   * method reference argument; the resolved type arguments are used in that case.
+   * The node's decl is replaced so that the resolved node can be found from the
+   * chosen method.
+   */
+  protected static MethodDecl MethodAccess.parameterizedDecl(MethodInferenceNode method) {
+    GenericMethodDecl gm = (GenericMethodDecl) method.decl;
+    Collection<TypeDecl> typeArgs = method.bounds.typeArguments();
+    if (typeArgs.contains(null)) {
+      method.decl = gm.rawMethodDecl();
+    } else {
+      method.decl = gm.lookupParMethodDecl(typeArgs);
+    }
+    return method.decl;
+  }
+
+  protected static MethodDecl MethodAccess.inferredDecl(MethodInferenceNode method) {
+    if (method.decl.isGeneric()) {
+      return parameterizedDecl(method);
+    }
+    return method.decl;
+  }
+
+  /**
+   * Finds all different types returned by this lambda.
+   */
+  syn Collection<TypeDecl> LambdaBody.returnTypes();
+
+  eq BlockLambdaBody.returnTypes() {
+    Set<TypeDecl> types = null;
+    for (ReturnStmt ret : lambdaReturns()) {
+      if (ret.hasResult()) {
+        if (types == null) {
+          types = new HashSet<TypeDecl>();
+        }
+        types.add(ret.getResult().type());
+      }
+    }
+    return types == null ? Collections.<TypeDecl>emptySet() : types;
+  }
+
+  eq ExprLambdaBody.returnTypes() = Collections.singleton(getExpr().type());
+
+  /**
+   * The resolved invocation of this expression when it targets {@code targetType}:
+   * the chosen declaration together with its inference bound set.
+   */
+  syn lazy MethodInferenceNode Expr.resolve(TypeDecl targetType) circular [MethodInferenceNode.UNRESOLVED] =
+      MethodInferenceNode.UNRESOLVED;
+
+  // A qualified method invocation resolves through its rightmost access.
+  eq Dot.resolve(TypeDecl targetType) = getRight().resolve(targetType);
+
+  eq MethodAccess.resolve(TypeDecl targetType) {
+    Set<MethodInferenceNode> methods = potentiallyApplicable(targetType);
+    SimpleSet<MethodDecl> maxSpecific = emptySet();
+
+    // Phase 1: applicability by strict invocation.
+    for (MethodInferenceNode method : methods) {
+      MethodDecl decl = inferredDecl(method);
+      if (applicableByStrictInvocation(decl)) {
+        maxSpecific = mostSpecific(maxSpecific, decl);
+      }
+    }
+
+    // Phase 2: applicability by loose invocation.
+    if (maxSpecific.isEmpty()) {
+      for (MethodInferenceNode method : methods) {
+        MethodDecl decl = inferredDecl(method);
+        if (applicableByLooseInvocation(decl)) {
+          maxSpecific = mostSpecific(maxSpecific, decl);
+        }
+      }
+    }
+
+    // Phase 3: applicability by variable arity invocation.
+    if (maxSpecific.isEmpty()) {
+      for (MethodInferenceNode method : methods) {
+        MethodDecl decl = inferredDecl(method);
+        if (applicableByVariableArity(decl)) {
+          maxSpecific = mostSpecific(maxSpecific, decl);
+        }
+      }
+    }
+
+    if (maxSpecific.size() == 1) {
+      MethodDecl chosen = maxSpecific.iterator().next();
+      for (MethodInferenceNode method : methods) {
+        if (method.decl == chosen) {
+          return method;
+        }
+      }
+    }
+    return MethodInferenceNode.UNRESOLVED;
+  }
+
+  refine LookupMethod
+  eq MethodAccess.decls() {
+    if (this instanceof ParMethodAccess) {
+      // A method invocation with explicit type arguments does not undergo type
+      // inference. The Java 5 explicit-type-argument resolution is reused for this case.
+      return refined();
+    }
+    TypeDecl tt = targetTypeInference() ? targetType() : unknownType();
+    MethodInferenceNode method = resolve(tt);
+    if (method == MethodInferenceNode.UNRESOLVED) return emptySet();
+    if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
+      if (!method.decl.isStatic()) {
+        return emptySet();
+      }
+    }
+    return method.decl;
+  }
 }

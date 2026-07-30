@@ -1,5 +1,7 @@
 # Capture types becomes too general
 
+**Status:** resolved
+
 _ExtendJ 8.1.2-117-g8158643 Java SE 8_
 
 When initializing a parameterized type containing a wildcard, the capture type becomes too general.

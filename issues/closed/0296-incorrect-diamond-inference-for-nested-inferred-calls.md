@@ -1,5 +1,7 @@
 # Incorrect Diamond inference for nested inferred calls
 
+**Status:** resolved
+
 In Java8 mode diamond access will infer incorrect bounds when an argument of another generic.
 
 Following snippet from Jerkins (core/src/main/java/hudson/XmlFile.java):

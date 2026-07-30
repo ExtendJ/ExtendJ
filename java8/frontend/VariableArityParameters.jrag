@@ -1,6 +1,33 @@
 // SPDX-License-Identifier: BSD-3-Clause
 
 aspect VariableArityParameters {
-  //15.27.1
+  // JLS SE8 §15.27.1
   eq DeclaredLambdaParameters.getParameter(int i).variableArityValid() = i == getNumParameter() - 1;
+
+  /**
+   * An invocation of a variable arity method is in array (fixed-arity) form
+   * iff the method is applicable by strict or loose invocation (JLS SE8
+   * §15.12.2.2, §15.12.2.3); a method applicable only by variable arity
+   * invocation (§15.12.2.4) is invoked in element form.
+   *
+   * <p>The form is decided by testing the last argument's compatibility
+   * against the variable arity parameter's array type, using the same
+   * pinned-target compatibility tests as overload resolution. Testing the
+   * argument type directly is circular when the argument type must be
+   * inferred: the type depends on the argument's target type, which depends
+   * on the invocation form. The resolution then oscillates between the array
+   * and element forms and never terminates.
+   */
+  refine VariableArityParameters
+  eq MethodAccess.invokesVariableArityAsArray() {
+    if (!decl().isVariableArity()) {
+      return false;
+    }
+    if (arity() != decl().arity()) {
+      return false;
+    }
+    TypeDecl arrayType = decl().lastParameter().type();
+    Expr last = getArg(getNumArg() - 1);
+    return last.compatibleStrictContext(arrayType) || last.compatibleLooseContext(arrayType);
+  }
 }

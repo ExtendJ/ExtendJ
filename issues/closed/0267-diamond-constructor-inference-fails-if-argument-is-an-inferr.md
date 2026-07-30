@@ -1,5 +1,7 @@
 # Diamond constructor inference fails if argument is an inferred-type method
 
+**Status:** resolved
+
 *ExtendJ 8.1.0-20-gdf98f7c Java SE 8*
 
 The following test fails to compile:

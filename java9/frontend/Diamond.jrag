@@ -38,35 +38,26 @@ aspect Java9Diamond{
    * the diamond operator, the inferred generic type for the
    * enclosing class instance expression is returned.
    */
-  refine Diamond eq DiamondAccess.type() {
-    TypeDecl accessType = getTypeAccess().type();
-
-    // In Java 9 we allow the diamond operator to be used with anonymous generic classes if the inferred type is denotable
-    if (isAnonymousDecl() && !(accessType.isPrimitiveType() || accessType.isClassDecl() || accessType.isInterfaceDecl())) {
-      return accessType;
+  refine TypeInference_SE8 eq DiamondAccess.type() {
+    if (!isAnonymousDecl()) {
+      // Non-anonymous diamonds use the Java 8 inference (§15.9.3), which infers
+      // the type arguments from the constructor arguments and the target type.
+      return refined();
     }
 
-    if (getClassInstanceExpr() == null) {
-      // It is an error if the DiamondAccess does not occurr
-      // within a class instance creation expression, but this
-      // error is handled in typeCheck.
-      return accessType;
+    // In Java 9 the diamond may be used with anonymous classes if the inferred
+    // type is denotable. The Java 7/8 inference (refined()) bails on anonymous
+    // classes, so infer the type arguments from the target type here instead.
+    TypeDecl at = getTypeAccess().type();
+    if ((at.isPrimitiveType() || at.isClassDecl() || at.isInterfaceDecl())
+        && getClassInstanceExpr() != null
+        && at instanceof ParClassDecl) {
+      TypeDecl tt = getClassInstanceExpr().targetType();
+      if (!tt.isUnknown()) {
+        return targetInferredType(tt, at);
+      }
     }
-
-    if (!(accessType instanceof ParClassDecl)) {
-      // It is an error if the TypeDecl of a DiamondAccess is not
-      // a generic type, but this error is handled in typeCheck.
-      return accessType;
-    }
-
-    SimpleSet<MethodDecl> maxSpecific = chooseConstructor();
-
-    if (maxSpecific.isEmpty()) {
-      return getTypeAccess().type();
-    }
-
-    MethodDecl constructor = maxSpecific.iterator().next();
-    return constructor.type();
+    return at;
   }
 
   refine Diamond eq DiamondAccess.typeProblems() {

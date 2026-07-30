@@ -1,5 +1,7 @@
 # Unused type variable causes type inference to fail
 
+**Status:** resolved
+
 *ExtendJ 8.0.1-195-gbd08c51 Java SE 8*
 
 Test case:
