@@ -45,38 +45,38 @@ public interface Tests {
   String[] FAILING = {
     "type/ambiguous_01f",
     "generics/static_02f",
-    "jsr335/lambda/type_inf_06p", // https://bitbucket.org/extendj/extendj/issues/217/failure-in-lambda-return-type-inference
-    "jsr335/lambda/err_01f", // https://bitbucket.org/extendj/extendj/issues/202/method-lookup-error-causes
-    "jsr335/lambda/err_02f", // https://bitbucket.org/extendj/extendj/issues/202/method-lookup-error-causes
-    "generics/method_20p", // https://bitbucket.org/extendj/extendj/issues/213/unused-type-variable-causes-type-inference
-    "generics/method_22p", // https://bitbucket.org/extendj/extendj/issues/213/unused-type-variable-causes-type-inference
+    "jsr335/lambda/type_inf_06p", // issue 217
+    "jsr335/lambda/err_01f", // issue 202
+    "jsr335/lambda/err_02f", // issue 202
+    "generics/method_20p", // issue 213
+    "generics/method_22p", // issue 213
     "jsr335/Semantics/ConstructorReferenceAnalysis/ClassReferences/ShouldFail/syntax03",
     "jsr335/Semantics/ConstructorReferenceAnalysis/ClassReferences/ShouldFail/syntax04",
     "jsr335/Semantics/FunctionalInterfaces/ReturnTypeSubstitutable/ShouldCompile/syntax22",
     "jsr335/Semantics/FunctionalInterfaces/Signature/ShouldFail/syntax08",
     "jsr335/Semantics/LambdaTypeAnalysis/AssignmentContext/ShouldCompile/syntax28",
-    "type/autoboxing_02f", // https://bitbucket.org/extendj/extendj/issues/225/illegal-autoboxing-conversion-is
-    "type/autoboxing_05f", // https://bitbucket.org/extendj/extendj/issues/225/illegal-autoboxing-conversion-is
-    "pkg/static_import_03p", // https://bitbucket.org/extendj/extendj/issues/227/error-should-not-be-generated-for-unused
+    "type/autoboxing_02f", // issue 225
+    "type/autoboxing_05f", // issue 225
+    "pkg/static_import_03p", // issue 227
     "jsr335/lambda/type_inf_09p", // True Java 8 type inference is needed.
     "curious", // Curious type inference problems in Java 8. Don't even work with javac.
-    "jsr335/diamond/generics_01p", // https://bitbucket.org/extendj/extendj/issues/267/diamond-constructor-inference-fails-if
+    "jsr335/diamond/generics_01p", // issue 267
     "extendj/generics/container_01f", // Needs an error message (crash during code generation).
     "generics/method_26f", // TODO: add an issue for this.
     "jsr335/misc/error_01f", // Does not give good error messages.
-    "jsr335/diamond/nested_01p", // https://bitbucket.org/extendj/extendj/issues/266/stack-overflow-caused-by-nested-diamond
-    "jsr335/diamond/nested_02p", // https://bitbucket.org/extendj/extendj/issues/266/stack-overflow-caused-by-nested-diamond
-    "jsr335/lambda/exception_ti_01p", // https://bitbucket.org/extendj/extendj/issues/308/error-in-uncaught-exception-checking-for
-    "jsr335/lambda/exception_ti_02p", // https://bitbucket.org/extendj/extendj/issues/308/error-in-uncaught-exception-checking-for
-    "jsr335/lambda/exception_ti_03p", // https://bitbucket.org/extendj/extendj/issues/309/java-8-exception-handling-with-inferred
-    "exception/ti_java8_01p", // https://bitbucket.org/extendj/extendj/issues/309/java-8-exception-handling-with-inferred
-    "extendj/err_14f", // https://bitbucket.org/extendj/extendj/issues/317/extendj-classes-accessible-by-code-being
+    "jsr335/diamond/nested_01p", // issue 266
+    "jsr335/diamond/nested_02p", // issue 266
+    "jsr335/lambda/exception_ti_01p", // issue 308
+    "jsr335/lambda/exception_ti_02p", // issue 308
+    "jsr335/lambda/exception_ti_03p", // issue 309
+    "exception/ti_java8_01p", // issue 309
+    "extendj/err_14f", // issue 317
     "generics/bounds_05f", // Compilation should fail on cyclic type variable bounds.
     "generics/bounds_06f", // Compilation should fail on cyclic type variable bounds.
-    "java10/var/var_17",  // https://bitbucket.org/extendj/extendj/issues/319/type-cast-to-intersection-type-has-no
-    "jsr335/intersection",  // https://bitbucket.org/extendj/extendj/issues/319/type-cast-to-intersection-type-has-no
-    "java10/var/var_14", // https://bitbucket.org/extendj/extendj/issues/340/type-intersection-parsing-issue
-    "java10/var/var_27", // https://bitbucket.org/extendj/extendj/issues/340/type-intersection-parsing-issue
+    "java10/var/var_17",  // issue 319
+    "jsr335/intersection",  // issue 319
+    "java10/var/var_14", // issue 340
+    "java10/var/var_27", // issue 340
     "ti/raw_unchecked_01p", // issue 345
     "ti/raw_unchecked_02p", // issue 345
     "ti/raw_unchecked_03p", // issue 345
@@ -122,7 +122,7 @@ public interface Tests {
     "jsr335",
     "extendj/jsr335",
     "api/jsr335",
-    "jsr334/diamond/diamond_24p", // https://bitbucket.org/extendj/extendj/issues/173/
+    "jsr334/diamond/diamond_24p", // issue 173
     "exception/ti_java8_01p",
   };
 
@@ -157,9 +157,9 @@ public interface Tests {
     "jsr334/diamond/diamond_03f", // Diamond is allowed in anonymous class instance expressions.
     "jsr334/diamond/diamond_25f", // Error message changed in Java 9.
     "jsr334/safe-varargs/nonfinal_01f", // @SafeVarargs is allowed on static non-final methods.
-    "enum/enumset_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
-    "enum/switch_01p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
-    "enum/switch_02p", // https://bitbucket.org/extendj/extendj/issues/318/static-field-update-for-switch-over-enums
+    "enum/enumset_01p", // issue 318
+    "enum/switch_01p", // issue 318
+    "enum/switch_02p", // issue 318
     "java9/diamond/diamond_06", // Bug in Java 9 diamond access implementation
   };
 
