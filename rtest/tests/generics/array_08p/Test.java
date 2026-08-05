@@ -1,5 +1,5 @@
 // Test for bug in ExtendJ code generation.
-// https://bitbucket.org/extendj/extendj/issues/261/broken-bytecode-for-enhanced-for-loop-with
+// See issue 261.
 import java.util.Set;
 import java.util.Collections;
 

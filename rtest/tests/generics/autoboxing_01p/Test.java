@@ -1,5 +1,5 @@
 // This tests that boxing conversions are generated when passing a generic method argument.
-// https://bitbucket.org/extendj/extendj/issues/232/missing-boxing-conversions-when-calling
+// See issue 232.
 // This test used to fail when passing a boolean to moo().
 public class Test {
   public static void main(String[] args) {

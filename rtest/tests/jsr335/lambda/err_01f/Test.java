@@ -1,5 +1,5 @@
 // Test for NullPointerException for variable lookup error related to lambdas.
-// https://bitbucket.org/extendj/extendj/issues/202/method-lookup-error-causes
+// See issue 202.
 // .result: COMPILE_FAIL
 import java.util.function.Function;
 

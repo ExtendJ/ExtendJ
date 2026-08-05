@@ -1,7 +1,7 @@
 // Test conditional expression type analysis.
 // The type of a conditional expression with two result
 // expressions of reference type is the lowest upper bound of the two types.
-// https://bitbucket.org/extendj/extendj/issues/188/intersection-type-capture-conversion-error
+// See issue 188.
 // .result=COMPILE_PASS
 
 // Over-designed OOP inheritance garbage.

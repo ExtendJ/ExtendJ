@@ -1,5 +1,5 @@
 // Test type analysis problem in an enhanced for statement.
-// See https://bitbucket.org/extendj/extendj/issues/146/error-in-enhanced-for-assignment
+// See issue 146.
 // .result=COMPILE_PASS
 import java.util.EnumSet;
 

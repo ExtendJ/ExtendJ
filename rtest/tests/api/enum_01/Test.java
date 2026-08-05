@@ -1,5 +1,5 @@
 // Test that the right modifiers are used for implicit enum methods.
-// https://bitbucket.org/extendj/extendj/issues/283/enum-values-and-valueof-methods-should-not
+// See issue 283.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;

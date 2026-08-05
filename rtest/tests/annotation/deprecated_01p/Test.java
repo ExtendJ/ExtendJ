@@ -1,6 +1,6 @@
 // Deprecation warnings are not generated for uses of deprecated objects inside
 // deprecated code.
-// https://bitbucket.org/extendj/extendj/issues/235/deprecation-warnings-inside-deprecated
+// See issue 235.
 // .result: COMPILE_PASS
 @Deprecated
 public class Test {

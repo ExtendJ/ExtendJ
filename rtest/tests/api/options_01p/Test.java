@@ -1,5 +1,5 @@
 // Test that unknown non-standard options (-X) are reported as warnings.
-// https://bitbucket.org/extendj/extendj/issues/305/some-command-line-arguments-fail-when-read
+// See issue 305.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.Options;

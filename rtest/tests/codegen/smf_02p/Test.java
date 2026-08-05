@@ -1,4 +1,4 @@
-// https://bitbucket.org/extendj/extendj/issues/244/incorrect-stackmap-frame-for-exception
+// See issue 244.
 public class Test {
   public static void main(String[] args) {
     Object lock = new Object();

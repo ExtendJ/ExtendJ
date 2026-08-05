@@ -1,5 +1,5 @@
-// Test a NullPointerException bug in ExtendJ caused by an error in method type
-// inference. See https://bitbucket.org/extendj/extendj/issues/172/nullpointerexception-in-method-type
+// Test a NullPointerException bug in ExtendJ caused by an error in method type inference.
+// See issue 172.
 // .result=COMPILE_PASS
 public class Test {
     int i = 0;

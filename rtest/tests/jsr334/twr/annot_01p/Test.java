@@ -1,6 +1,6 @@
 // Test that annotation with Target=LOCAL_VARIABLE can be used on a resource
 // declaration.
-// https://bitbucket.org/extendj/extendj/issues/315/annotations-with-target-local_variable-are
+// See issue 315.
 // .result=COMPILE_PASS
 import static java.lang.annotation.ElementType.*;
 import java.lang.annotation.Target;

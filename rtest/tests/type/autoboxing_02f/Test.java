@@ -1,5 +1,5 @@
 // Illegal autoboxing conversion.
-// https://bitbucket.org/extendj/extendj/issues/225/illegal-autoboxing-conversion-is
+// See issue 225.
 // .result: COMPILE_FAIL
 
 class Test {

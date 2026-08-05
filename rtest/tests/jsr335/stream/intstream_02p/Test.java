@@ -1,6 +1,6 @@
 // ExtendJ generates two anonymous classes to implement the lambdas in this test.
 // The second implicit class has strange bytecode:
-// https://bitbucket.org/extendj/extendj/issues/286/strange-bytecode-generated-for-anonymous
+// See issue 286.
 import java.util.*;
 import java.util.stream.*;
 public class Test {

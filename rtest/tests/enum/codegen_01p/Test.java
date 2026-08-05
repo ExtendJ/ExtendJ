@@ -1,6 +1,6 @@
 // Test error in ExtendJ codegeneration for
 // constant folding with enum constants.
-// https://bitbucket.org/extendj/extendj/issues/191/constant-folding-does-not-work-for-enum
+// See issue 191.
 // .result=EXEC_PASS
 // .classpath: @RUNTIME_CLASSES@
 import static runtime.Test.*;

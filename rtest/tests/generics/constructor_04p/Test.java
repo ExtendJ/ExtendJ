@@ -1,7 +1,7 @@
 // Test type argument inference for a constructor invocation.
 // This test case should compile because the inferred type of T is an unchecked
 // exception, so it must not be caught in the enclosing block.
-// https://bitbucket.org/extendj/extendj/issues/123/type-argument-inference-not-implemented
+// See issue 123.
 // .result=COMPILE_PASS
 class Test {
   class A {

@@ -1,5 +1,5 @@
 // Test stack overflow in ExtendJ during ParseName rewrite.
-// https://bitbucket.org/extendj/extendj/issues/203/stack-overflow-caused-by-parsename-rewrite
+// See issue 203.
 // .result: COMPILE_PASS
 class Token {
   public String string;

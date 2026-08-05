@@ -1,6 +1,6 @@
 // This test exposes a circularity in the ExtendJ type inference
 // for generic method references.
-// See https://bitbucket.org/extendj/extendj/issues/180/method-reference-stack-overflow-error
+// See issue 180.
 // .result=COMPILE_PASS
 import java.util.List;
 

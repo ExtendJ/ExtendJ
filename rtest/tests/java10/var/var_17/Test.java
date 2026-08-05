@@ -1,6 +1,6 @@
 // Initializer can be a non denotable type, here a type intersection
 // Error in type intersection unrelated to type inference with var.
-// https://bitbucket.org/extendj/extendj/issues/319/type-cast-to-intersection-type-has-no
+// See issue 319.
 // .result=COMPILE_PASS
 import java.util.*;
 public class Test {

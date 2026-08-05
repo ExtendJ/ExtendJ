@@ -1,6 +1,6 @@
 // Test that runtime retention is kept when loading an annotation from
 // bytecode. The annotation is provided via the runtime library.
-// https://bitbucket.org/extendj/extendj/issues/256/meta-annotations-are-dropped-from
+// See issue 256.
 // .classpath: @RUNTIME_CLASSES@
 import java.lang.reflect.Method;
 

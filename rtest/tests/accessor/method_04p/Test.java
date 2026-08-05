@@ -1,5 +1,5 @@
 // Test error in ExtendJ bytecode generation.
-// See https://bitbucket.org/extendj/extendj/issues/152/method-lookup-fails-inside-accessor-nta
+// See issue 152
 // .result=COMPILE_PASS
 public class Test {
 

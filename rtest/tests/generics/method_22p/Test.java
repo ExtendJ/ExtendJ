@@ -1,5 +1,5 @@
 // Test inference of unresolved type variables.
-// https://bitbucket.org/extendj/extendj/issues/213/unused-type-variable-causes-type-inference
+// See issue 213.
 // .result: COMPILE_PASS
 public abstract class Test {
   List<Integer> build() {

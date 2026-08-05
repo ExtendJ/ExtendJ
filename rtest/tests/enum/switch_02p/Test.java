@@ -1,6 +1,6 @@
 // Test that multiple switch statements do not lead to duplicated switch map.
 // This tests for an error in ExtendJ code generation.
-// https://bitbucket.org/extendj/extendj/issues/263/duplicate-switch-maps
+// See issue 263.
 // .result=EXEC_PASS
 public class Test {
   public static void main(String[] args) {

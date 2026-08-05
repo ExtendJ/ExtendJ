@@ -1,6 +1,6 @@
 // Test stack map frame generation for conditional returning
 // a generic array type.
-// https://bitbucket.org/extendj/extendj/issues/233/bad-stack-map-frame-when-using-conditional
+// See issue 233.
 public class Test {
   public static void main(String[] args) {
     System.out.println(foo(false).length);

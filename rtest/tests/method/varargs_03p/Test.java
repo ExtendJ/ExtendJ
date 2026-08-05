@@ -1,4 +1,4 @@
-// https://bitbucket.org/extendj/extendj/issues/258/failure-to-find-most-specific-method-when
+// See issue 258.
 public class Test {
   public static void main(String[] args) {
     reportError("nothing marks the spot", new Throwable());

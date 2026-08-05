@@ -1,7 +1,7 @@
 // Test that an unnecessary I2C instruction is not generated.
 // The data array contains so many elements that if each is
 // converted with I2C, the init method will run out of space.
-// https://bitbucket.org/extendj/extendj/issues/246/redundant-integer-conversion
+// See issue 246.
 public class Test {
   char[] data = {
       72, 94, 99, 55, 75, 82, 30, 59, 1, 39, 88, 53, 5, 87, 30, 

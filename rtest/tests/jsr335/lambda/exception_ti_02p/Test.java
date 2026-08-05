@@ -1,6 +1,6 @@
 // Regression test for exception handling issue.
 // Exception checking interacts in intricate ways with type inference.
-// https://bitbucket.org/extendj/extendj/issues/308/error-in-uncaught-exception-checking-for
+// See issue 308.
 // .result: EXEC_PASS
 public class Test {
   public static void main(String[] args) {

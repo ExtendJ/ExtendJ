@@ -1,5 +1,5 @@
 // This tests that equality constraints like T=T are correctly handled.
-// https://bitbucket.org/extendj/extendj/issues/214/type-inference-regression
+// See issue 214.
 // .result: COMPILE_PASS
 public abstract class Test {
   @SuppressWarnings("unchecked")

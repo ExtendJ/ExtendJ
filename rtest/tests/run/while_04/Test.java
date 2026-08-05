@@ -1,7 +1,7 @@
 // Test that codegeneration creates valid bytecode when using
 // a preincrement/predecrement expression on a field that is accessed
 // via accessor methods.
-// https://bitbucket.org/extendj/extendj/issues/277/broken-bytecode-when-using-preincrement
+// See issue 277.
 public class Test {
   public static void main(String[] args) {
     Loop loop = new Test().new Loop();

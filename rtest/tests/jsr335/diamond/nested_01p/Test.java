@@ -3,7 +3,7 @@
 // diamond expressions.
 // This tests checks that an argument to a diamond consturctor access can use
 // diamond access.
-// https://bitbucket.org/extendj/extendj/issues/266/stack-overflow-caused-by-nested-diamond
+// See issue 266.
 // .result: COMPILE_PASS
 import java.util.*;
 public class Test {

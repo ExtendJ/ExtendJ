@@ -1,4 +1,4 @@
-// https://bitbucket.org/jastadd/jastaddj/issue/91/inheriting-package-private-implementation
+// See issue 91
 // .result=COMPILE_FAIL
 import pkg1.A;
 import pkg1.I;

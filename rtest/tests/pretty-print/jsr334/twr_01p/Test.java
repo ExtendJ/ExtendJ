@@ -1,5 +1,5 @@
 // Regression test for Bitbucket issue #183:
-// https://bitbucket.org/extendj/extendj/issues/183/prettyprint-of-try-with-resources
+// See issue 183.
 // .result=COMPILE_OUT
 // .options=XprettyPrint
 import java.util.*;

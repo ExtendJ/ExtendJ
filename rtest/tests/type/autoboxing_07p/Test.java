@@ -1,5 +1,5 @@
 // Test that a boxing operation is generated when assigning a boolean to Boolean.
-// https://bitbucket.org/extendj/extendj/issues/239/missing-boxing-conversion-for-boolean
+// See issue 239.
 public class Test {
   public static void main(String[] args) {
     boolean b = true;

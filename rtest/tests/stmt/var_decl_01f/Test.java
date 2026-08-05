@@ -1,5 +1,5 @@
 // It is not legal to shadow a local variable in the same scope.
-// https://bitbucket.org/extendj/extendj/issues/179/local-variables-can-be-declared-multiple
+// See issue 179.
 // .result=COMPILE_FAIL
 class Test {
   void m() {

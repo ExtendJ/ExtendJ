@@ -1,6 +1,6 @@
 // Tricky type inference scenario which ExtendJ does not handle correctly.
 // This is a self-contained version of jsr335/inference/method_01p.
-// https://bitbucket.org/extendj/extendj/issues/182/wrong-target-type-for-inferred-method
+// See issue 182.
 // .result=COMPILE_PASS
 
 interface List<T> {

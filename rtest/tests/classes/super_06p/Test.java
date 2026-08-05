@@ -1,6 +1,6 @@
 // Tests a use of inner class instantiation via anonymous class instance
 // in separate class.
-// https://bitbucket.org/extendj/extendj/issues/187/too-conservative-anonymous-class-type
+// See issue 187.
 // .result=COMPILE_PASS
 
 class Outer {

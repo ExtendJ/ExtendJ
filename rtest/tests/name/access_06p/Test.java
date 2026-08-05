@@ -1,5 +1,5 @@
 // Test accessing a protected member of an enclosing type via a method qualifier.
-// https://bitbucket.org/extendj/extendj/issues/299/ambigous-name-resolution-incorrectly
+// See issue 299.
 // .result: COMPILE_PASS
 import p1.C;
 class Test extends C {

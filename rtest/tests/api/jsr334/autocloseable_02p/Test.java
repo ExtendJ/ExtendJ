@@ -1,5 +1,5 @@
 // Test method binding for implicit close() method access in try-with-resources.
-// https://bitbucket.org/extendj/extendj/issues/260/flaky-compilation-failures-with-java-7-twr
+// See issue 260.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;

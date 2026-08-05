@@ -1,4 +1,4 @@
-// https://bitbucket.org/extendj/extendj/issues/199/missing-type-error-in-enhanced-for-when
+// See issue 199.
 // .result=COMPILE_FAIL
 import java.util.List;
 

@@ -1,6 +1,6 @@
 // Test using an enhanced-for loop to iterate elements of an
 // array stored in a polymorphic container type.
-// https://bitbucket.org/extendj/extendj/issues/278/broken-bytecode-when-iterating-over-string
+// See issue 278.
 // .result: EXEC_PASS
 public class Test {
   public static void main(String[] args) {

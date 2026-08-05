@@ -1,5 +1,5 @@
 // Tests that method type argument inference works for methods in parameterized types.
-// https://bitbucket.org/extendj/extendj/issues/124/type-argument-inference-does-not-work-for
+// See issue 124.
 // .result=COMPILE_PASS
 class Test {
   class A<T> {

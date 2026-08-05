@@ -1,4 +1,4 @@
-// https://bitbucket.org/extendj/extendj/issues/245/stackmap-frame-error-in-constructor
+// See issue 245.
 public class Test {
   int sum;
 

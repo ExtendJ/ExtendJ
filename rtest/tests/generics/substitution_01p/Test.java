@@ -2,7 +2,7 @@
 // The type variable R is substituted for String in <S extends I<R>>, then
 // the method is called with S=C<String>.
 // This test checks this issue:
-// https://bitbucket.org/extendj/extendj/issues/163/generic-method-with-type-variable
+// See issue 163.
 // .result=COMPILE_PASS
 interface I<T> {
 }

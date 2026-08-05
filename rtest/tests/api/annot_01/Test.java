@@ -1,6 +1,6 @@
 // Test that an annotations attribute is not generated for a class
 // annotation with source retention policy.
-// https://bitbucket.org/extendj/extendj/issues/281/annotations-with-source-retention-are
+// See issue 281.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;

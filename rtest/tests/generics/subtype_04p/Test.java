@@ -1,6 +1,6 @@
 // Test safe generic type conversion.
 // Should not generate unchecked conversion warning.
-// https://bitbucket.org/extendj/extendj/issues/190/incorrect-unchecked-conversion-warning
+// See issue 190.
 // .result=COMPILE_PASS
 
 abstract class AbstractContainer<T> { }

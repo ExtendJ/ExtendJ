@@ -1,5 +1,5 @@
 // Tests that uninitialized locals are handled in stackmap frames.
-// https://bitbucket.org/extendj/extendj/issues/248/incorrect-stackmap-frames-error-no
+// See issue 248.
 public class Test {
   public static void main(String[] args) {
     boolean b = args.length > 0;

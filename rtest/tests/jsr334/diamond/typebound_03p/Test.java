@@ -1,5 +1,5 @@
 // Using parameterized class type to infer the diamond type.
-// https://bitbucket.org/extendj/extendj/issues/307/incorrect-warning-when-using-diamond
+// See issue 307.
 // .result: COMPILE_PASS
 import java.util.EnumMap;
 public class Test {

@@ -1,5 +1,5 @@
 // Test that Integer unboxing works in runtime.
-// https://bitbucket.org/extendj/extendj/issues/257/missing-checkcast-before-unboxing
+// See issue 257.
 import java.util.*;
 
 public class Test {

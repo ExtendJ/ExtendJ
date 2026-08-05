@@ -5,7 +5,7 @@
 // of the test method, then there is type substitution to substitute
 // the method type parameter R after type inference infers the type
 // R=Integer.
-// See https://bitbucket.org/extendj/extendj/issues/153/problem-with-type-inference-from-expected
+// See issue 153.
 // .result=COMPILE_PASS
 public class Test {
   void test(C<String> c, Impl i) {

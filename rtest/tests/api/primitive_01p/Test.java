@@ -1,7 +1,7 @@
 // This tests the behaviour of the isPrimitive attribute.
 // Boxed primitive types are treated as primitive types.
 // This should probably be changed eventually.
-// https://bitbucket.org/extendj/extendj/issues/240/typedeclisprimitive-does-not-work-as
+// See issue 240.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.Program;

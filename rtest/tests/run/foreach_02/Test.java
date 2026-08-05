@@ -1,5 +1,5 @@
 // Regression test for stack map frame generation issue.
-// https://bitbucket.org/extendj/extendj/issues/302/stack-map-error-when-iterating-over-int
+// See issue 302.
 public class Test {
   public static void main(String[] args) {
     int[] x = { 12321 };

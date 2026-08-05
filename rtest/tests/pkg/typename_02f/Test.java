@@ -1,6 +1,6 @@
 // Package name used as a typename.
 // A class may not implement a package.
-// https://bitbucket.org/extendj/extendj/issues/193/missing-error-for-class-implementing
+// See issue 193.
 // .result: COMPILE_FAIL
 package org.extendj;
 

@@ -1,6 +1,6 @@
 // Test a code generation error.
 // Crash caused by unplaced label in simple try-statement.
-// https://bitbucket.org/extendj/extendj/issues/311/code-generation-crashes-from-unplaced
+// See issue 311.
 // .result=EXEC_PASS
 public class Test {
   public static void main(String[] args) {

@@ -2,7 +2,7 @@
 // This test uses the Java 8 standard library and exposes a bug in ExtendJ type inference.
 // The bug is essentially that ExtendJ does not infer the correct target type.
 // Simplified versions of this test are in the tests method_02p, method_03p, and method_04p.
-// https://bitbucket.org/extendj/extendj/issues/182/wrong-target-type-for-inferred-method
+// See issue 182.
 // .result=COMPILE_PASS
 // .classpath: @RUNTIME_CLASSES@
 import java.util.ArrayList;

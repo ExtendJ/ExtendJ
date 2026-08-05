@@ -1,5 +1,5 @@
 // Test code generation error for wildcard parameterized method references.
-// https://bitbucket.org/extendj/extendj/issues/219/broken-bytecode-for-wildcard-parameterized
+// See issue 219.
 // .result: EXEC_PASS
 import java.util.*;
 

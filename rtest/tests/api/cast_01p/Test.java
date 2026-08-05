@@ -1,5 +1,5 @@
 // Test that unnecessary checkcast instructions are not generated.
-// https://bitbucket.org/extendj/extendj/issues/262/unnecessary-checkcast-converting-to-a
+// See issue 262.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;

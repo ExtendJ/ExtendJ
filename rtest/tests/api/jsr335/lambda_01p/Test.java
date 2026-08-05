@@ -1,6 +1,6 @@
 // Test that the method of an implicit anonymous class generated for a lambda
 // expression has the expected method type signature.
-// https://bitbucket.org/extendj/extendj/issues/286/strange-bytecode-generated-for-anonymous
+// See issue 286.
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;
 import org.extendj.ast.FileClassSource;

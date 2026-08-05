@@ -1,5 +1,5 @@
-// Overriding method from interface of abstract superclass with incompatible return type
-// https://bitbucket.org/jastadd/jastaddj/issue/107/incompatible-return-type-for-method
+// Overriding method from interface of abstract superclass with incompatible return type.
+// See issue 107
 // .result=COMPILE_FAIL
 
 interface I {

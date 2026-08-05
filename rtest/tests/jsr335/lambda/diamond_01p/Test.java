@@ -1,6 +1,6 @@
 // Test for a Stack Overflow error caused by circular dependency between lambda
 // type analysis and diamond type inference.
-// https://bitbucket.org/extendj/extendj/issues/176/lambda-expression-stackoverflowerror
+// See issue 176.
 // .result=COMPILE_PASS
 public class Test<T> {
   public Test(LambdaExprDataProvider<T> t) {}

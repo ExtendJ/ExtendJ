@@ -1,5 +1,5 @@
 // Test nested try statement control flow.
-// https://bitbucket.org/extendj/extendj/issues/241/broken-bytecode-in-nested-try-statements
+// See issue 241.
 public class Test {
 
   public static void main(String[] args) {

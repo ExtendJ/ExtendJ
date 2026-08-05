@@ -5,7 +5,7 @@
 // regtest.jar is included. The source for this Jar is Enclosing.java.original.
 // The bytecode was compiled with Javac 1.8.0, but the output was generated in
 // 1.6 mode.
-// https://bitbucket.org/extendj/extendj/issues/175/amazon-s3-jar-null-pointer-exception
+// See issue 175.
 // .result=COMPILE_PASS
 // .sources=Test.java
 // .classpath=@TEST_DIR@\/regtest.jar

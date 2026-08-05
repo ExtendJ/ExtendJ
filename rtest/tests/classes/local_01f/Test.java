@@ -1,6 +1,6 @@
 // A local class declaration is not accessible outside its immediately
 // enclosing block.
-// https://bitbucket.org/extendj/extendj/issues/195/local-class-should-not-be-accessible-from
+// See issue 195.
 // .result=COMPILE_FAIL
 public class Test {
   public static void main(String[] args) {

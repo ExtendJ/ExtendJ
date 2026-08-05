@@ -1,6 +1,6 @@
 // Test that executable bytecode is generated when discarding a method
 // result from a method that returns some wildcard-super type.
-// https://bitbucket.org/extendj/extendj/issues/276/wildcardsupertype-has-variable-size-zero
+// See issue 276.
 // .result: EXEC_PASS
 public class Test {
   public static void main(String[] args) {

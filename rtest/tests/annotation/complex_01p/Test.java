@@ -1,5 +1,5 @@
 // Tests a minimal complex annotation, i.e. an annotation type an annotation member.
-// See https://bitbucket.org/extendj/extendj/issues/145/incorrect-handling-of-annotation-targets
+// See issue 145.
 // .result=COMPILE_PASS
 import java.lang.annotation.Target;
 

@@ -1,5 +1,5 @@
 // Test a simple package anntation (pkg/package-info.java).
-// https://bitbucket.org/extendj/extendj/issues/316/parser-fails-on-package-annotation-with
+// See issue 316.
 // .result=COMPILE_PASS
 import pkg.A;
 

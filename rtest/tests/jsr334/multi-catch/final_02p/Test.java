@@ -1,5 +1,5 @@
 // A multi-catch parameter may be explicitly declared final (otherwise, it is implicitly final).
-// https://bitbucket.org/extendj/extendj/issues/298/final-is-incorrectly-rejected-for-multi
+// See issue 298.
 // .result: COMPILE_PASS
 import java.io.*;
 

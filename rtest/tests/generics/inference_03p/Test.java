@@ -1,6 +1,6 @@
 // Test that array types work with type inference.
 // This test case was added as regression test for this issue:
-// https://bitbucket.org/extendj/extendj/issues/163/generic-method-with-type-variable
+// See issue 163.
 // .result=COMPILE_PASS
 interface Set<E> {
   <T> T[] toArray(T[] a);

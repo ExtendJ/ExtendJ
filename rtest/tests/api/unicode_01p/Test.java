@@ -1,7 +1,7 @@
 // This tests the behaviour of the isPrimitive attribute.
 // Boxed primitive types are treated as primitive types.
 // This should probably be changed eventually.
-// https://bitbucket.org/extendj/extendj/issues/309/java-8-exception-handling-with-inferred
+// See issue 309.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@
 import beaver.Symbol;

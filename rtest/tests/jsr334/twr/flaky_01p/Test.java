@@ -1,5 +1,5 @@
 // Test flaky compile error in exception checking.
-// https://bitbucket.org/extendj/extendj/issues/260/flaky-compilation-failures-with-java-7-twr
+// See issue 260.
 // .result: COMPILE_PASS
 import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;

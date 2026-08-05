@@ -1,5 +1,5 @@
 // Test a simple builder pattern.
-// https://bitbucket.org/extendj/extendj/issues/231/illegal-private-field-access-for-field-of
+// See issue 231.
 public class Test {
   public static final Test DEFAULT_ACTION =
       builder()

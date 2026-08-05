@@ -1,5 +1,5 @@
 // Test that the type signature referring to an inner class is correct.
-// https://bitbucket.org/extendj/extendj/issues/294/incorrect-type-signatures-for-inner
+// See issue 294.
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;
 import org.extendj.ast.FileClassSource;

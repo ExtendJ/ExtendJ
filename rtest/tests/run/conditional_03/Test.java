@@ -1,5 +1,5 @@
 // Test runtime autoboxing forced by null in a conditional expression.
-// https://bitbucket.org/extendj/extendj/issues/226/missing-autoboxing-in-generated-code-for
+// See issue 226.
 class Test {
   public static void main(String[] args) {
     new Test().test1(true, 0.16, 2L);

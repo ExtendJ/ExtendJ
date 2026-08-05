@@ -1,5 +1,5 @@
 // Diamond type inference works with variable arity constructors.
-// https://bitbucket.org/extendj/extendj/issues/207/diamond-type-inference-failure-with
+// See issue 207.
 // .result: COMPILE_PASS
 public class Test {
   void pass() {

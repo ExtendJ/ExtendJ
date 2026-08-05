@@ -1,6 +1,6 @@
 // The type of a lambda parameter is the GLB of the parameter type
 // of the inferred function type.
-// See https://bitbucket.org/extendj/extendj/issues/181/lambda-parameters-do-not-use-the-glb-of
+// See issue 181.
 // .result=COMPILE_PASS
 import java.util.stream.Stream;
 

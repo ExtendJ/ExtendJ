@@ -1,6 +1,6 @@
 // Calculating the type of a constructor reference in a type
 // inference context.
-// See https://bitbucket.org/extendj/extendj/issues/180/method-reference-stack-overflow-error
+// See issue 180.
 // .result=COMPILE_PASS
 
 public class Test {

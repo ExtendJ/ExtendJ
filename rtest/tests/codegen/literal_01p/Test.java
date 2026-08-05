@@ -1,5 +1,5 @@
 // Test that the correct constant values are generated in bytecode.
-// https://bitbucket.org/extendj/extendj/issues/223/java-7-floating-point-literals-drop-their
+// See issue 223.
 // .result: EXEC_PASS
 public class Test {
   public static void main(String[] args) {

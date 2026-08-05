@@ -1,5 +1,5 @@
 // Test calling a generic method in a string conversion context.
-// https://bitbucket.org/extendj/extendj/issues/198/generic-method-type-inference-failure-in
+// See issue 198.
 // .result=COMPILE_PASS
 
 public class Test {

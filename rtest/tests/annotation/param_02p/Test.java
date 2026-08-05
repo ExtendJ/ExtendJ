@@ -1,5 +1,5 @@
 // Test multiple runtime parameter annotations.
-// https://bitbucket.org/extendj/extendj/issues/247/broken-runtime-parameter-annotations
+// See issue 247.
 import java.lang.annotation.*;
 
 public class Test {

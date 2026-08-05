@@ -1,5 +1,5 @@
 // Check that correct bytecode flags are generated for enum types.
-// https://bitbucket.org/extendj/extendj/issues/290/enum-types-should-not-have-acc_static-flag
+// See issue 290.
 // .classpath=@EXTENDJ_LIB@
 import org.extendj.ast.CompilationUnit;
 import org.extendj.ast.FileClassSource;

@@ -1,5 +1,5 @@
 // Test case from BitBucket issue #205.
-// https://bitbucket.org/extendj/extendj/issues/205/type-propagation-fails-in-certain-rewrites
+// See issue 205.
 // .result: COMPILE_PASS
 public class Test {
   static public class Container {

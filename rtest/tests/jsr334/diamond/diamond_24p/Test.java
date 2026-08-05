@@ -1,5 +1,5 @@
 // Test for issue in type analysis.
-// https://bitbucket.org/extendj/extendj/issues/173/diamond-no-method-matches
+// See issue 173.
 // .result=COMPILE_PASS
 import java.util.*;
 public class Test {

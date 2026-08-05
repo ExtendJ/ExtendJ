@@ -1,5 +1,5 @@
 // Test accessing a parameterized static method complex parameterization.
-// See https://bitbucket.org/extendj/extendj/issues/168/generic-method-lookup-error
+// See issue 168.
 // .result=COMPILE_PASS
 class Container<T> {
   T value;

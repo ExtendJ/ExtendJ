@@ -1,6 +1,6 @@
 // Test that a blank final instance variable can be declared after its initialization
 // without causing definite assignment error.
-// https://bitbucket.org/extendj/extendj/issues/128/definitive-assignment-of-a-final-field-in
+// See issue 128.
 // .result=COMPILE_PASS
 class Test {
     {

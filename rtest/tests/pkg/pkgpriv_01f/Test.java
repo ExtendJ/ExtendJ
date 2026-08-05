@@ -1,6 +1,6 @@
 // Can not access package private class from another package.
 // Tests the error message generated for this type of error.
-// https://bitbucket.org/jastadd/jastaddj/issue/93/asttypeaccess-used-in-type-access-error
+// See issue 93.
 // .result=COMPILE_FAIL
 class Test {
 	p1.A a;

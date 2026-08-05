@@ -1,5 +1,5 @@
 // Test method invocation type conversion.
-// https://bitbucket.org/extendj/extendj/issues/189/wildcard-type-argument-is-not-compatible
+// See issue 189.
 // .result=COMPILE_PASS
 
 class Thing {}

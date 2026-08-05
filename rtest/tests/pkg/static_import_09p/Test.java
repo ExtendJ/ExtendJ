@@ -1,5 +1,5 @@
 // It is allowed to static-import a package-private type from the same package.
-// https://bitbucket.org/extendj/extendj/issues/295/static-import-of-package-private-type-from
+// See issue 295.
 // .result: COMPILE_PASS
 package my.thing;
 

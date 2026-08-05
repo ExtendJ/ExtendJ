@@ -1,5 +1,5 @@
 // Wrong bytecode generated for call to static interface method.
-// https://bitbucket.org/extendj/extendj/issues/220/intstream-and-doublestream-does-not-work
+// See issue 220.
 // .result: EXEC_PASS
 import java.util.*;
 import java.util.stream.*;

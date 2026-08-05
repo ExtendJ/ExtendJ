@@ -1,4 +1,4 @@
-// https://bitbucket.org/extendj/extendj/issues/259/method-applicability-error-for-generic
+// See issue 259.
 // .result: COMPILE_PASS
 public class Test {
   void add(Container<? super X> xs) {

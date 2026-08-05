@@ -1,5 +1,5 @@
 // Test filtering a set.
-// https://bitbucket.org/extendj/extendj/issues/221/filter-a-filled-set-with-filter-and-a
+// See issue 221.
 import java.util.stream.*;
 import java.util.*;
 

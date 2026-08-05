@@ -1,5 +1,5 @@
 // Unknown typename in class instance expression.
-// https://bitbucket.org/extendj/extendj/issues/194/unknown-typename-in-class-instance
+// See issue 194.
 // .result=COMPILE_FAIL
 public class Test {
   static void f() {

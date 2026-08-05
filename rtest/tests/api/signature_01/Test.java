@@ -1,6 +1,6 @@
 // Test that a type signature is generated for a constructor declaration
 // that uses generic type variables.
-// https://bitbucket.org/extendj/extendj/issues/269/missing-type-variables-in-bytecode
+// See issue 269.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.CompilationUnit;

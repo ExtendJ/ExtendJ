@@ -1,5 +1,5 @@
 // Test for incorrect inference of thrown exception type.
-// https://bitbucket.org/extendj/extendj/issues/308/error-in-uncaught-exception-checking-for
+// See issue 308.
 // .result: COMPILE_PASS
 public class Test {
   void m() throws Exception {

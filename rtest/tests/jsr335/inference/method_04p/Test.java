@@ -1,6 +1,6 @@
 // ExtendJ infers the wrong target type for a generic method
 // when used as an argument to an ordinary method call.
-// See https://bitbucket.org/extendj/extendj/issues/182/wrong-target-type-for-inferred-method
+// See issue 182.
 // .result=COMPILE_PASS
 
 interface Muffin {}

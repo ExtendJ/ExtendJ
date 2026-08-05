@@ -1,6 +1,6 @@
 // Test that the IntegerLiteral constructor initializes a literal that
 // returns the correct constant value.
-// https://bitbucket.org/extendj/extendj/issues/218/integerliteral-generates-bad-bytecode-when
+// See issue 218.
 // .result=EXEC_PASS
 // .classpath=@EXTENDJ_LIB@:@RUNTIME_CLASSES@
 import org.extendj.ast.IntegerLiteral;
