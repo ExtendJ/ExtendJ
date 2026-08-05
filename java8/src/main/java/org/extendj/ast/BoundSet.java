@@ -21,7 +21,8 @@ import java.util.*;
  * <li>{@code ‹method → throws T›} - checked exceptions thrown by the method reference derived from function T.</li>
  * </ul>
  *
- * We do currently not implement all of these constraints (throws currently excluded).
+ * We do currently not implement all of these constraints
+ * (method reference throws constraints currently excluded).
  *
  * <p>Transitivity rules for pairs of bounds on a shared inference variable (§18.3.1):
  * <ul>
@@ -48,6 +49,14 @@ public class BoundSet {
 
     /** Equal type bounds. */
     public Collection<TypeDecl> equal = new HashSet<>(4);
+
+    /**
+     * Whether the bound {@code throws α} was added for the inference variable
+     * (§18.1.3).
+     *
+     * <p>Make inference prefer an unchecked exception type instantiation (§18.4).
+     */
+    public boolean hasThrowsBound = false;
 
     /**
      * The captured type to use as type argument.
@@ -168,6 +177,9 @@ public class BoundSet {
     for (Map.Entry<TypeVariable, ConstraintSet> entry : set.map.entrySet()) {
       TypeVariable var = entry.getKey();
       ConstraintSet incoming = entry.getValue();
+      if (incoming.hasThrowsBound) {
+        lookup(var).hasThrowsBound = true;
+      }
       for (TypeDecl T : incoming.equal) {
         constraintEqual(var, T);
       }
@@ -400,9 +412,9 @@ public class BoundSet {
       return lookup(bound).capture;
     }
     if (bound instanceof TypeVariable) {
-      // A type variable that is not an inference variable of this set — a genuine
-      // type parameter or a capture variable (§5.1.10). It does not mention any
-      // inference variable, so it is a proper instantiation.
+      // A type variable that is not an inference variable of this set is a
+      // proper type instantiation.
+      // TODO(joqvist): is this true?
       return bound;
     }
     // Substitute the instantiations of inference variables mentioned inside a
@@ -1035,7 +1047,7 @@ public class BoundSet {
    * Whether {@code T} is a resolved proper type for the purpose of the deferred
    * equality check: a concrete (non-type-variable) type or a wildcard capture
    * variable (§5.1.10), which denotes a fixed captured type. A declared type
-   * parameter is not resolved — in a deferred constraint it is an unresolved
+   * parameter is not resolved. In a deferred constraint it is an unresolved
    * placeholder for an inference variable.
    */
   private static boolean isResolvedProperType(TypeDecl T) {
@@ -1047,10 +1059,101 @@ public class BoundSet {
     return T instanceof CaptureVariable;
   }
 
-  public void constraintCheckedThrows(LambdaExpr expr, TypeDecl T) {
-    // TODO
+  /**
+   * Checked exception constraint {@code ‹Expression →throws T›} (§18.5.2).
+   */
+  public void constraintCheckedThrows(Expr expr, TypeDecl T) {
+    if (expr instanceof ParExpr) {
+      constraintCheckedThrows(((ParExpr) expr).getExpr(), T);
+    } else if (expr instanceof ConditionalExpr) {
+      ConditionalExpr cond = (ConditionalExpr) expr;
+      constraintCheckedThrows(cond.getTrueExpr(), T);
+      constraintCheckedThrows(cond.getFalseExpr(), T);
+    } else if (expr instanceof LambdaExpr) {
+      LambdaExpr lambda = (LambdaExpr) expr;
+      if (lambda.isImplicit() && !lambda.hasProperParameterTypes(T)) {
+        // TODO(joqvist): This constraint is reduced too eagerly now.
+        // We need dependency-based constraint resolution.
+        return;
+      }
+      constraintCheckedThrows(lambda, T);
+    } else if (expr instanceof MethodReference) {
+      constraintCheckedThrows((MethodReference) expr, T);
+    }
   }
 
+  /**
+   * Checked exception bound {@code ‹LambdaExpr →throws T›} (§18.2.5).
+   */
+  public void constraintCheckedThrows(LambdaExpr expr, TypeDecl T) {
+    // If T is not a functional interface type, the constraint reduces to false.
+    if (!T.hasFunctionDescriptor()) {
+      satisfiable = false;
+      return;
+    }
+    FunctionDescriptor fd = T.functionDescriptor();
+    MethodDecl function = fd.method;
+    if (!isProperType(function.type())) {
+      // The function type's return type is neither void nor a proper type.
+      // §18.2.5 reduces the constraint to false in this case, but we
+      // cannot do this because we have reduced constraints eagerly.
+      // TODO(joqvist): we need dependency-based constraint resolution.
+      return;
+    }
+    // Split types in the function type's throws clause into two sets (proper/not proper types):
+    ArrayList<TypeDecl> properThrows = new ArrayList<TypeDecl>();
+    ArrayList<TypeDecl> nonProperThrows = new ArrayList<TypeDecl>();
+    for (TypeDecl thrownType : fd.throwsList) {
+      if (isProperType(thrownType)) {
+        properThrows.add(thrownType);
+      } else {
+        nonProperThrows.add(thrownType);
+      }
+    }
+    // Grounded lambda used here to get the thrown types with substitution θ.
+    LambdaBody body = expr.isImplicit()
+        ? expr.groundedLambda(T).getLambda().getLambdaBody()
+        : expr.getLambdaBody();
+    // TODO(joqvist): replace collectExceptions() with a collection attribute.
+    Collection<TypeDecl> thrown = new HashSet<TypeDecl>();
+    body.collectExceptions(thrown);
+    ArrayList<TypeDecl> thrownTypes = new ArrayList<TypeDecl>();
+    for (TypeDecl X : thrown) {
+      if (X.isCheckedException() && body.reachedException(X)) {
+        thrownTypes.add(X);
+      }
+    }
+    for (TypeDecl X : thrownTypes) {
+      if (!subtypeOfAny(X, properThrows)) {
+        if (nonProperThrows.isEmpty()) {
+          satisfiable = false;
+          return;
+        }
+        for (TypeDecl E : nonProperThrows) {
+          constraintSubtype(X, E);
+        }
+      }
+    }
+    for (TypeDecl E : nonProperThrows) {
+      if (isInferenceVariable(E)) {
+        lookup(E).hasThrowsBound = true;
+      }
+    }
+  }
+
+  /** Whether {@code type} is a subtype of some type in {@code types}. */
+  private static boolean subtypeOfAny(TypeDecl type, Collection<TypeDecl> types) {
+    for (TypeDecl T : types) {
+      if (type.subtype(T)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Checked exception bound {@code ‹MethodReference →throws T›}
+   */
   public void constraintCheckedThrows(MethodReference expr, TypeDecl T) {
     // TODO
   }

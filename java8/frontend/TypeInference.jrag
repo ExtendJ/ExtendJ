@@ -304,29 +304,29 @@ aspect TypeInference_SE8 {
   eq GenericMethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) {
     List<ParameterDeclaration> params = getParameterList();
     BoundSet bounds = new BoundSet();
-    boolean hasDeferred = collectBounds(bounds, args, targetType, context);
+    collectBounds(bounds, args, targetType, context);
 
-    // Incorporate variables excluded from applicability
-    // inference (implicitly typed lambdas and inexact method references).
-    // This does not affect already-resolved type arguments, only detects incompatible constraints.
-    if (hasDeferred && bounds.satisfiable) {
+    // §18.5.2: Invocation type inference.
+    // Additional invocation constraints if the bound set is still satisfiable.
+    if (bounds.satisfiable) {
       ParMethodDecl par = inferenceParMethodDecl();
       for (int i = 0; i < args.getNumChild(); i++) {
+        TypeDecl Fi = par.formalType(i);
         int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
         Expr ei = args.getChild(i);
-        if (ei.pertinentToApplicability(context, this, k)) {
-          continue;
-        }
-        TypeDecl Fk = par.formalType(i);
-        if (ei instanceof LambdaExpr && ((LambdaExpr) ei).isImplicit()) {
-          // Reduce an implicitly typed lambda only when the ground target gives it
-          // proper parameter types.
-          if (((LambdaExpr) ei).hasProperParameterTypes(Fk)) {
-            bounds.constraintExprCompat(((LambdaExpr) ei).groundedLambda(Fk), Fk);
+        if (!ei.pertinentToApplicability(context, this, k)) {
+          if (ei instanceof LambdaExpr && ((LambdaExpr) ei).isImplicit()) {
+            // Reduce an implicitly typed lambda only when the ground target gives it
+            // proper parameter types.
+            LambdaExpr lambda = (LambdaExpr) ei;
+            if (lambda.hasProperParameterTypes(Fi)) {
+              bounds.constraintExprCompat(lambda.groundedLambda(Fi), Fi);
+            }
+          } else {
+            bounds.constraintExprCompat(ei, Fi); // ‹ei → Fi θ›
           }
-          continue;
         }
-        bounds.constraintExprCompat(ei, Fk);
+        bounds.constraintCheckedThrows(ei, Fi); // ‹ei →throws Fi θ›
       }
     }
     bounds.resolve();
@@ -372,15 +372,13 @@ aspect TypeInference_SE8 {
   }
 
   /**
-   * Add this generic method's applicability and invocation type
-   * inference constraints for {@code args} and {@code targetType} to {@code bounds},
-   * without resolving.
+   * Add this generic method's invocation applicability inference constraints
+   * for {@code args} and {@code targetType} to {@code bounds}, without resolving them.
    *
-   * Returns {@code true} if any argument was deferred (implicitly typed
-   * lambda or inexact method reference). They are left to be reduced in a top-level
-   * resolved invocation.
+   * <p>Not all type arguments will be inferred here. Deferred variables are
+   * left to be reduced in a top-level resolved invocation.
    */
-  public boolean GenericMethodDecl.collectBounds(BoundSet bounds, List<Expr> args,
+  public void GenericMethodDecl.collectBounds(BoundSet bounds, List<Expr> args,
       TypeDecl targetType, Expr context) {
     List<ParameterDeclaration> params = getParameterList();
     ParMethodDecl par = inferenceParMethodDecl(); // TODO(joqvist): need fresh inference variables?
@@ -400,19 +398,17 @@ aspect TypeInference_SE8 {
 
     // §18.5.1 (applicability inference), restricted to the arguments that are
     // pertinent to applicability (§15.12.2.2).
-    boolean hasDeferred = false;
     for (int i = 0; i < args.getNumChild(); i++) {
       int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
       Expr ei = args.getChild(i);
       if (!ei.pertinentToApplicability(context, this, k)) {
-        hasDeferred = true;
         continue;
       }
       bounds.constraintExprCompat(ei, par.formalType(i));
     }
 
     if (bounds.rawAccess) {
-      return hasDeferred;
+      return;
     }
 
     // §18.5.2: constrain the result type R against the target type T.
@@ -431,7 +427,7 @@ aspect TypeInference_SE8 {
       // play the role of these fresh variables.
       bounds.constraintTypeCompat(context.captureConversion(R), T);
     }
-    return hasDeferred;
+    return;
   }
 
   /**

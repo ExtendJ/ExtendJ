@@ -1,5 +1,7 @@
 # Error in uncaught exception checking for lambda expressions
 
+**Status:** resolved
+
 *ExtendJ 8.1.2-15-gd4d25af7 Java SE 8*
 
 ExtendJ incorrectly reports an error about an unhandled exception type for the following test case:

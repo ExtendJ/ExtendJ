@@ -66,9 +66,6 @@ public interface Tests {
     "jsr335/misc/error_01f", // Does not give good error messages.
     "jsr335/diamond/nested_01p", // issue 266
     "jsr335/diamond/nested_02p", // issue 266
-    "jsr335/lambda/exception_ti_01p", // issue 308
-    "jsr335/lambda/exception_ti_02p", // issue 308
-    "jsr335/lambda/exception_ti_03p", // issue 309
     "exception/ti_java8_01p", // issue 309
     "extendj/err_14f", // issue 317
     "generics/bounds_05f", // Compilation should fail on cyclic type variable bounds.
