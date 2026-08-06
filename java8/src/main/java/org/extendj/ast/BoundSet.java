@@ -21,9 +21,6 @@ import java.util.*;
  * <li>{@code ‹method → throws T›} - checked exceptions thrown by the method reference derived from function T.</li>
  * </ul>
  *
- * We do currently not implement all of these constraints
- * (method reference throws constraints currently excluded).
- *
  * <p>Transitivity rules for pairs of bounds on a shared inference variable (§18.3.1):
  * <ul>
  * <li>{@code α = S} and {@code α = T} imply {@code ‹S = T›}</li>
@@ -1078,7 +1075,13 @@ public class BoundSet {
       }
       constraintCheckedThrows(lambda, T);
     } else if (expr instanceof MethodReference) {
-      constraintCheckedThrows((MethodReference) expr, T);
+      MethodReference ref = (MethodReference) expr;
+      if (!ref.isExact() && !ref.hasProperParameterTypes(T)) {
+        // TODO(joqvist): This constraint is reduced too eagerly now.
+        // We need dependency-based constraint resolution.
+        return;
+      }
+      constraintCheckedThrows(ref, T);
     }
   }
 
@@ -1100,16 +1103,6 @@ public class BoundSet {
       // TODO(joqvist): we need dependency-based constraint resolution.
       return;
     }
-    // Split types in the function type's throws clause into two sets (proper/not proper types):
-    ArrayList<TypeDecl> properThrows = new ArrayList<TypeDecl>();
-    ArrayList<TypeDecl> nonProperThrows = new ArrayList<TypeDecl>();
-    for (TypeDecl thrownType : fd.throwsList) {
-      if (isProperType(thrownType)) {
-        properThrows.add(thrownType);
-      } else {
-        nonProperThrows.add(thrownType);
-      }
-    }
     // Grounded lambda used here to get the thrown types with substitution θ.
     LambdaBody body = expr.isImplicit()
         ? expr.groundedLambda(T).getLambda().getLambdaBody()
@@ -1121,6 +1114,25 @@ public class BoundSet {
     for (TypeDecl X : thrown) {
       if (X.isCheckedException() && body.reachedException(X)) {
         thrownTypes.add(X);
+      }
+    }
+    reduceCheckedThrows(thrownTypes, fd.throwsList);
+  }
+
+  /**
+   * Reduce a checked exception constraint given the checked exception types
+   * {@code thrownTypes} that the lambda body or referenced method can throw,
+   * checked against the target function type's throws clause (§18.2.5).
+   */
+  private void reduceCheckedThrows(Collection<TypeDecl> thrownTypes, Collection<TypeDecl> throwsList) {
+    // Split types in the function type's throws clause into two sets (proper/not proper types):
+    ArrayList<TypeDecl> properThrows = new ArrayList<TypeDecl>();
+    ArrayList<TypeDecl> nonProperThrows = new ArrayList<TypeDecl>();
+    for (TypeDecl thrownType : throwsList) {
+      if (isProperType(thrownType)) {
+        properThrows.add(thrownType);
+      } else {
+        nonProperThrows.add(thrownType);
       }
     }
     for (TypeDecl X : thrownTypes) {
@@ -1152,10 +1164,43 @@ public class BoundSet {
   }
 
   /**
-   * Checked exception bound {@code ‹MethodReference →throws T›}
+   * Checked exception bound {@code ‹MethodReference →throws T›} (§18.2.5).
    */
   public void constraintCheckedThrows(MethodReference expr, TypeDecl T) {
-    // TODO
+    // If T is not a functional interface type, the constraint reduces to false.
+    if (!T.hasFunctionDescriptor()) {
+      satisfiable = false;
+      return;
+    }
+    FunctionDescriptor fd = T.functionDescriptor();
+    MethodDecl function = fd.method;
+    if (function.isUnknown()) {
+      // Target method not identified in this functional interface.
+      // Error reported elsewhere.
+      // TODO(joqvist): should we set satisfiable = false here?
+      return;
+    }
+    if (!isProperType(function.type())) {
+      // The function type's return type is neither void nor a proper type.
+      // §18.2.5 reduces the constraint to false in this case, but we
+      // cannot do this because we have reduced constraints eagerly.
+      // TODO(joqvist): we need dependency-based constraint resolution.
+      return;
+    }
+    MethodDecl invoked = expr.compileTimeDeclaration(fd);
+    if (invoked.isUnknown()) {
+      // No unique invoked method was found. The incompatible method reference
+      // is instead reported by the compatibility constraint.
+      return;
+    }
+    ArrayList<TypeDecl> thrownTypes = new ArrayList<TypeDecl>();
+    for (int i = 0; i < invoked.getNumException(); i++) {
+      TypeDecl X = invoked.getException(i).type();
+      if (X.isCheckedException()) {
+        thrownTypes.add(X);
+      }
+    }
+    reduceCheckedThrows(thrownTypes, fd.throwsList);
   }
 
   /**

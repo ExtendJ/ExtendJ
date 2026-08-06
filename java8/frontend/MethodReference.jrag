@@ -381,6 +381,37 @@ aspect MethodReference {
   }
 
   eq AmbiguousMethodReference.exactCompileTimeDeclaration() = unknownMethod();
+
+  /**
+   * The compile-time declaration of this method reference (§15.13.1).
+   * Roughly equivalent to {@code implicitInvocation(fd).decl()}.
+   */
+  syn lazy MethodDecl MethodReference.compileTimeDeclaration(FunctionDescriptor fd) {
+    if (fd.method.isUnknown()) return unknownMethod();
+    return isExact() ? exactCompileTimeDeclaration() : inexactCompileTimeDeclaration(fd);
+  }
+
+  /**
+   * The method invoked by an inexact method reference, found using the
+   * parameter types of the target function descriptor {@code fd} (§15.13.1).
+   */
+  syn lazy MethodDecl MethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd);
+
+  eq ExprMethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd) = targetMethod(fd);
+
+  eq TypeMethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd) {
+    boolean validStatic = validStaticMethod(fd);
+    boolean validInstance = validInstanceMethod(fd);
+    if (validStatic && !validInstance) {
+      return targetStaticMethod(fd);
+    } else if (!validStatic && validInstance) {
+      return targetInstanceMethod(fd);
+    } else {
+      return unknownMethod();
+    }
+  }
+
+  eq AmbiguousMethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd) = unknownMethod();
 }
 
 aspect Synthetics {

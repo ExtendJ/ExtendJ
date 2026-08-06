@@ -172,35 +172,7 @@ aspect TypeInference_SE8 {
    *
    * @return {@code UnknownType} when no applicable referenced method is found.
    */
-  syn TypeDecl MethodReference.invocationType(FunctionDescriptor fd) = unknownType();
-
-  eq ExprMethodReference.invocationType(FunctionDescriptor fd) {
-    // TODO(joqvist): Investigate if we can use implicitInvocation().type() instead.
-    if (fd.method.isUnknown()) return unknownType();
-    if (isExact()) {
-      // An exact method reference is resolved without inference (§15.13.1), so its
-      // result type is available even when the descriptor mentions inference variables.
-      return exactCompileTimeDeclaration().type();
-    }
-    return targetMethod(fd).type();
-  }
-
-  eq TypeMethodReference.invocationType(FunctionDescriptor fd) {
-    // TODO(joqvist): Investigate if we can use implicitInvocation().type() instead.
-    if (fd.method.isUnknown()) return unknownType();
-    if (isExact()) {
-      // An exact method reference is resolved without inference (§15.13.1), so its
-      // result type is available even when the descriptor mentions inference variables.
-      return exactCompileTimeDeclaration().type();
-    }
-    MethodDecl staticMethod = targetStaticMethod(fd);
-    MethodDecl instanceMethod = targetInstanceMethod(fd);
-    boolean hasStatic = !staticMethod.isUnknown();
-    boolean hasInstance = !instanceMethod.isUnknown();
-    if (hasStatic && !hasInstance) return staticMethod.type();
-    if (!hasStatic && hasInstance) return instanceMethod.type();
-    return unknownType();
-  }
+  syn TypeDecl MethodReference.invocationType(FunctionDescriptor fd) = compileTimeDeclaration(fd).type();
 
   /** See {@code MethodReference.invocationType}. */
   syn TypeDecl ConstructorReference.invocationType(FunctionDescriptor fd) = unknownType();
@@ -279,10 +251,9 @@ aspect TypeInference_SE8 {
   eq GroundedLambda.getLambda().targetType() = getGroundType().type();
 
   /**
-   * Whether the functional interface {@code T} provides proper parameter types
-   * to this implicitly typed lambda.
+   * Whether the functional interface {@code T} provides proper parameter types.
    */
-  syn boolean LambdaExpr.hasProperParameterTypes(TypeDecl T) {
+  syn boolean Expr.hasProperParameterTypes(TypeDecl T) {
     if (!T.hasFunctionDescriptor()) {
       return false;
     }
