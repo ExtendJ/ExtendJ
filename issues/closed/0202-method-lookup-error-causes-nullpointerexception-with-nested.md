@@ -1,5 +1,7 @@
 # Method lookup error causes NullPointerException with nested lambdas
 
+**Status:** resolved
+
 *ExtendJ 8.0.1-174-g53debda Java SE 8*
 
 The following test case should generate an error message instead of a NullPointerException:

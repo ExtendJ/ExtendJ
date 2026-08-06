@@ -46,8 +46,6 @@ public interface Tests {
     "type/ambiguous_01f",
     "generics/static_02f",
     "jsr335/lambda/type_inf_06p", // issue 217
-    "jsr335/lambda/err_01f", // issue 202
-    "jsr335/lambda/err_02f", // issue 202
     "generics/method_20p", // issue 213
     "generics/method_22p", // issue 213
     "jsr335/Semantics/ConstructorReferenceAnalysis/ClassReferences/ShouldFail/syntax03",

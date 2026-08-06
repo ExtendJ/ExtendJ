@@ -1,33 +1,23 @@
-/* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
- *               2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright notice,
- *       this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the Lund University nor the names of its
- *       contributors may be used to endorse or promote products derived from
- *       this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
 aspect MethodReference {
-  syn lazy MethodDecl ExprMethodReference.targetMethod(FunctionDescriptor fd) = syntheticMethodAccess(fd).decl();
+  /**
+   * The declaration matching this method reference when targeting
+   * the given function descriptor {@code fd}, or {@code unknownMethod()} if no
+   * unique most specific method is found.
+   */
+  syn lazy MethodDecl MethodReference.targetMethod(FunctionDescriptor fd);
+
+  eq ExprMethodReference.targetMethod(FunctionDescriptor fd) = syntheticMethodAccess(fd).decl();
+
+  eq TypeMethodReference.targetMethod(FunctionDescriptor fd) {
+    boolean is_static = validStaticMethod(fd);
+    boolean is_instance = validInstanceMethod(fd);
+    if (is_static && !is_instance) return targetStaticMethod(fd);
+    if (!is_static && is_instance) return targetInstanceMethod(fd);
+    return unknownMethod();
+  }
+
+  eq AmbiguousMethodReference.targetMethod(FunctionDescriptor fd) = unknownMethod();
 
   syn nta lazy Access ExprMethodReference.syntheticAccess(FunctionDescriptor fd) {
     List<Expr> arguments = new List<Expr>();
@@ -214,9 +204,7 @@ aspect MethodReference {
       }
   }
 
-  syn lazy boolean MethodReference.congruentTo(FunctionDescriptor fd);
-
-  eq ExprMethodReference.congruentTo(FunctionDescriptor fd) {
+  syn lazy boolean MethodReference.congruentTo(FunctionDescriptor fd) {
     if (fd.method.isUnknown()) {
       // No target method.
       return false;
@@ -229,32 +217,6 @@ aspect MethodReference {
     if (decl.type().isVoid()) return false;
     return decl.type().assignConversionTo(methodType, null);
   }
-
-  eq TypeMethodReference.congruentTo(FunctionDescriptor fd) {
-    if (fd.method.isUnknown()) {
-      // No target method.
-      return false;
-    }
-
-    TypeDecl methodType = fd.method.type();
-    MethodDecl staticMethod = targetStaticMethod(fd);
-    MethodDecl instanceMethod = targetInstanceMethod(fd);
-    boolean hasStatic = !staticMethod.isUnknown();
-    boolean hasInstance = !instanceMethod.isUnknown();
-    MethodDecl found;
-    if (hasStatic && !hasInstance) {
-      found = staticMethod;
-    } else if (!hasStatic && hasInstance) {
-      found = instanceMethod;
-    } else {
-      return false;
-    }
-    if   (methodType.isVoid()) return true;
-    if (found.type().isVoid()) return false;
-    return found.type().assignConversionTo(methodType, null);
-  }
-
-  eq AmbiguousMethodReference.congruentTo(FunctionDescriptor fd) = false;
 
   syn lazy java.util.List<MethodDecl> MethodReference.potentiallyApplicableMethods(FunctionDescriptor fd);
 
@@ -388,30 +350,8 @@ aspect MethodReference {
    */
   syn lazy MethodDecl MethodReference.compileTimeDeclaration(FunctionDescriptor fd) {
     if (fd.method.isUnknown()) return unknownMethod();
-    return isExact() ? exactCompileTimeDeclaration() : inexactCompileTimeDeclaration(fd);
+    return isExact() ? exactCompileTimeDeclaration() : targetMethod(fd);
   }
-
-  /**
-   * The method invoked by an inexact method reference, found using the
-   * parameter types of the target function descriptor {@code fd} (§15.13.1).
-   */
-  syn lazy MethodDecl MethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd);
-
-  eq ExprMethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd) = targetMethod(fd);
-
-  eq TypeMethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd) {
-    boolean validStatic = validStaticMethod(fd);
-    boolean validInstance = validInstanceMethod(fd);
-    if (validStatic && !validInstance) {
-      return targetStaticMethod(fd);
-    } else if (!validStatic && validInstance) {
-      return targetInstanceMethod(fd);
-    } else {
-      return unknownMethod();
-    }
-  }
-
-  eq AmbiguousMethodReference.inexactCompileTimeDeclaration(FunctionDescriptor fd) = unknownMethod();
 }
 
 aspect Synthetics {
