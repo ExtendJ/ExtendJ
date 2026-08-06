@@ -1,5 +1,7 @@
 # Unchecked conversion does not erase the invocation result type
 
+**Status:** resolved
+
 When a raw argument makes unchecked conversion necessary for a generic method
 to be applicable, the result type of the invocation is the erasure of the
 declared result type (JLS SE8 §18.5.2). ExtendJ instead infers `Object` for the

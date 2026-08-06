@@ -72,9 +72,6 @@ public interface Tests {
     "jsr335/intersection",  // issue 319
     "java10/var/var_14", // issue 340
     "java10/var/var_27", // issue 340
-    "ti/raw_unchecked_01p", // issue 345
-    "ti/raw_unchecked_02p", // issue 345
-    "ti/raw_unchecked_03p", // issue 345
   };
 
   /**

@@ -86,6 +86,13 @@ public class BoundSet {
   public boolean rawAccess = false;
 
   /**
+   * Whether unchecked conversion was necessary for the method to be
+   * applicable (§18.5.1). The invocation type is then the erasure of the
+   * method type (§18.5.2), so the inferred type arguments are not used.
+   */
+  public boolean uncheckedConversion = false;
+
+  /**
    * A constraint that could not be reduced because it mentions a type variable
    * not local to this bound set (an inference variable of an enclosing bound set).
    * It is deferred and replayed when this bound set is lifted into the enclosing
@@ -164,6 +171,9 @@ public class BoundSet {
     }
     if (set.rawAccess) {
       rawAccess = true;
+    }
+    if (set.uncheckedConversion) {
+      uncheckedConversion = true;
     }
     for (TypeVariable var : set.variables) {
       addAuxiliaryVariable(var);

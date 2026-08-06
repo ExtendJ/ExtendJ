@@ -379,6 +379,9 @@ aspect TypeInference_SE8 {
     }
 
     if (bounds.rawAccess) {
+      // Unchecked conversion was necessary for the method to be applicable, so
+      // the invocation type is the erasure of the method type.
+      bounds.uncheckedConversion = true;
       return;
     }
 
@@ -560,19 +563,17 @@ aspect TypeInference_SE8 {
   }
 
   /**
-   * The parameterization of a generic method applicable by inference: the method
-   * parameterized by the resolved type arguments, or the raw method when an
-   * unchecked (raw) argument left the inference variables uninstantiated (§18.5.2;
-   * the bound set is abandoned before resolution and the type arguments are null).
-   * rawAccess may also be set after a successful resolution, e.g. by an inexact
-   * method reference argument; the resolved type arguments are used in that case.
-   * The node's decl is replaced so that the resolved node can be found from the
-   * chosen method.
+   * The parameterization of a generic method using resolved type arguments
+   * from a (partial) inference result. Created as a synthetic substituted
+   * declaration node.
+   *
+   * <p>Returns the raw method if unchecked conversion was necessary for
+   * applicability or if an inference variable was left uninstantiated.
    */
   protected static MethodDecl MethodAccess.parameterizedDecl(MethodInferenceNode method) {
     GenericMethodDecl gm = (GenericMethodDecl) method.decl;
     Collection<TypeDecl> typeArgs = method.bounds.typeArguments();
-    if (typeArgs.contains(null)) {
+    if (method.bounds.uncheckedConversion || typeArgs.contains(null)) {
       method.decl = gm.rawMethodDecl();
     } else {
       method.decl = gm.lookupParMethodDecl(typeArgs);
