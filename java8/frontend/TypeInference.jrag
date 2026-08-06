@@ -617,8 +617,10 @@ aspect TypeInference_SE8 {
   // A qualified method invocation resolves through its rightmost access.
   eq Dot.resolve(TypeDecl targetType) = getRight().resolve(targetType);
 
-  eq MethodAccess.resolve(TypeDecl targetType) {
-    Set<MethodInferenceNode> methods = potentiallyApplicable(targetType);
+  /**
+   * Filter out the most specific declarations from a set of applicable methods.
+   */
+  public SimpleSet<MethodDecl> MethodAccess.mostSpecific(Set<MethodInferenceNode> methods) {
     SimpleSet<MethodDecl> maxSpecific = emptySet();
 
     // Phase 1: applicability by strict invocation.
@@ -648,9 +650,14 @@ aspect TypeInference_SE8 {
         }
       }
     }
+    return maxSpecific;
+  }
 
-    if (maxSpecific.size() == 1) {
-      MethodDecl chosen = maxSpecific.iterator().next();
+  eq MethodAccess.resolve(TypeDecl targetType) {
+    Set<MethodInferenceNode> methods = potentiallyApplicable(targetType);
+    SimpleSet<MethodDecl> maxSpecific = mostSpecific(methods);
+    if (maxSpecific.isSingleton()) {
+      MethodDecl chosen = maxSpecific.singletonValue();
       for (MethodInferenceNode method : methods) {
         if (method.decl == chosen) {
           return method;
@@ -669,7 +676,13 @@ aspect TypeInference_SE8 {
     }
     TypeDecl tt = targetTypeInference() ? targetType() : unknownType();
     MethodInferenceNode method = resolve(tt);
-    if (method == MethodInferenceNode.UNRESOLVED) return emptySet();
+    if (method == MethodInferenceNode.UNRESOLVED) {
+      SimpleSet<MethodDecl> maxSpecific = mostSpecific(potentiallyApplicable(tt));
+      if (maxSpecific.size() > 1) {
+        return maxSpecific; // Ambiguous invocation.
+      }
+      return emptySet();
+    }
     if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
       if (!method.decl.isStatic()) {
         return emptySet();
