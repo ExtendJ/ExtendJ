@@ -28,21 +28,32 @@ only be used with Java 7 or higher. For Java 5 or 6 you must use Ant.
 
 ## Quick Compile Diff Testing Tool
 
-`DiffRunner.java` is a standalone tool for quickly comparing two ExtendJ
+`TestRunner.java` is a standalone tool for quickly comparing two ExtendJ
 versions. It compiles every regression test with two different builds
 of ExtendJ in a single JVM and reports the tests where the builds disagree on
 whether compilation succeeds.
 
-    javac DiffRunner.java
-    java DiffRunner <[label=]classpath> <[label=]classpath> [testsRoot]
+    javac TestRunner.java
+    java TestRunner <[label=]spec> <[label=]spec> [testsRoot]
 
-For example, comparing a baseline jar against the current build:
+Each compiler version is given as a classpath (an ExtendJ jar and/or class
+directories), or as the literal `javac` to use the system Java compiler of the
+running JDK. For example, comparing a baseline jar against the current build:
 
-    java DiffRunner baseline.jar ../java8/extendj.jar
+    java TestRunner baseline.jar ../java8/extendj.jar
 
-Note that DiffRunner only diffs compile pass/fail. It does not check expected
+Note that TestRunner only diffs compile pass/fail. It does not check expected
 results, error output, or execution. It is mainly useful for running quick
 regression testing during development and does not replace the JUnit testing framework.
+
+## Interactive Testing TUI
+
+`tui.py` is an interactive terminal tool (Python 3, no dependencies) for
+running the regression tests with multiple compiler versions and comparing
+the results side by side:
+
+    ./tui.py
+
 
 ## Test Organization
 
