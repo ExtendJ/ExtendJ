@@ -412,7 +412,9 @@ public class BoundSet {
    * {@code null} if the bound still mentions an uninstantiated inference variable.
    */
   private TypeDecl properBound(TypeDecl bound) {
-    if (isProperType(bound)) {
+    // This is the substitution that isProperType() assumes has already happened, so the
+    // test here does not rely on isProperType().
+    if (!bound.involvesTypeParameters()) {
       return bound;
     }
     if (isInferenceVariable(bound)) {
@@ -569,7 +571,7 @@ public class BoundSet {
       constraintLambdaCompat(((GroundedLambda) expr).getLambda(), T);
       return;
     }
-    if (!T.involvesTypeParameters()) {
+    if (isProperType(T)) {
       // If T is a proper type, the constraint reduces to true if the expression
       // is compatible in a loose invocation context with T (§5.3), and false
       // otherwise.
@@ -776,9 +778,37 @@ public class BoundSet {
     constraintTypeCompat(referencedResult, descriptorResult);
   }
 
-  /** Whether {@code T} is a proper type, i.e. mentions no inference variable. */
+  /**
+   * A type T is a proper type if it does not involve unresolved inference variables.
+   */
   private boolean isProperType(TypeDecl T) {
-    return !T.involvesTypeParameters();
+    if (T instanceof TypeVariable) {
+      // NOTE(joqvist): The definition of proper types is a bit vague:
+      // JLS SE8 §18.1 says that proper types excludes types that mention inference variables.
+      // However, for this to work one would have to consider inference variables that have been instantiated
+      // to be replaced in all occurrences with their instantiated type. We do not replace
+      // inference variables, instead we check if they have been instantiated to a proper type.
+      TypeDecl cap = lookup(T).capture;
+      return cap != null && isProperType(cap); // NOTE(joqvist): is this recursion guaranteed bounded?
+    }
+    if (T instanceof ArrayDecl) {
+      return isProperType(((ArrayDecl) T).componentType());
+    }
+    if (T instanceof ParTypeDecl) {
+      for (TypeDecl arg : ((ParTypeDecl) T).getParameterization().args) {
+        if (!isProperType(arg)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (T instanceof WildcardExtendsType) {
+      return isProperType(((WildcardExtendsType) T).extendsType());
+    }
+    if (T instanceof WildcardSuperType) {
+      return isProperType(((WildcardSuperType) T).superType());
+    }
+    return true;
   }
 
   /** Whether {@code T} is one of the inference variables of this bound set. */
