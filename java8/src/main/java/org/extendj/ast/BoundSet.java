@@ -891,7 +891,18 @@ public class BoundSet {
             && S.subtype(((GenericTypeDecl) G).rawType())) {
           // TODO(joqvist): this part deviates from JLS
           // If S only has G as a raw supertype the access is unchecked,
-          rawAccess = true;
+          // In Java 8, unchecked conversion is necessary for applicability only
+          // when it is needed to reduce an argument compatibility constraint
+          // ‹ei → Fi› (§18.5.1). A subtyping constraint derived by incorporating a
+          // pair of bounds (§18.3.1) does not count. A raw argument reaching a type
+          // parameter's declared bound is not counted as unchecked conversion.
+          //
+          // Java 9 extended the unchecked determination to the bound as well, so from
+          // Java 9 onwards such an invocation is unchecked and its invocation type
+          // is erased (§18.5.2).
+          if (!incorporating || ASTNode.JAVA_VERSION >= 9) {
+            rawAccess = true;
+          }
         } else {
           // otherwise reduce to ‹false›.
           satisfiable = false;
