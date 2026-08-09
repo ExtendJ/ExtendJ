@@ -300,6 +300,11 @@ public class BoundSet {
 
   /** Resolve the inference variables to instantiations (§18.4). */
   public boolean resolve() {
+    // §18.4 specifies that variables are instantiated in an iterative fashion
+    // where in each step a subset S ⊂ V is chosen and instantiated as a unit
+    // where S is minimal non-empty sink SCC of uninstantiated inference
+    // variables under inference variable dependencies.
+    // We first select a set S and then incorporate bounds related to variables in S.
     incorporate();
     if (!satisfiable) {
       return false;
