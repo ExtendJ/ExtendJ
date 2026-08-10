@@ -36,6 +36,35 @@ public class BoundSet {
    */
   public boolean satisfiable = true;
 
+  enum BoundKind { UPPER, LOWER, EQUAL, }
+
+  static class Bound {
+    public BoundKind kind;
+    public TypeVariable alpha;
+    public TypeDecl type;
+
+    public Bound(BoundKind k, TypeVariable a, TypeDecl T) {
+      kind = k;
+      alpha = a;
+      type = T;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof Bound)) return false;
+      Bound that = (Bound) o;
+      return kind == that.kind && alpha == that.alpha && type == that.type;
+    }
+
+    @Override
+    public int hashCode() {
+      return Objects.hash(kind, alpha, type);
+    }
+  }
+
+  private ArrayList<Bound> newBounds = new ArrayList<>();
+  private boolean incorporating = false;
+
   /** Set of type bounds for inferred type variables. */
   static class ConstraintSet {
     /** Lower type bounds. */
@@ -236,76 +265,12 @@ public class BoundSet {
     return str.toString();
   }
 
-  /**
-   * Incorporate the bounds to a fixed point, deriving the constraints implied by
-   * pairs of bounds on a shared inference variable (§18.3.1).
-   *
-   * <p>An equality between two inference variables is recorded symmetrically so
-   * that rules propagate bounds in both directions.
-   */
-  private void incorporate() {
-    int previousSize = -1;
-    while (satisfiable) {
-      int size = totalBoundCount();
-      if (size == previousSize) {
-        break;
-      }
-      previousSize = size;
-      ArrayList<TypeVariable> vars = new ArrayList<TypeVariable>(allVariables());
-      for (TypeVariable alpha : vars) {
-        ConstraintSet set = lookup(alpha);
-        // Snapshot each bound collection (mutated by calls below)
-        ArrayList<TypeDecl> equal = new ArrayList<TypeDecl>(set.equal);
-        ArrayList<TypeDecl> upper = new ArrayList<TypeDecl>(set.upper);
-        ArrayList<TypeDecl> lower = new ArrayList<TypeDecl>(set.lower);
-        for (TypeDecl S : equal) {
-          if (isInferenceVariable(S)) {
-            addEqualBound(S, alpha);    // α = β implies β = α
-          }
-          for (TypeDecl T : equal) {
-            if (S != T) {
-              constraintEqual(S, T);    // α = S, α = T  ⟹  ‹S = T›
-            }
-          }
-          for (TypeDecl T : upper) {
-            constraintSubtype(S, T);    // α = S, α <: T ⟹  ‹S <: T›
-          }
-          for (TypeDecl T : lower) {
-            constraintSubtype(T, S);    // α = S, T <: α ⟹  ‹T <: S›
-          }
-          if (!satisfiable) {
-            return;
-          }
-        }
-        for (TypeDecl S : lower) {
-          for (TypeDecl T : upper) {
-            constraintSubtype(S, T);    // S <: α, α <: T ⟹  ‹S <: T›
-          }
-        }
-        if (!satisfiable) {
-          return;
-        }
-      }
-    }
-  }
-
-  /** Total number of recorded bounds, used to detect incorporation fixed point. */
-  private int totalBoundCount() {
-    int count = 0;
-    for (ConstraintSet set : map.values()) {
-      count += set.equal.size() + set.upper.size() + set.lower.size();
-    }
-    return count;
-  }
-
   /** Resolve the inference variables to instantiations (§18.4). */
   public boolean resolve() {
     // §18.4 specifies that variables are instantiated in an iterative fashion
     // where in each step a subset S ⊂ V is chosen and instantiated as a unit
     // where S is minimal non-empty sink SCC of uninstantiated inference
     // variables under inference variable dependencies.
-    // We first select a set S and then incorporate bounds related to variables in S.
-    incorporate();
     if (!satisfiable) {
       return false;
     }
@@ -1249,15 +1214,94 @@ public class BoundSet {
   }
 
   /**
+   * Incorporate a single bound, deriving constraints implied by
+   * pairs of bounds on a shared inference variable (§18.3.1).
+   *
+   * <p>An equality between two inference variables is recorded symmetrically so
+   * that rules propagate bounds in both directions.
+   */
+  private boolean incorporate(Bound bound) {
+    ConstraintSet set = lookup(bound.alpha);
+    TypeVariable alpha = bound.alpha;
+    TypeDecl S = bound.type;
+    switch (bound.kind) {
+      case EQUAL:
+        if (isInferenceVariable(S)) {
+          addEqualBound(S, alpha);
+        }
+        for (TypeDecl T : set.equal) {
+          if (S != T) {
+            constraintEqual(S, T);    // α = S, α = T  ⟹  ‹S = T›
+          }
+        }
+        for (TypeDecl T : set.upper) {
+          constraintSubtype(S, T);    // α = S, α <: T ⟹  ‹S <: T›
+        }
+        for (TypeDecl T : set.lower) {
+          constraintSubtype(T, S);    // α = S, T <: α ⟹  ‹T <: S›
+        }
+        if (!satisfiable) {
+          return false;
+        }
+        break;
+      case UPPER:
+        for (TypeDecl T : set.equal) {
+          constraintSubtype(T, S);    // α = T, α <: S  ⟹  ‹T <: S›
+        }
+        for (TypeDecl T : set.lower) {
+          constraintSubtype(T, S);    // T <: α, α <: S ⟹  ‹T <: S›
+        }
+        break;
+      case LOWER:
+        for (TypeDecl T : set.equal) {
+          constraintSubtype(S, T);    // α = T, S <: α  ⟹  ‹S <: T›
+        }
+        for (TypeDecl T : set.upper) {
+          constraintSubtype(S, T);    // S <: α, α <: T ⟹  ‹S <: T›
+        }
+        break;
+    }
+    return satisfiable;
+  }
+
+  private void addBound(Bound bound) {
+    if (incorporating) {
+      // Recursive case.
+      newBounds.add(bound);
+      return;
+    }
+
+    // Start a new fixpoint bound incorporation loop.
+    incorporating = true;
+    try {
+      newBounds.clear();
+      ArrayList<Bound> back = new ArrayList<>();
+      incorporate(bound);
+      do {
+        ArrayList<Bound> swap = newBounds;
+        newBounds = back;
+        newBounds.clear();
+        back = swap;
+        for (Bound b : back) {
+          if (!incorporate(b)) {
+            break;
+          }
+        }
+      } while (satisfiable && !newBounds.isEmpty());
+    } finally {
+      incorporating = false;
+    }
+  }
+
+  /**
    * Add the equality bound {@code α = T} where {@code S} is the inference
    * variable α and {@code T} is a proper type or another inference variable (§18.1.3).
    */
   private void addEqualBound(TypeDecl S, TypeDecl T) {
-    if (S == T) {
-      return;
+    if (S == T) return;
+    if (lookup(S).equal.add(T)) {
+      addBound(new Bound(BoundKind.EQUAL, (TypeVariable) S, T));
     }
-    ConstraintSet set = lookup(S);
-    set.equal.add(T);
   }
 
   /**
@@ -1265,10 +1309,10 @@ public class BoundSet {
    * variable α (§18.1.3).
    */
   private void addUpperBound(TypeDecl alpha, TypeDecl T) {
-    if (alpha == T) {
-      return;
+    if (alpha == T) return;
+    if (lookup(alpha).upper.add(T)) {
+      addBound(new Bound(BoundKind.UPPER, (TypeVariable) alpha, T));
     }
-    lookup(alpha).upper.add(T);
   }
 
   /**
@@ -1276,10 +1320,10 @@ public class BoundSet {
    * inference variable α (§18.1.3).
    */
   private void addLowerBound(TypeDecl alpha, TypeDecl S) {
-    if (alpha == S) {
-      return;
+    if (alpha == S) return;
+    if (lookup(alpha).lower.add(S)) {
+      addBound(new Bound(BoundKind.LOWER, (TypeVariable) alpha, S));
     }
-    lookup(alpha).lower.add(S);
   }
 
   /**
