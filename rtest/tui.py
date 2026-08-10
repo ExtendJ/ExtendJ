@@ -1362,7 +1362,7 @@ class App:
                 open_ = node.expanded or self.filter or self.run.filter != "all"
                 label = f"{'▾' if open_ else '▸'} {node.name} ({under})"
             else:
-                label = "  " + node.name  # what it expects is in the exp column
+                label = "  " + node.name
             # Marker columns: selected for the next run, compilers disagree, and
             # while every test is shown, outside the test set of this version.
             if node is self.tree or not picked:
@@ -1378,8 +1378,7 @@ class App:
 
         self.put(1, 0, "test".ljust(namew),
                  curses.A_UNDERLINE | (curses.A_BOLD if self.col == 0 else 0))
-        self.put(1, namew, " exp ", curses.A_UNDERLINE)
-        x = namew + 6
+        x = namew
         for j, comp in enumerate(comps):
             attr = curses.A_UNDERLINE | (curses.A_BOLD if j + 1 == self.col else 0)
             self.put(1, x, comp["name"][:colw[j] - 1].center(colw[j]), attr)
@@ -1410,10 +1409,7 @@ class App:
                 name_attr |= curses.A_BOLD
             self.put(y, 0, labels[row][:namew].ljust(namew), name_attr)
             in_run = node.test is not None and node.test.rel in self.run.rels
-            if node.test is not None:
-                self.put(y, namew, "fail" if node.test.expected_fail else "pass",
-                         curses.A_DIM)
-            x = namew + 6
+            x = namew
             cells = stats[node.rel][3]
             for j, comp in enumerate(comps):
                 if in_run and j < len(self.run.comps):
