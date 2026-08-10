@@ -68,13 +68,13 @@ public class BoundSet {
   /** Set of type bounds for inferred type variables. */
   static class ConstraintSet {
     /** Lower type bounds. */
-    public Collection<TypeDecl> lower = new HashSet<>(4);
+    public final Collection<TypeDecl> lower;
 
     /** Upper type bounds. */
-    public Collection<TypeDecl> upper = new HashSet<>(4);
+    public final Collection<TypeDecl> upper;
 
     /** Equal type bounds. */
-    public Collection<TypeDecl> equal = new HashSet<>(4);
+    public final Collection<TypeDecl> equal;
 
     /**
      * Whether the bound {@code throws α} was added for the inference variable
@@ -90,9 +90,26 @@ public class BoundSet {
      * <p>This is {@code null} before inference starts and if no type matches the bounds.
      */
     public TypeDecl capture;
+
+    ConstraintSet() {
+      this(new HashSet<>(4), new HashSet<>(4), new HashSet<>(4));
+    }
+
+    private ConstraintSet(Collection<TypeDecl> lower, Collection<TypeDecl> upper,
+        Collection<TypeDecl> equal) {
+      this.lower = lower;
+      this.upper = upper;
+      this.equal = equal;
+    }
+
+    /** Create an immutable empty constraint set. */
+    static ConstraintSet empty() {
+      return new ConstraintSet(Collections.<TypeDecl>emptySet(),
+          Collections.<TypeDecl>emptySet(), Collections.<TypeDecl>emptySet());
+    }
   }
 
-  static final ConstraintSet EMPTY_CONSTRAINT_SET = new ConstraintSet();
+  static final ConstraintSet EMPTY_CONSTRAINT_SET = ConstraintSet.empty();
 
   /**
    * Inference variables whose instantiations are the inferred type arguments of
