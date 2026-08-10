@@ -447,6 +447,16 @@ public class BoundSet {
   }
 
   /**
+   * Substitute the instantiations of the inference variables mentioned in
+   * {@code T}, or return {@code T} if some mentioned variable is still
+   * uninstantiated.
+   */
+  private TypeDecl substituted(TypeDecl T) {
+    TypeDecl proper = properBound(T);
+    return proper == null ? T : proper;
+  }
+
+  /**
    * Resolve every bound to a proper type, or return {@code null} if any of them
    * still mentions an uninstantiated inference variable.
    */
@@ -559,7 +569,7 @@ public class BoundSet {
       // If T is a proper type, the constraint reduces to true if the expression
       // is compatible in a loose invocation context with T (§5.3), and false
       // otherwise.
-      if (!expr.compatibleLooseContext(T)) {
+      if (!expr.compatibleLooseContext(substituted(T))) {
         satisfiable = false;
       }
       return;
@@ -816,7 +826,7 @@ public class BoundSet {
     // compatible in a loose invocation context with T (§5.3), and false
     // otherwise.
     if (isProperType(S) && isProperType(T)) {
-      if (!looseInvocationCompatible(S, T)) {
+      if (!looseInvocationCompatible(substituted(S), substituted(T))) {
         satisfiable = false;
       }
       return;
@@ -847,7 +857,7 @@ public class BoundSet {
     // If S and T are proper types, the constraint reduces to true if S is a
     // subtype of T (§4.10), and false otherwise.
     if (isProperType(S) && isProperType(T)) {
-      if (!S.subtype(T)) {
+      if (!substituted(S).subtype(substituted(T))) {
         satisfiable = false;
       }
       return;
@@ -1020,7 +1030,7 @@ public class BoundSet {
     // If S and T are proper types, the constraint reduces to true if S is the same
     // as T (§4.3.4), and false otherwise.
     if (isProperType(S) && isProperType(T)) {
-      if (S != T) {
+      if (substituted(S) != substituted(T)) {
         satisfiable = false;
       }
       return;
@@ -1324,7 +1334,13 @@ public class BoundSet {
    */
   private void addEqualBound(TypeDecl S, TypeDecl T) {
     if (S == T) return;
-    if (lookup(S).equal.add(T)) {
+    ConstraintSet set = lookup(S);
+    if (set.equal.add(T)) {
+      if (isProperType(T)) {
+        // As soon as we add an equality bound to a proper type T
+        // we have an instantiation of the inference variable (§18.1.3).
+        set.capture = properBound(T);
+      }
       addBound(new Bound(BoundKind.EQUAL, (TypeVariable) S, T));
     }
   }
