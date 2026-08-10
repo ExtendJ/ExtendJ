@@ -258,27 +258,24 @@ public class BoundSet {
 
   public String toString() {
     StringBuilder str = new StringBuilder();
+    str.append("BoundSet {");
+    String sep = " ";
     for (TypeVariable T : variables) {
       ConstraintSet set = lookup(T);
       for (TypeDecl U : set.lower) {
-        if (str.length() > 0) {
-          str.append("\n");
-        }
-        str.append(T.fullName() + " :> " + U.fullName());
+        sep = "\n";
+        str.append("\n  " + T.fullName() + " :> " + U.fullName());
       }
       for (TypeDecl U : set.upper) {
-        if (str.length() > 0) {
-          str.append("\n");
-        }
-        str.append(T.fullName() + " <: " + U.fullName());
+        sep = "\n";
+        str.append("\n  " + T.fullName() + " <: " + U.fullName());
       }
       for (TypeDecl U : set.equal) {
-        if (str.length() > 0) {
-          str.append("\n");
-        }
-        str.append(T.fullName() + " = " + U.fullName());
+        sep = "\n";
+        str.append("\n  " + T.fullName() + " = " + U.fullName());
       }
     }
+    str.append(sep + "}");
     return str.toString();
   }
 
