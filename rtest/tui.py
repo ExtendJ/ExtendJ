@@ -895,7 +895,7 @@ class App:
         """Select or deselect a subtree, keeping only the decisions that matter."""
         inherited = self.inherited_selection(node)
         value = not self.selection.get(node.rel, inherited)
-        prefix = node.rel + os.sep
+        prefix = node.rel + os.sep if node.rel else ""  # "" is the root: everything
         for rel in [r for r in self.selection
                     if r == node.rel or r.startswith(prefix)]:
             del self.selection[rel]  # this decision replaces the ones below it
@@ -1365,7 +1365,7 @@ class App:
                 label = "  " + node.name
             # Marker columns: selected for the next run, compilers disagree, and
             # while every test is shown, outside the test set of this version.
-            if node is self.tree or not picked:
+            if not picked:
                 mark = " "
             else:
                 mark = "*" if picked == under else "~"
@@ -1649,9 +1649,7 @@ class App:
             elif self.col <= len(comps):
                 self.open_diag(node.test, comps[self.col - 1])
         elif ch == ord(" "):
-            if node is self.tree:
-                self.msg = "ALL TESTS is not selectable - press r on it to run everything"
-            elif node:
+            if node:
                 self.toggle_selection(node)
         elif ch == ord("u"):
             self.selection.clear()
