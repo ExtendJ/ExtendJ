@@ -18,14 +18,11 @@ Keys:
     Enter         fold/unfold a directory; on a test, show its Test.java,
                   or, in a result column, the compiler diagnostics of that
                   result (fullscreen)
-    Space         select/deselect a subtree for the next run; a selected
-                  directory carries its tests with it, and a test deselected
-                  afterwards is an exception to that ('*' fully selected,
-                  '~' partly)
+    Space         toggle selection on a subtree
     f             select the tests that did not give the expected result
     u             clear the selection
     a             show every test, or only those of this version's test set
-    r             run the selection, or the subtree under the cursor
+    r             run selected tests
     x             cancel pending compile jobs
     /             find tests by path (live), Esc clears, Enter keeps
     o             show only: all / where compilers differ / unexpected
@@ -65,7 +62,7 @@ EXTENDJ_OPTIONS = ("XprettyPrint", "XstructuredPrint", "XdumpTree", "XparseOnly"
 
 
 def compiles_test(comp, test):
-    """Whether a compiler can be asked to compile a test at all."""
+    """Whether a compiler can be asked to compile a given test."""
     if comp.get("type") == "extendj":
         return True
     return not any(option.strip().lstrip("-") in EXTENDJ_OPTIONS
@@ -115,7 +112,7 @@ def java_home_version(home):
 
 
 def java_runtimes():
-    """The installed Java runtimes, as {major version: java command}."""
+    """The installed Java runtimes as {major version: java command}."""
     if JAVA_RUNTIMES:
         return JAVA_RUNTIMES
     homes = []
@@ -184,6 +181,7 @@ def default_config():
         "timeout": 60,
         "jobs": max(1, (os.cpu_count() or 4) // 2),
         "tests_root": os.path.join(SCRIPT_DIR, "tests"),
+        "selection": {},
     }
 
 
@@ -208,6 +206,8 @@ def load_config():
         cfg["jobs"] = max(1, int(cfg["jobs"]))
     except (KeyError, TypeError, ValueError):
         cfg["jobs"] = 1
+    if not isinstance(cfg.get("selection"), dict):
+        cfg["selection"] = {}
     return cfg
 
 
@@ -721,18 +721,19 @@ class App:
         self.show_all = False   # show tests outside the version's test set too
         self.reload_tests()     # reads the test set, so it comes after show_all
         self.mode = "main"
-        self.cursor = 0   # row
-        self.col = 0      # column: 0 is the test, 1..n its compiler results
+        self.cursor = 0         # row
+        self.col = 0            # column: 0 is the test, 1..n its compiler results
         self.top = 0
         self.filter = ""
-        self.selection = {}  # rel -> selected, inherited by everything below
+        self.filter_shape = None
+        self.selection = self.stored_selection()
         self.msg = ""
         self.prompt_line = None
 
         self.lock = threading.Lock()
         self.runs = [Run() for _ in cfg["versions"]]
         self.run = self.runs[cfg["active"]]
-        self.yoff = 1  # the version tab bar occupies the first line
+        self.yoff = 1
         self.gen = 0
         self.threads = []
         self.workers = set()
@@ -748,10 +749,10 @@ class App:
         self.diag_off = 0
         self.diag_title = ""
         self.diag_path = None
+        self.diag_job = None
+        self.diag_pending = False
 
         self.ccursor = 0
-
-    # ---------- data helpers ----------
 
     def reload_tests(self):
         self.tests_root = self.cfg["tests_root"]
@@ -778,13 +779,8 @@ class App:
 
         count(self.tree)
 
-    def visible(self, stats=None):
-        """The rows of the test tree: (node, depth), the ALL TESTS row first.
-
-        The name filter, the result filter and the test set of the active Java
-        version all hide rows; the two filters expand the tree so that every
-        match is in view.
-        """
+    def visible(self, stats=None, unfolded=False):
+        """The rows of the test tree: (node, depth), the ALL TESTS row first."""
         out = [(self.tree, 0)]  # the "all tests" item is always the first row
         needle = self.filter.lower()
         results = self.run.filter if stats else "all"
@@ -815,11 +811,38 @@ class App:
                 if not keep(child):
                     continue
                 out.append((child, depth))
-                if child.children and (child.expanded or needle or results != "all"):
+                if child.children and (child.expanded or unfolded):
                     walk(child, depth + 1)
 
         walk(self.tree, 0)
         return out
+
+    def fold(self, node, expanded):
+        """Fold or unfold a node, as a decision that outlives the filters."""
+        node.expanded = expanded
+        if self.filter_shape is not None:
+            if expanded:
+                self.filter_shape.add(node.rel)
+            else:
+                self.filter_shape.discard(node.rel)
+
+    def restore_folding(self):
+        for node in self.index.values():
+            node.expanded = node.rel in self.filter_shape
+
+    def refilter(self):
+        """Open the tree on what the filters show, and fold it back when they go."""
+        if not self.filter and self.run.filter == "all":
+            if self.filter_shape is not None:
+                self.restore_folding()
+                self.filter_shape = None
+            return
+        if self.filter_shape is None:
+            self.filter_shape = {n.rel for n in self.index.values() if n.expanded}
+        else:
+            self.restore_folding()
+        for node, _ in self.visible(self.run_stats(), unfolded=True):
+            node.expanded = True
 
     def tests_under(self, node):
         """The tests under a node that the tree is showing."""
@@ -844,12 +867,6 @@ class App:
         return False
 
     def selection_state(self):
-        """The selected tests, and per node how many of its tests are selected.
-
-        A directory passes its decision down to everything below it, so
-        selecting a directory selects its tests, and deselecting one of them
-        afterwards is recorded as an exception to that.
-        """
         counts = {}
         tests = []
 
@@ -902,7 +919,22 @@ class App:
         if value != inherited:
             self.selection[node.rel] = value
 
-    # ---------- test running ----------
+    def stored_selection(self):
+        """The selection saved by an earlier session, less what is no longer there.
+
+        A test that has been renamed or removed since, or that belongs to
+        another tests root than the one in use now, is simply dropped.
+        """
+        out = {}
+        for rel, value in self.cfg.get("selection", {}).items():
+            rel = str(rel).replace("/", os.sep)
+            if rel in self.index:  # "" is ALL TESTS, which is selectable too
+                out[rel] = bool(value)
+        return out
+
+    def store_selection(self):
+        self.cfg["selection"] = {rel.replace(os.sep, "/"): value
+                                 for rel, value in sorted(self.selection.items())}
 
     def version(self):
         """The active target Java version."""
@@ -920,6 +952,7 @@ class App:
         self.cfg["active"] = index
         self.run = self.runs[index]
         self.reload_test_set()
+        self.refilter()
         self.ccursor = 0
         # Saved right away, so the next run of the tool opens on this version.
         self.msg = (save_config(self.cfg)
@@ -928,14 +961,18 @@ class App:
     def enabled_compilers(self):
         return [c for c in self.version()["compilers"] if c.get("enabled", True)]
 
-    def start_run(self, tests):
+    def start_run(self, tests, only=None):
+        """Compile the tests; only is the compiler to run them with."""
         comps = self.enabled_compilers()
         if not comps:
             self.msg = "no enabled compilers - press c to configure"
-            return
+            return False
         if not tests:
             self.msg = "no tests in the selected set"
-            return
+            return False
+        if only is not None and not any(c["name"] == only for c in comps):
+            self.msg = f"compiler '{only}' is not enabled in this Java version"
+            return False
         self.stop_workers()
         self.gen += 1
         gen = self.gen
@@ -947,7 +984,12 @@ class App:
         for comp in run.comps:
             comp["_spec"] = jvm_spec(comp)
         pairs = [(test, index) for test in tests
-                 for index, comp in enumerate(run.comps) if compiles_test(comp, test)]
+                 for index, comp in enumerate(run.comps)
+                 if compiles_test(comp, test)
+                 and (only is None or comp["name"] == only)]
+        if not pairs:
+            self.msg = f"{only or 'the compilers'} cannot compile this test"
+            return False
         run.rels.update(test.rel for test, _ in pairs)
         with self.lock:
             for test, index in pairs:
@@ -970,6 +1012,7 @@ class App:
             self.threads.append(thread)
 
         self.msg = self.jvm_error
+        return True
 
     def compile_args(self, test, comp, tmpdir):
         """Compiler arguments for one test, without the compiler command itself."""
@@ -1154,8 +1197,6 @@ class App:
                     result.status = "canceled"
         self.msg = "pending jobs canceled"
 
-    # ---------- results helpers ----------
-
     def run_stats(self):
         """Aggregate the results of the active run over the whole test tree.
 
@@ -1208,8 +1249,6 @@ class App:
             visit(self.tree)
         return stats
 
-    # ---------- drawing ----------
-
     def color(self, name):
         return curses.color_pair(self.pairs[name])
 
@@ -1237,12 +1276,10 @@ class App:
             pass
 
     def view_size(self):
-        """The size of the screen area below the version tab bar."""
         height, width = self.stdscr.getmaxyx()
         return height - self.yoff, width
 
     def draw_tabs(self, width):
-        """One tab per configured target Java version, the active one highlighted."""
         x = 0
         for i, version in enumerate(self.cfg["versions"]):
             label = f" {version['name']} "
@@ -1359,8 +1396,7 @@ class App:
             if node is self.tree:
                 label = f"ALL TESTS ({under})"
             elif node.children:
-                open_ = node.expanded or self.filter or self.run.filter != "all"
-                label = f"{'▾' if open_ else '▸'} {node.name} ({under})"
+                label = f"{'▾' if node.expanded else '▸'} {node.name} ({under})"
             else:
                 label = "  " + node.name
             # Marker columns: selected for the next run, compilers disagree, and
@@ -1519,8 +1555,6 @@ class App:
         self.footer(height, width,
                     "space:enable  enter/e:edit  a:add  d:delete  J/K:move  q:back")
 
-    # ---------- input ----------
-
     def prompt(self, label, initial="", live=None):
         buf = list(initial)
         self.stdscr.timeout(-1)
@@ -1555,13 +1589,8 @@ class App:
         answer = self.prompt(question + " (y/n)")
         return answer is not None and answer.strip().lower().startswith("y")
 
-    # ---------- key handling per mode ----------
-
-    def show_text(self, title, raw, path=None):
-        """Show text fullscreen, wrapped to the screen width.
-
-        A path marks the text as the contents of a file, which e then edits.
-        """
+    def show_text(self, title, raw, path=None, job=None):
+        """Show text fullscreen, wrapped to the screen width."""
         width = self.view_size()[1]
         lines = []
         for line in raw:
@@ -1573,7 +1602,11 @@ class App:
         self.diag_lines = lines
         self.diag_off = 0
         self.diag_path = path
-        self.diag_title = f"{title} (q to go back{', e to edit' if path else ''})"
+        self.diag_job = job
+        self.diag_pending = False
+        keys = ["q to go back"] + (["e to edit"] if path else []) \
+            + (["r to re-run"] if job else [])
+        self.diag_title = f"{title} ({', '.join(keys)})"
         self.mode = "diag"
 
     def open_source(self, test):
@@ -1606,12 +1639,41 @@ class App:
                                                    "actual", lineterm="", n=99))
         self.show_text(f"{test.rel} | {comp['name']} | {result.status.upper()}",
                        header + [""]
-                       + (result.output.splitlines() or ["(no compiler output)"]))
+                       + (result.output.splitlines() or ["(no compiler output)"]),
+                       job=(test, comp))
+
+    def rerun_diag(self):
+        """Re-run the one test and compiler the diagnostics view is showing."""
+        if self.diag_job is None:
+            self.msg = "there is nothing to re-run here"
+            return
+        test, comp = self.diag_job
+        if not self.start_run([test], only=comp["name"]):
+            return
+        self.diag_pending = True
+        self.diag_title = f"{test.rel} | {comp['name']} | re-running… (q to go back)"
+
+    def refresh_diag(self):
+        """Show the result of a re-run once it is in, at the same scroll position."""
+        test, comp = self.diag_job
+        with self.lock:
+            result = self.run.results.get((test.rel, comp["name"]))
+        if result is None or result.status in ("pending", "running"):
+            return
+        self.diag_pending = False
+        if not result.done:  # canceled: keep showing what is on screen
+            self.msg = f"re-run {result.status}"
+            self.diag_title = f"{test.rel} | {comp['name']} | {result.status.upper()}"
+            return
+        offset = self.diag_off
+        self.open_diag(test, comp)
+        self.diag_off = min(offset, max(0, len(self.diag_lines) - 1))
 
     def handle_main(self, ch):
         rows = self.visible(self.run_stats())
         node = rows[self.cursor][0] if rows and self.cursor < len(rows) else None
         quarter = max(1, (self.view_size()[0] - 3) // 4)
+        selection = dict(self.selection)
         if ch in (curses.KEY_DOWN, ord("j")):
             self.cursor += 1
         elif ch in (curses.KEY_UP, ord("k")):
@@ -1643,7 +1705,7 @@ class App:
             if node is None:
                 pass
             elif node.children or node is self.tree:
-                node.expanded = not node.expanded
+                self.fold(node, not node.expanded)
             elif self.col == 0:
                 self.open_source(node.test)
             elif self.col <= len(comps):
@@ -1665,24 +1727,28 @@ class App:
                         else f"showing the tests of {self.test_set[0] or 'the suite'}")
         elif ch == ord("z"):
             for n in self.index.values():
-                n.expanded = False
+                self.fold(n, False)
         elif ch == ord("Z"):
             for n in self.index.values():
-                n.expanded = True
+                self.fold(n, True)
         elif ch == ord("/"):
             def live(s):
                 self.filter = s
                 self.cursor = 0
                 self.top = 0
+                self.refilter()
             if self.prompt("/", self.filter, live=live) is None:
                 self.filter = ""
+                self.refilter()
         elif ch == 27:  # Esc
             self.filter = ""
             self.run.filter = "all"
+            self.refilter()
         elif ch == ord("o"):
             order = ["all", "diff", "unexpected"]
             self.run.filter = order[(order.index(self.run.filter) + 1) % len(order)]
             self.cursor = self.top = 0
+            self.refilter()
         elif ch == ord("r"):
             tests = self.selected_tests()
             if not tests and node:
@@ -1694,6 +1760,9 @@ class App:
             self.mode = "config"
         elif ch == ord("q"):
             return False
+        if self.selection != selection:
+            self.store_selection()
+            self.msg = save_config(self.cfg) or self.msg
         self.cursor = max(0, self.cursor)
         self.col = max(0, min(self.col, len(self.run.comps or self.enabled_compilers())))
         return True
@@ -1742,6 +1811,8 @@ class App:
             self.diag_off = len(self.diag_lines)
         elif ch == ord("e"):
             self.edit_file()
+        elif ch == ord("r"):
+            self.rerun_diag()
         elif ch in (ord("q"), 27):
             self.mode = "main"
         self.diag_off = max(0, self.diag_off)
@@ -1930,7 +2001,10 @@ class App:
                     if kind == "tests_root":
                         self.reload_tests()
                         self.cursor = self.top = 0
+                        self.filter_shape = None
+                        self.refilter()
                         self.selection.clear()
+                        self.store_selection()
             elif kind in ("timeout", "jobs"):
                 value = self.prompt(kind + ":", str(self.cfg.get(kind, "")))
                 if value is not None:
@@ -1991,6 +2065,8 @@ class App:
         while True:
             if self.dirty.is_set():
                 self.dirty.clear()
+            if self.mode == "diag" and self.diag_pending:
+                self.refresh_diag()
             self.draw()
             try:
                 ch = self.stdscr.getch()
