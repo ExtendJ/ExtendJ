@@ -60,8 +60,6 @@ RUNNER_SOURCE = os.path.join(SCRIPT_DIR, "TestRunner.java")
 
 EXPECT_FAIL_RESULTS = ("COMPILE_FAIL", "COMPILE_ERR_OUTPUT")
 
-MAX_JOBS = max(1, (os.cpu_count() or 4) // 2)
-
 # ExtendJ-only options:
 EXTENDJ_OPTIONS = ("XprettyPrint", "XstructuredPrint", "XdumpTree", "XparseOnly")
 
@@ -184,7 +182,7 @@ def default_config():
         "versions": [default_version("8"), default_version("11")],
         "active": 0,
         "timeout": 60,
-        "jobs": MAX_JOBS,
+        "jobs": max(1, (os.cpu_count() or 4) // 2),
         "tests_root": os.path.join(SCRIPT_DIR, "tests"),
     }
 
@@ -207,9 +205,9 @@ def load_config():
         cfg["versions"] = [default_version("8")]
     cfg["active"] = max(0, min(cfg.get("active", 0), len(cfg["versions"]) - 1))
     try:
-        cfg["jobs"] = max(1, min(int(cfg["jobs"]), MAX_JOBS))
+        cfg["jobs"] = max(1, int(cfg["jobs"]))
     except (KeyError, TypeError, ValueError):
-        cfg["jobs"] = MAX_JOBS
+        cfg["jobs"] = 1
     return cfg
 
 
@@ -963,7 +961,7 @@ class App:
         jobs = queue.Queue()
         for pair in pairs:
             jobs.put(pair)
-        nworkers = max(1, min(int(self.cfg.get("jobs", MAX_JOBS)), MAX_JOBS, len(pairs)))
+        nworkers = max(1, min(int(self.cfg.get("jobs", 1)), len(pairs)))
         self.threads = []
         for _ in range(nworkers):
             thread = threading.Thread(target=self.worker_loop, args=(run, gen, jobs),
@@ -1519,7 +1517,7 @@ class App:
                 if kind == "java":
                     value += f"   -> {self.describe_java()}"
                 elif kind == "jobs":
-                    value += f"   (at most {MAX_JOBS}, half the cores of this machine)"
+                    value += f"   ({os.cpu_count()} cores on this machine)"
                 self.put(y, 0, f"  {label:<14} = {value}", attr)
             y += 1
         self.footer(height, width,
@@ -1947,10 +1945,6 @@ class App:
                     except ValueError:
                         self.msg = f"not a number: {value}"
                     else:
-                        if kind == "jobs" and number > MAX_JOBS:
-                            number = MAX_JOBS
-                            self.msg = (f"at most {MAX_JOBS} jobs, half the cores of "
-                                        "this machine")
                         self.cfg[kind] = number
                         changed = True
             elif kind == "addversion":
