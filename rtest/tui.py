@@ -22,6 +22,7 @@ Keys:
     f             select the tests that did not give the expected result
     u             clear the selection
     a             show every test, or only those of this version's test set
+    e             enable/disable the compiler of the column under the cursor
     r             run selected tests
     x             cancel pending compile jobs
     /             find tests by path (live), Esc clears, Enter keeps
@@ -961,6 +962,22 @@ class App:
     def enabled_compilers(self):
         return [c for c in self.version()["compilers"] if c.get("enabled", True)]
 
+    def columns(self):
+        comps = list(self.version()["compilers"])
+        names = {c["name"] for c in comps}
+        comps.extend(c for c in self.run.comps if c["name"] not in names)
+        return comps
+
+    def toggle_compiler(self, comp):
+        """Take a compiler in or out of the next run."""
+        if not any(c is comp for c in self.version()["compilers"]):
+            self.msg = f"{comp['name']} is no longer a compiler of this Java version"
+            return
+        enabled = not comp.get("enabled", True)
+        comp["enabled"] = enabled
+        self.msg = (save_config(self.cfg)
+                    or f"{comp['name']} {'enabled' if enabled else 'disabled'}")
+
     def start_run(self, tests, only=None):
         """Compile the tests; only is the compiler to run them with."""
         comps = self.enabled_compilers()
@@ -1197,25 +1214,25 @@ class App:
                     result.status = "canceled"
         self.msg = "pending jobs canceled"
 
-    def run_stats(self):
+    def run_stats(self, comps=None):
         """Aggregate the results of the active run over the whole test tree.
 
         Maps each node to (tests, differing tests, unexpected tests, cells),
-        where cells holds (done, total, unexpected) per compiler. Only tests
+        where cells holds (done, total, unexpected) per column. Only tests
         that are part of the run are counted, so a node covered by no run has
         no test in its totals.
         """
         stats = {}
         run = self.run
-        ncomp = len(run.comps)
-        empty = [(0, 0, 0)] * ncomp
+        comps = self.columns() if comps is None else comps
+        empty = [(0, 0, 0)] * len(comps)
 
         def own(test):
             """Stats for a single test: it may sit in a directory with nested tests."""
             cells = []
             statuses = []
             bad = 0
-            for comp in run.comps:
+            for comp in comps:
                 result = run.results.get((test.rel, comp["name"]))
                 if result is None:
                     cells.append((0, 0, 0))
@@ -1363,10 +1380,10 @@ class App:
 
     def draw_main(self, height, width):
         """The test tree, with the results of the active run in columns."""
-        stats = self.run_stats()
+        comps = self.columns()
+        stats = self.run_stats(comps)
         selcount, seltests = self.selection_state()
         rows = self.visible(stats)
-        comps = self.run.comps or self.enabled_compilers()
         ntests, ndiff, nbad, cells = stats[self.tree.rel]
         done = sum(c[0] for c in cells)
         total = sum(c[1] for c in cells)
@@ -1410,14 +1427,18 @@ class App:
                 marker += "-" if not self.setcount.get(node.rel, 1) else " "
             labels.append(marker + "  " * depth + label)
         namew = max(20, min(46, max([len(t) for t in labels] or [0]) + 1))
-        colw = [max(6, min(14, len(c["name"]) + 2)) for c in comps]
+        # A disabled compiler still has a column, its heading in parentheses.
+        heads = [c["name"] if c.get("enabled", True) else f"({c['name']})" for c in comps]
+        colw = [max(6, min(14, len(h) + 2)) for h in heads]
 
         self.put(1, 0, "test".ljust(namew),
                  curses.A_UNDERLINE | (curses.A_BOLD if self.col == 0 else 0))
         x = namew
         for j, comp in enumerate(comps):
             attr = curses.A_UNDERLINE | (curses.A_BOLD if j + 1 == self.col else 0)
-            self.put(1, x, comp["name"][:colw[j] - 1].center(colw[j]), attr)
+            if not comp.get("enabled", True):
+                attr |= curses.A_DIM
+            self.put(1, x, heads[j][:colw[j] - 1].center(colw[j]), attr)
             x += colw[j]
 
         body = height - 3
@@ -1444,13 +1465,12 @@ class App:
             elif stats[node.rel][2]:
                 name_attr |= curses.A_BOLD
             self.put(y, 0, labels[row][:namew].ljust(namew), name_attr)
-            in_run = node.test is not None and node.test.rel in self.run.rels
             x = namew
             cells = stats[node.rel][3]
             for j, comp in enumerate(comps):
-                if in_run and j < len(self.run.comps):
+                if node.test is not None:
                     text, attr = self.leaf_cell(node.test, comp)
-                elif node.test is None and j < len(cells) and cells[j][1]:
+                elif j < len(cells) and cells[j][1]:
                     text, attr = self.summary_cell(cells[j])
                 else:
                     text, attr = "", 0
@@ -1461,7 +1481,7 @@ class App:
         self.draw_scrollbar(2, body, len(rows), self.top)
         hints = (f"space:select  {'f:failed  ' if nbad else ''}"
                  f"{'u:clear  ' if nsel else ''}r:run  enter:open  h/l:column  "
-                 "/:find  o:filter  a:all  c:config  q:quit")
+                 "e:on/off  /:find  o:filter  a:all  c:config  q:quit")
         if done < total:
             hints = "running - x:cancel   " + hints
         self.footer(height, width, hints)
@@ -1670,7 +1690,8 @@ class App:
         self.diag_off = min(offset, max(0, len(self.diag_lines) - 1))
 
     def handle_main(self, ch):
-        rows = self.visible(self.run_stats())
+        comps = self.columns()
+        rows = self.visible(self.run_stats(comps))
         node = rows[self.cursor][0] if rows and self.cursor < len(rows) else None
         quarter = max(1, (self.view_size()[0] - 3) // 4)
         selection = dict(self.selection)
@@ -1701,7 +1722,6 @@ class App:
                         self.cursor = i
                         break
         elif ch in (ord("\n"), curses.KEY_ENTER, 10, 13):
-            comps = self.run.comps or self.enabled_compilers()
             if node is None:
                 pass
             elif node.children or node is self.tree:
@@ -1725,6 +1745,11 @@ class App:
             self.show_all = not self.show_all
             self.msg = ("showing every test" if self.show_all
                         else f"showing the tests of {self.test_set[0] or 'the suite'}")
+        elif ch == ord("e"):
+            if self.col and self.col <= len(comps):
+                self.toggle_compiler(comps[self.col - 1])
+            else:
+                self.msg = "move to a compiler column to enable or disable it"
         elif ch == ord("z"):
             for n in self.index.values():
                 self.fold(n, False)
@@ -1764,7 +1789,7 @@ class App:
             self.store_selection()
             self.msg = save_config(self.cfg) or self.msg
         self.cursor = max(0, self.cursor)
-        self.col = max(0, min(self.col, len(self.run.comps or self.enabled_compilers())))
+        self.col = max(0, min(self.col, len(self.columns())))
         return True
 
     def edit_file(self):
