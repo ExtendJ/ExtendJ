@@ -183,6 +183,14 @@ public class BoundSet {
     }
   }
 
+  /** Add the bound {@code throws α} for an inference variable (§18.1.3).  */
+  public void addThrowsBound(TypeVariable alpha) {
+    ConstraintSet set = lookup(alpha);
+    if (set != EMPTY_CONSTRAINT_SET) {
+      set.hasThrowsBound = true;
+    }
+  }
+
   /**
    * Register an inference variable incorporated from another bound set so that it
    * participates in resolution without becoming a result type argument.

@@ -379,7 +379,7 @@ aspect TypeInference_SE8 {
     // Additional invocation constraints if the bound set is still satisfiable.
     if (bounds.satisfiable) {
       ParMethodDecl par = inferenceParMethodDecl();
-      for (int i = 0; i < args.getNumChild(); i++) {
+      for (int i = 0; i < args.getNumChild(); ++i) {
         TypeDecl Fi = par.formalType(i);
         int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
         Expr ei = args.getChild(i);
@@ -457,11 +457,11 @@ aspect TypeInference_SE8 {
     }
     // §18.5.1 (initial bounds)
     // For each type parameter P with bound B record constraint ‹P <: B›.
-    for (int k = 0; k < typeParams.getNumChild(); k++) {
+    for (int k = 0; k < typeParams.getNumChild(); ++k) {
       TypeVariable p = typeParams.getChild(k);
       TypeVariable substituted = getTypeParameter(k).substituted(par.getParameterization());
       boolean proper = false;
-      for (int i = 0; i < substituted.getNumTypeBound(); i++) {
+      for (int i = 0; i < substituted.getNumTypeBound(); ++i) {
         TypeDecl bound = substituted.getTypeBound(i).type();
         proper |= !bound.involvesTypeParameters();
         bounds.constraintSubtype(p, bound);
@@ -472,9 +472,21 @@ aspect TypeInference_SE8 {
       }
     }
 
+    // §18.5.1 (initial bounds)
+    // For each type parameter P appearing in the throws clause of this method the
+    // bound ‹throws α› is implied for the inference variable α replacing P.
+    for (int i = 0; i < getNumException(); ++i) {
+      TypeDecl exception = getException(i).type();
+      for (int k = 0; k < typeParams.getNumChild(); ++k) {
+        if (exception == getTypeParameter(k)) {
+          bounds.addThrowsBound(typeParams.getChild(k));
+        }
+      }
+    }
+
     // §18.5.1 (applicability inference), restricted to the arguments that are
     // pertinent to applicability (§15.12.2.2).
-    for (int i = 0; i < args.getNumChild(); i++) {
+    for (int i = 0; i < args.getNumChild(); ++i) {
       int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
       Expr ei = args.getChild(i);
       if (!ei.pertinentToApplicability(context, this, k)) {

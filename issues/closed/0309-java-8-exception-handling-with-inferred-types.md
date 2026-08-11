@@ -1,5 +1,7 @@
 # Java 8 exception handling with inferred types
 
+**Status:** resolved
+
 *ExtendJ 8.1.2-15-gd4d25af7 Java SE 8*
 
 The behavior of exception checking for generic methods has changed slightly after Java 7 and ExtendJ does not have the right behavior for Java 8.
