@@ -478,7 +478,21 @@ public class BoundSet {
         return;
       }
     }
-    // TODO: if we have throws αi, then incorporate the exception type bound.
+    // If we have the bound throws αi, then incorporate αi = RuntimeException.
+    if (set.hasThrowsBound) {
+      boolean useRTE = true;
+      for (TypeDecl upper : set.upper) {
+        if (upper != alpha.typeException()
+            && upper != alpha.typeObject()
+            && upper != alpha.typeThrowable()) {
+          useRTE = false;
+        }
+      }
+      if (useRTE) {
+        bounds.add(new Bound(BoundKind.EQUAL, alpha, alpha.typeRuntimeException()));
+        return;
+      }
+    }
     // Otherwise, if α has upper bounds, the instantiation is their greatest lower bound (§5.1.10).
     if (!set.upper.isEmpty()) {
       ArrayList<TypeDecl> upper = properBounds(set.upper);
