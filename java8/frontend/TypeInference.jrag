@@ -107,6 +107,106 @@ aspect CaptureConversion {
   inh TypeVariable Expr.lookupCaptureType(ASTNode site, TypeDecl type, int index);
 
   /**
+   * Create fresh variables Y1, ..., Yn used by the second instantiation attempt
+   * of bound resolution in {@link BoundSet#resolve()}.
+   *
+   * <p>The variables are created with upper/lower bounds and the whole
+   * group needs to be created as a single unit because the bounds can be
+   * mutually recursive in their upper bounds ({@code Yi <: glb(U1 θ, ..., Uk θ)} where
+   * θ is the substitution {@code [α1:=Y1, ..., αn:=Yn]}).
+   * For example, a self-bounded variable {@code <T extends Comparable<T>>} gives
+   * {@code Y1 <: Comparable<Y1>}.
+   *
+   * @param vars The inference variables {@code α1, ..., αn} being replaced.
+   * @param lowerBounds The lower bound of each Yi before substitution, or {@code null}
+   * for a variable that has no proper lower bound.
+   * @param upperBounds The upper bound of each Yi before substitution, or {@code null}
+   * for a variable that has no upper bound.
+   */
+  inh List<FreshVariable> TypeVariable.lookupFreshVars(
+      ArrayList<TypeVariable> vars,
+      ArrayList<TypeDecl> lowerBounds,
+      ArrayList<TypeDecl> upperBounds);
+
+  eq Program.getChild().lookupFreshVars(ArrayList<TypeVariable> vars, ArrayList<TypeDecl> lowerBounds, ArrayList<TypeDecl> upperBounds) =
+      wildcards().lookupFreshVars(vars, lowerBounds, upperBounds);
+
+  syn nta List<FreshVariable> WildcardsCompilationUnit.lookupFreshVars(
+      ArrayList<TypeVariable> vars,
+      ArrayList<TypeDecl> lowerBounds,
+      ArrayList<TypeDecl> upperBounds) {
+    // TODO(joqvist): We really should re-design Parameterization so that it can be reused here
+    // instead of using Map<TypeVariable, TypeDecl> to represent the substitution.
+    int n = vars.size();
+    ArrayList<FreshVariable> fresh = new ArrayList<>(n);
+    for (int i = 0; i < n; ++i) {
+      fresh.add(new FreshVariable(
+          new Modifiers(new List().add(new Modifier("public"))),
+          "fresh#" + vars.get(i).typeName(),
+          new List<BodyDecl>(),
+          new List<Access>(),
+          new List<Access>()));
+    }
+    Map<TypeVariable, TypeDecl> theta = new LinkedHashMap<>();
+    for (int i = 0; i < n; ++i) {
+      theta.put(vars.get(i), fresh.get(i));
+    }
+    List<FreshVariable> result = new List<>();
+    for (int i = 0; i < n; ++i) {
+      FreshVariable Yi = fresh.get(i);
+      TypeDecl upper = upperBounds.get(i);
+      if (upper != null) {
+        Yi.setBoundList(new List<>(upper.substituted(theta).createBoundAccess()));
+      }
+      TypeDecl lower = lowerBounds.get(i);
+      if (lower != null) {
+        Yi.setLowerBoundList(new List<>(lower.substituted(theta).createBoundAccess()));
+      }
+      result.add(Yi);
+    }
+    return result;
+  }
+
+  syn TypeDecl TypeDecl.substituted(Map<TypeVariable, ? extends TypeDecl> theta) = this;
+
+  eq ParTypeDecl.substituted(Map<TypeVariable, ? extends TypeDecl> theta) {
+    if (!involvesTypeParameters() || isRawType()) return this;
+    GenericTypeDecl generic = (GenericTypeDecl) genericDecl();
+    java.util.List<TypeDecl> args = getParameterization().args;
+    ArrayList<TypeDecl> substituted = new ArrayList<>(args.size());
+    for (TypeDecl arg : args) {
+      substituted.add(arg.substituted(theta));
+    }
+    return generic.lookupParTypeDecl(substituted);
+  }
+
+  eq TypeVariable.substituted(Map<TypeVariable, ? extends TypeDecl> theta) {
+    TypeDecl that = theta.get(this);
+    return that == null ? this : that;
+  }
+
+  eq WildcardExtendsType.substituted(Map<TypeVariable, ? extends TypeDecl> theta) =
+      lookupWildcardExtends(extendsType().substituted(theta));
+
+  eq WildcardSuperType.substituted(Map<TypeVariable, ? extends TypeDecl> theta) =
+      lookupWildcardSuper(superType().substituted(theta));
+
+  eq ArrayDecl.substituted(Map<TypeVariable, ? extends TypeDecl> theta) =
+      componentType().substituted(theta).arrayType();
+
+  eq GLBType.substituted(Map<TypeVariable, ? extends TypeDecl> theta) {
+    ArrayList<TypeDecl> bounds = new ArrayList<>(getNumTypeBound());
+    boolean changed = false;
+    for (int i = 0; i < getNumTypeBound(); ++i) {
+      TypeDecl bound = getTypeBound(i).type();
+      TypeDecl substituted = bound.substituted(theta);
+      changed |= substituted != bound;
+      bounds.add(substituted);
+    }
+    return changed ? lookupGLBType(bounds) : this;
+  }
+
+  /**
    * Capture conversion of {@code type} with this expression as the capture site
    * (JLS SE8 §5.1.10): each wildcard type argument is replaced by a capture
    * variable of this site.
@@ -360,8 +460,15 @@ aspect TypeInference_SE8 {
     for (int k = 0; k < typeParams.getNumChild(); k++) {
       TypeVariable p = typeParams.getChild(k);
       TypeVariable substituted = getTypeParameter(k).substituted(par.getParameterization());
+      boolean proper = false;
       for (int i = 0; i < substituted.getNumTypeBound(); i++) {
-        bounds.constraintSubtype(p, substituted.getTypeBound(i).type());
+        TypeDecl bound = substituted.getTypeBound(i).type();
+        proper |= !bound.involvesTypeParameters();
+        bounds.constraintSubtype(p, bound);
+      }
+      if (!proper) {
+        // This is the 'Pl has no TypeBound' case from §18.1.3.
+        bounds.constraintSubtype(p, typeObject());
       }
     }
 

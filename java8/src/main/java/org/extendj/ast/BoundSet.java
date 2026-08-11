@@ -30,10 +30,7 @@ import java.util.*;
  * </ul>
  */
 public class BoundSet {
-  /**
-   * Whether the bound set is still satisfiable
-   * (the false constraint has not been added).
-   */
+  /** The bound set is satisfiable only if the false constraint has not been added. */
   public boolean satisfiable = true;
 
   enum BoundKind { UPPER, LOWER, EQUAL, }
@@ -65,6 +62,7 @@ public class BoundSet {
   private ArrayList<Bound> newBounds = new ArrayList<>();
   private boolean incorporating = false;
 
+  // TODO(joqvist): record throws bounds (preferring unchecked exceptions).
   /** Set of type bounds for inferred type variables. */
   static class ConstraintSet {
     /** Lower type bounds. */
@@ -77,8 +75,7 @@ public class BoundSet {
     public final Collection<TypeDecl> equal;
 
     /**
-     * Whether the bound {@code throws α} was added for the inference variable
-     * (§18.1.3).
+     * Whether the bound {@code throws α} was added for the inference variable (§18.1.3).
      *
      * <p>Make inference prefer an unchecked exception type instantiation (§18.4).
      */
@@ -91,8 +88,22 @@ public class BoundSet {
      */
     public TypeDecl capture;
 
+    /** This is a fresh synthetic variable created during resolution. */
+    public boolean fresh = false;
+
     ConstraintSet() {
-      this(new HashSet<>(4), new HashSet<>(4), new HashSet<>(4));
+      // Insertion ordered so that resolution does not depend on identity hash codes:
+      // the bounds drive the dependency traversal and the lub/glb argument order.
+      this(new LinkedHashSet<>(4), new LinkedHashSet<>(4), new LinkedHashSet<>(4));
+    }
+
+    ConstraintSet(ConstraintSet that) {
+      this.lower = new LinkedHashSet<>(that.lower);
+      this.upper = new LinkedHashSet<>(that.upper);
+      this.equal = new LinkedHashSet<>(that.equal);
+      this.hasThrowsBound = that.hasThrowsBound;
+      this.capture = that.capture;
+      this.fresh = that.fresh;
     }
 
     private ConstraintSet(Collection<TypeDecl> lower, Collection<TypeDecl> upper,
@@ -123,6 +134,7 @@ public class BoundSet {
    */
   private Collection<TypeVariable> auxiliaryVariables;
 
+  /** The constraint sets of the inference variables in this set. */
   protected Map<TypeVariable, ConstraintSet> map;
 
   ConstraintSet lookup(TypeDecl v) {
@@ -132,17 +144,14 @@ public class BoundSet {
   public boolean rawAccess = false;
 
   /**
-   * Whether unchecked conversion was necessary for the method to be
-   * applicable (§18.5.1). The invocation type is then the erasure of the
-   * method type (§18.5.2), so the inferred type arguments are not used.
+   * Whether unchecked conversion was necessary for the method to be applicable (§18.5.1).
    */
   public boolean uncheckedConversion = false;
 
   /**
    * A constraint that could not be reduced because it mentions a type variable
    * not local to this bound set (an inference variable of an enclosing bound set).
-   * It is deferred and replayed when this bound set is lifted into the enclosing
-   * one (§18.5.2). */
+   */
   private static class DeferredConstraint {
     static final int SUBTYPE = 0;
     static final int EQUAL = 1;
@@ -159,7 +168,7 @@ public class BoundSet {
   }
 
   /** Constraints deferred to the enclosing bound set (§18.5.2). */
-  private java.util.List<DeferredConstraint> deferred = new java.util.ArrayList<DeferredConstraint>(0);
+  private ArrayList<DeferredConstraint> deferred = new ArrayList<>(0);
 
   public BoundSet() {
     variables = new ArrayList<>(4);
@@ -279,115 +288,283 @@ public class BoundSet {
     return str.toString();
   }
 
+  private ArrayList<TypeVariable> addEdge(TypeVariable alpha, TypeVariable beta, Stack<TypeVariable> stack,
+      Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
+    // Add dependency edge alpha -> beta
+    ConstraintSet set = lookup(beta);
+    if (hasInstantiation(set)) {
+      // Variable already instantiated - ignore it.
+      return null;
+    }
+    if (!index.containsKey(beta)) {
+      ArrayList<TypeVariable> scc = connect(beta, stack, index, lowlink);
+      lowlink.put(alpha, Math.min(lowlink.get(alpha), lowlink.get(beta)));
+      return scc;
+    }
+    lowlink.put(alpha, Math.min(lowlink.get(alpha), index.get(beta)));
+    return null;
+  }
+
+  private ArrayList<TypeVariable> addEdge(TypeVariable alpha, TypeDecl T, Stack<TypeVariable> stack,
+      Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
+    if (T instanceof TypeVariable) {
+      return addEdge(alpha, (TypeVariable) T, stack, index, lowlink);
+    }
+    if (T instanceof ParTypeDecl) {
+      for (TypeDecl arg : ((ParTypeDecl) T).getParameterization().args) {
+        ArrayList<TypeVariable> scc = addEdge(alpha, arg, stack, index, lowlink);
+        if (scc != null) return scc;
+      }
+    }
+    if (T instanceof WildcardExtendsType) {
+      return addEdge(alpha, ((WildcardExtendsType) T).extendsType(), stack, index, lowlink);
+    }
+    if (T instanceof WildcardSuperType) {
+      return addEdge(alpha, ((WildcardSuperType) T).superType(), stack, index, lowlink);
+    }
+    if (T.isArrayDecl()) {
+      return addEdge(alpha, T.componentType(), stack, index, lowlink);
+    }
+    return null;
+  }
+
+  private ArrayList<TypeVariable> connect(TypeVariable alpha, Stack<TypeVariable> stack,
+      Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
+    // Modified Tarjan SCC algorithm which stops at the first SCC.
+    // We terminate when leaving the first node v that has index[v] == lowlink[v].
+    // The first SCC found is a sink.
+    // We do not need the on-stack test of Tarjan because we stop at the first SCC.
+    if (index.containsKey(alpha)) return null;
+    int i = index.size() + 1;
+    index.put(alpha, Integer.valueOf(i));
+    lowlink.put(alpha, Integer.valueOf(i));
+    stack.push(alpha);
+    ArrayList<TypeVariable> scc;
+
+    // Iterate dependencies.
+    ConstraintSet set = lookup(alpha);
+    for (TypeDecl T : set.equal) {
+      // alpha depends on T (unless capture)
+      scc = addEdge(alpha, T, stack, index, lowlink);
+      if (scc != null) return scc;
+    }
+    for (TypeDecl T : set.upper) {
+      // alpha depends on T (unless capture)
+      scc = addEdge(alpha, T, stack, index, lowlink);
+      if (scc != null) return scc;
+    }
+    for (TypeDecl T : set.lower) {
+      // alpha depends on T (unless capture)
+      scc = addEdge(alpha, T, stack, index, lowlink);
+      if (scc != null) return scc;
+    }
+
+    // If v is a root node, pop the stack and generate an SCC
+    if (Objects.equals(lowlink.get(alpha), index.get(alpha))) {
+      // Insertion ordered: the SCC determines the order in which the fresh variables
+      // of the second instantiation attempt are created and instantiated.
+      scc = new ArrayList<>();
+      while (true) {
+        TypeVariable w = stack.pop();
+        scc.add(w);
+        if (w == alpha) break;
+      }
+      return scc;
+    } else {
+      return null;
+    }
+  }
+
   /** Resolve the inference variables to instantiations (§18.4). */
   public boolean resolve() {
     // §18.4 specifies that variables are instantiated in an iterative fashion
     // where in each step a subset S ⊂ V is chosen and instantiated as a unit
     // where S is minimal non-empty sink SCC of uninstantiated inference
     // variables under inference variable dependencies.
-    if (!satisfiable) {
-      return false;
-    }
-    Collection<TypeVariable> all = allVariables();
+    if (!satisfiable) return false;
+    Stack<TypeVariable> stack = new Stack<>();
+    Map<TypeVariable, Integer> index = new HashMap<>();
+    Map<TypeVariable, Integer> lowlink = new HashMap<>();
     boolean change = true;
-    while (change) {
+    while (satisfiable && change) {
       change = false;
-      for (TypeVariable alpha : all) {
-        ConstraintSet set = lookup(alpha);
-        if (set.capture != null) {
+      Collection<TypeVariable> all = allVariables(); // incorporation produces additional auxiliary variables
+      for (TypeVariable u : all) {
+        ConstraintSet set = lookup(u);
+        if (hasInstantiation(set)) {
+          // Variable already instantiated - ignore it.
           continue;
         }
-        TypeDecl instantiation = instantiate(alpha, set);
+        stack.clear();
+        index.clear();
+        lowlink.clear();
+        ArrayList<TypeVariable> sink = connect(u, stack, index, lowlink);
+        assert sink != null; // Must be non-null by the fact that at least u is not instantiated.
+        int n = sink.size();
+        ArrayList<ConstraintSet> saved = new ArrayList<>(n); // May need to rollback constraints.
+        // Instantiate the variables. First attempt.
+        LinkedList<Bound> bounds = new LinkedList<>();
+        for (TypeVariable alpha : sink) {
+          saved.add(new ConstraintSet(lookup(alpha)));
+        }
+        for (TypeVariable alpha : sink) {
+          instantiate(alpha, bounds);
+        }
+        if (satisfiable) {
+          // Incorporate the bounds from instantiation.
+          for (Bound bound : bounds) {
+            change = true;
+            addEqualBound(bound.alpha, bound.type);
+            if (!satisfiable) break;
+            ConstraintSet as = lookup(bound.alpha);
+            if (as.capture == null) {
+              satisfiable = false;
+            }
+          }
+        }
         if (!satisfiable) {
-          return false;
-        }
-        if (instantiation != null) {
-          set.capture = instantiation;
+          // Run a second instantiation attempt according to §18.4.
+          // We create new type variables Y1, ..., Yn whose bounds are the lub/glb of the original
+          // variables in sink and if they are not internally inconsistent then assign
+          // αi = Yi for each i ∈ {1, ..., n}.
+          for (int i = 0; i < n; ++i) { // First rollback the saved constraints:
+            map.put(sink.get(i), saved.get(i));
+          }
+          satisfiable = true;
           change = true;
+          instantiateFresh(new ArrayList<>(sink));
         }
+        if (!satisfiable) break;
       }
     }
-    // Instantiate any remaining variable to its declared first bound (typically
-    // Object), matching the behavior when no constraints were recorded.
-    for (TypeVariable alpha : all) {
-      ConstraintSet set = lookup(alpha);
-      if (set.capture == null) {
-        set.capture = alpha.firstBound().type();
-      }
-    }
-    checkDeferred();
     return satisfiable;
   }
 
-  /** Strictly evaluate the deferred constraints (§18.5.2).
+  /**
+   * Test if the constriant set comes from a variable that has an instantiation or
+   * is not part of this bound set.
    */
-  private void checkDeferred() {
-    for (DeferredConstraint dc : deferred) {
-      if (!satisfiable) {
+  private boolean hasInstantiation(ConstraintSet set) {
+    if (set == EMPTY_CONSTRAINT_SET || set.capture != null) return true;
+    for (TypeDecl bound : set.equal) {
+      TypeDecl proper = properBound(bound);
+      if (proper != null) {
+        // We can cache the instantiation in set.capture.
+        set.capture = proper;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Compute a candidate instantiation for the inference variable {@code alpha}
+   * from its bounds (§18.4). If a candidate instantiation is found then it is
+   * added to the {@code bounds} list.
+   */
+  private void instantiate(TypeVariable alpha, LinkedList<Bound> bounds) {
+    // An equality bound to a proper type gives a direct instantiation and takes precedence.
+    ConstraintSet set = lookup(alpha);
+    // If αi has lower bounds, the instantiation is their least upper bound.
+    if (!set.lower.isEmpty()) {
+      ArrayList<TypeDecl> lower = properBounds(set.lower);
+      if (!lower.isEmpty()) {
+        TypeDecl lub = leastUpperBound(alpha, lower);
+        if (lub.isUnknown()) {
+          satisfiable = false;
+          return;
+        }
+        bounds.add(new Bound(BoundKind.EQUAL, alpha, lub));
         return;
       }
-      TypeDecl S = properBound(dc.S);
-      TypeDecl T = properBound(dc.T);
-      if (S == null || T == null) {
-        // Still mentions an uninstantiated inference variable; leave it deferred.
-        continue;
-      }
-      if (dc.kind == DeferredConstraint.EQUAL
-          && (isCaptureVariable(dc.S) || isCaptureVariable(dc.T))
-          && isResolvedProperType(S) && isResolvedProperType(T)) {
-        // A capture variable equated to a proper type is an over-constrained inference variable.
-        // E.g., ‹capture = String› from a Box<?> argument and a conflicting Box<String> target.
-        // Two resolved proper types are equal only if they are the same type (§18.2.4).
-        if (S != T) {
+    }
+    // TODO: if we have throws αi, then incorporate the exception type bound.
+    // Otherwise, if α has upper bounds, the instantiation is their greatest lower bound (§5.1.10).
+    if (!set.upper.isEmpty()) {
+      ArrayList<TypeDecl> upper = properBounds(set.upper);
+      if (!upper.isEmpty()) {
+        TypeDecl glb = greatestLowerBound(upper);
+        // An ill-formed intersection (e.g. of two unrelated classes) has no
+        // greatest lower bound, so the variable cannot be instantiated and the
+        // bound set is unsatisfiable (§5.1.10, §18.4).
+        if (glb.isUnknown()) {
           satisfiable = false;
+          return;
         }
+        bounds.add(new Bound(BoundKind.EQUAL, alpha, glb));
       }
     }
   }
 
   /**
-   * Compute a candidate instantiation for the inference variable {@code alpha}
-   * from its bounds (§18.4), or {@code null} if it cannot yet be resolved because
-   * a bound still mentions an uninstantiated inference variable.
+   * The lower bound of the fresh type variable that replaces {@code alpha} in the
+   * second instantiation attempt (§18.4).
    */
-  private TypeDecl instantiate(TypeVariable alpha, ConstraintSet set) {
-    // An equality bound gives a direct instantiation and takes precedence (§18.4).
-    for (TypeDecl bound : set.equal) {
-      TypeDecl proper = properBound(bound);
-      if (proper != null) {
-        return proper;
-      }
+  private TypeDecl freshLowerBound(TypeVariable alpha) {
+    ConstraintSet set = lookup(alpha);
+    if (set.lower.isEmpty()) {
+      return null;
     }
-    // An equality bound to a non-variable type that is not yet proper (e.g. S<β>
-    // with β uninstantiated) must be deferred rather than falling back to the
-    // lower/upper bounds.
-    for (TypeDecl bound : set.equal) {
-      if (!isInferenceVariable(bound)) {
-        return null;
-      }
+    ArrayList<TypeDecl> lower = properBounds(set.lower);
+    if (lower.isEmpty()) {
+      return null;
     }
-    // Otherwise, if α has lower bounds, the instantiation is their least upper bound (§4.10.4).
-    if (!set.lower.isEmpty()) {
-      ArrayList<TypeDecl> lower = properBounds(set.lower);
-      return lower == null ? null : leastUpperBound(alpha, lower);
+    TypeDecl lub = leastUpperBound(alpha, lower);
+    if (lub.isUnknown()) {
+      // An ill-formed upper bound has no instantiation and the bound set is unsatisfiable.
+      satisfiable = false;
+      return null;
     }
-    // Otherwise, if α has upper bounds, the instantiation is their greatest lower bound (§5.1.10).
-    if (!set.upper.isEmpty()) {
-      ArrayList<TypeDecl> upper = properBounds(set.upper);
-      if (upper == null) {
-        return null;
-      }
-      TypeDecl glb = greatestLowerBound(upper);
-      // An ill-formed intersection (e.g. of two unrelated classes) has no
-      // greatest lower bound, so the variable cannot be instantiated and the
-      // bound set is unsatisfiable (§5.1.10, §18.4).
-      if (glb.isUnknown()) {
-        satisfiable = false;
-        return null;
-      }
-      return glb;
+    return lub;
+  }
+
+  /**
+   * The upper bound of the fresh type variable that replaces {@code alpha} in the
+   * second instantiation attempt (§18.4).
+   */
+  private TypeDecl freshUpperBound(TypeVariable alpha) {
+    ConstraintSet set = lookup(alpha);
+    if (set.upper.isEmpty()) {
+      return null;
     }
-    return null;
+    TypeDecl glb = greatestLowerBound(new ArrayList<>(set.upper));
+    if (glb.isUnknown()) {
+      // An ill-formed lower bound has no instantiation and the bound set is unsatisfiable.
+      satisfiable = false;
+      return null;
+    }
+    return glb;
+  }
+
+  /**
+   * Second instantiation attempt of §18.4. Replace the inference variables
+   * {@code vars} of a sink SCC by fresh type variables {@code Y1, ..., Yn} whose bounds are
+   * derived from the bounds of {@code α1, ..., αn} and instantiate {@code αi = Yi}.
+   */
+  private void instantiateFresh(ArrayList<TypeVariable> vars) {
+    int n = vars.size();
+    ArrayList<TypeDecl> lowerBounds = new ArrayList<>(n);
+    ArrayList<TypeDecl> upperBounds = new ArrayList<>(n);
+    for (TypeVariable alpha : vars) {
+      lowerBounds.add(freshLowerBound(alpha));
+      upperBounds.add(freshUpperBound(alpha));
+    }
+    if (!satisfiable) return;
+    List<FreshVariable> fresh = vars.get(0).lookupFreshVars(vars, lowerBounds, upperBounds);
+    for (int i = 0; i < n; ++i) {
+      FreshVariable Yi = fresh.getChild(i);
+      ConstraintSet cs = new ConstraintSet();
+      cs.fresh = true;
+      cs.capture = Yi;
+      map.put(Yi, cs);
+      if (!auxiliaryVariables.contains(Yi)) {
+        auxiliaryVariables.add(Yi);
+      }
+      lookup(vars.get(i)).capture = Yi;
+    }
+    for (int i = 0; i < n && satisfiable; ++i) {
+      addEqualBound(vars.get(i), fresh.getChild(i));
+    }
   }
 
   /**
@@ -396,8 +573,6 @@ public class BoundSet {
    * {@code null} if the bound still mentions an uninstantiated inference variable.
    */
   private TypeDecl properBound(TypeDecl bound) {
-    // This is the substitution that isProperType() assumes has already happened, so the
-    // test here does not rely on isProperType().
     if (!bound.involvesTypeParameters()) {
       return bound;
     }
@@ -464,10 +639,9 @@ public class BoundSet {
     ArrayList<TypeDecl> result = new ArrayList<TypeDecl>(bounds.size());
     for (TypeDecl bound : bounds) {
       TypeDecl proper = properBound(bound);
-      if (proper == null) {
-        return null;
+      if (proper != null) {
+        result.add(proper);
       }
-      result.add(proper);
     }
     return result;
   }
@@ -782,8 +956,8 @@ public class BoundSet {
       // However, for this to work one would have to consider inference variables that have been instantiated
       // to be replaced in all occurrences with their instantiated type. We do not replace
       // inference variables, instead we check if they have been instantiated to a proper type.
-      TypeDecl cap = lookup(T).capture;
-      return cap != null && isProperType(cap); // NOTE(joqvist): is this recursion guaranteed bounded?
+      ConstraintSet cs = lookup(T);
+      return cs.fresh || (cs.capture != null && isProperType(cs.capture)); // NOTE(joqvist): is this recursion guaranteed bounded?
     }
     if (T instanceof ArrayDecl) {
       return isProperType(((ArrayDecl) T).componentType());
@@ -805,14 +979,15 @@ public class BoundSet {
     return true;
   }
 
-  /** Whether {@code T} is one of the inference variables of this bound set. */
+  /** Test if {@code T} is one of the inference variables of this bound set. */
   private boolean isInferenceVariable(TypeDecl T) {
-    return T instanceof TypeVariable && map.containsKey(T);
+    if (!(T instanceof TypeVariable)) return false;
+    ConstraintSet cs = map.get((TypeVariable) T);
+    return cs != null && !cs.fresh;
   }
 
   /**
-   * Whether S is compatible with T in a loose invocation context (§5.3), used to
-   * decide the proper-type case of a type compatibility constraint.
+   * Test if {@code S} is compatible with {@code T} in a loose invocation context (§5.3).
    */
   private static boolean looseInvocationCompatible(TypeDecl S, TypeDecl T) {
     return S.methodInvocationConversionTo(T) || S.boxed().withinBounds(T);
@@ -1086,23 +1261,7 @@ public class BoundSet {
   }
 
   /**
-   * Whether {@code T} is a resolved proper type for the purpose of the deferred
-   * equality check: a concrete (non-type-variable) type or a wildcard capture
-   * variable (§5.1.10), which denotes a fixed captured type. A declared type
-   * parameter is not resolved. In a deferred constraint it is an unresolved
-   * placeholder for an inference variable.
-   */
-  private static boolean isResolvedProperType(TypeDecl T) {
-    return !(T instanceof TypeVariable) || isCaptureVariable(T);
-  }
-
-  /** Whether {@code T} is a wildcard capture variable (§5.1.10). */
-  private static boolean isCaptureVariable(TypeDecl T) {
-    return T instanceof CaptureVariable;
-  }
-
-  /**
-   * Checked exception constraint {@code ‹Expression →throws T›} (§18.5.2).
+   * Checked exception constraint {@code ‹Expression → throws T›} (§18.5.2).
    */
   public void constraintCheckedThrows(Expr expr, TypeDecl T) {
     if (expr instanceof ParExpr) {
@@ -1198,7 +1357,7 @@ public class BoundSet {
     }
   }
 
-  /** Whether {@code type} is a subtype of some type in {@code types}. */
+  /** Test if {@code type} is a subtype of some type in {@code types}. */
   private static boolean subtypeOfAny(TypeDecl type, Collection<TypeDecl> types) {
     for (TypeDecl T : types) {
       if (type.subtype(T)) {
