@@ -220,9 +220,13 @@ aspect GreatestLowerBoundFactory {
               for (ParTypeDecl superIface_j : superISet_j) {
                 if (superIface_j instanceof ParInterfaceDecl) {
                   ParInterfaceDecl pj = (ParInterfaceDecl) superIface_j;
+                  // Two parameterizations of the same generic interface can both be
+                  // supertypes of the intersection unless they are provably distinct.
+                  // Parameterizations of different generic interfaces are unrelated and
+                  // never conflict, so the generic declarations are compared first.
                   if (pi != pj
                       && pi.genericDecl() == pj.genericDecl()
-                      && !pi.sameArguments(pj)) {
+                      && provablyDistinct(pi, pj)) {
                     return false;
                   }
                 }
@@ -250,7 +254,7 @@ aspect GreatestLowerBoundFactory {
               ParInterfaceDecl parIface = (ParInterfaceDecl) iface;
               if (parIface != impParIface
                   && parIface.genericDecl() == impParIface.genericDecl()
-                  && !parIface.sameArguments(impParIface)) {
+                  && provablyDistinct(parIface, impParIface)) {
                 return false;
               }
             }
@@ -258,6 +262,51 @@ aspect GreatestLowerBoundFactory {
         }
       }
       return true;
+    }
+
+    /**
+     * Test if two parameterized types are provably distinct (JLS3 §4.5).
+     *
+     * @return {@code true} if no type is a subtype of both {@code s} and {@code t}
+     */
+    private static boolean provablyDistinct(ParTypeDecl s, ParTypeDecl t) {
+      if (s.genericDecl() != t.genericDecl()) {
+        // Parameterizations of distinct generic types are distinct.
+        return true;
+      }
+      java.util.List<TypeDecl> sa = s.getParameterization().args;
+      java.util.List<TypeDecl> ta = t.getParameterization().args;
+      if (sa.size() != ta.size()) {
+        return false;
+      }
+      for (int i = 0; i < sa.size(); ++i) {
+        if (provablyDistinctArguments(sa.get(i), ta.get(i))) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    /**
+     * Test if two type arguments are provably distinct (JLS3 §4.5).
+     *
+     * @return {@code true} if no type argument satisfies both {@code s} and {@code t}
+     */
+    private static boolean provablyDistinctArguments(TypeDecl s, TypeDecl t) {
+      if (!isTypeVariableOrWildcard(s) && !isTypeVariableOrWildcard(t)) {
+        // Neither argument is a type variable or wildcard so they are distinct unless they are the same type.
+        if (s instanceof ParTypeDecl && t instanceof ParTypeDecl) {
+          return !((ParTypeDecl) s).sameArguments((ParTypeDecl) t);
+        }
+        return s != t;
+      }
+      TypeDecl se = s.erasure();
+      TypeDecl te = t.erasure();
+      return !se.subtype(te) && !te.subtype(se);
+    }
+
+    private static boolean isTypeVariableOrWildcard(TypeDecl t) {
+      return t.isWildcard() || t instanceof TypeVariable;
     }
 
     /**

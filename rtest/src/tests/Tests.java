@@ -69,7 +69,12 @@ public interface Tests {
     "generics/bounds_05f", // Compilation should fail on cyclic type variable bounds.
     "generics/bounds_06f", // Compilation should fail on cyclic type variable bounds.
     "java10/var/var_17",  // issue 319
-    "jsr335/intersection",  // issue 319
+    "jsr335/intersection/intersection_01",  // issue 319
+    "jsr335/intersection/intersection_02",  // issue 319
+    "jsr335/intersection/intersection_03",  // issue 319
+    "jsr335/intersection/intersection_04",  // issue 319
+    "jsr335/intersection/intersection_05",  // issue 319
+    "jsr335/intersection/intersection_06",  // issue 319
     "java10/var/var_14", // issue 340
     "java10/var/var_27", // issue 340
   };
