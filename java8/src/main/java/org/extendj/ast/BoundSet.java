@@ -62,9 +62,11 @@ public class BoundSet {
   private ArrayList<Bound> newBounds = new ArrayList<>();
   private boolean incorporating = false;
 
-  // TODO(joqvist): record throws bounds (preferring unchecked exceptions).
-  /** Set of type bounds for inferred type variables. */
-  static class ConstraintSet {
+  /**
+   * The set of reduced bounds for an inference variable.
+   * Produced from constraint formulas.
+   */
+  static class VariableBounds {
     /** Lower type bounds. */
     public final Collection<TypeDecl> lower;
 
@@ -84,20 +86,23 @@ public class BoundSet {
     /**
      * The captured type to use as type argument.
      *
-     * <p>This is {@code null} before inference starts and if no type matches the bounds.
+     * <p>This is {@code null} until the variable has been instantiated.
      */
     public TypeDecl capture;
 
     /** This is a fresh synthetic variable created during resolution. */
     public boolean fresh = false;
 
-    ConstraintSet() {
+    /** Sentinel set from looking up a missing/external variable. */
+    static final VariableBounds EMPTY = VariableBounds.empty();
+
+    VariableBounds() {
       // Insertion ordered so that resolution does not depend on identity hash codes:
       // the bounds drive the dependency traversal and the lub/glb argument order.
       this(new LinkedHashSet<>(4), new LinkedHashSet<>(4), new LinkedHashSet<>(4));
     }
 
-    ConstraintSet(ConstraintSet that) {
+    VariableBounds(VariableBounds that) {
       this.lower = new LinkedHashSet<>(that.lower);
       this.upper = new LinkedHashSet<>(that.upper);
       this.equal = new LinkedHashSet<>(that.equal);
@@ -106,7 +111,7 @@ public class BoundSet {
       this.fresh = that.fresh;
     }
 
-    private ConstraintSet(Collection<TypeDecl> lower, Collection<TypeDecl> upper,
+    private VariableBounds(Collection<TypeDecl> lower, Collection<TypeDecl> upper,
         Collection<TypeDecl> equal) {
       this.lower = lower;
       this.upper = upper;
@@ -114,18 +119,13 @@ public class BoundSet {
     }
 
     /** Create an immutable empty constraint set. */
-    static ConstraintSet empty() {
-      return new ConstraintSet(Collections.<TypeDecl>emptySet(),
+    static VariableBounds empty() {
+      return new VariableBounds(Collections.<TypeDecl>emptySet(),
           Collections.<TypeDecl>emptySet(), Collections.<TypeDecl>emptySet());
     }
   }
 
-  static final ConstraintSet EMPTY_CONSTRAINT_SET = ConstraintSet.empty();
-
-  /**
-   * Inference variables whose instantiations are the inferred type arguments of
-   * this bound set.
-   */
+  /** Inference variables whose instantiations are to be derived from this bound set. */
   private Collection<TypeVariable> variables;
 
   /**
@@ -135,10 +135,10 @@ public class BoundSet {
   private Collection<TypeVariable> auxiliaryVariables;
 
   /** The constraint sets of the inference variables in this set. */
-  protected Map<TypeVariable, ConstraintSet> map;
+  protected Map<TypeVariable, VariableBounds> map;
 
-  ConstraintSet lookup(TypeDecl v) {
-    return map.getOrDefault(v, EMPTY_CONSTRAINT_SET);
+  VariableBounds lookup(TypeDecl v) {
+    return map.getOrDefault(v, VariableBounds.EMPTY);
   }
 
   public boolean rawAccess = false;
@@ -179,14 +179,14 @@ public class BoundSet {
   public void addTypeVariable(TypeVariable T) {
     if (!variables.contains(T)) {
       variables.add(T);
-      map.put(T, new ConstraintSet());
+      map.put(T, new VariableBounds());
     }
   }
 
   /** Add the bound {@code throws α} for an inference variable (§18.1.3).  */
   public void addThrowsBound(TypeVariable alpha) {
-    ConstraintSet set = lookup(alpha);
-    if (set != EMPTY_CONSTRAINT_SET) {
+    VariableBounds set = lookup(alpha);
+    if (set != VariableBounds.EMPTY) {
       set.hasThrowsBound = true;
     }
   }
@@ -198,7 +198,7 @@ public class BoundSet {
   private void addAuxiliaryVariable(TypeVariable T) {
     if (!variables.contains(T) && !auxiliaryVariables.contains(T)) {
       auxiliaryVariables.add(T);
-      map.put(T, new ConstraintSet());
+      map.put(T, new VariableBounds());
     }
   }
 
@@ -244,9 +244,9 @@ public class BoundSet {
     for (TypeVariable var : set.auxiliaryVariables) {
       addAuxiliaryVariable(var);
     }
-    for (Map.Entry<TypeVariable, ConstraintSet> entry : set.map.entrySet()) {
+    for (Map.Entry<TypeVariable, VariableBounds> entry : set.map.entrySet()) {
       TypeVariable var = entry.getKey();
-      ConstraintSet incoming = entry.getValue();
+      VariableBounds incoming = entry.getValue();
       if (incoming.hasThrowsBound) {
         lookup(var).hasThrowsBound = true;
       }
@@ -278,7 +278,7 @@ public class BoundSet {
     str.append("BoundSet {");
     String sep = " ";
     for (TypeVariable T : variables) {
-      ConstraintSet set = lookup(T);
+      VariableBounds set = lookup(T);
       for (TypeDecl U : set.lower) {
         sep = "\n";
         str.append("\n  " + T.fullName() + " :> " + U.fullName());
@@ -299,7 +299,7 @@ public class BoundSet {
   private ArrayList<TypeVariable> addEdge(TypeVariable alpha, TypeVariable beta, Stack<TypeVariable> stack,
       Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
     // Add dependency edge alpha -> beta
-    ConstraintSet set = lookup(beta);
+    VariableBounds set = lookup(beta);
     if (hasInstantiation(set)) {
       // Variable already instantiated - ignore it.
       return null;
@@ -350,7 +350,7 @@ public class BoundSet {
     ArrayList<TypeVariable> scc;
 
     // Iterate dependencies.
-    ConstraintSet set = lookup(alpha);
+    VariableBounds set = lookup(alpha);
     for (TypeDecl T : set.equal) {
       // alpha depends on T (unless capture)
       scc = addEdge(alpha, T, stack, index, lowlink);
@@ -398,7 +398,7 @@ public class BoundSet {
       change = false;
       Collection<TypeVariable> all = allVariables(); // incorporation produces additional auxiliary variables
       for (TypeVariable u : all) {
-        ConstraintSet set = lookup(u);
+        VariableBounds set = lookup(u);
         if (hasInstantiation(set)) {
           // Variable already instantiated - ignore it.
           continue;
@@ -409,11 +409,11 @@ public class BoundSet {
         ArrayList<TypeVariable> sink = connect(u, stack, index, lowlink);
         assert sink != null; // Must be non-null by the fact that at least u is not instantiated.
         int n = sink.size();
-        ArrayList<ConstraintSet> saved = new ArrayList<>(n); // May need to rollback constraints.
+        ArrayList<VariableBounds> saved = new ArrayList<>(n); // May need to rollback constraints.
         // Instantiate the variables. First attempt.
         LinkedList<Bound> bounds = new LinkedList<>();
         for (TypeVariable alpha : sink) {
-          saved.add(new ConstraintSet(lookup(alpha)));
+          saved.add(new VariableBounds(lookup(alpha)));
         }
         for (TypeVariable alpha : sink) {
           instantiate(alpha, bounds);
@@ -424,7 +424,7 @@ public class BoundSet {
             change = true;
             addEqualBound(bound.alpha, bound.type);
             if (!satisfiable) break;
-            ConstraintSet as = lookup(bound.alpha);
+            VariableBounds as = lookup(bound.alpha);
             if (as.capture == null) {
               satisfiable = false;
             }
@@ -452,8 +452,8 @@ public class BoundSet {
    * Test if the constriant set comes from a variable that has an instantiation or
    * is not part of this bound set.
    */
-  private boolean hasInstantiation(ConstraintSet set) {
-    if (set == EMPTY_CONSTRAINT_SET || set.capture != null) return true;
+  private boolean hasInstantiation(VariableBounds set) {
+    if (set == VariableBounds.EMPTY || set.capture != null) return true;
     for (TypeDecl bound : set.equal) {
       TypeDecl proper = properBound(bound);
       if (proper != null) {
@@ -472,7 +472,7 @@ public class BoundSet {
    */
   private void instantiate(TypeVariable alpha, LinkedList<Bound> bounds) {
     // An equality bound to a proper type gives a direct instantiation and takes precedence.
-    ConstraintSet set = lookup(alpha);
+    VariableBounds set = lookup(alpha);
     // If αi has lower bounds, the instantiation is their least upper bound.
     if (!set.lower.isEmpty()) {
       ArrayList<TypeDecl> lower = properBounds(set.lower);
@@ -523,7 +523,7 @@ public class BoundSet {
    * second instantiation attempt (§18.4).
    */
   private TypeDecl freshLowerBound(TypeVariable alpha) {
-    ConstraintSet set = lookup(alpha);
+    VariableBounds set = lookup(alpha);
     if (set.lower.isEmpty()) {
       return null;
     }
@@ -545,7 +545,7 @@ public class BoundSet {
    * second instantiation attempt (§18.4).
    */
   private TypeDecl freshUpperBound(TypeVariable alpha) {
-    ConstraintSet set = lookup(alpha);
+    VariableBounds set = lookup(alpha);
     if (set.upper.isEmpty()) {
       return null;
     }
@@ -575,7 +575,7 @@ public class BoundSet {
     List<FreshVariable> fresh = vars.get(0).lookupFreshVars(vars, lowerBounds, upperBounds);
     for (int i = 0; i < n; ++i) {
       FreshVariable Yi = fresh.getChild(i);
-      ConstraintSet cs = new ConstraintSet();
+      VariableBounds cs = new VariableBounds();
       cs.fresh = true;
       cs.capture = Yi;
       map.put(Yi, cs);
@@ -693,22 +693,22 @@ public class BoundSet {
       if (type.hasSuperclass()) {
         set.add(type.superclass());
       }
-      for (int i = 0; i < type.getNumImplements(); i++) {
-        set.add(type.getImplements(i).type());
+      for (Access it : type.getImplementsList()) {
+        set.add(it.type());
       }
       return set;
     } else if (T instanceof InterfaceDecl) {
       InterfaceDecl type = (InterfaceDecl) T;
-      Collection<TypeDecl> set = new HashSet<TypeDecl>();
-      for (int i = 0; i < type.getNumSuperInterface(); i++) {
-        set.add(type.getSuperInterface(i).type());
+      Collection<TypeDecl> set = new HashSet<>();
+      for (Access it : type.getSuperInterfaces()) {
+        set.add(it.type());
       }
       return set;
     } else if (T instanceof TypeVariable) {
       TypeVariable type = (TypeVariable) T;
-      Collection<TypeDecl> set = new HashSet<TypeDecl>();
-      for (int i = 0; i < type.getNumTypeBound(); i++) {
-        set.add(type.getTypeBound(i).type());
+      Collection<TypeDecl> set = new HashSet<>();
+      for (Access it : type.getBounds()) {
+        set.add(it.type());
       }
       return set;
     } else {
@@ -721,8 +721,8 @@ public class BoundSet {
   /** Computes the parameterized supertypes of some type.  */
   protected static Collection<ParTypeDecl> parameterizedSupertypes(TypeDecl type) {
     // TODO(joqvist): this should be an attribute of TypeDecl instead.
-    Collection<ParTypeDecl> result = new HashSet<ParTypeDecl>();
-    addParameterizedSupertypes(type, new HashSet<TypeDecl>(), result);
+    Collection<ParTypeDecl> result = new HashSet<>();
+    addParameterizedSupertypes(type, new HashSet<>(), result);
     return result;
   }
 
@@ -978,7 +978,7 @@ public class BoundSet {
       // However, for this to work one would have to consider inference variables that have been instantiated
       // to be replaced in all occurrences with their instantiated type. We do not replace
       // inference variables, instead we check if they have been instantiated to a proper type.
-      ConstraintSet cs = lookup(T);
+      VariableBounds cs = lookup(T);
       return cs.fresh || (cs.capture != null && isProperType(cs.capture)); // NOTE(joqvist): is this recursion guaranteed bounded?
     }
     if (T instanceof ArrayDecl) {
@@ -1004,7 +1004,7 @@ public class BoundSet {
   /** Test if {@code T} is one of the inference variables of this bound set. */
   private boolean isInferenceVariable(TypeDecl T) {
     if (!(T instanceof TypeVariable)) return false;
-    ConstraintSet cs = map.get((TypeVariable) T);
+    VariableBounds cs = map.get((TypeVariable) T);
     return cs != null && !cs.fresh;
   }
 
@@ -1437,7 +1437,7 @@ public class BoundSet {
    * that rules propagate bounds in both directions.
    */
   private boolean incorporate(Bound bound) {
-    ConstraintSet set = lookup(bound.alpha);
+    VariableBounds set = lookup(bound.alpha);
     TypeVariable alpha = bound.alpha;
     TypeDecl S = bound.type;
     switch (bound.kind) {
@@ -1515,7 +1515,7 @@ public class BoundSet {
    */
   private void addEqualBound(TypeDecl S, TypeDecl T) {
     if (S == T) return;
-    ConstraintSet set = lookup(S);
+    VariableBounds set = lookup(S);
     if (set.equal.add(T)) {
       if (isProperType(T)) {
         // As soon as we add an equality bound to a proper type T
