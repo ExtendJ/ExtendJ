@@ -1,6 +1,6 @@
-// This test is the same as inf_01, excepth that the second function type
+// This test is the same as chain_05p, except that the second function type
 // in app is different. They are otherwise functionally identical.
-// This test compiles with javac, inf_01 does not.
+// This test compiles with javac, chain_05p does not.
 // .result: COMPILE_PASS
 public class Test {
   public static void main(String[] args) {

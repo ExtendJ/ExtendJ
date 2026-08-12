@@ -363,6 +363,115 @@ aspect TypeInference_SE8 {
 
   eq GroundedLambda.type() = getGroundType().type();
 
+  /**
+   * Test if a constraint on this expression can have input variables (§18.5.2),
+   * and thereby needs to be reduced in dependency order.
+   */
+  syn boolean Expr.hasConstraintInputVariables() = false;
+
+  eq LambdaExpr.hasConstraintInputVariables() = true;
+
+  eq MethodReference.hasConstraintInputVariables() = true;
+
+  eq ConstructorReference.hasConstraintInputVariables() = true;
+
+  eq ParExpr.hasConstraintInputVariables() = getExpr().hasConstraintInputVariables();
+
+  eq ConditionalExpr.hasConstraintInputVariables() =
+      getTrueExpr().hasConstraintInputVariables()
+      || getFalseExpr().hasConstraintInputVariables();
+
+  /**
+   * Fill the out-argument {@code result} with all input variables
+   * of the constraint {@code ‹this → T›} or
+   * {@code ‹this →throws T›} according to {@code checkedThrows}.
+   *
+   * <p>Used in ordering constraints by variable dependencies.
+   */
+  public void Expr.constraintInputVariables(BoundSet bounds, TypeDecl T, boolean checkedThrows,
+      Collection<TypeVariable> result) {
+  }
+
+  public void ParExpr.constraintInputVariables(BoundSet bounds, TypeDecl T, boolean checkedThrows,
+      Collection<TypeVariable> result) {
+    getExpr().constraintInputVariables(bounds, T, checkedThrows, result);
+  }
+
+  public void ConditionalExpr.constraintInputVariables(BoundSet bounds, TypeDecl T,
+      boolean checkedThrows, Collection<TypeVariable> result) {
+    getTrueExpr().constraintInputVariables(bounds, T, checkedThrows, result);
+    getFalseExpr().constraintInputVariables(bounds, T, checkedThrows, result);
+  }
+
+  public void LambdaExpr.constraintInputVariables(BoundSet bounds, TypeDecl T, boolean checkedThrows,
+      Collection<TypeVariable> result) {
+    if (bounds.isInferenceVariable(T)) {
+      result.add((TypeVariable) T);
+      return;
+    }
+    if (!T.hasFunctionDescriptor()) {
+      return;
+    }
+    FunctionDescriptor fd = T.functionDescriptor();
+    if (isImplicit()) {
+      for (ParameterDeclaration param : fd.method.getParameters()) {
+        bounds.collectMentionedVars(param.type(), result);
+      }
+    }
+    TypeDecl R = fd.method.type();
+    if (checkedThrows) {
+      bounds.collectMentionedVars(R, result);
+    } else if (!R.isVoid()) {
+      for (Expr expr : resultExpressions()) {
+        expr.constraintInputVariables(bounds, R, false, result);
+      }
+    }
+  }
+
+  public void MethodReference.constraintInputVariables(BoundSet bounds, TypeDecl T,
+      boolean checkedThrows, Collection<TypeVariable> result) {
+    referenceInputVariables(bounds, T, checkedThrows, isExact(), result);
+  }
+
+  public void ConstructorReference.constraintInputVariables(BoundSet bounds, TypeDecl T,
+      boolean checkedThrows, Collection<TypeVariable> result) {
+    referenceInputVariables(bounds, T, checkedThrows, isExact(), result);
+  }
+
+  /** The input variables of a method or constructor reference constraint (§18.5.2). */
+  public void Expr.referenceInputVariables(BoundSet bounds, TypeDecl T, boolean checkedThrows,
+      boolean exact, Collection<TypeVariable> result) {
+    if (bounds.isInferenceVariable(T)) {
+      result.add((TypeVariable) T);
+      return;
+    }
+    if (exact || !T.hasFunctionDescriptor()) {
+      return;
+    }
+    FunctionDescriptor fd = T.functionDescriptor();
+    for (ParameterDeclaration param : fd.method.getParameters()) {
+      bounds.collectMentionedVars(param.type(), result);
+    }
+    if (checkedThrows) {
+      bounds.collectMentionedVars(fd.method.type(), result);
+    }
+  }
+
+  /** The expressions that give the result of this lambda (§15.27.2). */
+  syn Collection<Expr> LambdaExpr.resultExpressions() {
+    ArrayList<Expr> result = new ArrayList<>();
+    if (getLambdaBody() instanceof ExprLambdaBody) {
+      result.add(((ExprLambdaBody) getLambdaBody()).getExpr());
+    } else {
+      for (ReturnStmt returnStmt : ((BlockLambdaBody) getLambdaBody()).lambdaReturns()) {
+        if (returnStmt.hasResult()) {
+          result.add(returnStmt.getResult());
+        }
+      }
+    }
+    return result;
+  }
+
   // TODO(joqvist): if targetType is not compatible with the declared return type do we return an unsatisfiable bound set?
   syn BoundSet MethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) = new BoundSet();
 
@@ -376,23 +485,36 @@ aspect TypeInference_SE8 {
     // Additional invocation constraints if the bound set is still satisfiable.
     if (bounds.satisfiable) {
       ParMethodDecl par = inferenceParMethodDecl();
+      boolean ordered = false;
+      ArrayList<BoundSet.Constraint> constraints = null;
+      for (Expr arg : args) {
+        if (arg.hasConstraintInputVariables()) {
+          ordered = true;
+          constraints = new ArrayList<>();
+          break;
+        }
+      }
       for (int i = 0; i < args.getNumChild(); ++i) {
         TypeDecl Fi = par.formalType(i);
         int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
         Expr ei = args.getChild(i);
-        if (!ei.pertinentToApplicability(context, this, k)) {
-          if (ei instanceof LambdaExpr && ((LambdaExpr) ei).isImplicit()) {
-            // Reduce an implicitly typed lambda only when the ground target gives it
-            // proper parameter types.
-            LambdaExpr lambda = (LambdaExpr) ei;
-            if (lambda.hasProperParameterTypes(Fi)) {
-              bounds.constraintExprCompat(lambda.groundedLambda(Fi), Fi);
-            }
-          } else {
+        boolean compat = !ei.pertinentToApplicability(context, this, k);
+        if (ordered) {
+          if (compat) {
+            constraints.add(BoundSet.compatibilityConstraint(ei, Fi)); // ‹ei → Fi θ›
+          }
+          constraints.add(BoundSet.checkedThrowsConstraint(ei, Fi)); // ‹ei → throws Fi θ›
+        } else {
+          // No argument constraint has input variables, so the constraints do not
+          // have to be reduced in dependency order.
+          if (compat) {
             bounds.constraintExprCompat(ei, Fi); // ‹ei → Fi θ›
           }
+          bounds.constraintCheckedThrows(ei, Fi); // ‹ei → throws Fi θ›
         }
-        bounds.constraintCheckedThrows(ei, Fi); // ‹ei →throws Fi θ›
+      }
+      if (ordered) {
+        bounds.reduceOrdered(constraints);
       }
     }
     bounds.resolve();

@@ -1,6 +1,7 @@
 package org.extendj.ast;
 
 import java.util.*;
+import java.util.function.*;
 
 /**
  * A type bound set used for type inference as described by JLS SE8 §18.
@@ -99,7 +100,7 @@ public class BoundSet {
     VariableBounds() {
       // Insertion ordered so that resolution does not depend on identity hash codes:
       // the bounds drive the dependency traversal and the lub/glb argument order.
-      this(new LinkedHashSet<>(4), new LinkedHashSet<>(4), new LinkedHashSet<>(4));
+      this(new LinkedHashSet<>(), new LinkedHashSet<>(), new LinkedHashSet<>());
     }
 
     VariableBounds(VariableBounds that) {
@@ -171,7 +172,7 @@ public class BoundSet {
   private ArrayList<DeferredConstraint> deferred = new ArrayList<>(0);
 
   public BoundSet() {
-    variables = new ArrayList<>(4);
+    variables = new ArrayList<>();
     auxiliaryVariables = new ArrayList<>(0);
     map = new HashMap<>();
   }
@@ -385,6 +386,15 @@ public class BoundSet {
 
   /** Resolve the inference variables to instantiations (§18.4). */
   public boolean resolve() {
+    return resolve(this::allVariables);
+  }
+
+  /** Resolve the given inference variables and the variables they depend on. */
+  public boolean resolve(Collection<TypeVariable> targets) {
+    return resolve(() -> targets);
+  }
+
+  private boolean resolve(Supplier<Collection<TypeVariable>> variables) {
     // §18.4 specifies that variables are instantiated in an iterative fashion
     // where in each step a subset S ⊂ V is chosen and instantiated as a unit
     // where S is minimal non-empty sink SCC of uninstantiated inference
@@ -396,8 +406,8 @@ public class BoundSet {
     boolean change = true;
     while (satisfiable && change) {
       change = false;
-      Collection<TypeVariable> all = allVariables(); // incorporation produces additional auxiliary variables
-      for (TypeVariable u : all) {
+      // Incorporation during instantiation can add auxiliary variables to the set.
+      for (TypeVariable u : variables.get()) {
         VariableBounds set = lookup(u);
         if (hasInstantiation(set)) {
           // Variable already instantiated - ignore it.
@@ -446,6 +456,256 @@ public class BoundSet {
       }
     }
     return satisfiable;
+  }
+
+  enum ConstraintKind {
+    COMPATIBILITY,  // ‹expr → T›
+    CHECKED_THROWS, // ‹expr → throws T›
+  };
+
+  /**
+   * A constraint formula on an argument expression to be reduced in dependency order.
+   */
+  public static class Constraint {
+    final ConstraintKind kind;
+    final Expr expr;
+
+    /** The target type, substituted as the input variables are instantiated. */
+    TypeDecl T;
+
+    Constraint(ConstraintKind kind, Expr expr, TypeDecl T) {
+      this.kind = kind;
+      this.expr = expr;
+      this.T = T;
+    }
+
+    /** Collect variables that must be instantiated before this constraint can be reduced. */
+    void collectInputVars(BoundSet bounds, Collection<TypeVariable> result) {
+      expr.constraintInputVariables(bounds, T, kind == ConstraintKind.CHECKED_THROWS, result);
+    }
+
+    /** Collect variables of the target type that this constraint can constrain. */
+    void collectOutputVars(BoundSet bounds, Collection<TypeVariable> result) {
+      Collection<TypeVariable> input = new LinkedHashSet<>();
+      collectInputVars(bounds, input);
+      Collection<TypeVariable> mentioned = new LinkedHashSet<>();
+      bounds.collectMentionedVars(T, mentioned);
+      mentioned.removeAll(input);
+      result.addAll(mentioned);
+    }
+
+    void reduce(BoundSet bounds) {
+      switch (kind) {
+        case CHECKED_THROWS:
+          bounds.constraintCheckedThrows(expr, T);
+          break;
+        case COMPATIBILITY:
+          if (expr instanceof LambdaExpr && ((LambdaExpr) expr).isImplicit()
+              && expr.hasProperParameterTypes(T)) {
+            // The target type gives the lambda proper parameter types, so its body can
+            // be typed against a ground target type.
+            bounds.constraintExprCompat(((LambdaExpr) expr).groundedLambda(T), T);
+          } else {
+            bounds.constraintExprCompat(expr, T);
+          }
+          break;
+      }
+    }
+  }
+
+  public static Constraint compatibilityConstraint(Expr expr, TypeDecl T) {
+    return new Constraint(ConstraintKind.COMPATIBILITY, expr, T);
+  }
+
+  public static Constraint checkedThrowsConstraint(Expr expr, TypeDecl T) {
+    return new Constraint(ConstraintKind.CHECKED_THROWS, expr, T);
+  }
+
+  /** Collect the inference variables of this bound set that are mentioned by {@code T}. */
+  public void collectMentionedVars(TypeDecl T, Collection<TypeVariable> result) {
+    if (isInferenceVariable(T)) {
+      result.add((TypeVariable) T);
+    } else if (T instanceof ParTypeDecl && !T.isRawType()) {
+      for (TypeDecl arg : ((ParTypeDecl) T).getParameterization().args) {
+        collectMentionedVars(arg, result);
+      }
+    } else if (T instanceof WildcardExtendsType) {
+      collectMentionedVars(((WildcardExtendsType) T).extendsType(), result);
+    } else if (T instanceof WildcardSuperType) {
+      collectMentionedVars(((WildcardSuperType) T).superType(), result);
+    } else if (T.isArrayDecl()) {
+      collectMentionedVars(T.componentType(), result);
+    } else if (T instanceof GLBType) {
+      GLBType glb = (GLBType) T;
+      for (int i = 0; i < glb.getNumTypeBound(); ++i) {
+        collectMentionedVars(glb.getTypeBound(i).type(), result);
+      }
+    }
+  }
+
+  /**
+   * Reduce the constraint formulas of an invocation in dependency order (§18.5.2).
+   */
+  public void reduceOrdered(java.util.List<Constraint> constraints) {
+    // Fixpoint constraint reduction, choosing constraints whose input
+    // variables cannot influence output variables of other constraints.
+    ArrayList<Constraint> pending = new ArrayList<>(constraints);
+    while (satisfiable && !pending.isEmpty()) {
+      ArrayList<Constraint> selected = select(pending);
+      pending.removeAll(selected);
+      Collection<TypeVariable> input = new LinkedHashSet<>();
+      for (Constraint constraint : selected) {
+        constraint.collectInputVars(this, input);
+      }
+      if (!input.isEmpty() && !resolve(input)) {
+        return;
+      }
+      Map<TypeVariable, TypeDecl> theta = instantiations();
+      if (!theta.isEmpty()) {
+        for (Constraint constraint : selected) {
+          constraint.T = constraint.T.substituted(theta);
+        }
+        for (Constraint constraint : pending) {
+          constraint.T = constraint.T.substituted(theta);
+        }
+      }
+      for (Constraint constraint : selected) {
+        constraint.reduce(this);
+        if (!satisfiable) {
+          return;
+        }
+      }
+    }
+  }
+
+  /**
+   * Select constraints to reduce in the next round of reduction.
+   */
+  private ArrayList<Constraint> select(ArrayList<Constraint> pending) {
+    ArrayList<Collection<TypeVariable>> input = new ArrayList<>(pending.size());
+    ArrayList<Collection<TypeVariable>> output = new ArrayList<>(pending.size());
+    for (Constraint constraint : pending) {
+      Collection<TypeVariable> in = new LinkedHashSet<>();
+      Collection<TypeVariable> out = new LinkedHashSet<>();
+      constraint.collectInputVars(this, in);
+      constraint.collectOutputVars(this, out);
+      input.add(in);
+      output.add(out);
+    }
+    Map<TypeVariable, TypeVariable> forest = influenceGroups();
+    ArrayList<Constraint> selected = new ArrayList<>(pending.size());
+    for (int i = 0; i < pending.size(); ++i) {
+      boolean independent = true;
+      for (int j = 0; independent && j < pending.size(); ++j) {
+        if (i == j) {
+          continue;
+        }
+influence:
+        for (TypeVariable alpha : input.get(i)) {
+          TypeVariable root = find(forest, alpha);
+          for (TypeVariable beta : output.get(j)) {
+            if (find(forest, beta) == root) {
+              independent = false;
+              break influence;
+            }
+          }
+        }
+      }
+      if (independent) {
+        selected.add(pending.get(i));
+      }
+    }
+    if (selected.isEmpty()) {
+      // Remaining constraints form a dependency cycle, pick one using tie breaker.
+      Constraint first = pending.get(0);
+      for (Constraint constraint : pending) {
+        if (tieBreak(constraint, first)) {
+          first = constraint;
+        }
+      }
+      selected.add(first);
+    }
+    return selected;
+  }
+
+  /** Tie breaker for mutually dependent constraint ordering. */
+  private static boolean tieBreak(Constraint constraint, Constraint other) {
+    if (constraint.kind != other.kind) {
+      return constraint.kind == ConstraintKind.COMPATIBILITY;
+    }
+    return constraint.expr.getStart() < other.expr.getStart();
+  }
+
+  private TypeVariable find(Map<TypeVariable, TypeVariable> forest, TypeVariable x) {
+    if (!forest.containsKey(x)) {
+      forest.put(x, x);
+      return x;
+    }
+    TypeVariable parent = forest.get(x);
+    while (parent != x) {
+      x = parent;
+      parent = forest.get(parent);
+    }
+    return parent;
+  }
+
+  private void union(Map<TypeVariable, TypeVariable> forest, TypeVariable x, TypeVariable y) {
+    x = find(forest, x);
+    y = find(forest, y);
+    if (x == y) return;
+    forest.put(y, x);
+  }
+
+  /**
+   * Group the uninstantiated inference variables so that two variables are in the
+   * same group when one can influence the other (§18.5.2).
+   *
+   * <p>An inference variable can influence another when either depends on the
+   * resolution of the other (§18.4).
+   *
+   * @return a disjoint set forest (union-find data structure)
+   */
+  private Map<TypeVariable, TypeVariable> influenceGroups() {
+    Map<TypeVariable, TypeVariable> forest = new LinkedHashMap<>();
+    for (TypeVariable alpha : allVariables()) {
+      if (hasInstantiation(alpha)) {
+        continue;
+      }
+      Collection<TypeVariable> mentioned = new LinkedHashSet<>();
+      VariableBounds set = lookup(alpha);
+      for (TypeDecl bound : set.equal) {
+        collectMentionedVars(bound, mentioned);
+      }
+      for (TypeDecl bound : set.upper) {
+        collectMentionedVars(bound, mentioned);
+      }
+      for (TypeDecl bound : set.lower) {
+        collectMentionedVars(bound, mentioned);
+      }
+      find(forest, alpha);
+      for (TypeVariable beta : mentioned) {
+        if (hasInstantiation(beta)) continue;
+        union(forest, alpha, beta);
+      }
+    }
+    return forest;
+  }
+
+  /** The instantiations of the inference variables that have been resolved. */
+  private Map<TypeVariable, TypeDecl> instantiations() {
+    Map<TypeVariable, TypeDecl> theta = new LinkedHashMap<>();
+    for (TypeVariable alpha : allVariables()) {
+      VariableBounds set = lookup(alpha);
+      if (set != VariableBounds.EMPTY && set.capture != null) {
+        theta.put(alpha, set.capture);
+      }
+    }
+    return theta;
+  }
+
+  /** Test if an inference variable has an instantiation.  */
+  private boolean hasInstantiation(TypeVariable alpha) {
+    return hasInstantiation(lookup(alpha));
   }
 
   /**
@@ -966,7 +1226,7 @@ public class BoundSet {
   }
 
   /** Test if {@code T} is one of the inference variables of this bound set. */
-  private boolean isInferenceVariable(TypeDecl T) {
+  public boolean isInferenceVariable(TypeDecl T) {
     if (!(T instanceof TypeVariable)) return false;
     VariableBounds cs = map.get((TypeVariable) T);
     return cs != null && !cs.fresh;
@@ -1259,16 +1519,16 @@ public class BoundSet {
     } else if (expr instanceof LambdaExpr) {
       LambdaExpr lambda = (LambdaExpr) expr;
       if (lambda.isImplicit() && !lambda.hasProperParameterTypes(T)) {
-        // TODO(joqvist): This constraint is reduced too eagerly now.
-        // We need dependency-based constraint resolution.
+        // The lambda body still cannot be typed.
+        // TODO(joqvist): set satisfiable = false?
         return;
       }
       constraintCheckedThrows(lambda, T);
     } else if (expr instanceof MethodReference) {
       MethodReference ref = (MethodReference) expr;
       if (!ref.isExact() && !ref.hasProperParameterTypes(T)) {
-        // TODO(joqvist): This constraint is reduced too eagerly now.
-        // We need dependency-based constraint resolution.
+        // The method reference still cannot be resolved.
+        // TODO(joqvist): set satisfiable = false?
         return;
       }
       constraintCheckedThrows(ref, T);
@@ -1287,10 +1547,8 @@ public class BoundSet {
     FunctionDescriptor fd = T.functionDescriptor();
     MethodDecl function = fd.method;
     if (!isProperType(function.type())) {
-      // The function type's return type is neither void nor a proper type.
-      // §18.2.5 reduces the constraint to false in this case, but we
-      // cannot do this because we have reduced constraints eagerly.
-      // TODO(joqvist): we need dependency-based constraint resolution.
+      // TODO(joqvist): §18.2.5 reduces to false here. We do not because the return type
+      // might still become proper after further constraint reduction. Fix me?
       return;
     }
     // Grounded lambda used here to get the thrown types with substitution θ.
@@ -1371,10 +1629,8 @@ public class BoundSet {
       return;
     }
     if (!isProperType(function.type())) {
-      // The function type's return type is neither void nor a proper type.
-      // §18.2.5 reduces the constraint to false in this case, but we
-      // cannot do this because we have reduced constraints eagerly.
-      // TODO(joqvist): we need dependency-based constraint resolution.
+      // TODO(joqvist): §18.2.5 reduces to false here. We do not because the return type
+      // might still become proper after further constraint reduction. Fix me?
       return;
     }
     MethodDecl invoked = expr.compileTimeDeclaration(fd);

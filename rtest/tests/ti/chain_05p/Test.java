@@ -1,3 +1,5 @@
+// Chained inter-dependent function types.
+// This case does not work in javac 8, however it compiles with javac 9.
 // .result: COMPILE_PASS
 public class Test {
   public static void main(String[] args) {
