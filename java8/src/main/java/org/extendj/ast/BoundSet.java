@@ -682,42 +682,6 @@ public class BoundSet {
     return GLBTypeFactory.glb(bounds);
   }
 
-  /**
-   * Computes the direct supertypes of a type.
-   */
-  protected static Collection<TypeDecl> directSupertypes(TypeDecl T) {
-    // TODO(joqvist): this should be an attribute of TypeDecl instead.
-    if (T instanceof ClassDecl) {
-      ClassDecl type = (ClassDecl) T;
-      Collection<TypeDecl> set = new HashSet<TypeDecl>();
-      if (type.hasSuperclass()) {
-        set.add(type.superclass());
-      }
-      for (Access it : type.getImplementsList()) {
-        set.add(it.type());
-      }
-      return set;
-    } else if (T instanceof InterfaceDecl) {
-      InterfaceDecl type = (InterfaceDecl) T;
-      Collection<TypeDecl> set = new HashSet<>();
-      for (Access it : type.getSuperInterfaces()) {
-        set.add(it.type());
-      }
-      return set;
-    } else if (T instanceof TypeVariable) {
-      TypeVariable type = (TypeVariable) T;
-      Collection<TypeDecl> set = new HashSet<>();
-      for (Access it : type.getBounds()) {
-        set.add(it.type());
-      }
-      return set;
-    } else {
-      throw new Error(String.format(
-            "Operation not supported for %s, %s",
-            T.fullName(), T.getClass().getName()));
-    }
-  }
-
   /** Computes the parameterized supertypes of some type.  */
   protected static Collection<ParTypeDecl> parameterizedSupertypes(TypeDecl type) {
     // TODO(joqvist): this should be an attribute of TypeDecl instead.
@@ -735,7 +699,7 @@ public class BoundSet {
       if (type.isParameterizedType()) {
         result.add((ParTypeDecl) type);
       }
-      for (TypeDecl typeDecl : directSupertypes(type)) {
+      for (TypeDecl typeDecl : type.directSupertypes()) {
         addParameterizedSupertypes(typeDecl, processed, result);
       }
     }
