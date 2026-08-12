@@ -602,6 +602,9 @@ public class BoundSet {
         }
 influence:
         for (TypeVariable alpha : input.get(i)) {
+          // If alpha is already instantiated it becomes a singleton root in the forest.
+          // Note that identical variables should still compare as dependent
+          // regardless of instantiation state. See test ti/cycle_01f.
           TypeVariable root = find(forest, alpha);
           for (TypeVariable beta : output.get(j)) {
             if (find(forest, beta) == root) {
