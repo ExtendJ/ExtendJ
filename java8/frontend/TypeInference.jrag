@@ -72,10 +72,10 @@ aspect CaptureConversion {
   eq CaptureVariable.fullName() = name();
 
   /**
-   * Test if {@code type} is a subtype of one of the lower bounds of this capture
-   * variable, and thereby a subtype of the capture variable itself.
+   * Test if {@code type} is a subtype of one of the lower bounds of this fresh
+   * variable, and thereby a subtype of the fresh variable itself.
    */
-  syn boolean CaptureVariable.aboveLowerBound(TypeDecl type) {
+  syn boolean FreshVariable.aboveLowerBound(TypeDecl type) {
     for (Access lowerBound : getLowerBoundList()) {
       if (type.subtype(lowerBound.type())) {
         return true;
@@ -84,18 +84,18 @@ aspect CaptureConversion {
     return false;
   }
 
-  // A capture variable, unlike a declared type variable, can be a strict
-  // supertype of a concrete type when it has a lower bound (§5.1.10).
-  eq CaptureVariable.supertypeClassDecl(ClassDecl type) =
+  // A fresh variable, unlike a declared type variable, can be a strict
+  // supertype of a concrete type when it has a lower bound (§5.1.10, §18.4).
+  eq FreshVariable.supertypeClassDecl(ClassDecl type) =
       aboveLowerBound(type) || super.supertypeClassDecl(type);
 
-  eq CaptureVariable.supertypeInterfaceDecl(InterfaceDecl type) =
+  eq FreshVariable.supertypeInterfaceDecl(InterfaceDecl type) =
       aboveLowerBound(type) || super.supertypeInterfaceDecl(type);
 
-  eq CaptureVariable.supertypeArrayDecl(ArrayDecl type) =
+  eq FreshVariable.supertypeArrayDecl(ArrayDecl type) =
       aboveLowerBound(type) || super.supertypeArrayDecl(type);
 
-  eq CaptureVariable.supertypeTypeVariable(TypeVariable type) =
+  eq FreshVariable.supertypeTypeVariable(TypeVariable type) =
       type == this || aboveLowerBound(type);
 
   eq Program.getChild().lookupCaptureType(ASTNode site, TypeDecl type, int index) =
@@ -104,32 +104,39 @@ aspect CaptureConversion {
   inh TypeVariable Expr.lookupCaptureType(ASTNode site, TypeDecl type, int index);
 
   /**
-   * Create fresh variables Y1, ..., Yn used by the second instantiation attempt
-   * of bound resolution in {@link BoundSet#resolve()}.
+   * Create fresh variables {@code Y1, ..., Yn} to be used in bound set resolution
+   * ({@link BoundSet#resolve()}) and capture bound creation.
    *
-   * <p>The variables are created with upper/lower bounds and the whole
-   * group needs to be created as a single unit because the bounds can be
+   * <p>The variables are created with (optional) upper/lower bounds.
+   * The whole group needs to be created as a single unit because the bounds can be
    * mutually recursive in their upper bounds ({@code Yi <: glb(U1 θ, ..., Uk θ)} where
    * θ is the substitution {@code [α1:=Y1, ..., αn:=Yn]}).
    * For example, a self-bounded variable {@code <T extends Comparable<T>>} gives
    * {@code Y1 <: Comparable<Y1>}.
    *
-   * @param vars The inference variables {@code α1, ..., αn} being replaced.
+   * <p>Memoized so that re-evaluated inference (fixpoint iteration in
+   * {@code Expr.resolve}) gets the same variables.
+   *
+   * @param context The invocation whose inference creates the variables.
+   * @param vars The inference variables {@code α1, ..., αn} being replaced, or
+   * the capture bound argument types.
    * @param lowerBounds The lower bound of each Yi before substitution, or {@code null}
    * for a variable that has no proper lower bound.
    * @param upperBounds The upper bound of each Yi before substitution, or {@code null}
    * for a variable that has no upper bound.
    */
-  inh List<FreshVariable> TypeVariable.lookupFreshVars(
-      ArrayList<TypeVariable> vars,
+  inh List<FreshVariable> Expr.lookupFreshVars(
+      Expr context,
+      ArrayList<TypeDecl> vars,
       ArrayList<TypeDecl> lowerBounds,
       ArrayList<TypeDecl> upperBounds);
 
-  eq Program.getChild().lookupFreshVars(ArrayList<TypeVariable> vars, ArrayList<TypeDecl> lowerBounds, ArrayList<TypeDecl> upperBounds) =
-      wildcards().lookupFreshVars(vars, lowerBounds, upperBounds);
+  eq Program.getChild().lookupFreshVars(Expr context, ArrayList<TypeDecl> vars, ArrayList<TypeDecl> lowerBounds, ArrayList<TypeDecl> upperBounds) =
+      wildcards().lookupFreshVars(context, vars, lowerBounds, upperBounds);
 
   syn nta List<FreshVariable> WildcardsCompilationUnit.lookupFreshVars(
-      ArrayList<TypeVariable> vars,
+      Expr context,
+      ArrayList<TypeDecl> vars,
       ArrayList<TypeDecl> lowerBounds,
       ArrayList<TypeDecl> upperBounds) {
     // TODO(joqvist): We really should re-design Parameterization so that it can be reused here
@@ -139,22 +146,24 @@ aspect CaptureConversion {
     for (int i = 0; i < n; ++i) {
       fresh.add(new FreshVariable(
           new Modifiers(new List().add(new Modifier("public"))),
-          "fresh#" + vars.get(i).typeName(),
+          String.format("fresh#(%s)", vars.get(i).typeName()),
           new List<BodyDecl>(),
           new List<Access>(),
           new List<Access>()));
     }
     Map<TypeVariable, TypeDecl> theta = new LinkedHashMap<>();
     for (int i = 0; i < n; ++i) {
-      theta.put(vars.get(i), fresh.getChild(i));
+      if (vars.get(i) instanceof TypeVariable) {
+        theta.put((TypeVariable) vars.get(i), fresh.getChild(i));
+      }
     }
     for (int i = 0; i < n; ++i) {
       FreshVariable Yi = fresh.getChild(i);
-      TypeDecl upper = upperBounds.get(i);
+      TypeDecl upper = i < upperBounds.size() ? upperBounds.get(i) : null;
       if (upper != null) {
         Yi.setBoundList(new List<>(upper.substituted(theta).createBoundAccess()));
       }
-      TypeDecl lower = lowerBounds.get(i);
+      TypeDecl lower = i < lowerBounds.size() ? lowerBounds.get(i) : null;
       if (lower != null) {
         Yi.setLowerBoundList(new List<>(lower.substituted(theta).createBoundAccess()));
       }
@@ -203,7 +212,7 @@ aspect CaptureConversion {
 
   /**
    * Capture conversion of {@code type} with this expression as the capture site
-   * (JLS SE8 §5.1.10): each wildcard type argument is replaced by a capture
+   * (JLS SE8 §5.1.10). Each wildcard type argument is replaced by a capture
    * variable of this site.
    *
    * <p>Capture converting the same type at the same site twice yields the same
@@ -326,7 +335,7 @@ aspect TypeInference_SE8 {
   protected void MethodAccess.addInferenceNode(HashSet<MethodInferenceNode> methods,
       MethodDecl method, TypeDecl targetType) {
     if (!method.isGeneric()) {
-      methods.add(new MethodInferenceNode(method, new BoundSet()));
+      methods.add(new MethodInferenceNode(method, new BoundSet(this)));
       return;
     }
     GenericMethodDecl gm = method.genericDecl();
@@ -471,12 +480,13 @@ aspect TypeInference_SE8 {
   }
 
   // TODO(joqvist): if targetType is not compatible with the declared return type do we return an unsatisfiable bound set?
-  syn BoundSet MethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) = new BoundSet();
+  syn BoundSet MethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context)
+      = new BoundSet(context);
 
   /** Infer type bounds based on actual arguments. */
   eq GenericMethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) {
     List<ParameterDeclaration> params = getParameterList();
-    BoundSet bounds = new BoundSet();
+    BoundSet bounds = new BoundSet(context);
     collectBounds(bounds, args, targetType, context);
 
     // §18.5.2: Invocation type inference.
@@ -530,7 +540,7 @@ aspect TypeInference_SE8 {
    * <p>Lifted into the bound set of the ongoing inference which this is an argument of.
    */
   public BoundSet GenericMethodDecl.nestedInferenceBounds(List<Expr> args, TypeDecl type, Expr context) {
-    BoundSet bounds = new BoundSet();
+    BoundSet bounds = new BoundSet(context);
     collectBounds(bounds, args, type, context);
     return bounds;
   }
@@ -631,13 +641,19 @@ aspect TypeInference_SE8 {
       }
       TypeDecl R = par.type();
       if (R.isVoid()) {
+        // TODO(joqvist): There is currently no test coverage for this branch.
+        // §18.5.2 defines the result constraint only for non-void results.
         R = typeObject();
       }
-      // If R is parameterized by wildcards then fresh variables with bounds
-      // derived from the wildcards and the declared type parameter bounds are
-      // used in place of the wildcards (§18.5.2). The capture variables of R
-      // play the role of these fresh variables.
-      bounds.constraintTypeCompat(context.captureConversion(R), T);
+      if (R.isParameterizedType()) {
+        // If R θ is a parameterized type, G<A1, ..., An>, and one of A1, ..., An is a
+        // wildcard, then, for fresh inference variables β1, ..., βn, the
+        // constraint formula ‹G<β1, ..., βn> → T› is reduced and
+        // incorporated, along with the bound G<β1, ..., βn> = capture(G<A1, ..., An>), with B2.
+        bounds.maybeCaptureBound(R, T);
+      } else {
+        bounds.constraintTypeCompat(R, T);
+      }
     }
     return;
   }

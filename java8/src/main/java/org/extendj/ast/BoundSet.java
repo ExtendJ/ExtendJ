@@ -3,6 +3,7 @@ package org.extendj.ast;
 
 import java.util.*;
 import java.util.function.*;
+import java.util.stream.Collectors;
 
 /**
  * A type bound set used for type inference as described by JLS SE8 §18.
@@ -32,34 +33,13 @@ import java.util.function.*;
  * </ul>
  */
 public class BoundSet {
+  static final boolean DEBUG = !System.getProperty("extendj.debug.inf", "").isEmpty();
+
   /** The bound set is satisfiable only if the false constraint has not been added. */
   public boolean satisfiable = true;
 
-  enum BoundKind { UPPER, LOWER, EQUAL, }
-
-  static class Bound {
-    public BoundKind kind;
-    public TypeVariable alpha;
-    public TypeDecl type;
-
-    public Bound(BoundKind k, TypeVariable a, TypeDecl T) {
-      kind = k;
-      alpha = a;
-      type = T;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof Bound)) return false;
-      Bound that = (Bound) o;
-      return kind == that.kind && alpha == that.alpha && type == that.type;
-    }
-
-    @Override
-    public int hashCode() {
-      return Objects.hash(kind, alpha, type);
-    }
-  }
+  /** The invocation this bound set infers. */
+  private final Expr context;
 
   private ArrayList<Bound> newBounds = new ArrayList<>();
   private boolean incorporating = false;
@@ -84,6 +64,8 @@ public class BoundSet {
      * <p>Make inference prefer an unchecked exception type instantiation (§18.4).
      */
     public boolean hasThrowsBound = false;
+
+    public CaptureBound captureBound = null;
 
     /**
      * The instantiated type to use as type argument.
@@ -139,6 +121,8 @@ public class BoundSet {
   /** The constraint sets of the inference variables in this set. */
   protected Map<TypeVariable, VariableBounds> map;
 
+  protected Collection<CaptureBound> captureBounds;
+
   VariableBounds lookup(TypeDecl v) {
     return map.getOrDefault(v, VariableBounds.EMPTY);
   }
@@ -172,10 +156,12 @@ public class BoundSet {
   /** Constraints deferred to the enclosing bound set (§18.5.2). */
   private ArrayList<DeferredConstraint> deferred = new ArrayList<>(0);
 
-  public BoundSet() {
+  public BoundSet(Expr context) {
+    this.context = context;
     variables = new ArrayList<>();
     auxiliaryVariables = new HashSet<>();
     map = new HashMap<>();
+    captureBounds = new HashSet<>();
   }
 
   public void addTypeVariable(TypeVariable T) {
@@ -240,28 +226,32 @@ public class BoundSet {
     if (set.uncheckedConversion) {
       uncheckedConversion = true;
     }
-    for (TypeVariable var : set.variables) {
-      addAuxiliaryVariable(var);
+    for (TypeVariable v : set.variables) {
+      addAuxiliaryVariable(v);
     }
-    for (TypeVariable var : set.auxiliaryVariables) {
-      addAuxiliaryVariable(var);
+    for (TypeVariable v : set.auxiliaryVariables) {
+      addAuxiliaryVariable(v);
     }
     for (Map.Entry<TypeVariable, VariableBounds> entry : set.map.entrySet()) {
-      TypeVariable var = entry.getKey();
+      TypeVariable v = entry.getKey();
       VariableBounds incoming = entry.getValue();
       if (incoming.hasThrowsBound) {
-        lookup(var).hasThrowsBound = true;
+        lookup(v).hasThrowsBound = true;
+      }
+      if (incoming.captureBound != null) {
+        lookup(v).captureBound = incoming.captureBound;
       }
       for (TypeDecl T : incoming.equal) {
-        constraintEqual(var, T);
+        constraintEqual(v, T);
       }
       for (TypeDecl T : incoming.upper) {
-        constraintSubtype(var, T);
+        constraintSubtype(v, T);
       }
       for (TypeDecl T : incoming.lower) {
-        constraintSubtype(T, var);
+        constraintSubtype(T, v);
       }
     }
+    captureBounds.addAll(set.captureBounds);
     // Apply the deferred constraints of the lifted set within this set
     // where previously non-local type variables may be inference variables.
     for (DeferredConstraint dc : set.deferred) {
@@ -275,6 +265,7 @@ public class BoundSet {
     }
   }
 
+  @Override
   public String toString() {
     StringBuilder str = new StringBuilder();
     str.append("BoundSet {");
@@ -294,11 +285,14 @@ public class BoundSet {
         str.append("\n  " + T.fullName() + " = " + U.fullName());
       }
     }
+    for (CaptureBound cap : captureBounds) {
+        str.append("\n  " + cap);
+    }
     str.append(sep + "}");
     return str.toString();
   }
 
-  private ArrayList<TypeVariable> addEdge(TypeVariable alpha, TypeVariable beta, Stack<TypeVariable> stack,
+  private java.util.List<TypeVariable> addEdge(TypeVariable alpha, TypeVariable beta, Stack<TypeVariable> stack,
       Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
     // Add dependency edge alpha -> beta
     VariableBounds set = lookup(beta);
@@ -307,7 +301,7 @@ public class BoundSet {
       return null;
     }
     if (!index.containsKey(beta)) {
-      ArrayList<TypeVariable> scc = connect(beta, stack, index, lowlink);
+      java.util.List<TypeVariable> scc = connect(beta, stack, index, lowlink);
       lowlink.put(alpha, Math.min(lowlink.get(alpha), lowlink.get(beta)));
       return scc;
     }
@@ -315,14 +309,14 @@ public class BoundSet {
     return null;
   }
 
-  private ArrayList<TypeVariable> addEdge(TypeVariable alpha, TypeDecl T, Stack<TypeVariable> stack,
+  private java.util.List<TypeVariable> addEdge(TypeVariable alpha, TypeDecl T, Stack<TypeVariable> stack,
       Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
     if (T instanceof TypeVariable) {
       return addEdge(alpha, (TypeVariable) T, stack, index, lowlink);
     }
     if (T instanceof ParTypeDecl) {
       for (TypeDecl arg : ((ParTypeDecl) T).getParameterization().args) {
-        ArrayList<TypeVariable> scc = addEdge(alpha, arg, stack, index, lowlink);
+        java.util.List<TypeVariable> scc = addEdge(alpha, arg, stack, index, lowlink);
         if (scc != null) return scc;
       }
     }
@@ -338,7 +332,7 @@ public class BoundSet {
     return null;
   }
 
-  private ArrayList<TypeVariable> connect(TypeVariable alpha, Stack<TypeVariable> stack,
+  private java.util.List<TypeVariable> connect(TypeVariable alpha, Stack<TypeVariable> stack,
       Map<TypeVariable, Integer> index, Map<TypeVariable, Integer> lowlink) {
     // Modified Tarjan SCC algorithm which stops at the first SCC.
     // We terminate when leaving the first node v that has index[v] == lowlink[v].
@@ -349,24 +343,41 @@ public class BoundSet {
     index.put(alpha, Integer.valueOf(i));
     lowlink.put(alpha, Integer.valueOf(i));
     stack.push(alpha);
-    ArrayList<TypeVariable> scc;
+    java.util.List<TypeVariable> scc;
 
     // Iterate dependencies.
     VariableBounds set = lookup(alpha);
-    for (TypeDecl T : set.equal) {
-      // alpha depends on T (unless capture)
-      scc = addEdge(alpha, T, stack, index, lowlink);
-      if (scc != null) return scc;
-    }
-    for (TypeDecl T : set.upper) {
-      // alpha depends on T (unless capture)
-      scc = addEdge(alpha, T, stack, index, lowlink);
-      if (scc != null) return scc;
-    }
-    for (TypeDecl T : set.lower) {
-      // alpha depends on T (unless capture)
-      scc = addEdge(alpha, T, stack, index, lowlink);
-      if (scc != null) return scc;
+    if (set.captureBound != null) {
+      // A variable on the left-hand side of a capture bound depends
+      // on every other variable mentioned in the bound and its other
+      // bounds do not contribute dependencies (§18.4).
+      for (TypeVariable beta : set.captureBound.lhs) {
+        if (beta != alpha) {
+          scc = addEdge(alpha, beta, stack, index, lowlink);
+          if (scc != null) return scc;
+        }
+      }
+      for (TypeDecl beta : set.captureBound.rhs) {
+        scc = addEdge(alpha, beta, stack, index, lowlink);
+        if (scc != null) return scc;
+      }
+    } else {
+      // TODO(joqvist): how to handle the capture variable dependency inversion rule?
+      for (TypeDecl T : set.equal) {
+        // alpha depends on T (unless capture)
+        scc = addEdge(alpha, T, stack, index, lowlink);
+        if (scc != null) return scc;
+      }
+      for (TypeDecl T : set.upper) {
+        // alpha depends on T (unless capture)
+        scc = addEdge(alpha, T, stack, index, lowlink);
+        if (scc != null) return scc;
+      }
+      for (TypeDecl T : set.lower) {
+        // alpha depends on T (unless capture)
+        scc = addEdge(alpha, T, stack, index, lowlink);
+        if (scc != null) return scc;
+      }
     }
 
     // If v is a root node, pop the stack and generate an SCC
@@ -405,6 +416,7 @@ public class BoundSet {
     Map<TypeVariable, Integer> index = new HashMap<>();
     Map<TypeVariable, Integer> lowlink = new HashMap<>();
     boolean change = true;
+    if (DEBUG) System.err.println("Resolve start: " + this);
     while (satisfiable && change) {
       change = false;
       // Incorporation during instantiation can add auxiliary variables to the set.
@@ -417,44 +429,59 @@ public class BoundSet {
         stack.clear();
         index.clear();
         lowlink.clear();
-        ArrayList<TypeVariable> sink = connect(u, stack, index, lowlink);
+        java.util.List<TypeVariable> sink = connect(u, stack, index, lowlink);
+        if (DEBUG) System.err.println("sink: " + sink);
         assert sink != null; // Must be non-null by the fact that at least u is not instantiated.
-        int n = sink.size();
-        ArrayList<VariableBounds> saved = new ArrayList<>(n); // May need to rollback constraints.
-        // Instantiate the variables. First attempt.
-        LinkedList<Bound> bounds = new LinkedList<>();
-        for (TypeVariable alpha : sink) {
-          saved.add(new VariableBounds(lookup(alpha)));
+        java.util.List<TypeVariable> filtered = sink.stream()
+            .filter(it -> lookup(it).captureBound == null)
+            .collect(Collectors.toList());
+        boolean captureBlocked = filtered.size() != sink.size();
+        if (!filtered.isEmpty()) {
+          sink = filtered;
         }
-        for (TypeVariable alpha : sink) {
-          instantiate(alpha, bounds);
-        }
-        if (satisfiable) {
-          // Incorporate the bounds from instantiation.
-          for (Bound bound : bounds) {
-            change = true;
-            addEqualBound(bound.alpha, bound.type);
-            if (!satisfiable) break;
-            VariableBounds as = lookup(bound.alpha);
-            if (as.inst == null) {
-              satisfiable = false;
+        if (!captureBlocked) {
+          // Instantiate the variables. First attempt.
+          LinkedList<Bound> bounds = new LinkedList<>();
+          ArrayList<VariableBounds> saved = new ArrayList<>(sink.size()); // May need to rollback constraints.
+          for (TypeVariable alpha : sink) {
+            saved.add(new VariableBounds(lookup(alpha)));
+          }
+          for (TypeVariable alpha : sink) {
+            instantiate(alpha, bounds);
+          }
+          if (satisfiable) {
+            // Incorporate the bounds from instantiation.
+            for (Bound bound : bounds) {
+              change = true;
+              addEqualBound(bound.alpha, bound.type);
+              if (!satisfiable) break;
+              VariableBounds as = lookup(bound.alpha);
+              if (as.inst == null) {
+                satisfiable = false;
+              }
             }
           }
+          if (satisfiable) {
+            // Instantiation success on first attempt. Continue to next α.
+            continue;
+          }
+          // Rollback saved constraints in preparation for the second instantiation attempt.
+          for (int i = 0; i < saved.size(); ++i) {
+            map.put(sink.get(i), saved.get(i));
+          }
+          satisfiable = true;
         }
-        if (!satisfiable) {
+        if (satisfiable) {
           // Run a second instantiation attempt according to §18.4.
           // We create new type variables Y1, ..., Yn whose bounds are the lub/glb of the original
           // variables in sink and if they are not internally inconsistent then assign
           // αi = Yi for each i ∈ {1, ..., n}.
-          for (int i = 0; i < n; ++i) { // First rollback the saved constraints:
-            map.put(sink.get(i), saved.get(i));
-          }
-          satisfiable = true;
           change = true;
           instantiateFresh(new ArrayList<>(sink));
         }
         if (!satisfiable) break;
       }
+      if (DEBUG) System.err.println("after: " + this);
     }
     return satisfiable;
   }
@@ -677,14 +704,19 @@ influence:
       }
       Collection<TypeVariable> mentioned = new LinkedHashSet<>();
       VariableBounds set = lookup(alpha);
-      for (TypeDecl bound : set.equal) {
-        collectMentionedVars(bound, mentioned);
-      }
-      for (TypeDecl bound : set.upper) {
-        collectMentionedVars(bound, mentioned);
-      }
-      for (TypeDecl bound : set.lower) {
-        collectMentionedVars(bound, mentioned);
+      if (set.captureBound != null) {
+        mentioned.addAll(set.captureBound.lhs);
+        collectMentionedVars(set.captureBound.baseType, mentioned);
+      } else {
+        for (TypeDecl bound : set.equal) {
+          collectMentionedVars(bound, mentioned);
+        }
+        for (TypeDecl bound : set.upper) {
+          collectMentionedVars(bound, mentioned);
+        }
+        for (TypeDecl bound : set.lower) {
+          collectMentionedVars(bound, mentioned);
+        }
       }
       find(forest, alpha);
       for (TypeVariable beta : mentioned) {
@@ -746,7 +778,7 @@ influence:
           satisfiable = false;
           return;
         }
-        bounds.add(new Bound(BoundKind.EQUAL, alpha, lub));
+        bounds.add(new Bound(Bound.Kind.EQUAL, alpha, lub));
         return;
       }
     }
@@ -761,7 +793,7 @@ influence:
         }
       }
       if (useRTE) {
-        bounds.add(new Bound(BoundKind.EQUAL, alpha, alpha.typeRuntimeException()));
+        bounds.add(new Bound(Bound.Kind.EQUAL, alpha, alpha.typeRuntimeException()));
         return;
       }
     }
@@ -777,7 +809,7 @@ influence:
           satisfiable = false;
           return;
         }
-        bounds.add(new Bound(BoundKind.EQUAL, alpha, glb));
+        bounds.add(new Bound(Bound.Kind.EQUAL, alpha, glb));
       }
     }
   }
@@ -813,7 +845,11 @@ influence:
     if (set.upper.isEmpty()) {
       return null;
     }
-    TypeDecl glb = greatestLowerBound(new ArrayList<>(set.upper));
+    ArrayList<TypeDecl> upper = new ArrayList<>(set.upper.size());
+    for (TypeDecl u : set.upper) {
+      upper.add(substituted(u));
+    }
+    TypeDecl glb = greatestLowerBound(upper);
     if (glb.isUnknown()) {
       // An ill-formed lower bound has no instantiation and the bound set is unsatisfiable.
       satisfiable = false;
@@ -836,7 +872,17 @@ influence:
       upperBounds.add(freshUpperBound(alpha));
     }
     if (!satisfiable) return;
-    List<FreshVariable> fresh = vars.get(0).lookupFreshVars(vars, lowerBounds, upperBounds);
+    for (int i = 0; i < n; ++i) {
+      TypeDecl lower = lowerBounds.get(i);
+      TypeDecl upper = upperBounds.get(i);
+      if (lower != null && upper != null && isProperType(upper) && !lower.subtype(upper)) {
+        // The fresh variables must have well-formed bounds (§18.4).
+        satisfiable = false;
+        return;
+      }
+    }
+    List<FreshVariable> fresh = context.lookupFreshVars(
+        context, new ArrayList<>(vars), lowerBounds, upperBounds);
     for (int i = 0; i < n; ++i) {
       FreshVariable Yi = fresh.getChild(i);
       VariableBounds cs = new VariableBounds();
@@ -1204,7 +1250,11 @@ influence:
       // However, for this to work one would have to consider inference variables that have been instantiated
       // to be replaced in all occurrences with their instantiated type. We do not replace
       // inference variables, instead we check if they have been instantiated to a proper type.
-      VariableBounds cs = lookup(T);
+      VariableBounds cs = map.get(T);
+      if (cs == null) {
+        // A capture variable outside this bound set is a proper type.
+        return T instanceof CaptureVariable;
+      }
       return cs.fresh || (cs.inst != null && isProperType(cs.inst)); // NOTE(joqvist): is this recursion guaranteed bounded?
     }
     if (T instanceof ArrayDecl) {
@@ -1659,13 +1709,14 @@ influence:
    * that rules propagate bounds in both directions.
    */
   private boolean incorporate(Bound bound) {
-    VariableBounds set = lookup(bound.alpha);
     TypeVariable alpha = bound.alpha;
     TypeDecl S = bound.type;
     switch (bound.kind) {
       case EQUAL:
+        {
+        VariableBounds set = lookup(bound.alpha);
         if (isInferenceVariable(S)) {
-          addEqualBound(S, alpha);
+          addEqualBound(S, alpha);    // reflexivity
         }
         for (TypeDecl T : set.equal) {
           if (S != T) {
@@ -1681,23 +1732,111 @@ influence:
         if (!satisfiable) {
           return false;
         }
+        }
         break;
       case UPPER:
+        {
+        VariableBounds set = lookup(bound.alpha);
         for (TypeDecl T : set.equal) {
           constraintSubtype(T, S);    // α = T, α <: S  ⟹  ‹T <: S›
         }
         for (TypeDecl T : set.lower) {
           constraintSubtype(T, S);    // T <: α, α <: S ⟹  ‹T <: S›
         }
+        }
         break;
       case LOWER:
+        {
+        VariableBounds set = lookup(bound.alpha);
         for (TypeDecl T : set.equal) {
           constraintSubtype(S, T);    // α = T, S <: α  ⟹  ‹S <: T›
         }
         for (TypeDecl T : set.upper) {
           constraintSubtype(S, T);    // S <: α, α <: T ⟹  ‹S <: T›
         }
+        }
         break;
+      case CAPTURE:
+        {
+          // Incorporate bounds involving capture conversion (§18.3.2)
+          CaptureBound cap = (CaptureBound) bound;
+          GenericTypeDecl original = (GenericTypeDecl) ((ParTypeDecl) cap.baseType).genericDecl();
+          Map<TypeVariable, TypeDecl> theta = new HashMap<>();
+          for (int i = 0; i < original.getNumTypeParameter(); ++i) {
+            TypeVariable Pi = original.getTypeParameter(i);
+            TypeDecl ai = cap.lhs.get(i);
+            theta.put(Pi, ai);
+          }
+          for (int i = 0; i < cap.lhs.size(); ++i) {
+            TypeDecl ai = cap.lhs.get(i);
+            TypeDecl Ai = cap.rhs.get(i);
+            TypeVariable Pi = original.getTypeParameter(i);
+            TypeDecl Bi = Pi.firstBound().type();
+            VariableBounds aiBounds = lookup(ai);
+            if (Ai instanceof WildcardType) {
+              for (TypeDecl R : aiBounds.equal) {
+                if (isProperType(R)) {
+                  satisfiable = false; // αi = R implies the bound false
+                  break;
+                }
+              }
+              for (TypeDecl R : aiBounds.upper) {
+                if (isProperType(R)) {
+                  constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
+                }
+              }
+              for (TypeDecl R : aiBounds.lower) {
+                if (isProperType(R)) {
+                  satisfiable = false; // R <: αi implies the bound false
+                  break;
+                }
+              }
+            } else if (Ai instanceof WildcardExtendsType) {
+              for (TypeDecl R : aiBounds.equal) {
+                if (isProperType(R)) {
+                  satisfiable = false; // αi = R implies the bound false
+                  break;
+                }
+              }
+              TypeDecl T = ((WildcardExtendsType) Ai).extendsType();
+              for (TypeDecl R : aiBounds.upper) {
+                if (isProperType(R)) {
+                  if (Bi == Bi.typeObject()) {
+                    constraintSubtype(T, R); // If Bi is Object, αi <: R implies ‹T <: R›
+                  }
+                  if (T == T.typeObject()) {
+                    constraintSubtype(Bi.substituted(theta), R); // If T is Object, αi <: R implies ‹Bi θ <: R›
+                  }
+                }
+              }
+              for (TypeDecl R : aiBounds.lower) {
+                if (isProperType(R)) {
+                  satisfiable = false; // R <: αi implies the bound false
+                  break;
+                }
+              }
+            } else if (Ai instanceof WildcardSuperType) {
+              TypeDecl T = ((WildcardSuperType) Ai).superType();
+              for (TypeDecl R : aiBounds.equal) {
+                if (isProperType(R)) {
+                  satisfiable = false; // αi = R implies the bound false
+                  break;
+                }
+              }
+              for (TypeDecl R : aiBounds.upper) {
+                if (isProperType(R)) {
+                  constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
+                }
+              }
+              for (TypeDecl R : aiBounds.lower) {
+                if (isProperType(R)) {
+                  constraintSubtype(R, T); // R <: αi implies ‹R <: T›
+                }
+              }
+            }
+          }
+          break;
+        }
     }
     return satisfiable;
   }
@@ -1744,7 +1883,7 @@ influence:
         // we have an instantiation of the inference variable (§18.1.3).
         set.inst = properBound(T);
       }
-      addBound(new Bound(BoundKind.EQUAL, (TypeVariable) S, T));
+      addBound(new Bound(Bound.Kind.EQUAL, (TypeVariable) S, T));
     }
   }
 
@@ -1755,7 +1894,7 @@ influence:
   private void addUpperBound(TypeDecl alpha, TypeDecl T) {
     if (alpha == T) return;
     if (lookup(alpha).upper.add(T)) {
-      addBound(new Bound(BoundKind.UPPER, (TypeVariable) alpha, T));
+      addBound(new Bound(Bound.Kind.UPPER, (TypeVariable) alpha, T));
     }
   }
 
@@ -1766,8 +1905,59 @@ influence:
   private void addLowerBound(TypeDecl alpha, TypeDecl S) {
     if (alpha == S) return;
     if (lookup(alpha).lower.add(S)) {
-      addBound(new Bound(BoundKind.LOWER, (TypeVariable) alpha, S));
+      addBound(new Bound(Bound.Kind.LOWER, (TypeVariable) alpha, S));
     }
+  }
+
+  /**
+   * The capture bound must be fully constructed before this call because its
+   * identity is content-based.
+   */
+  private void addCaptureBound(CaptureBound cap) {
+    if (captureBounds.add(cap)) {
+      addBound(cap);
+    }
+  }
+
+  /**
+   * Incorporate the constraint formula {@code ‹G<β1, ..., βn> → T›} and
+   * add the capture bound {@code G<β1, ...., βn> = capture(G<A1, ...., An>)}.
+   */
+  public void maybeCaptureBound(TypeDecl R, TypeDecl T) {
+    Parameterization par = ((ParTypeDecl) R).getParameterization();
+    // Create a parameterization of G with fresh variables β1, ..., βn.
+    // If there are no wildcards fall back to normal type compatibility constraint.
+    boolean haveWildcard = false;
+    for (TypeDecl arg : par.args) {
+      if (arg.isWildcard()) {
+        haveWildcard = true;
+      }
+    }
+    if (!haveWildcard) {
+      constraintTypeCompat(R, T);
+      return;
+    }
+    CaptureBound cap = new CaptureBound(R);
+    ArrayList<TypeDecl> fresh = new ArrayList<>();
+    List<FreshVariable> freshVars = context.lookupFreshVars(
+        context, new ArrayList<>(par.args), new ArrayList<>(), new ArrayList<>());
+    for (int i = 0; i < par.args.size(); ++i) {
+      TypeDecl arg = par.args.get(i);
+      FreshVariable beta = freshVars.getChild(i);
+      VariableBounds cs = new VariableBounds();
+      cs.captureBound = cap;
+      map.put(beta, cs);
+      auxiliaryVariables.add(beta);
+      fresh.add(beta);
+      if (!arg.isWildcard()) {
+        addEqualBound(beta, arg); // §18.3.2
+      }
+      cap.lhs.add(beta);
+      cap.rhs.add(arg);
+    }
+    TypeDecl G = ((GenericTypeDecl) ((ParTypeDecl) R).genericDecl()).lookupParTypeDecl(fresh);
+    constraintTypeCompat(G, T);
+    addCaptureBound(cap);
   }
 
   /**

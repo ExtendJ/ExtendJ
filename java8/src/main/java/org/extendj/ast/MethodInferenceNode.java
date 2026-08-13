@@ -6,7 +6,7 @@ public class MethodInferenceNode {
   public MethodDecl decl;
   public BoundSet bounds;
 
-  public static final MethodInferenceNode UNRESOLVED = new MethodInferenceNode(null, new BoundSet());
+  public static final MethodInferenceNode UNRESOLVED = new MethodInferenceNode(null, new BoundSet(null));
 
   public MethodInferenceNode(MethodDecl decl, BoundSet bounds) {
     this.decl = decl;
