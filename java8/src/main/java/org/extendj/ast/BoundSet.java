@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: BSD-3-Clause
 package org.extendj.ast;
 
 import java.util.*;
@@ -173,7 +174,7 @@ public class BoundSet {
 
   public BoundSet() {
     variables = new ArrayList<>();
-    auxiliaryVariables = new ArrayList<>(0);
+    auxiliaryVariables = new HashSet<>();
     map = new HashMap<>();
   }
 
@@ -842,9 +843,7 @@ influence:
       cs.fresh = true;
       cs.capture = Yi;
       map.put(Yi, cs);
-      if (!auxiliaryVariables.contains(Yi)) {
-        auxiliaryVariables.add(Yi);
-      }
+      auxiliaryVariables.add(Yi);
       lookup(vars.get(i)).capture = Yi;
     }
     for (int i = 0; i < n && satisfiable; ++i) {
