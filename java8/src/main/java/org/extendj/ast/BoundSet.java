@@ -86,11 +86,11 @@ public class BoundSet {
     public boolean hasThrowsBound = false;
 
     /**
-     * The captured type to use as type argument.
+     * The instantiated type to use as type argument.
      *
      * <p>This is {@code null} until the variable has been instantiated.
      */
-    public TypeDecl capture;
+    public TypeDecl inst;
 
     /** This is a fresh synthetic variable created during resolution. */
     public boolean fresh = false;
@@ -109,7 +109,7 @@ public class BoundSet {
       this.upper = new LinkedHashSet<>(that.upper);
       this.equal = new LinkedHashSet<>(that.equal);
       this.hasThrowsBound = that.hasThrowsBound;
-      this.capture = that.capture;
+      this.inst = that.inst;
       this.fresh = that.fresh;
     }
 
@@ -436,7 +436,7 @@ public class BoundSet {
             addEqualBound(bound.alpha, bound.type);
             if (!satisfiable) break;
             VariableBounds as = lookup(bound.alpha);
-            if (as.capture == null) {
+            if (as.inst == null) {
               satisfiable = false;
             }
           }
@@ -700,8 +700,8 @@ influence:
     Map<TypeVariable, TypeDecl> theta = new LinkedHashMap<>();
     for (TypeVariable alpha : allVariables()) {
       VariableBounds set = lookup(alpha);
-      if (set != VariableBounds.EMPTY && set.capture != null) {
-        theta.put(alpha, set.capture);
+      if (set != VariableBounds.EMPTY && set.inst != null) {
+        theta.put(alpha, set.inst);
       }
     }
     return theta;
@@ -717,12 +717,12 @@ influence:
    * is not part of this bound set.
    */
   private boolean hasInstantiation(VariableBounds set) {
-    if (set == VariableBounds.EMPTY || set.capture != null) return true;
+    if (set == VariableBounds.EMPTY || set.inst != null) return true;
     for (TypeDecl bound : set.equal) {
       TypeDecl proper = properBound(bound);
       if (proper != null) {
-        // We can cache the instantiation in set.capture.
-        set.capture = proper;
+        // We can cache the instantiation in set.inst.
+        set.inst = proper;
         return true;
       }
     }
@@ -841,10 +841,10 @@ influence:
       FreshVariable Yi = fresh.getChild(i);
       VariableBounds cs = new VariableBounds();
       cs.fresh = true;
-      cs.capture = Yi;
+      cs.inst = Yi;
       map.put(Yi, cs);
       auxiliaryVariables.add(Yi);
-      lookup(vars.get(i)).capture = Yi;
+      lookup(vars.get(i)).inst = Yi;
     }
     for (int i = 0; i < n && satisfiable; ++i) {
       addEqualBound(vars.get(i), fresh.getChild(i));
@@ -861,7 +861,7 @@ influence:
       return bound;
     }
     if (isInferenceVariable(bound)) {
-      return lookup(bound).capture;
+      return lookup(bound).inst;
     }
     if (bound instanceof TypeVariable) {
       // A type variable that is not an inference variable of this set is a
@@ -973,7 +973,7 @@ influence:
   public Collection<TypeDecl> typeArguments() {
     Collection<TypeDecl> list = new ArrayList<>(variables.size());
     for (TypeVariable T : variables) {
-      list.add(lookup(T).capture);
+      list.add(lookup(T).inst);
     }
     return list;
   }
@@ -1205,7 +1205,7 @@ influence:
       // to be replaced in all occurrences with their instantiated type. We do not replace
       // inference variables, instead we check if they have been instantiated to a proper type.
       VariableBounds cs = lookup(T);
-      return cs.fresh || (cs.capture != null && isProperType(cs.capture)); // NOTE(joqvist): is this recursion guaranteed bounded?
+      return cs.fresh || (cs.inst != null && isProperType(cs.inst)); // NOTE(joqvist): is this recursion guaranteed bounded?
     }
     if (T instanceof ArrayDecl) {
       return isProperType(((ArrayDecl) T).componentType());
@@ -1742,7 +1742,7 @@ influence:
       if (isProperType(T)) {
         // As soon as we add an equality bound to a proper type T
         // we have an instantiation of the inference variable (§18.1.3).
-        set.capture = properBound(T);
+        set.inst = properBound(T);
       }
       addBound(new Bound(BoundKind.EQUAL, (TypeVariable) S, T));
     }
