@@ -157,6 +157,10 @@ inside the `rtest` directory. For example
 
 For more details on regression testing see `rtest/README.md`.
 
+### Issue Tracking
+
+Issues are tracked inside the Git repository itself in markdown files `issues/{open,closed}/NNNN-*.md`
+
 ### Debugging
 
 In the case that ExtendJ generates faulty
