@@ -25,3 +25,15 @@ Caused by: java.lang.NullPointerException
         at org.extendj.ast.Program$2.parse(Program.java:87)
         at org.extendj.ast.ClassSource.parseCompilationUnit(ClassSource.java:143)
 ```
+
+## Comments
+
+### Jesper Öqvist - 2026-08-14
+
+Still reproduces in the Ant-built Java 6 compiler at df197f7b, with the same
+stack trace when parsing the same file (`Tar.java` from Apache Ant 1.10.1).
+
+The Gradle-built compilers do not crash, but only because they have no error
+recovery. The JastAddGradle module `java4/jastadd_modules` does not include
+`parser/ErrorRecovery.parser`, which the Ant build does include. Adding that
+to Gradle build makes the Gradle-built version crash the same way.
