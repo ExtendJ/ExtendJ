@@ -1,5 +1,7 @@
 # Field access chain on a method invocation is resolved as a package name
 
+**Status:** resolved
+
 *ExtendJ 11.0.0-g25eca834 Java SE 8*
 
 When the right hand side of an assignment is a chain of two or more field
