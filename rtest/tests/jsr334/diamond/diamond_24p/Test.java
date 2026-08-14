@@ -1,4 +1,5 @@
-// Test for issue in type analysis.
+// Test that the type argument of a diamond in an argument position is inferred
+// from the argument of the class instance creation, not from its target type.
 // See issue 173.
 // .result=COMPILE_PASS
 import java.util.*;

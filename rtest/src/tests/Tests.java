@@ -118,7 +118,6 @@ public interface Tests {
     "jsr335",
     "extendj/jsr335",
     "api/jsr335",
-    "jsr334/diamond/diamond_24p", // issue 173
     "exception/ti_java8_01p",
   };
 
