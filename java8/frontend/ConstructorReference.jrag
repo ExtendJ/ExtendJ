@@ -147,15 +147,16 @@ aspect ConstructorReference {
   syn lazy boolean ConstructorReference.isExact();
 
   syn lazy ConstructorDecl ClassReference.exactCompileTimeDeclaration() {
-    if (getTypeAccess().type().isRawType()) {
-      if (getTypeAccess().type().hostType() == null || getTypeAccess().type().isStatic()
-          || getTypeAccess().type().hostType().isRawType()) {
-        return unknownConstructor();
-      }
+    // `ClassType :: [TypeArguments] new` is exact if it satisfies the following:
+    TypeDecl type = getTypeAccess().type();
+    // ClassType is not raw or is a non-static member type of a raw type.
+    if (!(!type.isRawType()
+        || (!type.isStatic() && type.isNestedType() && type.enclosingType().isRawType()))) {
+      return unknownConstructor();
     }
-    TypeDecl classType = getTypeAccess().type();
-    Collection<ConstructorDecl> col = classType.constructors();
-    ArrayList<ConstructorDecl> applicable = new ArrayList<ConstructorDecl>();
+    // ClassType has exactly one constructor accessible to the class or
+    // interface in which the method reference expression appears.
+    Collection<ConstructorDecl> col = type.constructors();
     ConstructorDecl latestDecl = null;
     for (ConstructorDecl decl : col) {
       if (decl.accessibleFrom(hostType())) {
@@ -168,9 +169,11 @@ aspect ConstructorReference {
     if (latestDecl == null) {
       return unknownConstructor();
     }
+    // The accessible constructor is not variable arity.
     if (latestDecl.hasVarargsParameter()) {
       return unknownConstructor();
     }
+    // If generic, explicit type arguments are provided.
     if (latestDecl.isGeneric()) {
       GenericConstructorDecl genericDecl = latestDecl.genericDecl();
       if (getNumTypeArgument() == genericDecl.getNumTypeParameter()) {

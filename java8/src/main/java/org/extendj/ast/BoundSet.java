@@ -1224,12 +1224,38 @@ influence:
       }
       return;
     }
-    // T mentions inference variables. Reduce the constraint ‹R' → R› where R' is
-    // the constructed type and R is the descriptor result type (§18.2.1).
+    if (expr instanceof ClassReference && expr.isExact()) {
+      // An exact reference reduces to the parameter constraints ‹Pi → Fi› and
+      // the result constraint ‹R' → R›, where the Fi are the
+      // referenced constructor's parameter types and R' the constructed type.
+      ConstructorDecl decl = ((ClassReference) expr).exactCompileTimeDeclaration();
+      MethodDecl function = fd.method;
+      if (function.getNumParameter() != decl.getNumParameter()) {
+        satisfiable = false;
+        return;
+      }
+      for (int i = 0; i < function.getNumParameter(); ++i) {
+        constraintTypeCompat(function.getParameter(i).type(), decl.getParameter(i).type());
+        if (!satisfiable) {
+          return;
+        }
+      }
+      TypeDecl R = function.type();
+      if (!R.isVoid()) {
+        // Capture conversion of the constructed type is the identity, since
+        // ClassType cannot mention wildcards.
+        constraintTypeCompat(((ClassReference) expr).getTypeAccess().type(), R);
+      }
+      return;
+    }
+    // The reference is inexact.
+    // TODO(joqvist): If one or more of the function type's parameter types is not a proper type, the constraint reduces to false.
     TypeDecl descriptorResult = fd.method.type();
     if (descriptorResult.isVoid()) {
       return;
     }
+    // Reduce the constraint ‹R' → R› where R' is the constructed
+    // type and R is the descriptor result type.
     TypeDecl referencedResult = expr.invocationType(fd);
     if (referencedResult.isUnknown() || referencedResult.isVoid()) {
       satisfiable = false;
