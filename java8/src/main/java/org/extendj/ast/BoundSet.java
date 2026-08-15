@@ -38,7 +38,7 @@ public class BoundSet {
   /** The bound set is satisfiable only if the false constraint has not been added. */
   public boolean satisfiable = true;
 
-  /** The invocation this bound set infers. */
+  /** The invocation this bound set infers. Non-null. */
   private final Expr context;
 
   private ArrayList<Bound> newBounds = new ArrayList<>();
@@ -1185,9 +1185,48 @@ influence:
       }
       return;
     }
-    // T mentions inference variables. The descriptor parameter types identify the
-    // referenced method; reduce the constraint ‹R' → R› where R' is the referenced
-    // method's result and R is the descriptor result type (§18.2.1).
+    if (expr.isExact()) {
+      // An exact reference reduces to the parameter constraints ‹Pi → Fi› and
+      // the result constraint ‹R' → R›. When the function type has
+      // one parameter more than the referenced method, the first parameter
+      // acts as the target reference: ‹P1 <: ReferenceType›.
+      MethodDecl decl = expr.exactCompileTimeDeclaration();
+      MethodDecl function = fd.method;
+      int n = function.getNumParameter();
+      int k = decl.getNumParameter();
+      if (n == k + 1 && expr instanceof TypeMethodReference) {
+        TypeDecl referenceType = ((TypeMethodReference) expr).getTypeAccess().type();
+        constraintSubtype(function.getParameter(0).type(), referenceType);
+        for (int i = 1; i < n; ++i) {
+          constraintTypeCompat(function.getParameter(i).type(), decl.getParameter(i - 1).type());
+          if (!satisfiable) {
+            return;
+          }
+        }
+      } else if (n == k) {
+        for (int i = 0; i < n; ++i) {
+          constraintTypeCompat(function.getParameter(i).type(), decl.getParameter(i).type());
+          if (!satisfiable) {
+            return;
+          }
+        }
+      } else {
+        satisfiable = false;
+        return;
+      }
+      TypeDecl R = function.type();
+      if (!R.isVoid()) {
+        TypeDecl declResult = decl.type();
+        if (declResult.isVoid()) {
+          satisfiable = false;
+          return;
+        }
+        constraintTypeCompat(context.captureConversion(declResult), R);
+      }
+      return;
+    }
+    // The reference is inexact.
+    // TODO(joqvist): If one or more of the function type's parameter types is not a proper type, the constraint reduces to false.
     TypeDecl ftype = fd.method.type();
     if (ftype.isVoid()) {
       return;
@@ -1197,6 +1236,8 @@ influence:
       satisfiable = false;
       return;
     }
+    // Reduce the constraint ‹R' → R› where R' is the constructed
+    // type and R is the descriptor result type.
     if (!referencedResult.isUnknown()) {
       constraintTypeCompat(referencedResult, ftype);
       return;
