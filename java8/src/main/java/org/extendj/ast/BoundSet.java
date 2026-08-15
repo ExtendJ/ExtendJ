@@ -533,14 +533,7 @@ public class BoundSet {
           bounds.constraintCheckedThrows(expr, T);
           break;
         case COMPATIBILITY:
-          if (expr instanceof LambdaExpr && ((LambdaExpr) expr).isImplicit()
-              && expr.hasProperParameterTypes(T)) {
-            // The target type gives the lambda proper parameter types, so its body can
-            // be typed against a ground target type.
-            bounds.constraintExprCompat(((LambdaExpr) expr).groundedLambda(T), T);
-          } else {
-            bounds.constraintExprCompat(expr, T);
-          }
+          bounds.constraintExprCompat(expr, T);
           break;
       }
     }
@@ -1031,11 +1024,11 @@ influence:
 
   /** Expression compatibility in a loose invocation context with type T: {@code <Expr → T>}. */
   public void constraintExprCompat(Expr expr, TypeDecl T) {
-    if (expr instanceof GroundedLambda) {
-      // A lambda pinned to a ground target type (§18.5.2): its parameter types
-      // come from the ground target, so the body can be typed without depending on
-      // the enclosing invocation's resolution. Reduce the pinned lambda directly.
-      constraintLambdaCompat(((GroundedLambda) expr).getLambda(), T);
+    if (expr instanceof LambdaExpr && ((LambdaExpr) expr).isImplicit()
+        && expr.hasProperParameterTypes(T)) {
+      // The target type gives the lambda proper parameter types, so its body can
+      // be typed against a ground target type.
+      constraintLambdaCompat(((LambdaExpr) expr).groundedLambda(T).getLambda(), T);
       return;
     }
     if (isProperType(T)) {
