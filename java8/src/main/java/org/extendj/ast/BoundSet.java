@@ -406,7 +406,7 @@ public class BoundSet {
     return resolve(() -> targets);
   }
 
-  private boolean resolve(Supplier<Collection<TypeVariable>> variables) {
+  private boolean resolveImpl(Supplier<Collection<TypeVariable>> variables) {
     // §18.4 specifies that variables are instantiated in an iterative fashion
     // where in each step a subset S ⊂ V is chosen and instantiated as a unit
     // where S is minimal non-empty sink SCC of uninstantiated inference
@@ -416,7 +416,7 @@ public class BoundSet {
     Map<TypeVariable, Integer> index = new HashMap<>();
     Map<TypeVariable, Integer> lowlink = new HashMap<>();
     boolean change = true;
-    if (DEBUG) System.err.println("Resolve start: " + this);
+    if (DEBUG) System.err.format("resolve(%s):\n%s\n", this.context, this);
     while (satisfiable && change) {
       change = false;
       // Incorporation during instantiation can add auxiliary variables to the set.
@@ -481,9 +481,14 @@ public class BoundSet {
         }
         if (!satisfiable) break;
       }
-      if (DEBUG) System.err.println("after: " + this);
     }
     return satisfiable;
+  }
+
+  private boolean resolve(Supplier<Collection<TypeVariable>> variables) {
+    boolean result = resolveImpl(variables);
+    if (DEBUG) System.err.format("resolve(%s) -> %s\n%s\n", this.context, result, this);
+    return result;
   }
 
   enum ConstraintKind {
