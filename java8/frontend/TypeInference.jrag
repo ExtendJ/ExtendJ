@@ -821,19 +821,43 @@ aspect TypeInference_SE8 {
    * from a (partial) inference result. Created as a synthetic substituted
    * declaration node.
    *
-   * <p>Returns the raw method if unchecked conversion was necessary for
-   * applicability or if an inference variable was left uninstantiated.
+   * <p>Returns the raw method if an inference variable was left uninstantiated.
+   * If unchecked conversion was necessary for applicability the parameter types
+   * are still those of the inferred parameterization, only the result type is
+   * erased (§18.5.2).
    */
   protected static MethodDecl MethodAccess.parameterizedDecl(MethodInferenceNode method) {
     GenericMethodDecl gm = (GenericMethodDecl) method.decl;
     Collection<TypeDecl> typeArgs = method.bounds.typeArguments();
-    if (method.bounds.uncheckedConversion || typeArgs.contains(null)) {
+    if (typeArgs.contains(null)) {
       method.decl = gm.rawMethodDecl();
+    } else if (method.bounds.uncheckedConversion) {
+      method.decl = gm.lookupUncheckedMethodDecl(typeArgs);
     } else {
       method.decl = gm.lookupParMethodDecl(typeArgs);
     }
     return method.decl;
   }
+
+  /**
+   * The invocation type of this generic method when unchecked conversion was
+   * necessary for it to be applicable (§18.5.2).
+   */
+  syn nta UncheckedMethodDecl GenericMethodDecl.lookupUncheckedMethodDecl(
+      Collection<TypeDecl> typeArguments) =
+          (UncheckedMethodDecl) initParMethodDecl(new UncheckedMethodDecl(), typeArguments);
+
+  /**
+   * The result type is the erasure of the substituted result type rather than
+   * the erasure of the declared one, which §18.5.2 asks for. Javac erases the
+   * substituted type, so erasing the declared type would reject invocations
+   * that javac accepts. See issue 348.
+   *
+   * <p>The thrown types need no equation as a thrown type is never a
+   * parameterized type, so erasing the substituted thrown types leaves them
+   * unchanged.
+   */
+  eq UncheckedMethodDecl.type() = erasedType(getTypeAccess().type());
 
   protected static MethodDecl MethodAccess.inferredDecl(MethodInferenceNode method) {
     if (method.decl.isGeneric()) {

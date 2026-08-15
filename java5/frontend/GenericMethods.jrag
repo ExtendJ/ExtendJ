@@ -58,8 +58,15 @@ aspect GenericMethods {
    * The result type of a raw generic method invocation is the erasure of the
    * declared result type (JLS SE8 §15.12.2.6).
    */
-  eq RawMethodDecl.type() {
-    TypeDecl erasure = getGenericMethodDecl().type().erasure();
+  eq RawMethodDecl.type() = erasedResultType();
+
+  /** The erasure of the declared result type of the generic method. */
+  syn TypeDecl ParMethodDecl.erasedResultType() =
+      erasedType(getGenericMethodDecl().type());
+
+  /** The erasure of {@code type}, using the raw type of a generic type. */
+  public static TypeDecl ParMethodDecl.erasedType(TypeDecl type) {
+    TypeDecl erasure = type.erasure();
     if (erasure instanceof GenericTypeDecl) {
       return ((GenericTypeDecl) erasure).rawType();
     }
@@ -83,9 +90,20 @@ aspect GenericMethods {
           newParMethodDecl(Collections.<TypeDecl>emptyList());
 
   public ParMethodDecl GenericMethodDecl.newParMethodDecl(Collection<TypeDecl> typeArguments) {
+    return initParMethodDecl(
+        typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl(),
+        typeArguments);
+  }
+
+  /**
+   * Initialize a parameterization of this generic method by {@code typeArguments}.
+   *
+   * @param methodDecl the parameterization node to initialize
+   */
+  public ParMethodDecl GenericMethodDecl.initParMethodDecl(ParMethodDecl methodDecl,
+      Collection<TypeDecl> typeArguments) {
     Parameterization parameterization = new Parameterization(getTypeParameterList(),
         typeArguments);
-    ParMethodDecl methodDecl = typeArguments.isEmpty() ? new RawMethodDecl() : new ParMethodDecl();
 
     // Adding a link to GenericMethodDecl to be used during substitution
     // instead of the not yet existing parent link.

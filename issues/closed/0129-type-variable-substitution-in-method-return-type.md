@@ -92,3 +92,7 @@ with ExtendJ.
 I am closing this issue now since the original bug described by this issue is no longer active.
 
 Regression test added in `rtest/tests/generics/wildcard_11p`.
+
+### Jesper Öqvist - 2026-08-15
+
+For posterity, the remaining jEdit 5.2.0 compilation errors were resolved by fixing issues 346-348.

@@ -9,7 +9,7 @@ public class Test {
 
   @SuppressWarnings("unchecked")
   void test(zhf1pIl007o raw, zhf1pIl007o<String> typed) {
-    both(raw, typed); // Error: typed constrains X, which raw leaves erased.
+    both(raw, typed); // X is inferred as String, which raw converts to.
     both(raw, raw);
     single(raw);
   }
