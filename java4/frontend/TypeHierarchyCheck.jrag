@@ -1,33 +1,4 @@
-/* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from this
- * software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
 
 aspect TypeHierarchyCheck {
   inh String Expr.methodHost();
@@ -271,22 +242,11 @@ aspect TypeHierarchyCheck {
 
           // Regardless of overriding.
           // 8.4.4
-          for (Access e: m.getExceptionList()) {
-            if (e.type().isCheckedException()) {
-              boolean found = false;
-              for (Access declException: decl.getExceptionList()) {
-                if (e.type().subtype(declException.type())) {
-                  found = true;
-                  break;
-                }
-              }
-              if (!found) {
-                problems.add(target.errorf("%s in %s may not throw more checked exceptions than"
-                    + " overridden method %s in %s",
-                    m.fullSignature(), m.hostType().typeName(), decl.fullSignature(),
-                    decl.hostType().typeName()));
-              }
-            }
+          if (!m.throwsCompatibleWith(decl)) {
+            problems.add(target.errorf("%s in %s may not throw more checked exceptions than"
+                + " overridden method %s in %s",
+                m.fullSignature(), m.hostType().typeName(), decl.fullSignature(),
+                decl.hostType().typeName()));
           }
 
           // 8.4.6.3
@@ -318,18 +278,9 @@ aspect TypeHierarchyCheck {
             problems.add(target.error("cannot hide a method with a different return type"));
           }
           // 8.4.4
-          for (int i = 0; i < m.getNumException(); i++) {
-            Access e = m.getException(i);
-            boolean found = false;
-            for (int j = 0; !found && j < decl.getNumException(); j++) {
-              if (e.type().subtype(decl.getException(j).type())) {
-                found = true;
-              }
-            }
-            if (!found) {
-              problems.add(target.error(
-                  "may not throw more checked exceptions than hidden method"));
-            }
+          if (!m.throwsCompatibleWith(decl)) {
+            problems.add(target.error(
+                "may not throw more checked exceptions than hidden method"));
           }
           // 8.4.6.3
           if (decl.isPublic() && !m.isPublic()) {
@@ -399,6 +350,31 @@ aspect TypeHierarchyCheck {
   }
 
   syn boolean MethodDecl.mayOverride(MethodDecl m) = type() == m.type();
+
+  /**
+   * Check that this method does not throw more checked exceptions than the
+   * overridden or hidden method (JLS2 §8.4.4).
+   * @param m the overridden or hidden method
+   * @return {@code true} if each checked exception thrown by this method is a
+   * subtype of some exception thrown by the other method
+   */
+  syn boolean MethodDecl.throwsCompatibleWith(MethodDecl m) {
+    for (Access e : getExceptionList()) {
+      if (e.type().isCheckedException()) {
+        boolean found = false;
+        for (Access de : m.getExceptionList()) {
+          if (e.type().subtype(de.type())) {
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
 
   syn Collection<Problem> ClassDecl.nameProblems() {
     Collection<Problem> problems = new LinkedList<Problem>(super.nameProblems());
@@ -499,22 +475,11 @@ aspect TypeHierarchyCheck {
     if (!n.isAbstract()) {
       // If n implements and overrides method m in the interface then it
       // may not throw more checked exceptions.
-      for (Access e: n.getExceptionList()) {
-        if (e.type().isCheckedException()) {
-          boolean found = false;
-          for (Access declException: m.getExceptionList()) {
-            if (e.type().subtype(declException.type())) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            problems.add(errorf(
-                "%s in %s may not throw more checked exceptions than overridden method %s in %s",
-                n.fullSignature(), n.hostType().typeName(), m.fullSignature(),
-                m.hostType().typeName()));
-          }
-        }
+      if (!n.throwsCompatibleWith(m)) {
+        problems.add(errorf(
+            "%s in %s may not throw more checked exceptions than overridden method %s in %s",
+            n.fullSignature(), n.hostType().typeName(), m.fullSignature(),
+            m.hostType().typeName()));
       }
     }
   }
