@@ -1,33 +1,4 @@
-/* Copyright (c) 2005-2008, Torbjorn Ekman
- *                    2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from this
- * software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
 
 /**
  * Adds subtyping equations for generic types.
@@ -354,61 +325,32 @@ aspect GenericsSubtype {
   eq GenericInterfaceDecl.supertypeParInterfaceDecl(ParInterfaceDecl type) =
       type.genericDecl().original().subtype(this);
 
-  eq TypeVariable.supertypeArrayDecl(ArrayDecl type) {
-    for (Access bound : getBoundList()) {
-      if (type.subtype(bound.type())) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   eq TypeVariable.subtype(TypeDecl type) = type.supertypeTypeVariable(this);
 
+  /**
+   * A type variable is a subtype of all of its bounds. For some type T, if the
+   * type variable has a bound B which fulfills {@code B <: T} then the type
+   * variable is a subtype of T.
+   */
   syn boolean TypeDecl.supertypeTypeVariable(TypeVariable type) {
     if (type == this) {
       return true;
     }
-    for (int i = 0; i < type.getNumTypeBound(); i++) {
-      if (type.getTypeBound(i).type().subtype(this)) {
+    for (Access bound : type.getTypeBoundList()) {
+      if (bound.type().subtype(this)) {
         return true;
       }
     }
     return false;
   }
 
-  /**
-   * A type variable is a supertype of another type variable if all
-   * bounds are greater than the bounds of the other type variable.
-   */
-  eq TypeVariable.supertypeTypeVariable(TypeVariable type) {
-    if (type == this) {
-      return true;
-    }
-    for (Access bound : getBoundList()) {
-      TypeDecl boundType = bound.type();
-      if (boundType.isObject()) {
-        continue;
-      }
-      boolean foundSubtype = false;
-      for (int j = 0; !foundSubtype && j < type.getNumBound(); j++) {
-        if (type.getBound(j).type().subtype(boundType)) {
-          foundSubtype = true;
-          break;
-        }
-      }
-      if (!foundSubtype) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  // Type variable cannot be a strict supertype to a concrete type because the
-  // type variable only has an upper bound.
+  // A type variable cannot be a strict supertype to a concrete type because the
+  // type variable only has upper bounds.
   eq TypeVariable.supertypeClassDecl(ClassDecl type) = false;
 
   eq TypeVariable.supertypeInterfaceDecl(InterfaceDecl type) = false;
+
+  eq TypeVariable.supertypeArrayDecl(ArrayDecl type) = false;
 
   eq LUBType.subtype(TypeDecl type) = type.supertypeLUBType(this);
   syn boolean TypeDecl.supertypeLUBType(LUBType type) {
@@ -513,4 +455,3 @@ aspect GenericsSubtype {
       super.supertypeGenericInterfaceDecl(type) || original().supertypeGenericInterfaceDecl(type);
 
 }
-
