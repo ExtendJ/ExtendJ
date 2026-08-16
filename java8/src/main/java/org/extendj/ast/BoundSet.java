@@ -1221,7 +1221,10 @@ influence:
           satisfiable = false;
           return;
         }
-        constraintTypeCompat(context.captureConversion(declResult), R);
+        // NOTE: It is important that we use the reference itself as the
+        // capture site so the same fresh variables are reused by the later
+        // congruence and type checks.
+        constraintTypeCompat(expr.captureConversion(declResult), R);
       }
       return;
     }
