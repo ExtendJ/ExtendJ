@@ -30,6 +30,8 @@ import java.util.stream.Collectors;
  * <li>{@code α = S} and {@code α <: T} imply {@code ‹S <: T›}</li>
  * <li>{@code α = S} and {@code T <: α} imply {@code ‹T <: S›}</li>
  * <li>{@code S <: α} and {@code α <: T} imply {@code ‹S <: T›}</li>
+ * <li>{@code α <: S} and {@code α <: T} imply equality constraints between
+ * corresponding type arguments of common generic supertypes of S and T</li>
  * </ul>
  */
 public class BoundSet {
@@ -1811,6 +1813,11 @@ influence:
         for (TypeDecl T : set.lower) {
           constraintSubtype(T, S);    // T <: α, α <: S ⟹  ‹T <: S›
         }
+        for (TypeDecl T : set.upper) {
+          if (S != T) {
+            incorporateUpperBounds(S, T);
+          }
+        }
         }
         break;
       case LOWER:
@@ -1907,6 +1914,36 @@ influence:
         }
     }
     return satisfiable;
+  }
+
+  /**
+   * Incorporate a pair of upper bounds on the same inference variable
+   * according to the final rule of JLS SE8 §18.3.1.
+   *
+   * <p>If {@code S} and {@code T} have parameterized supertypes of the same
+   * generic type, their corresponding non-wildcard type arguments must be
+   * equal. For example, the bounds {@code α <: List<β>} and
+   * {@code α <: List<String>} imply {@code β = String}.
+   */
+  private void incorporateUpperBounds(TypeDecl S, TypeDecl T) {
+    Collection<ParTypeDecl> ss = parameterizedSupertypes(S);
+    Collection<ParTypeDecl> st = parameterizedSupertypes(T);
+    for (ParTypeDecl ssi : ss) {
+      for (ParTypeDecl sti : st) {
+        if (ssi.genericDecl() != sti.genericDecl()) {
+          continue;
+        }
+        java.util.List<TypeDecl> sargs = ssi.getParameterization().args;
+        java.util.List<TypeDecl> targs = sti.getParameterization().args;
+        for (int i = 0; i < sargs.size(); ++i) {
+          TypeDecl Si = sargs.get(i);
+          TypeDecl Ti = targs.get(i);
+          if (!Si.isWildcard() && !Ti.isWildcard()) {
+            constraintEqual(Si, Ti);
+          }
+        }
+      }
+    }
   }
 
   private void addBound(Bound bound) {
