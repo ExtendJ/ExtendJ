@@ -10,61 +10,94 @@ aspect CaptureConversion {
   /**
    * Counts the capture variables instantiated so far, to number them in
    * diagnostics. Each capture variable is instantiated once, since
-   * {@code lookupCaptureType} is a memoized nonterminal attribute.
+   * {@code lookupCaptureTypes} is a memoized nonterminal attribute.
    */
   private int WildcardsCompilationUnit.captureCount = 0;
 
   /**
-   * Instantiate the capture variable of the wildcard type argument at index
-   * {@code index} of the type {@code type} captured at the capture site
-   * {@code site} (JLS SE8 §5.1.10).
+   * Instantiate the capture variables of the wildcard type arguments of the
+   * type {@code type} captured at the capture site {@code site}
+   * (JLS SE8 §5.1.10). The capture variables are returned in type argument
+   * order, with the non-wildcard arguments skipped.
    *
    * <p>Capture conversion introduces fresh type variables each time it is
    * applied, so the capture variables are indexed by the site the conversion is
-   * applied at. For example, we create distinct capture variables for
-   * the otherwise identical wildcards in {@code Map<?, ?>}.
+   * applied at.
+   *
+   * <p>The upper bounds of a capture variable are the declared bounds of the
+   * corresponding type parameter of the captured type, with the type arguments
+   * of the capture substituted (a bound can reference a sibling type
+   * parameter). The capture variables are therefore created without bounds
+   * first, and the bounds are added when all captures of the type are known.
+   * The bound of the wildcard itself is a use site type and is not substituted.
    *
    * @param site The expression whose type is captured.
    * @param type The captured type, which is a parameterization of a generic type.
-   * @param index The index of the captured type argument.
    */
-  syn nta TypeVariable WildcardsCompilationUnit.lookupCaptureType(
-      ASTNode site, TypeDecl type, int index) {
-    ParTypeDecl parType = (ParTypeDecl) type;
-    TypeDecl wildcard = parType.getParameterization().args.get(index);
-    // The upper bound of the capture variable is the declared bound of the
-    // corresponding type parameter of the captured type.
-    TypeDecl bound = ((GenericTypeDecl) parType.genericDecl())
-        .getTypeParameter(index).firstBound().type();
-    List<Access> bounds = new List<Access>();
-    List<Access> lowerBounds = new List<Access>();
-    if (wildcard instanceof WildcardExtendsType) {
-      // Intersect the type parameter bound with the bound of the upper bounded wildcard.
-      TypeDecl extendsType = ((WildcardExtendsType) wildcard).extendsType();
-      bounds.add(extendsType.createBoundAccess());
-      if (!extendsType.subtype(bound)) {
-        bounds.add(bound.createBoundAccess());
+  syn nta List<CaptureVariable> WildcardsCompilationUnit.lookupCaptureTypes(
+      ASTNode site, TypeDecl type) {
+    ParTypeDecl pt = (ParTypeDecl) type;
+    GenericTypeDecl generic = (GenericTypeDecl) pt.genericDecl();
+    TypeDecl original = generic.original();
+    java.util.List<TypeDecl> args = pt.getParameterization().args;
+    List<CaptureVariable> captures = new List<>();
+    // The theta substitution maps the type variables of the captured generic
+    // type to the argument it is replaced by in this capture.
+    Map<TypeVariable, TypeDecl> theta = new LinkedHashMap<>();
+    java.util.List<TypeDecl> capturedArgs = new ArrayList<>(args.size());
+    for (int i = 0; i < args.size(); ++i) {
+      TypeDecl arg = args.get(i);
+      if (arg.isWildcard()) {
+        // The name is generated with an index so that diagnostics become understandable
+        // for the user.
+        // TODO(joqvist): This is done with a side effect which is not ideal, but this
+        // side effect is not used for anything inside any attribute evaluation so it seems
+        // fine for the time being. Should remove this eventually.
+        captureCount += 1;
+        CaptureVariable capture = new CaptureVariable(
+            new Modifiers(new List().add(new Modifier("public"))),
+            String.format("capture#%d(%s)", captureCount, arg.typeName()),
+            new List<>(), new List<>(), new List<>());
+        captures.add(capture);
+        arg = capture;
       }
-    } else {
-      bounds.add(bound.createBoundAccess());
-      if (wildcard instanceof WildcardSuperType) {
-        // The capture variable of a lower bounded wildcard has the bound of the
-        // wildcard as its lower bound.
-        lowerBounds.add(((WildcardSuperType) wildcard).superType().createBoundAccess());
+      capturedArgs.add(arg);
+      theta.put(generic.getTypeParameter(i), arg);
+      if (original != generic && original instanceof GenericTypeDecl) {
+        theta.put(((GenericTypeDecl) original).getTypeParameter(i), arg);
       }
     }
-    // The name is generated with an index so that diagnostics become understandable
-    // for the user.
-    // TODO(joqvist): This is done with a side effect which is not ideal, but this
-    // side effect is not used for anything inside any attribute evaluation so it seems
-    // fine for the time being. Should remove this eventually.
-    captureCount += 1;
-    return new CaptureVariable(
-        new Modifiers(new List().add(new Modifier("public"))),
-        "capture#" + captureCount + " of " + wildcard.typeName(),
-        new List<BodyDecl>(),
-        bounds,
-        lowerBounds);
+    int capture = 0;
+    for (int i = 0; i < args.size(); ++i) {
+      TypeDecl wildcard = args.get(i);
+      if (!wildcard.isWildcard()) {
+        continue;
+      }
+      CaptureVariable cap = captures.getChild(capture++);
+      TypeVariable param = generic.getTypeParameter(i);
+      if (wildcard instanceof WildcardExtendsType) {
+        // Intersect the type parameter bounds with the bound of the upper bounded wildcard.
+        TypeDecl extendsType = ((WildcardExtendsType) wildcard).extendsType();
+        cap.addBound(extendsType.createBoundAccess());
+        for (Access it : param.getTypeBoundList()) {
+          TypeDecl bound = it.type();
+          if (!extendsType.subtype(bound)) {
+            cap.addBound(bound.substituted(theta).createBoundAccess());
+          }
+        }
+      } else {
+        for (Access bound : param.getTypeBoundList()) {
+          cap.addBound(bound.type().substituted(theta).createBoundAccess());
+        }
+        if (wildcard instanceof WildcardSuperType) {
+          // The capture variable of a lower bounded wildcard has the bound of the
+          // wildcard as its lower bound.
+          cap.addLowerBound(
+              ((WildcardSuperType) wildcard).superType().createBoundAccess());
+        }
+      }
+    }
+    return captures;
   }
 
   // A capture variable is not declared in any type or member, so it has no
@@ -96,12 +129,12 @@ aspect CaptureConversion {
       aboveLowerBound(type) || super.supertypeArrayDecl(type);
 
   eq FreshVariable.supertypeTypeVariable(TypeVariable type) =
-      type == this || aboveLowerBound(type);
+      aboveLowerBound(type) || super.supertypeTypeVariable(type);
 
-  eq Program.getChild().lookupCaptureType(ASTNode site, TypeDecl type, int index) =
-      wildcards().lookupCaptureType(site, type, index);
+  eq Program.getChild().lookupCaptureTypes(ASTNode site, TypeDecl type) =
+      wildcards().lookupCaptureTypes(site, type);
 
-  inh TypeVariable Expr.lookupCaptureType(ASTNode site, TypeDecl type, int index);
+  inh List<CaptureVariable> Expr.lookupCaptureTypes(ASTNode site, TypeDecl type);
 
   /**
    * Create fresh variables {@code Y1, ..., Yn} to be used in bound set resolution
@@ -228,17 +261,18 @@ aspect CaptureConversion {
       return type;
     }
     ArrayList<TypeDecl> args = new ArrayList<TypeDecl>();
-    boolean captured = false;
-    int index = 0;
+    List<CaptureVariable> captures = null;
+    int capture = 0;
     for (TypeDecl arg : parType.getParameterization().args) {
       if (arg.isWildcard()) {
-        arg = lookupCaptureType(this, type, index);
-        captured = true;
+        if (capture == 0) {
+          captures = lookupCaptureTypes(this, type);
+        }
+        arg = captures.getChild(capture++);
       }
       args.add(arg);
-      index += 1;
     }
-    return captured
+    return capture > 0
         ? ((GenericTypeDecl) parType.genericDecl()).lookupParTypeDecl(args)
         : type;
   }
