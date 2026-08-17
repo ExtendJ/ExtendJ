@@ -3,29 +3,32 @@ package org.extendj.ast;
 
 import java.util.*;
 
-class CaptureBound extends Bound {
+/**
+ * Represents a capture bound {@code G<β1, ..., βn> = capture(G<A1, ..., An>)}
+ * where {@code baseType = G}, {@code lhs = β1, ..., βn}, and {@code rhs = A1, ..., An}.
+ */
+class CaptureBound implements Bound {
   public final TypeDecl baseType; // Parameterized type being captured
   public final java.util.List<TypeVariable> lhs = new ArrayList<>();
   public final java.util.List<TypeDecl> rhs = new ArrayList<>();
 
   public CaptureBound(TypeDecl type) {
-    super(Bound.Kind.CAPTURE, null, null);
     baseType = type;
   }
 
   @Override
   public String toString() {
     StringBuilder str = new StringBuilder();
-    str.append(baseType.name() + "<");
+    str.append(baseType.name()).append("<");
     String sep = "";
     for (TypeVariable it : lhs) {
-      str.append(sep + it.typeName());
+      str.append(sep).append(it.typeName());
       sep = ", ";
     }
-    str.append("> → capture(" + baseType.name() + "<");
+    str.append("> → capture(").append(baseType.name()).append("<");
     sep = "";
     for (TypeDecl it : rhs) {
-      str.append(sep + it.typeName());
+      str.append(sep).append(it.typeName());
       sep = ", ";
     }
     str.append(">)");
