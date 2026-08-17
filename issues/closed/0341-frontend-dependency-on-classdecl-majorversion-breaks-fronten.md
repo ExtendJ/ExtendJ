@@ -1,5 +1,7 @@
 # Frontend dependency on `ClassDecl().majorVersion` breaks frontend-only builds
 
+**Status:** resolved
+
 _ExtendJ version_ 11.0.0
 
 Building projects with `build.gradle` set to include `java8 frontend` but not `java8 backend` as in:
