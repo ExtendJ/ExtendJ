@@ -161,6 +161,8 @@ For more details on regression testing see `rtest/README.md`.
 
 Issues are tracked inside the Git repository itself in markdown files `issues/{open,closed}/NNNN-*.md`
 
+If you want to report an issue, copy `issues/open/0000-template.md` and create a pull request with your issue.
+
 ### Debugging
 
 In the case that ExtendJ generates faulty
