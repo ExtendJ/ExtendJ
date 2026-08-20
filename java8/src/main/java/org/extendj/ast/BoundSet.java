@@ -1024,10 +1024,25 @@ influence:
     return list;
   }
 
+  /** Test if the functional interface {@code T} provides proper parameter types. */
+  private boolean hasProperParameterTypes(TypeDecl T) {
+    if (!T.hasFunctionDescriptor()) {
+      return false;
+    }
+    FunctionDescriptor fd = T.functionDescriptor();
+    for (ParameterDeclaration param : fd.method.getParameters()) {
+      if (!isProperType(param.type())) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+
   /** Expression compatibility in a loose invocation context with type T: {@code <Expr → T>}. */
   public void constraintExprCompat(Expr expr, TypeDecl T) {
     if (expr instanceof LambdaExpr && ((LambdaExpr) expr).isImplicit()
-        && expr.hasProperParameterTypes(T)) {
+        && hasProperParameterTypes(T)) {
       // The target type gives the lambda proper parameter types, so its body can
       // be typed against a ground target type.
       constraintLambdaCompat(((LambdaExpr) expr).groundedLambda(T).getLambda(), T);
@@ -1136,7 +1151,7 @@ influence:
       // For an implicitly typed lambda, the constraint reduces to false if any
       // of the target function parameter types is not a proper type.
       for (int i = 0; i < function.getNumParameter(); i++) {
-        if (function.getParameter(i).type().involvesTypeParameters()) {
+        if (!isProperType(function.getParameter(i).type())) {
           satisfiable = false;
           return;
         }
@@ -1640,7 +1655,7 @@ influence:
       constraintCheckedThrows(cond.getFalseExpr(), T);
     } else if (expr instanceof LambdaExpr) {
       LambdaExpr lambda = (LambdaExpr) expr;
-      if (lambda.isImplicit() && !lambda.hasProperParameterTypes(T)) {
+      if (lambda.isImplicit() && !hasProperParameterTypes(T)) {
         // The lambda body still cannot be typed.
         // TODO(joqvist): set satisfiable = false?
         return;
@@ -1648,7 +1663,7 @@ influence:
       constraintCheckedThrows(lambda, T);
     } else if (expr instanceof MethodReference) {
       MethodReference ref = (MethodReference) expr;
-      if (!ref.isExact() && !ref.hasProperParameterTypes(T)) {
+      if (!ref.isExact() && !hasProperParameterTypes(T)) {
         // The method reference still cannot be resolved.
         // TODO(joqvist): set satisfiable = false?
         return;
