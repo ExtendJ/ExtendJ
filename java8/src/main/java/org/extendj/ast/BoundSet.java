@@ -219,7 +219,7 @@ public class BoundSet {
   public void incorporateBounds(BoundSet set) {
     if (!set.satisfiable) {
       // If lifted bounds contain ‹false› then this set includes ‹false›
-      satisfiable = false;
+      unsat("lifted bounds contain ‹false›");
       return;
     }
     if (set.rawAccess) {
@@ -273,6 +273,24 @@ public class BoundSet {
     str.append("BoundSet {");
     String sep = " ";
     for (TypeVariable T : variables) {
+      VariableBounds set = lookup(T);
+      for (TypeDecl U : set.lower) {
+        sep = "\n";
+        str.append("\n  " + T.fullName() + " :> " + U.fullName());
+      }
+      for (TypeDecl U : set.upper) {
+        sep = "\n";
+        str.append("\n  " + T.fullName() + " <: " + U.fullName());
+      }
+      for (TypeDecl U : set.equal) {
+        sep = "\n";
+        str.append("\n  " + T.fullName() + " = " + U.fullName());
+      }
+    }
+    if (!auxiliaryVariables.isEmpty()) {
+      str.append("\n  Auxiliary:");
+    }
+    for (TypeVariable T : auxiliaryVariables) {
       VariableBounds set = lookup(T);
       for (TypeDecl U : set.lower) {
         sep = "\n";
@@ -459,7 +477,7 @@ public class BoundSet {
               if (!satisfiable) break;
               VariableBounds as = lookup(bound.alpha);
               if (as.inst == null) {
-                satisfiable = false;
+                unsat("round 1: incorporate equal bound failed"); // unreachable?
               }
             }
           }
@@ -479,6 +497,13 @@ public class BoundSet {
           // variables in sink and if they are not internally inconsistent then assign
           // αi = Yi for each i ∈ {1, ..., n}.
           change = true;
+          // Remove the capture bounds before incorporating the new equal bounds.
+          for (TypeVariable ai : sink) {
+            CaptureBound cap = lookup(ai).captureBound;
+            if (cap != null) {
+              captureBounds.remove(cap);
+            }
+          }
           instantiateFresh(new ArrayList<>(sink));
         }
         if (!satisfiable) break;
@@ -775,7 +800,7 @@ influence:
       if (!lower.isEmpty()) {
         TypeDecl lub = leastUpperBound(alpha, lower);
         if (lub.isUnknown()) {
-          satisfiable = false;
+          unsat("unknown lub type");
           return;
         }
         bounds.add(new SingleBound(Bound.Kind.EQUAL, alpha, lub));
@@ -806,7 +831,7 @@ influence:
         // greatest lower bound, so the variable cannot be instantiated and the
         // bound set is unsatisfiable (§5.1.10, §18.4).
         if (glb.isUnknown()) {
-          satisfiable = false;
+          unsat("unknown glb type");
           return;
         }
         bounds.add(new SingleBound(Bound.Kind.EQUAL, alpha, glb));
@@ -830,7 +855,7 @@ influence:
     TypeDecl lub = leastUpperBound(alpha, lower);
     if (lub.isUnknown()) {
       // An ill-formed upper bound has no instantiation and the bound set is unsatisfiable.
-      satisfiable = false;
+      unsat("unknown lub type");
       return null;
     }
     return lub;
@@ -852,7 +877,7 @@ influence:
     TypeDecl glb = greatestLowerBound(upper);
     if (glb.isUnknown()) {
       // An ill-formed lower bound has no instantiation and the bound set is unsatisfiable.
-      satisfiable = false;
+      unsat("unknown glb type");
       return null;
     }
     return glb;
@@ -877,7 +902,7 @@ influence:
       TypeDecl upper = upperBounds.get(i);
       if (lower != null && upper != null && isProperType(upper) && !lower.subtype(upper)) {
         // The fresh variables must have well-formed bounds (§18.4).
-        satisfiable = false;
+        unsat("fresh variable with ill-formed bounds");
         return;
       }
     }
@@ -1053,7 +1078,7 @@ influence:
       // is compatible in a loose invocation context with T (§5.3), and false
       // otherwise.
       if (!expr.compatibleLooseContext(substituted(T))) {
-        satisfiable = false;
+        unsat("case 1");
       }
       return;
     }
@@ -1084,7 +1109,7 @@ influence:
       // T (which are not local to B3) are deferred and replayed here, so the
       // nested and enclosing variables are solved together at resolution time.
       if (!expr.reduceInvocationBounds(this, T)) {
-        satisfiable = false;
+        unsat("case 2");
       }
       return;
     }
@@ -1119,7 +1144,7 @@ influence:
   private void constraintLambdaCompat(LambdaExpr expr, TypeDecl T) {
     // If T is not a functional interface type (§9.8), the constraint reduces to false.
     if (!T.hasFunctionDescriptor()) {
-      satisfiable = false;
+      unsat("case 3");
       return;
     }
     // TODO(joqvist): FunctionDescriptor fd = expr.groundTargetType(T);
@@ -1132,7 +1157,7 @@ influence:
         ? ((DeclaredLambdaParameters) lambdaParams).getNumParameter()
         : ((InferredLambdaParameters) lambdaParams).getNumParameter();
     if (numParams != function.getNumParameter()) {
-      satisfiable = false;
+      unsat("case 4");
       return;
     }
     if (explicitlyTyped) {
@@ -1152,7 +1177,7 @@ influence:
       // of the target function parameter types is not a proper type.
       for (int i = 0; i < function.getNumParameter(); i++) {
         if (!isProperType(function.getParameter(i).type())) {
-          satisfiable = false;
+          unsat("case 5");
           return;
         }
       }
@@ -1191,14 +1216,14 @@ influence:
    */
   private void constraintReferenceCompat(MethodReference expr, TypeDecl T) {
     if (!T.hasFunctionDescriptor()) {
-      satisfiable = false;
+      unsat("case 6");
       return;
     }
     FunctionDescriptor fd = T.functionDescriptor();
     if (isProperType(T)) {
       // No inference variables in T: a plain congruence check is sufficient.
       if (!expr.congruentTo(fd)) {
-        satisfiable = false;
+        unsat("case 7");
       }
       return;
     }
@@ -1228,14 +1253,14 @@ influence:
           }
         }
       } else {
-        satisfiable = false;
+        unsat("case 8");
         return;
       }
       TypeDecl R = function.type();
       if (!R.isVoid()) {
         TypeDecl declResult = decl.type();
         if (declResult.isVoid()) {
-          satisfiable = false;
+          unsat("case 9");
           return;
         }
         // NOTE: It is important that we use the reference itself as the
@@ -1253,7 +1278,7 @@ influence:
     }
     TypeDecl referencedResult = expr.invocationType(fd);
     if (referencedResult.isVoid()) {
-      satisfiable = false;
+      unsat("case 10");
       return;
     }
     // Reduce the constraint ‹R' → R› where R' is the constructed
@@ -1264,7 +1289,7 @@ influence:
     }
     MethodAccess invoc = expr.implicitInvocation(fd);
     if (invoc == null || !invoc.reduceInvocationBounds(this, ftype)) {
-      satisfiable = false;
+      unsat("case 11");
     }
   }
 
@@ -1274,14 +1299,14 @@ influence:
    */
   private void constraintReferenceCompat(ConstructorReference expr, TypeDecl T) {
     if (!T.hasFunctionDescriptor()) {
-      satisfiable = false;
+      unsat("case 12");
       return;
     }
     FunctionDescriptor fd = T.functionDescriptor();
     if (isProperType(T)) {
       // No inference variables in T: a plain congruence check is sufficient.
       if (!expr.congruentTo(fd)) {
-        satisfiable = false;
+        unsat("case 13");
       }
       return;
     }
@@ -1292,7 +1317,7 @@ influence:
       ConstructorDecl decl = ((ClassReference) expr).exactCompileTimeDeclaration();
       MethodDecl function = fd.method;
       if (function.getNumParameter() != decl.getNumParameter()) {
-        satisfiable = false;
+        unsat("case 14");
         return;
       }
       for (int i = 0; i < function.getNumParameter(); ++i) {
@@ -1319,7 +1344,7 @@ influence:
     // type and R is the descriptor result type.
     TypeDecl referencedResult = expr.invocationType(fd);
     if (referencedResult.isUnknown() || referencedResult.isVoid()) {
-      satisfiable = false;
+      unsat("case 15");
       return;
     }
     constraintTypeCompat(referencedResult, descriptorResult);
@@ -1385,7 +1410,7 @@ influence:
     // otherwise.
     if (isProperType(S) && isProperType(T)) {
       if (!looseInvocationCompatible(substituted(S), substituted(T))) {
-        satisfiable = false;
+        unsat("case 16");
       }
       return;
     }
@@ -1416,7 +1441,7 @@ influence:
     // subtype of T (§4.10), and false otherwise.
     if (isProperType(S) && isProperType(T)) {
       if (!substituted(S).subtype(substituted(T))) {
-        satisfiable = false;
+        unsat("case 17");
       }
       return;
     }
@@ -1426,7 +1451,7 @@ influence:
     }
     // Otherwise, if T is the null type, the constraint reduces to false.
     if (T.isNull()) {
-      satisfiable = false;
+      unsat("case 18");
       return;
     }
     // Otherwise, if S is an inference variable α, the constraint reduces to α <: T.
@@ -1458,7 +1483,7 @@ influence:
       } else {
         // S is not an array type (inference variables are handled above).
         // TODO(joqvist): also allow S to have array type upper bound (§18.2.3)
-        satisfiable = false;
+        unsat("case 19");
       }
       return;
     }
@@ -1487,7 +1512,7 @@ influence:
           }
         } else {
           // otherwise reduce to ‹false›.
-          satisfiable = false;
+          unsat("case 20");
         }
         return;
       }
@@ -1507,7 +1532,7 @@ influence:
     // T is a raw or non-generic class or interface type.
     // The constraint holds only if a supertype of S is T.
     if (!S.erasure().subtype(T)) {
-      satisfiable = false;
+      unsat("case 21");
     }
   }
 
@@ -1527,7 +1552,7 @@ influence:
           // set is lifted (§18.5.2); defer the containment so it is reduced there.
           deferred.add(new DeferredConstraint(DeferredConstraint.CONTAINED, S, T));
         } else {
-          satisfiable = false;
+          unsat("case 22");
         }
       } else {
         constraintEqual(S, T);
@@ -1560,7 +1585,7 @@ influence:
       } else if (S instanceof WildcardSuperType) {
         constraintSubtype(Tp, ((WildcardSuperType) S).superType());
       } else {
-        satisfiable = false;
+        unsat("case 23");
       }
     }
   }
@@ -1581,7 +1606,7 @@ influence:
         constraintEqual(((WildcardSuperType) S).superType(),
             ((WildcardSuperType) T).superType());
       } else {
-        satisfiable = false;
+        unsat("case 24");
       }
       return;
     }
@@ -1589,13 +1614,13 @@ influence:
     // as T (§4.3.4), and false otherwise.
     if (isProperType(S) && isProperType(T)) {
       if (substituted(S) != substituted(T)) {
-        satisfiable = false;
+        unsat("case 25");
       }
       return;
     }
     // Otherwise, if S or T is the null type, the constraint reduces to false.
     if (S.isNull() || T.isNull()) {
-      satisfiable = false;
+      unsat("case 26");
       return;
     }
     // Otherwise, if S is an inference variable α, and T is not a primitive type,
@@ -1640,7 +1665,7 @@ influence:
       return;
     }
     // Otherwise, the constraint reduces to false.
-    satisfiable = false;
+    unsat("case 27");
   }
 
   /**
@@ -1678,7 +1703,7 @@ influence:
   public void constraintCheckedThrows(LambdaExpr expr, TypeDecl T) {
     // If T is not a functional interface type, the constraint reduces to false.
     if (!T.hasFunctionDescriptor()) {
-      satisfiable = false;
+      unsat("case 28");
       return;
     }
     FunctionDescriptor fd = T.functionDescriptor();
@@ -1723,7 +1748,7 @@ influence:
     for (TypeDecl X : thrownTypes) {
       if (!subtypeOfAny(X, properThrows)) {
         if (nonProperThrows.isEmpty()) {
-          satisfiable = false;
+          unsat("case 29");
           return;
         }
         for (TypeDecl E : nonProperThrows) {
@@ -1754,7 +1779,7 @@ influence:
   public void constraintCheckedThrows(MethodReference expr, TypeDecl T) {
     // If T is not a functional interface type, the constraint reduces to false.
     if (!T.hasFunctionDescriptor()) {
-      satisfiable = false;
+      unsat("case 30");
       return;
     }
     FunctionDescriptor fd = T.functionDescriptor();
@@ -1846,6 +1871,10 @@ influence:
         }
         break;
     }
+    // Reflexivity with capture bounds.
+    for (CaptureBound cap : captureBounds) {
+      incorporateCapture(cap, bound);
+    }
     return satisfiable;
   }
 
@@ -1855,6 +1884,28 @@ influence:
    */
   private boolean incorporate(CaptureBound cap) {
     // Incorporate bounds involving capture conversion (§18.3.2)
+    for (TypeVariable ai : cap.lhs) {
+      VariableBounds aiBounds = lookup(ai);
+      for (TypeDecl R : new ArrayList<>(aiBounds.equal)) {
+        incorporateCapture(cap, new SingleBound(Bound.Kind.EQUAL, ai, R));
+      }
+      for (TypeDecl R : new ArrayList<>(aiBounds.upper)) {
+        incorporateCapture(cap, new SingleBound(Bound.Kind.UPPER, ai, R));
+      }
+      for (TypeDecl R : new ArrayList<>(aiBounds.lower)) {
+        incorporateCapture(cap, new SingleBound(Bound.Kind.LOWER, ai, R));
+      }
+      if (!satisfiable) {
+        return false;
+      }
+    }
+    return satisfiable;
+  }
+
+  /**
+   * Incorporate a capture bound against a single bound.
+   */
+  private boolean incorporateCapture(CaptureBound cap, SingleBound bound) {
     GenericTypeDecl original = (GenericTypeDecl) ((ParTypeDecl) cap.baseType).genericDecl();
     Map<TypeVariable, TypeDecl> theta = new HashMap<>();
     for (int i = 0; i < original.getNumTypeParameter(); ++i) {
@@ -1864,69 +1915,63 @@ influence:
     }
     for (int i = 0; i < cap.lhs.size(); ++i) {
       TypeDecl ai = cap.lhs.get(i);
+      if (bound.alpha != ai) {
+        continue;
+      }
+      TypeDecl R = bound.type;
       TypeDecl Ai = cap.rhs.get(i);
       TypeVariable Pi = original.getTypeParameter(i);
       TypeDecl Bi = Pi.firstBound().type();
-      VariableBounds aiBounds = lookup(ai);
+      if (Ai instanceof AbstractWildcardType) {
+        if (bound.kind == Bound.Kind.EQUAL && isProperType(R)) {
+          return unsat("αi = R implies the bound false");
+        }
+      }
       if (Ai instanceof WildcardType) {
-        for (TypeDecl R : aiBounds.equal) {
-          if (isProperType(R)) {
-            satisfiable = false; // αi = R implies the bound false
+        switch (bound.kind) {
+          case UPPER:
+            if (isProperType(R)) {
+              constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
+            }
             break;
-          }
-        }
-        for (TypeDecl R : aiBounds.upper) {
-          if (isProperType(R)) {
-            constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
-          }
-        }
-        for (TypeDecl R : aiBounds.lower) {
-          if (isProperType(R)) {
-            satisfiable = false; // R <: αi implies the bound false
+          case LOWER:
+            if (isProperType(R)) {
+              return unsat("R <: αi implies the bound false");
+            }
             break;
-          }
         }
       } else if (Ai instanceof WildcardExtendsType) {
-        for (TypeDecl R : aiBounds.equal) {
-          if (isProperType(R)) {
-            satisfiable = false; // αi = R implies the bound false
-            break;
-          }
-        }
-        TypeDecl T = ((WildcardExtendsType) Ai).extendsType();
-        for (TypeDecl R : aiBounds.upper) {
-          if (isProperType(R)) {
-            if (Bi == Bi.typeObject()) {
-              constraintSubtype(T, R); // If Bi is Object, αi <: R implies ‹T <: R›
+        switch (bound.kind) {
+          case UPPER:
+            if (isProperType(R)) {
+              TypeDecl T = ((WildcardExtendsType) Ai).extendsType();
+              if (Bi == Bi.typeObject()) {
+                constraintSubtype(T, R); // If Bi is Object, αi <: R implies ‹T <: R›
+              }
+              if (T == T.typeObject()) {
+                constraintSubtype(Bi.substituted(theta), R); // If T is Object, αi <: R implies ‹Bi θ <: R›
+              }
             }
-            if (T == T.typeObject()) {
-              constraintSubtype(Bi.substituted(theta), R); // If T is Object, αi <: R implies ‹Bi θ <: R›
-            }
-          }
-        }
-        for (TypeDecl R : aiBounds.lower) {
-          if (isProperType(R)) {
-            satisfiable = false; // R <: αi implies the bound false
             break;
-          }
+          case LOWER:
+            if (isProperType(R)) {
+              return unsat("R <: αi implies the bound false");
+            }
+            break;
         }
       } else if (Ai instanceof WildcardSuperType) {
-        TypeDecl T = ((WildcardSuperType) Ai).superType();
-        for (TypeDecl R : aiBounds.equal) {
-          if (isProperType(R)) {
-            satisfiable = false; // αi = R implies the bound false
+        switch (bound.kind) {
+          case UPPER:
+            if (isProperType(R)) {
+              constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
+            }
             break;
-          }
-        }
-        for (TypeDecl R : aiBounds.upper) {
-          if (isProperType(R)) {
-            constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
-          }
-        }
-        for (TypeDecl R : aiBounds.lower) {
-          if (isProperType(R)) {
-            constraintSubtype(R, T); // R <: αi implies ‹R <: T›
-          }
+          case LOWER:
+            if (isProperType(R)) {
+              TypeDecl T = ((WildcardSuperType) Ai).superType();
+              constraintSubtype(R, T); // R <: αi implies ‹R <: T›
+            }
+            break;
         }
       }
     }
@@ -2093,5 +2138,12 @@ influence:
       }
     }
     return null;
+  }
+
+  /** Helper method for tracing inference failures. */
+  private boolean unsat(String reason) {
+    if (DEBUG) System.err.format("unsatisfiable: %s\n", reason);
+    satisfiable = false;
+    return false;
   }
 }
