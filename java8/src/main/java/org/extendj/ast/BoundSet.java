@@ -95,6 +95,7 @@ public class BoundSet {
       this.hasThrowsBound = that.hasThrowsBound;
       this.inst = that.inst;
       this.fresh = that.fresh;
+      this.captureBound = that.captureBound;
     }
 
     private VariableBounds(Collection<TypeDecl> lower, Collection<TypeDecl> upper,
