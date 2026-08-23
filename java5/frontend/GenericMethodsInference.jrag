@@ -587,13 +587,15 @@ aspect GenericMethodsInference {
     }
   }
 
-  /** Computes the least upper bound type. */
+  /**
+   * Computes the lub (least upper bound) type as defined in JLS3 §15.12.2.7.
+   */
   syn lazy TypeDecl LUBType.lub() {
-    ArrayList<TypeDecl> list = new ArrayList<TypeDecl>();
-    for (int i = 0; i < getNumTypeBound(); i++) {
-      list.add(getTypeBound(i).type());
+    ArrayList<TypeDecl> list = new ArrayList<>();
+    for (Access bound : getTypeBoundList()) {
+      list.add(bound.type());
     }
-    ArrayList<TypeDecl> bounds = new ArrayList<TypeDecl>();
+    ArrayList<TypeDecl> bounds = new ArrayList<>();
     for (TypeDecl W : LUBType.MEC(list)) {
       TypeDecl C = W instanceof GenericTypeDecl ? lci(Inv(W, list), W) : W;
       bounds.add(C);
@@ -601,7 +603,8 @@ aspect GenericMethodsInference {
     if (bounds.size() == 1) {
       return bounds.iterator().next();
     }
-    return lookupLUBType(bounds);
+    // §15.12.2.7: lub(U1 ... Uk) = Candidate(W1) & ... & Candidate(Wr)
+    return lookupGLBType(bounds);
   }
 
   /**
@@ -811,11 +814,10 @@ aspect GenericMethodsInference {
       }
     } else if (t instanceof LUBType) {
       LUBType type = (LUBType) t;
-      for (Access bound : type.getTypeBoundList()) {
-        addSupertypes(set, bound.type());
-      }
       if (type.getNumTypeBound() == 0) {
         set.add(type.typeObject());
+      } else {
+        addSupertypes(set, type.lub());
       }
     } else if (t instanceof GLBType) {
       // Each supertype of an intersection member is a supertype of the intersection.
