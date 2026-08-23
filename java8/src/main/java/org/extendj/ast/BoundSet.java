@@ -1928,11 +1928,9 @@ influence:
       TypeDecl Ai = cap.rhs.get(i);
       TypeVariable Pi = original.getTypeParameter(i);
       TypeDecl Bi = Pi.firstBound().type();
-      if (Ai instanceof AbstractWildcardType) {
-        if (bound.kind == Bound.Kind.EQUAL && isProperType(R)) {
-          return unsat("αi = R implies the bound false");
-        }
-      }
+
+      // We deliberately skip the rule αi = R implies ‹false› from §18.3.2
+      // because javac does not honor it (see tests/ti/capture_nested_04p).
       if (Ai instanceof WildcardType) {
         switch (bound.kind) {
           case UPPER:
