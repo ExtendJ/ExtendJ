@@ -28,4 +28,17 @@ public class SingleBound implements Bound {
   public int hashCode() {
     return Objects.hash(kind, alpha, type);
   }
+
+  @Override
+  public String toString() {
+    switch (kind) {
+      case EQUAL:
+        return String.format("%s = %s", alpha.typeName(), type.typeName());
+      case UPPER:
+        return String.format("%s <: %s", alpha.typeName(), type.typeName());
+      case LOWER:
+        return String.format("%s :> %s", alpha.typeName(), type.typeName());
+    }
+    return kind.toString();
+  }
 }

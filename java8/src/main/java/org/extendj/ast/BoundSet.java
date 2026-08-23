@@ -76,8 +76,12 @@ public class BoundSet {
      */
     public TypeDecl inst;
 
-    /** This is a fresh synthetic variable created during resolution. */
-    public boolean fresh = false;
+    /**
+     * This is a fresh <em>type</em> variable created during resolution.
+     * N.B. not the same as a fresh <em>inference</em> variable.
+     * Fresh type variables are not lifted, among other differences.
+     */
+    public boolean isFreshTypeVar = false;
 
     /** Sentinel set from looking up a missing/external variable. */
     static final VariableBounds EMPTY = VariableBounds.empty();
@@ -94,7 +98,7 @@ public class BoundSet {
       this.equal = new LinkedHashSet<>(that.equal);
       this.hasThrowsBound = that.hasThrowsBound;
       this.inst = that.inst;
-      this.fresh = that.fresh;
+      this.isFreshTypeVar = that.isFreshTypeVar;
       this.captureBound = that.captureBound;
     }
 
@@ -217,7 +221,7 @@ public class BoundSet {
   }
 
   /** Lift the bound set of a nested invocation into this set (§18.5.2). */
-  public void incorporateBounds(BoundSet set) {
+  public void liftBounds(BoundSet set) {
     if (!set.satisfiable) {
       // If lifted bounds contain ‹false› then this set includes ‹false›
       unsat("lifted bounds contain ‹false›");
@@ -229,14 +233,14 @@ public class BoundSet {
     if (set.uncheckedConversion) {
       uncheckedConversion = true;
     }
-    for (TypeVariable v : set.variables) {
-      addAuxiliaryVariable(v);
-    }
-    for (TypeVariable v : set.auxiliaryVariables) {
-      addAuxiliaryVariable(v);
-    }
     for (Map.Entry<TypeVariable, VariableBounds> entry : set.map.entrySet()) {
       TypeVariable v = entry.getKey();
+      if (entry.getValue().isFreshTypeVar) {
+        // This branch is unreachable. Fresh type variables are only created
+        // during resolution and the nested bound set is not yet resolved.
+        continue;
+      }
+      addAuxiliaryVariable(v);
       VariableBounds incoming = entry.getValue();
       if (incoming.hasThrowsBound) {
         lookup(v).hasThrowsBound = true;
@@ -793,6 +797,7 @@ influence:
    * added to the {@code bounds} list.
    */
   private void instantiate(TypeVariable alpha, LinkedList<SingleBound> bounds) {
+    if (DEBUG) System.err.println("instantiate()");
     // An equality bound to a proper type gives a direct instantiation and takes precedence.
     VariableBounds set = lookup(alpha);
     // If αi has lower bounds, the instantiation is their least upper bound.
@@ -890,6 +895,7 @@ influence:
    * derived from the bounds of {@code α1, ..., αn} and instantiate {@code αi = Yi}.
    */
   private void instantiateFresh(ArrayList<TypeVariable> vars) {
+    if (DEBUG) System.err.println("instantiateFresh()");
     int n = vars.size();
     ArrayList<TypeDecl> lowerBounds = new ArrayList<>(n);
     ArrayList<TypeDecl> upperBounds = new ArrayList<>(n);
@@ -912,7 +918,7 @@ influence:
     for (int i = 0; i < n; ++i) {
       FreshVariable Yi = fresh.getChild(i);
       VariableBounds cs = new VariableBounds();
-      cs.fresh = true;
+      cs.isFreshTypeVar = true;
       cs.inst = Yi;
       map.put(Yi, cs);
       auxiliaryVariables.add(Yi);
@@ -1103,10 +1109,9 @@ influence:
     if (expr instanceof MethodAccess || expr instanceof ClassInstanceExpr
         || expr instanceof Dot) {
       // A class instance creation or method invocation reduces to the bound set
-      // B3 of the nested invocation targeting T (§18.5.2, and §15.9.3 for the
-      // "method" of a class instance creation).
+      // B3 of the nested invocation targeting T (§18.5.2, §15.9.3).
       // B3 is computed without resolving the nested invocation and lifted into
-      // this bound set; constraints in B3 that mention the inference variables of
+      // this bound set. Constraints in B3 that mention the inference variables of
       // T (which are not local to B3) are deferred and replayed here, so the
       // nested and enclosing variables are solved together at resolution time.
       if (!expr.reduceInvocationBounds(this, T)) {
@@ -1168,7 +1173,7 @@ influence:
       // detached tree copy) so their type accesses resolve in the enclosing scope.
       List<ParameterDeclaration> declared =
           ((DeclaredLambdaParameters) lambdaParams).getParameterList();
-      for (int i = 0; i < function.getNumParameter(); i++) {
+      for (int i = 0; i < function.getNumParameter(); ++i) {
         TypeDecl P = declared.getChild(i).type();
         TypeDecl Q = function.getParameter(i).type();
         constraintEqual(P, Q);
@@ -1176,7 +1181,7 @@ influence:
     } else {
       // For an implicitly typed lambda, the constraint reduces to false if any
       // of the target function parameter types is not a proper type.
-      for (int i = 0; i < function.getNumParameter(); i++) {
+      for (int i = 0; i < function.getNumParameter(); ++i) {
         if (!isProperType(function.getParameter(i).type())) {
           unsat("case 5");
           return;
@@ -1366,7 +1371,7 @@ influence:
         // A capture variable outside this bound set is a proper type.
         return T instanceof CaptureVariable;
       }
-      return cs.fresh || (cs.inst != null && isProperType(cs.inst)); // NOTE(joqvist): is this recursion guaranteed bounded?
+      return cs.isFreshTypeVar || (cs.inst != null && isProperType(cs.inst)); // NOTE(joqvist): is this recursion guaranteed bounded?
     }
     if (T instanceof ArrayDecl) {
       return isProperType(((ArrayDecl) T).componentType());
@@ -1392,7 +1397,7 @@ influence:
   public boolean isInferenceVariable(TypeDecl T) {
     if (!(T instanceof TypeVariable)) return false;
     VariableBounds cs = map.get((TypeVariable) T);
-    return cs != null && !cs.fresh;
+    return cs != null && !cs.isFreshTypeVar;
   }
 
   /**
@@ -1517,10 +1522,10 @@ influence:
         }
         return;
       }
-      java.util.List<TypeDecl> sArgs = U.getParameterization().args;
-      java.util.List<TypeDecl> tArgs = PT.getParameterization().args;
-      for (int i = 0; i < tArgs.size(); i++) {
-        constraintContainedIn(sArgs.get(i), tArgs.get(i));
+      java.util.List<TypeDecl> sa = U.getParameterization().args;
+      java.util.List<TypeDecl> ta = PT.getParameterization().args;
+      for (int i = 0; i < ta.size(); ++i) {
+        constraintContainedIn(sa.get(i), ta.get(i));
       }
       return;
     }
@@ -1643,10 +1648,10 @@ influence:
     if (S instanceof ParTypeDecl && !S.isRawType()
         && T instanceof ParTypeDecl && !T.isRawType()
         && ((ParTypeDecl) S).genericDecl() == ((ParTypeDecl) T).genericDecl()) {
-      java.util.List<TypeDecl> sArgs = ((ParTypeDecl) S).getParameterization().args;
-      java.util.List<TypeDecl> tArgs = ((ParTypeDecl) T).getParameterization().args;
-      for (int i = 0; i < sArgs.size(); i++) {
-        constraintEqual(sArgs.get(i), tArgs.get(i));
+      java.util.List<TypeDecl> sa = ((ParTypeDecl) S).getParameterization().args;
+      java.util.List<TypeDecl> ta = ((ParTypeDecl) T).getParameterization().args;
+      for (int i = 0; i < sa.size(); ++i) {
+        constraintEqual(sa.get(i), ta.get(i));
       }
       return;
     }
@@ -1803,7 +1808,7 @@ influence:
       return;
     }
     ArrayList<TypeDecl> thrownTypes = new ArrayList<TypeDecl>();
-    for (int i = 0; i < invoked.getNumException(); i++) {
+    for (int i = 0; i < invoked.getNumException(); ++i) {
       TypeDecl X = invoked.getException(i).type();
       if (X.isCheckedException()) {
         thrownTypes.add(X);
