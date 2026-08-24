@@ -520,50 +520,9 @@ aspect TypeInference_SE8 {
 
   /** Infer type bounds based on actual arguments. */
   eq GenericMethodDecl.inferBounds(List<Expr> args, TypeDecl targetType, Expr context) {
-    List<ParameterDeclaration> params = getParameterList();
     BoundSet bounds = new BoundSet(context);
     collectBounds(bounds, args, targetType, context);
-
-    // §18.5.2: Invocation type inference.
-    // Additional invocation constraints if the bound set is still satisfiable.
-    if (bounds.satisfiable) {
-      ParMethodDecl par = inferenceParMethodDecl(context);
-      boolean ordered = false;
-      ArrayList<BoundSet.Constraint> constraints = null;
-      for (Expr arg : args) {
-        if (arg.hasConstraintInputVariables()) {
-          ordered = true;
-          constraints = new ArrayList<>();
-          break;
-        }
-      }
-      for (int i = 0; i < args.getNumChild(); ++i) {
-        TypeDecl Fi = par.formalType(i);
-        int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
-        Expr ei = args.getChild(i);
-        boolean compat = !ei.pertinentToApplicability(context, this, k);
-        if (ordered) {
-          if (compat) {
-            constraints.add(BoundSet.compatibilityConstraint(ei, Fi)); // ‹ei → Fi θ›
-          }
-          if (ei.hasConstraintInputVariables()) {
-            // The throws constraint reduces to true for other expression forms (§18.2.5),
-            // and would only add phantom output variables to the dependency ordering.
-            constraints.add(BoundSet.checkedThrowsConstraint(ei, Fi)); // ‹ei → throws Fi θ›
-          }
-        } else {
-          // No argument constraint has input variables, so the constraints do not
-          // have to be reduced in dependency order.
-          if (compat) {
-            bounds.constraintExprCompat(ei, Fi); // ‹ei → Fi θ›
-          }
-          bounds.constraintCheckedThrows(ei, Fi); // ‹ei → throws Fi θ›
-        }
-      }
-      if (ordered) {
-        bounds.reduceOrdered(constraints);
-      }
-    }
+    addInvocationConstraints(bounds, args, context);
     bounds.resolve();
     return bounds;
   }
@@ -577,6 +536,7 @@ aspect TypeInference_SE8 {
   public BoundSet GenericMethodDecl.nestedInferenceBounds(List<Expr> args, TypeDecl type, Expr context) {
     BoundSet bounds = new BoundSet(context);
     collectBounds(bounds, args, type, context);
+    addInvocationConstraints(bounds, args, context);
     return bounds;
   }
 
@@ -693,6 +653,52 @@ aspect TypeInference_SE8 {
       }
     }
     return;
+  }
+
+  /**
+   * Add additional invocation constraints (JLS SE8 §18.5.2).
+   */
+  public void GenericMethodDecl.addInvocationConstraints(BoundSet bounds, List<Expr> args, Expr context) {
+    if (!bounds.satisfiable) {
+      return;
+    }
+    List<ParameterDeclaration> params = getParameterList();
+    ParMethodDecl par = inferenceParMethodDecl(context);
+    boolean ordered = false;
+    ArrayList<BoundSet.Constraint> constraints = null;
+    for (Expr arg : args) {
+      if (arg.hasConstraintInputVariables()) {
+        ordered = true;
+        constraints = new ArrayList<>();
+        break;
+      }
+    }
+    for (int i = 0; i < args.getNumChild(); ++i) {
+      TypeDecl Fi = par.formalType(i);
+      int k = i >= params.getNumChild() ? params.getNumChild() - 1 : i;
+      Expr ei = args.getChild(i);
+      boolean compat = !ei.pertinentToApplicability(context, this, k);
+      if (ordered) {
+        if (compat) {
+          constraints.add(BoundSet.compatibilityConstraint(ei, Fi)); // ‹ei → Fi θ›
+        }
+        if (ei.hasConstraintInputVariables()) {
+          // The throws constraint reduces to true for other expression forms (§18.2.5),
+          // and would only add phantom output variables to the dependency ordering.
+          constraints.add(BoundSet.checkedThrowsConstraint(ei, Fi)); // ‹ei → throws Fi θ›
+        }
+      } else {
+        // No argument constraint has input variables, so the constraints do not
+        // have to be reduced in dependency order.
+        if (compat) {
+          bounds.constraintExprCompat(ei, Fi); // ‹ei → Fi θ›
+        }
+        bounds.constraintCheckedThrows(ei, Fi); // ‹ei → throws Fi θ›
+      }
+    }
+    if (ordered) {
+      bounds.reduceOrdered(constraints);
+    }
   }
 
   /**
