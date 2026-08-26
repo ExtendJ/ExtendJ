@@ -34,7 +34,7 @@ import java.util.ArrayList;
 import java.util.Stack;
 
 /**
- * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
+ * Print AST nodes to a {@code PrintStream}.
  */
 public class PrettyPrinter {
   public interface Joiner {

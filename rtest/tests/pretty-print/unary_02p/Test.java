@@ -1,4 +1,4 @@
-// TODO: Consecutive minus expressions should not be concatenated.
+// Consecutive unary minuses are printed with a separating space.
 // .result=COMPILE_OUT
 // .options=XprettyPrint
 public class Test {
