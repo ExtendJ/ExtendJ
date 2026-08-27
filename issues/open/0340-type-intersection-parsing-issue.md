@@ -1,10 +1,6 @@
 # Type intersection parsing issue
 
-‌
-
 Type intersections are get unexpected parse and name errors.
-
-‌
 
 ```java
 public class Test {
@@ -26,8 +22,6 @@ Actual result Ex 2:
 Test.java:9,73: error: unexpected token "\)"
 Test.java:9,79: error: unexpected token ";"
 
-‌
-
 This is potentially caused by this if statement from the Java 8 JavaScanner.java
 
 ```java
@@ -39,5 +33,3 @@ This is potentially caused by this if statement from the Java 8 JavaScanner.java
       return false;
     }
 ```
-
-‌
