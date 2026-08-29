@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -eu
-JDK_VERSION=8 ./test.sh
+TEST_LEVEL=8 "$(dirname "$0")/test.sh" "$@"

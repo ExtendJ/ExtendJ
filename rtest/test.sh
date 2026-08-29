@@ -2,11 +2,11 @@
 
 set -eu
 
-: "${JDK_VERSION:=8}"
+cd "$(dirname "$0")"
 
-CONTAINER_NAME="extendj-test${JDK_VERSION}"
-IMAGE_NAME="extendj-test${JDK_VERSION}-run"
-SHOULD_BUILD=false
+: "${TEST_LEVEL:=${JDK_VERSION:-8}}"
+
+IMAGE_NAME="extendj-test${TEST_LEVEL}-run"
 
 if [ ! -f "lib/junit-4.11.jar" ]; then
   (cd lib; curl -sSLO https://repo1.maven.org/maven2/junit/junit/4.11/junit-4.11.jar)
@@ -21,44 +21,27 @@ if [ ! -f "lib/ant-junit-1.10.5.jar" ]; then
   (cd lib; curl -sSLO https://repo1.maven.org/maven2/org/apache/ant/ant-junit/1.10.5/ant-junit-1.10.5.jar)
 fi
 
-if [[ "$(docker images -q $IMAGE_NAME 2> /dev/null)" == "" ]]; then
-  echo "Image does not exist."
-  SHOULD_BUILD=true
-else
-  DOCKERFILE_MOD_TIME=$(date -r Dockerfile +%s 2>/dev/null)
-  IMAGE_CREATION_ISO=$(docker inspect --format='{{.Created}}' "$IMAGE_NAME" 2>/dev/null)
-  IMAGE_CREATION_TIME=$(date -d "$IMAGE_CREATION_ISO" +%s 2>/dev/null)
-  if [[ "$DOCKERFILE_MOD_TIME" -gt "$IMAGE_CREATION_TIME" ]]; then
-    echo "Dockerfile is newer than the existing image."
-    SHOULD_BUILD=true
-  fi
-fi
-
-if [ "$SHOULD_BUILD" = true ]; then
-  # Clean old container
-  docker rm $CONTAINER_NAME || true
-
-  echo "Building Docker image..."
-  docker build \
-    --ssh default \
-    --build-arg JDK_VERSION="${JDK_VERSION}" \
-    --build-arg USER_ID="$(id -u)" \
-    --build-arg GROUP_ID="$(id -g)" \
-    -t $IMAGE_NAME .
-fi
+# Build the test image (a cached no-op when nothing changed).
+USER_ID="$(id -u)" GROUP_ID="$(id -g)" docker buildx bake "test${TEST_LEVEL}"
 
 # Build the compiler under test
-(cd ..; ./gradlew :java${JDK_VERSION}:jar)
-cp ../java${JDK_VERSION}/extendj.jar . || { echo "Missing ExtendJ jar file."; exit 1; }
-
-# Run the container
-if [ "$(docker ps -a -q -f name=^/${CONTAINER_NAME}$)" ]; then
-  echo "Found existing container. Restarting..."
-  docker start -ai "$CONTAINER_NAME"
-else
-  docker run -it \
-    --name "$CONTAINER_NAME" \
-    --user "$(id -u):$(id -g)" \
-    -v "$PWD:/test/regtest" \
-    $IMAGE_NAME
+(cd ..; ./gradlew :java${TEST_LEVEL}:jar)
+if [ ! -f ../java${TEST_LEVEL}/extendj.jar ]; then
+  echo "Missing ExtendJ jar file."
+  exit 1
 fi
+
+mkdir -p reports
+
+# Only allocate a TTY when attached to one, so tests can run headless.
+TTY_FLAGS=""
+if [ -t 0 ] && [ -t 1 ]; then
+  TTY_FLAGS="-it"
+fi
+
+# Extra arguments are forwarded to Ant, e.g. ./test.sh -Dtest=generics/wildcard_01p
+docker run --rm $TTY_FLAGS \
+  --user "$(id -u):$(id -g)" \
+  -v "../java${TEST_LEVEL}/extendj.jar:/test/rtest/extendj.jar:ro" \
+  -v "$PWD/reports:/test/rtest/reports" \
+  "$IMAGE_NAME" "$@"

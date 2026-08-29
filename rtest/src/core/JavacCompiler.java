@@ -1,31 +1,4 @@
-/* Copyright (c) 2013-2016, Jesper Öqvist <jesper.oqvist@cs.lth.se>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *   1. Redistributions of source code must retain the above copyright notice,
- *      this list of conditions and the following disclaimer.
- *
- *   2. Redistributions in binary form must reproduce the above copyright notice,
- *      this list of conditions and the following disclaimer in the documentation
- *      and/or other materials provided with the distribution.
- *
- *   3. Neither the name of the copyright holder nor the names of its contributors
- *      may be used to endorse or promote products derived from this software
- *      without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
- * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
- * WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
- * DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
- * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
- * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
- * SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
- * CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
- * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
- * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
 package core;
 
 import java.io.ByteArrayInputStream;
@@ -45,19 +18,20 @@ import javax.tools.ToolProvider;
 
 /**
  * javac compiler wrapper
- * @author Jesper Öqvist <jesper.oqvist@cs.lth.se>
  */
 public class JavacCompiler extends Compiler {
 
   private final boolean newVM;
+  private final String execPath;
 
   /**
-   * Constructor
-   * @param newVM
+   * @param execPath external javac executable, or empty for the system Java compiler
+   * @param newVM run in separte VM
    */
-  public JavacCompiler(boolean newVM) {
-    super("javac", getVersion());
+  public JavacCompiler(String execPath, boolean newVM) {
+    super("javac", execPath.isEmpty() ? getVersion() : execPath);
 
+    this.execPath = execPath;
     this.newVM = newVM;
   }
 
@@ -81,12 +55,16 @@ public class JavacCompiler extends Compiler {
   public int invoke(String[] arguments, InputStream in,
       final OutputStream out, final OutputStream err) {
 
-    if (newVM) {
+    if (newVM || !execPath.isEmpty()) {
       List<String> cmd = new ArrayList<String>();
-      cmd.add("java");
-      // TODO(jesper): build the jar file
-      cmd.add("-jar");
-      cmd.add("tools/javacjar.jar");
+      if (!execPath.isEmpty()) {
+        cmd.add(execPath);
+      } else {
+        cmd.add("java");
+        // TODO(jesper): build the jar file
+        cmd.add("-jar");
+        cmd.add("tools/javacjar.jar");
+      }
       for (String arg : arguments) {
         cmd.add(arg);
       }

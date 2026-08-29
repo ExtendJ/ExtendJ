@@ -51,6 +51,10 @@ public class TestJava5 {
   static {
     properties.setProperty("compiler", "extendj");
     properties.setProperty("extendj.jar", "extendj.jar"); // Default to local compiler Jar.
+    String bootclasspath = properties.getProperty("bootclasspath", "");
+    if (!bootclasspath.isEmpty()) {
+      properties.setProperty("extraOptions", "-bootclasspath," + bootclasspath);
+    }
     properties.exclude(tests.Tests.JAVA6);
     properties.exclude(tests.Tests.JAVA7);
     properties.exclude(tests.Tests.JAVA8);

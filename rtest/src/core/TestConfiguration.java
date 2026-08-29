@@ -69,7 +69,7 @@ public class TestConfiguration {
           props.getProperty("debug", "").equals("true"));
     } else {
       // Compile with javac.
-      return new JavacCompiler(false);
+      return new JavacCompiler(props.getProperty("javacExec", ""), false);
     }
   }
 
