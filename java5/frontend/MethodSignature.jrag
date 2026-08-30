@@ -35,8 +35,23 @@ aspect MethodSignature15 {
     boolean hasVarargsParameter();
     ParameterDeclaration lastParameter();
     Callee variableArityDecl();
-    Callee original();
+    boolean isParameterized();
+    Callee unparameterized();
   }
+
+  syn boolean MethodDecl.isParameterized() = false;
+  eq ParMethodDecl.isParameterized() = true;
+
+  syn boolean ConstructorDecl.isParameterized() = false;
+  eq ParConstructorDecl.isParameterized() = true;
+
+  /** The generic declaration of a parameterized method instance. */
+  syn MethodDecl MethodDecl.unparameterized() = this;
+  eq ParMethodDecl.unparameterized() = getGenericMethodDecl();
+
+  /** The generic declaration of a parameterized constructor instance. */
+  syn ConstructorDecl ConstructorDecl.unparameterized() = this;
+  eq ParConstructorDecl.unparameterized() = getGenericConstructorDecl();
 
   public boolean Caller.moreSpecificThan(Callee m1, Callee m2) {
     // Pointless delegation here but this method is refined in the java8 module.
@@ -151,18 +166,18 @@ aspect MethodSignature15 {
   }
 
   public SimpleSet<ConstructorDecl> Caller.chooseConstructor(Collection<ConstructorDecl> ctors,
-      List<Expr> argList) {
+      List<Expr> args) {
     SimpleSet<ConstructorDecl> subset = emptySet();
 
     // Select potentially applicable constructors.
     for (ConstructorDecl decl : ctors) {
-      if (decl.potentiallyApplicable(argList) && decl.accessibleFrom(hostType())) {
+      if (decl.potentiallyApplicable(args) && decl.accessibleFrom(hostType())) {
         if (decl.isGeneric()) {
           GenericConstructorDecl gc = decl.genericDecl();
           Collection<TypeDecl> typeArguments = inferTypeArguments(
               gc.type(),
               gc.getParameterList(),
-              argList,
+              args,
               gc.getTypeParameterList(),
               gc.getExceptionList());
           decl = gc.lookupParConstructorDecl(typeArguments);
@@ -181,10 +196,10 @@ aspect MethodSignature15 {
    * If one is nullary and the other is not, then a NullPointerException is thrown.
    */
   refine LookupMethod eq Callee.lessSpecificThan(Callee m) {
-    if (original() != this) {
-      return original().lessSpecificThan(m);
+    if (isParameterized()) {
+      return unparameterized().lessSpecificThan(m);
     }
-    m = m.original();
+    m = m.unparameterized();
 
     // Here we have a non-obvious precondition: either both methods are
     // variable arity or both are fixed arity.
@@ -568,11 +583,11 @@ aspect MethodSignature15 {
     return typeArguments;
   }
 
-  syn boolean ConstructorDecl.potentiallyApplicable(List<Expr> argList) {
-    if (isVariableArity() && !(argList.getNumChild() >= arity()-1)) {
+  syn boolean ConstructorDecl.potentiallyApplicable(List<Expr> args) {
+    if (hasVarargsParameter() && !(args.getNumChild() >= arity()-1)) {
       return false;
     }
-    if (!isVariableArity() && !(arity() == argList.getNumChild())) {
+    if (!hasVarargsParameter() && !(arity() == args.getNumChild())) {
       return false;
     }
     return true;
