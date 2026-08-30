@@ -1,6 +1,6 @@
 # Missing capture conversion in the java5 module
 
-**Status:** open
+**Status:** resolved
 
 *ExtendJ 11.0.0-159-gabcd7d63 Java SE 5*
 
@@ -41,3 +41,8 @@ The `java8` module rejects this example with:
 error: no method named add(java.lang.Object) in Aelita<?> matches.
   However, there is a method add(capture#1 of ?)
 ```
+
+## Resolution
+
+Resolved by backporting the CaptureConversion aspect that was previously
+implemented for Java 8 type inference to the java5 module.
