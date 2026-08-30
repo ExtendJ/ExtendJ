@@ -28,9 +28,7 @@ Proposed fix:
 Test case for this bug:
 
 
-```
-#!java
-
+```java
 public static void foo(int a) {
 
 }

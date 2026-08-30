@@ -31,8 +31,6 @@ Actual result: code generation crashes with the following error message:
     [junit] java.lang.Error: Can not compute address of unplaced label (id: -1)
 ```
 
-‌
-
 ## Comments
 
 ### Jesper Öqvist - 2022-06-29

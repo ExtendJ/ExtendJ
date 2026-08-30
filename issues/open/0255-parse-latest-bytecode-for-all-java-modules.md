@@ -1,5 +1,7 @@
 # Parse latest bytecode for all Java modules
 
+**Status:** open
+
 *ExtendJ 8.0.1-258-g9891139 Java SE 8*
 
 Currently, ExtendJ only parses Java 6 bytecode when running the Java 5/6 modules, and Java 7 bytecode when running the Java 7 module. This means that the Java 5/6 builds must be run by a Java 6 VM, and the Java 7 build must be run by a Java 7 VM.

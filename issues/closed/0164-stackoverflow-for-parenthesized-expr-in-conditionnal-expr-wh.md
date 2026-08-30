@@ -3,8 +3,7 @@
 **Status:** resolved
 
 The following piece of code produces a stack overflow when trying to compile it :
-```
-#!java
+```java
 package p;
 
 class C {

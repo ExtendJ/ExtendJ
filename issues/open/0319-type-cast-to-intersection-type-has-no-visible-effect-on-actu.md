@@ -1,8 +1,8 @@
 # Type cast to intersection type has no visible effect on actual type
 
-_ExtendJ 8.1.2-117-g8158643 Java SE 8_
+**Status:** open
 
-‌
+*ExtendJ 8.1.2-117-g8158643 Java SE 8*
 
 Type cast to intersection type has no visible effect on actual type.
 
@@ -40,8 +40,6 @@ Actual:
 
 No errors reported, compilation passes.
 
-‌
-
 Likely cause:
 
 in java8/frontend/TypeCheck.jrag is the following code:
@@ -49,8 +47,6 @@ in java8/frontend/TypeCheck.jrag is the following code:
 ```
   syn lazy TypeDecl IntersectionCastExpr.type() = unknownType();
 ```
-
-‌
 
 ## Comments
 
@@ -60,5 +56,3 @@ My initial impression is that this will require several changes, and might be co
 
 * Add intersection types in the type hierarchy \(as subtype of `TypeDecl`\).
 * Compute a type that matches all the types listed in the intersection type and implicitly instantiate it. This type would match the “notional class or interface” mentioned in [JLS 8 4.9](https://docs.oracle.com/javase/specs/jls/se8/html/jls-4.html#jls-4.9)
-
-‌

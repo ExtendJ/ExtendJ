@@ -4,8 +4,7 @@
 
 This code causes a stackoverflow :
 
-```
-#!java
+```java
 package p;
 public class C {
     int[] array;

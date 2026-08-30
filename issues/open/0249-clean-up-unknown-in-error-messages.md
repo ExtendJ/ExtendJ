@@ -1,5 +1,7 @@
 # Clean up Unknown in error messages
 
+**Status:** open
+
 ExtendJ tends to report several unrelated errors that include references to the Unknown type whenever a name lookup fails. This is misleading and hides the root cause of the error.
 
 For example, the test case:

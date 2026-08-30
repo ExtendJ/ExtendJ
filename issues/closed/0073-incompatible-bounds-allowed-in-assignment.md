@@ -4,9 +4,7 @@
 
 The following test case generates no error in JastAddJ:
 
-```
-#!java
-
+```java
 public class Test {
         public <T extends Number> T method() {
                 return null;

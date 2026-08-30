@@ -1,5 +1,7 @@
 # Type intersection parsing issue
 
+**Status:** open
+
 Type intersections are get unexpected parse and name errors.
 
 ```java

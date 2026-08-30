@@ -4,8 +4,7 @@
 
 The code to compute the full name of a type variable is the following (java5/frontend/Generics.java):
 
-```
-#!java
+```java
 eq TypeVariable.fullName() {
       if (getParent().getParent() instanceof TypeDecl) {
         TypeDecl typeDecl = (TypeDecl) getParent().getParent();
@@ -17,9 +16,7 @@ eq TypeVariable.fullName() {
 ```
 however this means that in the following code the three type variables T have the same full name.
 
-```
-#!java
-
+```java
 interface I<T> {
     <T> void m(T t);
     <T> void m2(T t);
@@ -27,8 +24,7 @@ interface I<T> {
 ```
 I think this is a bug it could be fixed by adding this to the fullName equation  :
 
-```
-#!java
+```java
      if (getParent().getParent() instanceof GenericMethodDecl) {
           GenericMethodDecl genericMethodDecl =
                                   (GenericMethodDecl) getParent().getParent();
@@ -39,8 +35,7 @@ I think this is a bug it could be fixed by adding this to the fullName equation 
 
 but then there is some pathological cases that cause a stackoverflow like this method of java.util.Comparator :
 
-```
-#!java
+```java
  <U> Comparator<T> thenComparing(Function<? super T, ? extends U> keyExtractor,
                                         Comparator<? super U> keyComparator);
 ```
@@ -92,8 +87,7 @@ Added the ExtendJ error message in the previous comment.
 ### Loïc Girault - 2016-02-18
 
 My project was using an older version of extendj. I'm doing the upgrade but the version I had was from before the change of grammar concerning variable and field multiple declarations. It broke a lot of things. Anyway as soon as I'have finished this task I try to reproduce the bug. For info the minimal exemple I'm using is the following :
-```
-#!java
+```java
 interface Comparator<T> {
   <U> Comparator<T> thenComparing(Comparator<? super U> b);
 }
@@ -103,8 +97,7 @@ interface Comparator<T> {
 
 I confirm the StackOverflow error with the previous example. The recursivity comes from the signature() method and more precisely to the call to type() on the ParameterDeclaration
 
-```
-#!java
+```java
 syn lazy String MethodDecl.signature() {
     StringBuilder sb = new StringBuilder();
     sb.append(name() + "(");
@@ -120,14 +113,13 @@ syn lazy String MethodDecl.signature() {
 ```
 I use the following fix : instead of calling  getParameter(i).type().typeName(), I use getParameter(i).typeNameInSig() with the following code :
 
-```
-#!java
- public String ParamterDeclaration.typeNameInSig(){
-	if(getTypeAccess() instanceof ParTypeAccess){
-		ParTypeAccess pta = (ParTypeAccess) getTypeAccess();
-		return pta.genericDecl().getID();
-	}
-	return type().name();
+```java
+public String ParamterDeclaration.typeNameInSig(){
+  if(getTypeAccess() instanceof ParTypeAccess){
+    ParTypeAccess pta = (ParTypeAccess) getTypeAccess();
+    return pta.genericDecl().getID();
+  }
+  return type().name();
 }
 ```
 

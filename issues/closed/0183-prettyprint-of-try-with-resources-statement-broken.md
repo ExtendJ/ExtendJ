@@ -7,8 +7,7 @@ This pertains to the JAR built from commit 5eef0cc.
 Broken code is produced when parsing and subsequently pretty-printing code that contains try-with-resources statements.
 
 Input (see attachements):
-```
-#!Java
+```java
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -30,14 +29,12 @@ public class TWR {
 ```
 
 Execute:
-```
-#!Bash
+```bash
 java -cp extendj.jar org.extendj.JavaPrettyPrinter TWR.java
 ```
 
 This gives the output (see attachments):
-```
-#!Java
+```java
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -62,7 +59,6 @@ This code does not compile as the type declarations are missing in the resources
 I looked at the code and the resource statements are represented by `ResourceDeclaration` instances whose `prettyPrint` method is defined in the `Declarator` class. The relevant part of `Java4PrettyPrint.tt`:
 
 ```
-#!Text
 Declarator [[$ID$DimsList$if(hasInit) = $Init$endif]]
 ```
 This of course can't produce the full `FileOutputStream out = new FileOutputStream("out")` declaration.
@@ -87,8 +83,7 @@ Thank you.
 For regression testing purposes I would also add a finally block to the example.
 
 Input:
-```
-#!Java
+```java
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -113,8 +108,7 @@ public class TWR {
 
 Output of 5eef0cc:
 
-```
-#!Java
+```java
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;

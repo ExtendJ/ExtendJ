@@ -1,5 +1,7 @@
 # Illegal autoboxing conversion is incorrectly allowed
 
+**Status:** open
+
 *ExtendJ 8.0.1-222-g9a85c80 Java SE 8*
 
 The following test should fail, but passes:

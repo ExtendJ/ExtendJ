@@ -1,5 +1,7 @@
 # Missing capture conversion in the java5 module
 
+**Status:** open
+
 *ExtendJ 11.0.0-159-gabcd7d63 Java SE 5*
 
 The `java5` module does not implement capture conversion.

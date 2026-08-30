@@ -1,5 +1,7 @@
 # Improve type inference failure reporting
 
+**Status:** open
+
 When type inference fails in ExtendJ, either due to an untypable expression or because ExtendJ can't find the correct type arguments, ExtendJ assigns the Unknown type to all type arguments that it fails to infer a type for. This later leads to a typing error or method lookup error.
 
 However,  a better approach would be to print a message about conflicting or insufficient typing constraints, similar to how javac handles type inference failures.

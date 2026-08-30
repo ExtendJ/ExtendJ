@@ -1,5 +1,7 @@
 # ExtendJ classes accessible by code being compiled
 
+**Status:** open
+
 If you run extendj without `bootclasspath` or the system property `sun.boot.class.path`, then code being compiled can
 reference the types inside ExtendJ.
 

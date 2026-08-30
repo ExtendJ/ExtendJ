@@ -3,8 +3,7 @@
 **Status:** resolved
 
 Parsing this sample of code :
-```
-#!java
+```java
 package p;
 
 import java.util.Enumeration;
@@ -19,8 +18,7 @@ class A {
 }
 ```
 and then pretty printing it gives :
-```
-#!java
+```java
 package p;
 import java.util.Enumeration;
 import java.util.Vector;
@@ -36,8 +34,7 @@ class A {
 The problem is in java4/frontend/PrettyPrintUtil.jrag. Instead of reusing VarDeclStmt.prettyprint the ForStmt.prettyPrint reimplements it  with some kind of special case for arrays.
 
 To solve it, I've replaced
-```
-#!java
+```java
 public void ForStmt.prettyPrint(PrettyPrinter out) {
     out.print("for (");
     if (getNumInitStmt() > 0) {
@@ -56,8 +53,7 @@ public void ForStmt.prettyPrint(PrettyPrinter out) {
 ```
 
 by the following
-```
-#!java
+```java
 public void ForStmt.prettyPrint(PrettyPrinter out) {
     out.print("for (");
     if (getNumInitStmt() > 0) {
@@ -96,8 +92,7 @@ fixes #149 (bitbucket)
 
 In the end my fix has a problem. I've encoutered a for stmt without init stmt. The result is a missing semicolon
 Solution: add an else branch in the pretty printing
-```
-#!java
+```java
 public void ForStmt.prettyPrint(PrettyPrinter out) {
     out.print("for (");
     if (getNumInitStmt() > 0) {

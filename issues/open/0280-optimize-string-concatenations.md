@@ -1,5 +1,7 @@
 # Optimize string concatenations
 
+**Status:** open
+
 When several strings are concatenated in a row with `+=`, ExtendJ creates a new `StringBuilder` object to add each new string to the result.
 
 This is unnecessary, especially for straight-line code without method calls.

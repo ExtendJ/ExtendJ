@@ -4,8 +4,7 @@
 
 The following java8 example causes a java.lang.StackOverflowError:
 
-```
-#!java
+```java
 public class LambdaExpr01<T> {
 
 	public LambdaExpr01(LambdaExprDataProvider<T> t) {}
@@ -31,7 +30,6 @@ interface LambdaExprDataProvider<T> {
 ## Stacktrace ##
 
 ```
-#!text
 Encountered error while processing src/LambdaExpr01.java
 Fatal exception:
 java.lang.StackOverflowError

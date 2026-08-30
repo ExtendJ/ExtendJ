@@ -10,9 +10,7 @@
 
 JastAddJ currently does not give an error if an array type is used as bound. For example, the following declaration should be invalid because of the array-type in the bound for T:
 
-```
-#!java
-
+```java
 interface X {
     <T extends ArrayList<T>[]> T execute(T t);
  }

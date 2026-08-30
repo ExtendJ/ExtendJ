@@ -13,8 +13,6 @@ The parser fails on the following `package-info.java` file:
 @PackageAnnot package pkg;
 ```
 
-‌
-
 Expected result: the code should not cause a parsing error.
 
 Actual result: `package-info.java:4,23: error: unexpected token "pkg"`

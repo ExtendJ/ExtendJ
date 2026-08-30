@@ -1,5 +1,7 @@
 # Lexing errors in integer literals are missing line/column numbers
 
+**Status:** open
+
 *ExtendJ 8.0.1-151-g5196a27 Java SE 8*
 
 Lexing errors like this one should have proper line and column numbers:

@@ -5,9 +5,7 @@
 When a bound extends itself, a stack overflow error occurs instead of a normal error message. For example, the code below will generate a stack overflow error when compiled with JastAddJ:
 
 
-```
-#!java
-
+```java
 interface Y { <S extends S> void execute(S s); }
 ```
 

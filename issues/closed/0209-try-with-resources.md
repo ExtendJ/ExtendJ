@@ -8,8 +8,7 @@ Resources in try-with-resources in java 7 must be assigned at declaration.
 
 The following code will compile in ExtendJ but not in javac:
 
-```
-#!java
+```java
 try (BufferedReader b) {
 	 b = new BufferedReader(null);
 }catch (IOException e) {
@@ -17,8 +16,7 @@ try (BufferedReader b) {
 ```
 
 To compile with javac the assignment must be at the declaration. Like this:
-```
-#!java
+```java
 try (BufferedReader b = new BufferedReader(null)) {
 }catch (IOException e) {
 }

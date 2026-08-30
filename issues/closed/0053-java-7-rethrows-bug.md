@@ -15,9 +15,7 @@ The modifiedInScope-attribute used to compute effectively final does not travers
 Test case for this bug:
 
 
-```
-#!java
-
+```java
 public static void main(String[] args) {
 	try {
 

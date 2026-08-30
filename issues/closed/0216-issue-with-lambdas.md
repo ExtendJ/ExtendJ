@@ -4,8 +4,7 @@
 
 When using a lambda, like in the following code :
 
-```
-#!Java
+```java
 public class MainTest {
 	public static void main(String[] args) {
 		A[] arr = new A[] { new A() };
@@ -23,9 +22,7 @@ class A {
 ```
 the compiled binary crashes with the following Exception:
 
-```
-#!Java
-
+```java
 Exception in thread "main" java.lang.AbstractMethodError: Method MainTest$1.apply(Ljava/lang/Object;)Ljava/lang/Object; is abstract
 	at MainTest$1.apply(MainTest.java)
 	at java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:193)

@@ -3,8 +3,7 @@
 **Status:** resolved
 
 Disclaimer: I don't fully understand the AST stucture of array accesses, so I don't know if the following is described correctly.
-```
-#!Java
+```java
 class Test {
 	public static void main(String[] args) {
 		String[] test = new String[1];
@@ -13,8 +12,7 @@ class Test {
 }
 ```
 is printed as
-```
-#!Java
+```java
 class Test {
 	public static void main(String[] args) {
 		String[] test = new String[1];

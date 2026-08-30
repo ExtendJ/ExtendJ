@@ -4,9 +4,7 @@
 
 VariableDeclaration has no prettyPrint method. Here is an implementation :
 
-```
-#!java
-
+```java
 public void VariableDeclaration.prettyPrint(PrettyPrinter out) {
     getModifiers().prettyPrint(out);
     getTypeAccess().prettyPrint(out);
@@ -37,9 +35,7 @@ fixes #130 (bitbucket)
 
 Also about VariableDeclaration, the following equation in LookupVariable.jrag seems to be missing :
 
-```
-#!java
-
+```java
 eq VariableDeclaration.variableDeclaration(String name) = declaresVariable(name) ? this : null ;
 ```
 I haven't looked into the parser, I suppose it generates a VarDeclStmt even when a VariableDeclaration would suffice. This could explain why the above equation is not needed.  Since I'm doing refactoring in the AST I introduced directly a VariableDeclaration and had a bug because of this missing (?) equation.

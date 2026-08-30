@@ -3,15 +3,13 @@
 **Status:** resolved
 
 Just parsing and pretty printing back this code :
-```
-#!java
+```java
 enum E {
     A, B, C;
 }
 ```
 gives the following code :
-```
-#!java
+```java
 enum E {
 A(),
 B(),
@@ -29,8 +27,7 @@ public static synthetic E valueOf(String s) {
 
 To correct it and get the following printing :
 
-```
-#!java
+```java
 enum E {
 A,
 B,
@@ -42,8 +39,7 @@ C
 eq FieldDecl.isSynthetic() = getModifiers().isSynthetic(); needs to be added in java4/frontend/Modifiers.jrag
 
 MethodDecl.prettyPrint and FieldDecl.prettyPrint bodies have to be enclosed in a if(!isSynthetic()) conditionnal and I modified EnumDecl.prettyPrint and EnumConstant.prettyPrint in java5/fronted/Enums.jrag
-```
-#!java
+```java
  public void EnumDecl.prettyPrint(PrettyPrinter out) {
     if (!docComment.isEmpty()) {
       out.print(docComment);

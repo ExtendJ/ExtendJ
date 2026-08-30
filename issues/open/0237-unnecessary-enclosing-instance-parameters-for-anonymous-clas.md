@@ -1,5 +1,7 @@
 # Unnecessary enclosing instance parameters for anonymous class constructor
 
+**Status:** open
+
 *ExtendJ 8.0.1-235-g5497af4 Java SE 8*
 
 The constructor for the anonymous class in this test should only require one enclosing instance parameter, but ExtendJ generates two enclosing parameters:

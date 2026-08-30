@@ -1,5 +1,7 @@
 # Wildcards should not be allowed in parameterized supertype type arguments
 
+**Status:** open
+
 *ExtendJ 8.1.1-13-g984cc95 Java SE 8*
 
 ExtendJ allows wildcard types as the type arguments of a supertype.

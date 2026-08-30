@@ -3,8 +3,7 @@
 **Status:** resolved
 
 The following piece of code does not compile :
-```
-#!java
+```java
 package p;
 
 import java.util.Vector;

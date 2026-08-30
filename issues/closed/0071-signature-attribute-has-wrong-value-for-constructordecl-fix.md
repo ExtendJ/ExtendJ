@@ -3,9 +3,7 @@
 **Status:** resolved
 
 Example code:
-```
-#!java
-
+```java
 class Node {
     Node(String name) {}
 }
@@ -15,8 +13,7 @@ The value of the signature attribute for the Node-constructor is Node(AST.Parame
 It is a regression after commit  8dbee0d, after which ASTNode.toString() does not pretty print AST nodes any more.
 
 The fix is to replace the [line 116 in java4/frontend/LookupConstructor.jrag](https://bitbucket.org/jastadd/jastaddj/annotate/bc3a3b02e4fe946cbf4ebd3ce79ec4332b289102/java4/frontend/LookupConstructor.jrag?at=master#cl-116) with this one:
-```
-#!java
+```java
 s.append(getParameter(i).type().typeName());
 ```
 

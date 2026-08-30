@@ -6,8 +6,6 @@ _ExtendJ 8.1.2-85-gcff2884 Java 9_
 
 When adding support for Java 9 and bytecode version 53 invalid bytecode for switch statements over enums is created.  The error “Update to static final field” appears for the regression tests enum/switch\_01p, enum/switch\_02p and the following shortened example:
 
-‌
-
 ```
 public class Test {
   public static void main(String[] args) {
@@ -40,8 +38,6 @@ at Test.main(Test.java:7)
 ```
 
 This appears to be because of Java 9 being stricter about updates to final fields and javac creates an anonumous class to contain the SwitchMap which extendJ doesn’t do.
-
-‌
 
 ## Comments
 

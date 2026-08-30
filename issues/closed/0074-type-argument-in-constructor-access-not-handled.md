@@ -4,9 +4,7 @@
 
 The following test case generates no error in JastAddJ:
 
-```
-#!java
-
+```java
 public class Test {
         class B {
                 public <T> B(T t) {
@@ -26,8 +24,7 @@ public class Test {
 
 And the following test case do generate an error:
 
-```
-#!java
+```java
 public class Test {
         public class B {
                 public B(int i) { }

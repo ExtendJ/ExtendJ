@@ -8,9 +8,7 @@ The SafeVarargs annotation should not be allowed on non-final, non-static method
 
 The following code will compile in ExtendJ but not in javac:
 
-```
-#!java
-
+```java
 @SafeVarargs
 private void m(String... strings) {
 }

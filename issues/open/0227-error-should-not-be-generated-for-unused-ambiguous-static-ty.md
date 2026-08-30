@@ -1,5 +1,7 @@
 # Error should not be generated for unused ambiguous static type imports
 
+**Status:** open
+
 *ExtendJ 8.0.1-222-g9a85c80 Java SE 8*
 
 Ambiguous static imports are fine if they are not used. ExtendJ differs from javac in that it always reports an error for ambiguous static imports.

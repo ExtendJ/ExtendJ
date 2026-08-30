@@ -1,5 +1,7 @@
 # Issue Title
 
+**Status:** open
+
 *ExtendJ VERSION* <!-- the output of java -jar extendj.jar -version -->
 
 Issue description.

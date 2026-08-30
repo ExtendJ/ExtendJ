@@ -1,6 +1,8 @@
 # Refactor Classpath Handling
 
-The current classpath handling in JastAddJ has some problems:
+**Status:** open
+
+The current classpath handling in ExtendJ has some problems:
 
 * `PathPart` and its subtypes are mutable
 * `CompilationUnit` instances lack information about which `PathPart` they were loaded from

@@ -3,8 +3,7 @@
 **Status:** resolved
 
 The following example code fails to compile:
-```
-#!Java
+```java
 package test;
 
 public class MinTestGeneric {

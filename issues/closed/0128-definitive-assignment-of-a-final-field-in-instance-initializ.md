@@ -6,8 +6,7 @@ extendj v8.0.1-4-gcc1f6e3
 
 I tried to compile jEdit5.2.0 using extendj. While javac accept it, extendj find an error in org/gjt/sp/jedit/buffer/JEditBuffer.java. Here is a minimal example :
 
-```
-#!java
+```java
 class B {   int value(){return 0;}    }
 
 class A {
@@ -31,9 +30,7 @@ A final field assigned in an instance intializer and used in a constructor is no
 
 I fixed it using the joined Assign aspect and by adding the following lines in java4/frontend /DefiniteAssignment.jrag l 300
 
-```
-#!java
-
+```java
 if (b instanceof ConstructorDecl) {
         if(v.isInstanceVariable())
           for (BodyDecl bdecl : getBodyDeclList()){

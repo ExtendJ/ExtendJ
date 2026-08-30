@@ -8,8 +8,7 @@ Hi, I have discovered a case that looks rather similar to #176 but is concerned 
 
 Compiling the following example results in a StackOverflowException; stacktrace below.
 
-```
-#!java
+```java
 import java.util.function.Supplier;
 
 class MethodRefMinimal {

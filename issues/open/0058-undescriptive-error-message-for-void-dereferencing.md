@@ -1,14 +1,17 @@
 # Undescriptive error message for void dereferencing
 
-When dereferencing void JastAddJ should report a more descriptive error, similar to that of javac:
+**Status:** open
 
-    class Test {
-            void f(int i) {
-            }
-            void m() {
-                    f(0x123).f(-11111);
-            }
-    }
+When dereferencing `void` JastAddJ should report a more descriptive error, similar to that of javac:
+
+```java
+class Test {
+  void f(int i) { }
+  void m() {
+    f(0x123).f(-11111);
+  }
+}
+```
 
 With JastAddJ I get the following error:
 

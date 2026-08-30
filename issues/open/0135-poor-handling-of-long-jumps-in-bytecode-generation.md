@@ -1,5 +1,7 @@
 # Poor handling of long jumps in bytecode generation
 
+**Status:** open
+
 **ExtendJ 8.0.1-43-gf1875d6 Java SE 8**
 
 When a conditional statement, e.g. a while loop, has a very large conditional block, the generated jump offset may not fit inside two bytes and the code generation has to change slightly to handle this case.

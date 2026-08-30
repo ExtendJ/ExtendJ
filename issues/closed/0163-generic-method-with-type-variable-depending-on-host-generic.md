@@ -3,8 +3,7 @@
 **Status:** resolved
 
 The following piece of code do not compile.
-```
-#!java
+```java
 interface I<T> {}
 class C<T> implements I<T> {}
 
@@ -29,9 +28,7 @@ GenericMethodDeclSubstituted : GenericMethodDecl ::= <Original:GenericMethodDecl
 ```
 
 in java5/frontend/Generics.jrag :
-```
-#!java
-
+```java
  //the substitution in the parameter list produces bound type acces
  //we need to bound these accesses to the new type variables
  private void GenericMethodDecl.substitutedBodyDecl_fixTypeAccess(List<TypeVariable> tps, Access typeAccess){
@@ -98,8 +95,7 @@ public List List.substitute(Parameterization parTypeDecl) {
 
 I have edited the solution abose so that the following piece of code also compile :
 
-```
-#!java
+```java
 package p;
 
 interface Set<E> {
@@ -169,8 +165,7 @@ Thank you very much ! I was looking forward to this fix. It seems that not to ma
 ### Loïc Girault - 2016-03-31
 
 may I suggest to add the following method for convenience :
-```
-#!java
+```java
 TypeDecl Parameterization.getArg(int i){
 		TypeVariable tv = params.get(i);
 		TypeDecl arg = typeMap.get(tv.name()).arg;

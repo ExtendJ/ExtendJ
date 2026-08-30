@@ -1,5 +1,7 @@
 # Improve deprecation warning messages
 
+**Status:** open
+
 *ExtendJ 8.0.1-258-g9891139 Java SE 8*
 
 When compiling JUnit 4.12, ExtendJ generates the following warning:

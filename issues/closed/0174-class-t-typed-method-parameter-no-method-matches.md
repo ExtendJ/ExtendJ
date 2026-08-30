@@ -5,8 +5,7 @@
 This example causes an error:
 
 *NoMethodNameMatches01.java:7: error: no method named newE(java.lang.Class<D>) in NoMethodNameMatches01 matches. However, there is a method newE(java.lang.Class<T>)*
-```
-#!java
+```java
 import java.io.Serializable;
 
 public class NoMethodNameMatches01 implements EFactory {

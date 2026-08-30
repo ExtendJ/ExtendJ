@@ -4,8 +4,7 @@
 
 The following piece of code does not compile :
 
-```
-#!java
+```java
 package p;
 
 interface LogEntry {

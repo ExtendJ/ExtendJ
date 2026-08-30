@@ -1,5 +1,7 @@
 # TypeDecl.isPrimitive() vs TypeDecl.isPrimitiveType()
 
+**Status:** open
+
 Currently there exists two separate attributes named `isPrimitive` and `isPrimitiveType`, which behave differently.
 
 The `isPrimitive` version returns true if the callee is a primitive type, or can be unboxed to a primitive type. The `isPrimitiveType` version does not test for unboxing.

@@ -61,8 +61,7 @@ The fix introduced another error.
 I was about to submit an issue about generic method lookup that does not work with raw types.
 Seems related to this issue so I just post you the sample of code that does not work:
 
-```
-#!java
+```java
 package p;
 
 import java.util.Vector;

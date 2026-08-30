@@ -6,8 +6,7 @@
 A large test project using amazon s3 (aws-java-sdk-s3-1.9.8.jar) does not compile with ExtendJ. A NPE is thrown.
 To reproduce the NPE I assembled a little jar containing the core types involved in this issue:
 
-```
-#!java
+```java
 import com.amazonaws.services.s3.AmazonS3Client;
 
 public class AmazonS3ClientExample {
@@ -19,8 +18,7 @@ public class AmazonS3ClientExample {
 
 ## Types of aws-java-sdk-s3.jar ##
 
-```
-#!java
+```java
 package com.amazonaws.services.s3;
 
 public class AmazonS3Client {
@@ -40,8 +38,7 @@ public class AmazonS3Client {
 ```
 
 
-```
-#!java
+```java
 package com.amazonaws.services.s3;
 
 public interface AWSCredentialsProvider {
@@ -50,8 +47,7 @@ public interface AWSCredentialsProvider {
 ```
 
 
-```
-#!java
+```java
 package com.amazonaws.services.s3;
 
 public class AWSCredentialsProviderChain {
@@ -66,8 +62,7 @@ public class AWSCredentialsProviderChain {
 }
 ```
 
-```
-#!java
+```java
 package com.amazonaws.services.s3;
 
 public class InstanceProfileCredentialsProvider implements
@@ -79,13 +74,11 @@ public class InstanceProfileCredentialsProvider implements
 ## Example call: ##
 
 ```
-#!text
 java -jar extendj.jar -cp lib/aws-java-sdk-s3.jar src/AmazonS3ClientExample.java
 ```
 
 ## Hints: ##
 ```
-#!text
 java5/frontend/BytecodeDescriptor.jrag:208
 	lastIndex evaluates to -1
 java5/frontend/BytecodeDescriptor.jrag:209
@@ -96,7 +89,6 @@ java5/frontend/BytecodeDescriptor.jrag:213
 
 ## Stacktrace: ##
 ```
-#!text
 java.lang.NullPointerException
         at org.extendj.ast.MethodInfo.bodyDecl(MethodInfo.java:97)
         at org.extendj.ast.BytecodeParser.parseMethods(BytecodeParser.java:190)

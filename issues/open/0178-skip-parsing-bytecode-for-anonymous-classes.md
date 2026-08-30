@@ -1,5 +1,7 @@
 # Skip parsing bytecode for anonymous classes
 
+**Status:** open
+
 Anonymous classes are not needed for doing static analysis during compilation so we could skip loading their bytecode to save time.
 
 ## Comments

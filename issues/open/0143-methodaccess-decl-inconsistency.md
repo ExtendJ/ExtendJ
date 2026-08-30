@@ -1,9 +1,9 @@
 # MethodAccess.decl() inconsistency
 
-In the following example extracted from the freemind 0.9.0 sources, the call to decl() on "getRowCount" access can return either p.AttributeTableModel.getRowCount() or javax.swing.table.TableModel.getRowCount() :
-```
-#!java
+**Status:** open
 
+In the following example extracted from the freemind 0.9.0 sources, the call to decl() on "getRowCount" access can return either p.AttributeTableModel.getRowCount() or javax.swing.table.TableModel.getRowCount() :
+```java
 package p;
 
 import javax.swing.table.AbstractTableModel;
@@ -27,8 +27,7 @@ public class View {
 
 For info, I tried to minimalize even further the above example as follow to remove any library dependencies but then the inconsistency is not observable.
 
-```
-#!java
+```java
 package p;
 interface TableModel {
     int m();
@@ -72,8 +71,7 @@ For example I did the following to try to reproduce the bug with your example co
 Hello. The inconsistency of MethodAccess.decl() value returned is not a  problem  for compilation but it is for my static analysis. As such I do not know if you will consider it a bug.
 
 Anyway here is a test that reproduce the inconsistency  :
-```
-#!java
+```java
 package tests.extendj;
 
 import org.extendj.JavaCompiler;
@@ -130,24 +128,21 @@ public class TestJavaMethodAccess {
        }
 }
 ```
-To run it I modified the build.xml :
+To run it I modified the build.xml:
 
- * in the javac task of the build target, i've added <pathelement path="${extendj.jar}"/> in the classpath
+* in the javac task of the build target, i've added `<pathelement path="${extendj.jar}"/>` in the classpath
+* I've written the following task
 
- * I've written the following task
-
-```
-#!xml
-
-	<target name="javaMethodAccess" depends="build">
-		<junit fork="yes" showoutput="yes">
-			<classpath>
-				<pathelement path="lib/junit-${junit.version}.jar"/>
-				<pathelement path="${extendj.jar}"/>
-			</classpath>
-			<test name="tests.extendj.TestJavaMethodAccess" todir="${test-reports.dir}"/>
-		</junit>
-	</target>
+```xml
+<target name="javaMethodAccess" depends="build">
+	<junit fork="yes" showoutput="yes">
+		<classpath>
+			<pathelement path="lib/junit-${junit.version}.jar"/>
+			<pathelement path="${extendj.jar}"/>
+		</classpath>
+		<test name="tests.extendj.TestJavaMethodAccess" todir="${test-reports.dir}"/>
+	</junit>
+</target>
 ```
 
 ### Jesper Öqvist - 2016-03-04

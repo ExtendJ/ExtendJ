@@ -1,10 +1,11 @@
 # Type parameter substitution not performed in bounds
 
+**Status:** open
+
 Currently, type parameter substitution does not seem to be done in bound lists for JastAddJ. Also, there is an attribute called usesTypeVariable which is only defined for normal methods and thus does not take type parameter bounds into consideration. Two test cases can be found below:
 
 
-```
-#!java
+```java
 class Test {
         interface X<A> { <T extends A> void execute(int a); }
 
@@ -17,9 +18,7 @@ class Test {
 }
 ```
 
-```
-#!java
-
+```java
 class Test {
         interface X<A> { <T extends A> void execute(int a); }
 
@@ -33,9 +32,7 @@ class Test {
 
 A suggested fix for the usesTypeVariable attribute can be found below:
 
-```
-#!java
-
+```java
 eq GenericMethodDecl.usesTypeVariable() {
         return super.usesTypeVariable() || getTypeParameterList().usesTypeVariable();
 }

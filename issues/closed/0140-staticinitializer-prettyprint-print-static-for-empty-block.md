@@ -3,8 +3,7 @@
 **Status:** resolved
 
 Code of StaticInitializer.prettyPrint in java4/frontend/PrettyPrint.jadd print the keyword static even for an empty body. Its code is the following
-```
-#!java
+```java
 public void StaticInitializer.prettyPrint(PrettyPrinter out) {
     out.print("static ");
     if (!blockIsEmpty()) {
@@ -13,8 +12,7 @@ public void StaticInitializer.prettyPrint(PrettyPrinter out) {
   }
 ```
 it should be replaced by
-```
-#!java
+```java
 public void StaticInitializer.prettyPrint(PrettyPrinter out) {
     if (!blockIsEmpty()) {
       out.print("static ");

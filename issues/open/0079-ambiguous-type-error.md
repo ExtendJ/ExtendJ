@@ -1,5 +1,7 @@
 # Ambiguous type error
 
+**Status:** open
+
 JastAddJ does not generate an error message for ambiguous types.
 
 Example:

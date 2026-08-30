@@ -1,5 +1,7 @@
 # Refactoring Opportunities
 
+**Status:** open
+
 This is a list of questionable design choices in ExtendJ that are potential candidates for refactoring or redesign. Many of these issues are based on style and opinion, although inconsistent style is to some extent an important concern.
 
 Redesigning or refactoring in ExtendJ is usually not a good idea, unless there is a strong need for it or the change has very little impact on extensions. Almost any change in ExtendJ can affect existing extensions.

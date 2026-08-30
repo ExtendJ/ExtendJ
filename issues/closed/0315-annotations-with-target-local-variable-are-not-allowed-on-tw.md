@@ -6,8 +6,6 @@ _ExtendJ version 8.1.2-68-g825a39d0_
 
 A try-with-resources resource declaration should be able to be annotated with an annotation type that has `LOCAL_VARIABLE` target.
 
-‌
-
 Expected result:
 This should compile without error:
 
@@ -41,8 +39,6 @@ Actual result: Compile fails with the error:
 ```
 Test.java:13: error: annotation type Annot is not applicable to this kind of declaration
 ```
-
-‌
 
 ## Comments
 

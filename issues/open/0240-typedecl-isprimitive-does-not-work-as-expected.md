@@ -1,5 +1,7 @@
 # TypeDecl.isPrimitive() does not work as expected
 
+**Status:** open
+
 *ExtendJ 8.0.1-235-g49efefa Java SE 8*
 
 The `isPrimitive` attribute returns true for class types like `java.lang.Integer` and `java.lang.Boolean`. This behavior seems counter-intuitive.

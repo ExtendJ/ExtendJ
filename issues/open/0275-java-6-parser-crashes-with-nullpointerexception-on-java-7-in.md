@@ -1,5 +1,7 @@
 # Java 6 parser crashes with NullPointerException on Java 7 input
 
+**Status:** open
+
 *ExtendJ 8.1.0-26-g4f6c910 Java SE 6*
 
 The Java 6 parser crashes when trying to parse the file `src/main/org/apache/tools/ant/taskdefs/Tar.java` from Apache Ant 1.10.1. The parser should print an error message instead.
