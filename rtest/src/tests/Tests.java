@@ -44,6 +44,7 @@ public interface Tests {
     "jsr335/intersection/intersection_06",  // issue 319
     "java10/var/var_14", // issue 340
     "java10/var/var_27", // issue 340
+    "ti/capture_nested_07p", // issue 350
   };
 
   /**
