@@ -1840,15 +1840,15 @@ influence:
         if (isInferenceVariable(S)) {
           addEqualBound(S, alpha);    // reflexivity
         }
-        for (TypeDecl T : set.equal) {
+        for (TypeDecl T : new ArrayList<>(set.equal)) {
           if (S != T) {
             constraintEqual(S, T);    // α = S, α = T  ⟹  ‹S = T›
           }
         }
-        for (TypeDecl T : set.upper) {
+        for (TypeDecl T : new ArrayList<>(set.upper)) {
           constraintSubtype(S, T);    // α = S, α <: T ⟹  ‹S <: T›
         }
-        for (TypeDecl T : set.lower) {
+        for (TypeDecl T : new ArrayList<>(set.lower)) {
           constraintSubtype(T, S);    // α = S, T <: α ⟹  ‹T <: S›
         }
         if (!satisfiable) {
@@ -1856,23 +1856,23 @@ influence:
         }
         break;
       case UPPER:
-        for (TypeDecl T : set.equal) {
+        for (TypeDecl T : new ArrayList<>(set.equal)) {
           constraintSubtype(T, S);    // α = T, α <: S  ⟹  ‹T <: S›
         }
-        for (TypeDecl T : set.lower) {
+        for (TypeDecl T : new ArrayList<>(set.lower)) {
           constraintSubtype(T, S);    // T <: α, α <: S ⟹  ‹T <: S›
         }
-        for (TypeDecl T : set.upper) {
+        for (TypeDecl T : new ArrayList<>(set.upper)) {
           if (S != T) {
             incorporateUpperBounds(S, T);
           }
         }
         break;
       case LOWER:
-        for (TypeDecl T : set.equal) {
+        for (TypeDecl T : new ArrayList<>(set.equal)) {
           constraintSubtype(S, T);    // α = T, S <: α  ⟹  ‹S <: T›
         }
-        for (TypeDecl T : set.upper) {
+        for (TypeDecl T : new ArrayList<>(set.upper)) {
           constraintSubtype(S, T);    // S <: α, α <: T ⟹  ‹S <: T›
         }
         break;
