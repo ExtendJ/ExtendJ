@@ -1,6 +1,6 @@
 # Qualified argument with wildcard-parameterized type rejected in generic method invocation
 
-**Status:** open
+**Status:** resolved
 
 *ExtendJ 11.0.0-165-g0d14a712 Java SE 8*
 
