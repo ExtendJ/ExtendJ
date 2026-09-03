@@ -85,41 +85,33 @@ aspect MethodReference {
     return !(decl.isUnknown() || decl.isStatic());
   }
 
-  /* This attribute is used for method references when the reference type must be inferred.  The
-   * argument list declared in the parameter must be used, so in order to make the type lookup work
-   * this attribute is an nta. It must be located here in order to not miss type variables declared
-   * by the method where this parameter is located.
-   */
-  syn nta lazy ParTypeAccess ParameterDeclaration.inferredReferenceAccess(TypeAccess typeAccess) {
-    if (!(getTypeAccess() instanceof ParTypeAccess)) {
-      return new ParTypeAccess((TypeAccess) typeAccess.treeCopy(), new List<Access>());
-    }
-    ParTypeAccess parTypeAccess = (ParTypeAccess) getTypeAccess();
-    return new ParTypeAccess((TypeAccess) typeAccess.treeCopy(),
-        (List<Access>) parTypeAccess.getTypeArgumentList().treeCopy());
-  }
-
   /**
-   * When type method references are declared using a raw type, the type arguments can sometimes be
-   * inferred by looking at the target function descriptor. This attribute infers the type where the
-   * method lookup should be done. Returns null if no inferred type should be used.
+   * The inferred {@code ReferenceType} of this method reference,
+   * if the type access did not already include type arguments.
+   *
+   * <p>See JLS SE8 §15.13.1.
+   *
+   * @return {@code null} if the reference type is not raw or is not among the supertypes
+   * of the first argument of the target function descriptor {@code fd}
    */
   syn lazy TypeDecl TypeMethodReference.inferredReferenceType(FunctionDescriptor fd) {
     MethodDecl targetMethod = fd.method;
+    TypeDecl refType = getTypeAccess().type();
     if (targetMethod.isUnknown()
         || targetMethod.getNumParameter() == 0
-        || !(targetMethod.getParameter(0).getTypeAccess() instanceof ParTypeAccess)
-        || !getTypeAccess().type().isRawType()
-        || !(getTypeAccess() instanceof TypeAccess)) {
+        || !(refType instanceof ParTypeDecl)
+        || !refType.isRawType()) {
       return null;
     }
-
-    ParameterDeclaration param = targetMethod.getParameter(0);
-    if (!param.type().strictSubtype(
-          param.inferredReferenceAccess((TypeAccess) getTypeAccess()).type())) {
-      return null;
+    TypeDecl genericDecl = ((ParTypeDecl) refType).genericDecl();
+    TypeDecl P1 = targetMethod.getParameter(0).type();
+    // TODO(joqvist): Make parameterizedSupertypes an attribute.
+    for (ParTypeDecl sup : BoundSet.parameterizedSupertypes(P1)) {
+      if (sup.genericDecl() == genericDecl) {
+        return captureConversion((TypeDecl) sup);
+      }
     }
-    return param.inferredReferenceAccess((TypeAccess) getTypeAccess()).type();
+    return null;
   }
 
   syn nta lazy Access TypeMethodReference.syntheticStaticAccess(FunctionDescriptor fd) {
