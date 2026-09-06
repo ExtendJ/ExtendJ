@@ -124,11 +124,6 @@ aspect TypeInference_SE8 {
     Set<MethodInferenceNode> methods = new HashSet<>();
     for (MethodInferenceNode candidate : applicableCandidates()) {
       MethodDecl decl = candidate.decl;
-      // Note: candidate.decl may have become resolved due to mutation of cached candidate set.
-      // TODO(joqvist): make MethodInferenceNode immutable.
-      if (decl instanceof ParMethodDecl) {
-        decl = ((ParMethodDecl) decl).getGenericMethodDecl();
-      }
       if (!decl.isGeneric()) {
         methods.add(new MethodInferenceNode(decl, new BoundSet(this)));
         continue;
@@ -650,17 +645,17 @@ aspect TypeInference_SE8 {
    * are still those of the inferred parameterization, only the result type is
    * erased (§18.5.2).
    */
-  protected static MethodDecl MethodAccess.parameterizedDecl(MethodInferenceNode method) {
-    GenericMethodDecl gm = (GenericMethodDecl) method.decl;
-    Collection<TypeDecl> typeArgs = method.bounds.typeArguments();
+  syn MethodDecl MethodDecl.parameterizedDecl(BoundSet bounds) = this;
+
+  eq GenericMethodDecl.parameterizedDecl(BoundSet bounds) {
+    Collection<TypeDecl> typeArgs = bounds.typeArguments();
     if (typeArgs.contains(null)) {
-      method.decl = gm.rawMethodDecl();
-    } else if (method.bounds.uncheckedConversion) {
-      method.decl = gm.lookupUncheckedMethodDecl(typeArgs);
+      return rawMethodDecl();
+    } else if (bounds.uncheckedConversion) {
+      return lookupUncheckedMethodDecl(typeArgs);
     } else {
-      method.decl = gm.lookupParMethodDecl(typeArgs);
+      return lookupParMethodDecl(typeArgs);
     }
-    return method.decl;
   }
 
   /**
@@ -683,11 +678,13 @@ aspect TypeInference_SE8 {
    */
   eq UncheckedMethodDecl.type() = erasedType(getTypeAccess().type());
 
-  protected static MethodDecl MethodAccess.inferredDecl(MethodInferenceNode method) {
+  /** Get the inferred parameterization of an invocation candidate. */
+  protected static MethodInferenceNode MethodAccess.inferredNode(MethodInferenceNode method) {
     if (method.decl.isGeneric()) {
-      return parameterizedDecl(method);
+      MethodDecl decl = method.decl.parameterizedDecl(method.bounds);
+      return new MethodInferenceNode(decl, method.bounds);
     }
-    return method.decl;
+    return method;
   }
 
   /**
@@ -748,17 +745,16 @@ aspect TypeInference_SE8 {
    */
   public Set<MethodInferenceNode> MethodAccess.mostSpecific(Set<MethodInferenceNode> candidates) {
     Set<MethodInferenceNode> methods = new HashSet<>();
-    for (MethodInferenceNode method : candidates) {
-      if (method.bounds.resolve()) {
-        methods.add(method);
+    for (MethodInferenceNode candidate : candidates) {
+      if (candidate.bounds.resolve()) {
+        methods.add(inferredNode(candidate));
       }
     }
     Set<MethodInferenceNode> maxSpecific = Collections.emptySet();
 
     // Phase 1: applicability by strict invocation.
     for (MethodInferenceNode method : methods) {
-      MethodDecl decl = inferredDecl(method);
-      if (applicableByStrictInvocation(decl)) {
+      if (applicableByStrictInvocation(method.decl)) {
         maxSpecific = mostSpecific(maxSpecific, method);
       }
     }
@@ -766,8 +762,7 @@ aspect TypeInference_SE8 {
     // Phase 2: applicability by loose invocation.
     if (maxSpecific.isEmpty()) {
       for (MethodInferenceNode method : methods) {
-        MethodDecl decl = inferredDecl(method);
-        if (applicableByLooseInvocation(decl)) {
+        if (applicableByLooseInvocation(method.decl)) {
           maxSpecific = mostSpecific(maxSpecific, method);
         }
       }
@@ -776,8 +771,7 @@ aspect TypeInference_SE8 {
     // Phase 3: applicability by variable arity invocation.
     if (maxSpecific.isEmpty()) {
       for (MethodInferenceNode method : methods) {
-        MethodDecl decl = inferredDecl(method);
-        if (applicableByVariableArity(decl)) {
+        if (applicableByVariableArity(method.decl)) {
           maxSpecific = mostSpecific(maxSpecific, method);
         }
       }

@@ -4,8 +4,8 @@ package org.extendj.ast;
 import java.util.Objects;
 
 public class MethodInferenceNode {
-  public MethodDecl decl;
-  public BoundSet bounds;
+  public final MethodDecl decl;
+  public final BoundSet bounds;
 
   public static final MethodInferenceNode UNRESOLVED = new MethodInferenceNode(null, new BoundSet(null));
 
