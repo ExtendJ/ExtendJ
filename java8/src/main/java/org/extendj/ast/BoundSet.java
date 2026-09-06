@@ -233,31 +233,33 @@ public class BoundSet {
     if (set.uncheckedConversion) {
       uncheckedConversion = true;
     }
-    for (Map.Entry<TypeVariable, VariableBounds> entry : set.map.entrySet()) {
-      TypeVariable v = entry.getKey();
-      if (entry.getValue().isFreshTypeVar) {
+    set.map.forEach((variable, bounds) -> {
+      if (!bounds.isFreshTypeVar) {
+        addAuxiliaryVariable(variable);
+      }
+    });
+    set.map.forEach((v, bounds) -> {
+      if (bounds.isFreshTypeVar) {
         // This branch is unreachable. Fresh type variables are only created
         // during resolution and the nested bound set is not yet resolved.
-        continue;
+        return;
       }
-      addAuxiliaryVariable(v);
-      VariableBounds incoming = entry.getValue();
-      if (incoming.hasThrowsBound) {
+      if (bounds.hasThrowsBound) {
         lookup(v).hasThrowsBound = true;
       }
-      if (incoming.captureBound != null) {
-        lookup(v).captureBound = incoming.captureBound;
+      if (bounds.captureBound != null) {
+        lookup(v).captureBound = bounds.captureBound;
       }
-      for (TypeDecl T : incoming.equal) {
+      for (TypeDecl T : bounds.equal) {
         constraintEqual(v, T);
       }
-      for (TypeDecl T : incoming.upper) {
+      for (TypeDecl T : bounds.upper) {
         constraintSubtype(v, T);
       }
-      for (TypeDecl T : incoming.lower) {
+      for (TypeDecl T : bounds.lower) {
         constraintSubtype(T, v);
       }
-    }
+    });
     captureBounds.addAll(set.captureBounds);
     // Apply the deferred constraints of the lifted set within this set
     // where previously non-local type variables may be inference variables.
