@@ -2116,7 +2116,9 @@ influence:
       TypeDecl arg = par.args.get(i);
       FreshVariable beta = fresh.getChild(i);
       VariableBounds cs = new VariableBounds();
-      cs.captureBound = cap;
+      if (arg.isWildcard()) {
+        cs.captureBound = cap;
+      }
       map.put(beta, cs);
       auxiliaryVariables.add(beta);
       if (!arg.isWildcard()) {
