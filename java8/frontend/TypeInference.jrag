@@ -129,7 +129,9 @@ aspect TypeInference_SE8 {
         continue;
       }
       GenericMethodDecl gm = decl.genericDecl();
-      BoundSet bounds = gm.nestedInferenceBounds(getArgList(), targetType, this);
+      BoundSet bounds = new BoundSet(candidate.bounds);
+      gm.addResultConstraint(bounds, targetType, this);
+      gm.addInvocationConstraints(bounds, getArgList(), this);
       if (bounds.satisfiable) {
         methods.add(new MethodInferenceNode(gm, bounds));
       }
@@ -678,15 +680,6 @@ aspect TypeInference_SE8 {
    */
   eq UncheckedMethodDecl.type() = erasedType(getTypeAccess().type());
 
-  /** Get the inferred parameterization of an invocation candidate. */
-  protected static MethodInferenceNode MethodAccess.inferredNode(MethodInferenceNode method) {
-    if (method.decl.isGeneric()) {
-      MethodDecl decl = method.decl.parameterizedDecl(method.bounds);
-      return new MethodInferenceNode(decl, method.bounds);
-    }
-    return method;
-  }
-
   /**
    * Finds all different types returned by this lambda.
    */
@@ -746,8 +739,14 @@ aspect TypeInference_SE8 {
   public Set<MethodInferenceNode> MethodAccess.mostSpecific(Set<MethodInferenceNode> candidates) {
     Set<MethodInferenceNode> methods = new HashSet<>();
     for (MethodInferenceNode candidate : candidates) {
-      if (candidate.bounds.resolve()) {
-        methods.add(inferredNode(candidate));
+      if (candidate.decl.isGeneric()) {
+        // Copy the bound set before resolution so that we do not mutate the input.
+        BoundSet bounds = new BoundSet(candidate.bounds);
+        if (bounds.resolve()) {
+          methods.add(new MethodInferenceNode(candidate.decl.parameterizedDecl(bounds), bounds));
+        }
+      } else {
+        methods.add(candidate);
       }
     }
     Set<MethodInferenceNode> maxSpecific = Collections.emptySet();
@@ -807,20 +806,20 @@ aspect TypeInference_SE8 {
       return refined();
     }
     TypeDecl tt = targetTypeInference() ? targetType() : unknownType();
-    Set<MethodInferenceNode> method = mostSpecific(applicableCandidates(tt));
-    if (method.size() == 1) {
-      MethodInferenceNode chosen = method.iterator().next();
-      if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
-        if (!chosen.decl.isStatic()) {
-          return emptySet();
-        }
+    MethodInferenceNode chosen = resolve(tt);
+    if (chosen == MethodInferenceNode.UNRESOLVED) {
+      // Build the SimpleSet of most specific candidates for diagnostic reporting.
+      SimpleSet<MethodDecl> candidates = emptySet();
+      for (MethodInferenceNode it : mostSpecific(applicableCandidates(tt))) {
+        candidates = candidates.add(it.decl);
       }
-      return chosen.decl;
+      return candidates;
     }
-    SimpleSet<MethodDecl> candidates = emptySet();
-    for (MethodInferenceNode it : method) {
-      candidates = candidates.add(it.decl);
+    if (isQualified() ? qualifier().staticContextQualifier() : inStaticContext()) {
+      if (!chosen.decl.isStatic()) {
+        return emptySet();
+      }
     }
-    return candidates;
+    return chosen.decl;
   }
 }

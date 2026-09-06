@@ -171,6 +171,23 @@ public class BoundSet {
     captureBounds = new HashSet<>();
   }
 
+  /** Copy constructor. */
+  public BoundSet(BoundSet other) {
+    context = other.context;
+    satisfiable = other.satisfiable;
+    rawAccess = other.rawAccess;
+    uncheckedConversion = other.uncheckedConversion;
+    variables = new ArrayList<>(other.variables);
+    auxiliaryVariables = new HashSet<>(other.auxiliaryVariables);
+    captureBounds = new HashSet<>(other.captureBounds);
+    map = new HashMap<>();
+    other.map.forEach((variable, bounds) -> {
+      VariableBounds vb = new VariableBounds(bounds);
+      map.put(variable, vb);
+    });
+    deferred = new ArrayList<>(other.deferred);
+  }
+
   public void addTypeVariable(TypeVariable T) {
     if (!variables.contains(T)) {
       variables.add(T);
