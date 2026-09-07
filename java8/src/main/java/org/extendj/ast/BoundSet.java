@@ -134,34 +134,26 @@ public class BoundSet {
     return map.getOrDefault(v, VariableBounds.EMPTY);
   }
 
+  /**
+   * Get the bounds associated with the inference variable {@code alpha}, allocating
+   * {@code alpha} as an auxiliary variable if not already part of this bound set.
+   */
+  private VariableBounds implyVariable(TypeDecl alpha) {
+    VariableBounds set = map.get(alpha);
+    if (set == null) {
+      set = new VariableBounds();
+      auxiliaryVariables.add((TypeVariable) alpha);
+      map.put((TypeVariable) alpha, set);
+    }
+    return set;
+  }
+
   public boolean rawAccess = false;
 
   /**
    * Whether unchecked conversion was necessary for the method to be applicable (§18.5.1).
    */
   public boolean uncheckedConversion = false;
-
-  /**
-   * A constraint that could not be reduced because it mentions a type variable
-   * not local to this bound set (an inference variable of an enclosing bound set).
-   */
-  private static class DeferredConstraint {
-    static final int SUBTYPE = 0;
-    static final int EQUAL = 1;
-    static final int CONTAINED = 2;
-    final int kind;
-    final TypeDecl S;
-    final TypeDecl T;
-
-    DeferredConstraint(int kind, TypeDecl S, TypeDecl T) {
-      this.kind = kind;
-      this.S = S;
-      this.T = T;
-    }
-  }
-
-  /** Constraints deferred to the enclosing bound set (§18.5.2). */
-  private ArrayList<DeferredConstraint> deferred = new ArrayList<>(0);
 
   public BoundSet(Expr context) {
     this.context = context;
@@ -185,7 +177,6 @@ public class BoundSet {
       VariableBounds vb = new VariableBounds(bounds);
       map.put(variable, vb);
     });
-    deferred = new ArrayList<>(other.deferred);
   }
 
   public void addTypeVariable(TypeVariable T) {
@@ -200,17 +191,6 @@ public class BoundSet {
     VariableBounds set = lookup(alpha);
     if (set != VariableBounds.EMPTY) {
       set.hasThrowsBound = true;
-    }
-  }
-
-  /**
-   * Register an inference variable incorporated from another bound set so that it
-   * participates in resolution without becoming a result type argument.
-   */
-  private void addAuxiliaryVariable(TypeVariable T) {
-    if (!variables.contains(T) && !auxiliaryVariables.contains(T)) {
-      auxiliaryVariables.add(T);
-      map.put(T, new VariableBounds());
     }
   }
 
@@ -252,7 +232,7 @@ public class BoundSet {
     }
     set.map.forEach((variable, bounds) -> {
       if (!bounds.isFreshTypeVar) {
-        addAuxiliaryVariable(variable);
+        implyVariable(variable);
       }
     });
     set.map.forEach((v, bounds) -> {
@@ -278,17 +258,6 @@ public class BoundSet {
       }
     });
     captureBounds.addAll(set.captureBounds);
-    // Apply the deferred constraints of the lifted set within this set
-    // where previously non-local type variables may be inference variables.
-    for (DeferredConstraint dc : set.deferred) {
-      if (dc.kind == DeferredConstraint.SUBTYPE) {
-        constraintSubtype(dc.S, dc.T);
-      } else if (dc.kind == DeferredConstraint.CONTAINED) {
-        constraintContainedIn(dc.S, dc.T);
-      } else {
-        constraintEqual(dc.S, dc.T);
-      }
-    }
   }
 
   @Override
@@ -961,9 +930,7 @@ influence:
       return lookup(bound).inst;
     }
     if (bound instanceof TypeVariable) {
-      // A type variable that is not an inference variable of this set is a
-      // proper type instantiation.
-      // TODO(joqvist): is this true?
+      // A type variable that is not an inference variable is a proper type.
       return bound;
     }
     // Substitute the instantiations of inference variables mentioned inside a
@@ -1130,9 +1097,7 @@ influence:
       // A class instance creation or method invocation reduces to the bound set
       // B3 of the nested invocation targeting T (§18.5.2, §15.9.3).
       // B3 is computed without resolving the nested invocation and lifted into
-      // this bound set. Constraints in B3 that mention the inference variables of
-      // T (which are not local to B3) are deferred and replayed here, so the
-      // nested and enclosing variables are solved together at resolution time.
+      // this bound set.
       if (!expr.reduceInvocationBounds(this, T)) {
         unsat("case 2");
       }
@@ -1412,8 +1377,12 @@ influence:
     return true;
   }
 
-  /** Test if {@code T} is one of the inference variables of this bound set. */
+  /**
+   * Test if {@code T} is an inference variable (§18.1.1).
+   * This excludes fresh type variables created during resolution.
+   */
   public boolean isInferenceVariable(TypeDecl T) {
+    if (T instanceof InferenceVariable) return true;
     if (!(T instanceof TypeVariable)) return false;
     VariableBounds cs = map.get((TypeVariable) T);
     return cs != null && !cs.isFreshTypeVar;
@@ -1549,9 +1518,18 @@ influence:
       return;
     }
     if (T instanceof TypeVariable) {
-      // T is a type variable that is not an inference variable of this bound set.
-      // TODO(joqvist): handle intersection-type T (§18.2.3).
-      deferred.add(new DeferredConstraint(DeferredConstraint.SUBTYPE, S, T));
+      // TODO(joqvist): handle intersection-type S and T (§18.2.3).
+      if (T instanceof FreshVariable && ((FreshVariable) T).getNumLowerBound() > 0) {
+        // If T has a lower bound B, the constraint reduces to ‹S <: B›.
+        for (Access bound : ((FreshVariable) T).getLowerBoundList()) {
+          constraintSubtype(S, bound.type());
+        }
+        return;
+      }
+      // Otherwise, the constraint holds only if T is among the supertypes of S.
+      if (!S.subtype(T)) {
+        unsat("case 31");
+      }
       return;
     }
     // T is a raw or non-generic class or interface type.
@@ -1572,13 +1550,7 @@ influence:
         // Capture conversion is applied to the types entering the inference, not
         // to the arguments of a nested parameterized type, so a wildcard S here
         // reduces to false.
-        if (!isInferenceVariable(T) && T instanceof TypeVariable) {
-          // T may be an inference variable of an enclosing bound set into which this
-          // set is lifted (§18.5.2); defer the containment so it is reduced there.
-          deferred.add(new DeferredConstraint(DeferredConstraint.CONTAINED, S, T));
-        } else {
-          unsat("case 22");
-        }
+        unsat("case 22");
       } else {
         constraintEqual(S, T);
       }
@@ -1680,17 +1652,10 @@ influence:
       constraintEqual(S.componentType(), T.componentType());
       return;
     }
-    // One side is a type variable that is not an inference variable of this bound
-    // set. It may be an inference variable of an enclosing bound set into which this
-    // set will be lifted (§18.5.2); defer the constraint so it can be reduced
-    // there. A genuine (non-inference) type variable is handled leniently when the
-    // deferred constraint is eventually replayed at the outermost set.
-    if (S instanceof TypeVariable || T instanceof TypeVariable) {
-      deferred.add(new DeferredConstraint(DeferredConstraint.EQUAL, S, T));
-      return;
+    // The constraint reduces to false, unless S and T are the same type.
+    if (S != T) {
+      unsat("case 27");
     }
-    // Otherwise, the constraint reduces to false.
-    unsat("case 27");
   }
 
   /**
@@ -1783,7 +1748,7 @@ influence:
     }
     for (TypeDecl E : nonProperThrows) {
       if (isInferenceVariable(E)) {
-        lookup(E).hasThrowsBound = true;
+        implyVariable(E).hasThrowsBound = true;
       }
     }
   }
@@ -2066,7 +2031,7 @@ influence:
    */
   private void addEqualBound(TypeDecl S, TypeDecl T) {
     if (S == T) return;
-    VariableBounds set = lookup(S);
+    VariableBounds set = implyVariable(S);
     if (set.equal.add(T)) {
       if (isProperType(T)) {
         // As soon as we add an equality bound to a proper type T
@@ -2083,7 +2048,7 @@ influence:
    */
   private void addUpperBound(TypeDecl alpha, TypeDecl T) {
     if (alpha == T) return;
-    if (lookup(alpha).upper.add(T)) {
+    if (implyVariable(alpha).upper.add(T)) {
       addBound(new SingleBound(Bound.Kind.UPPER, (TypeVariable) alpha, T));
     }
   }
@@ -2094,7 +2059,7 @@ influence:
    */
   private void addLowerBound(TypeDecl alpha, TypeDecl S) {
     if (alpha == S) return;
-    if (lookup(alpha).lower.add(S)) {
+    if (implyVariable(alpha).lower.add(S)) {
       addBound(new SingleBound(Bound.Kind.LOWER, (TypeVariable) alpha, S));
     }
   }
