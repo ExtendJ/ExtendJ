@@ -15,6 +15,30 @@ aspect CaptureConversion {
    */
   private int WildcardsCompilationUnit.captureCount = 0;
 
+  /** Create a sentinel capture type representing an illegal/malformed capture. */
+  syn nta BadCapture WildcardsCompilationUnit.badCapture() =
+      new BadCapture(new Modifiers(), "capture#error", new List<>(), new List<>(), new List<>());
+
+  /** Create a sentinel capture type representing an illegal/malformed capture. */
+  inh TypeDecl Expr.badCapture();
+  eq Program.getChild().badCapture() = wildcards().badCapture();
+
+  syn boolean TypeDecl.isBadCapture() = false;
+  eq BadCapture.isBadCapture() = true;
+
+  eq BadCapture.subtype(TypeDecl type) = true; // Avoid cascading errors.
+  eq BadCapture.supertypeClassDecl(ClassDecl type) = false;
+  eq BadCapture.supertypeInterfaceDecl(InterfaceDecl type) = false;
+  eq BadCapture.supertypeArrayDecl(ArrayDecl type) = false;
+  eq BadCapture.supertypePrimitiveType(PrimitiveType type) = false;
+  eq BadCapture.supertypeNullType(NullType type) = false;
+  eq BadCapture.supertypeTypeVariable(TypeVariable type) = false;
+  eq BadCapture.supertypeWildcard(WildcardType type) = false;
+  eq BadCapture.supertypeWildcardExtends(WildcardExtendsType type) = false;
+  eq BadCapture.supertypeWildcardSuper(WildcardSuperType type) = false;
+  eq BadCapture.supertypeLUBType(LUBType type) = false;
+  eq BadCapture.supertypeGLBType(GLBType type) = false;
+
   /**
    * Instantiate the capture variables of the wildcard type arguments of the
    * type {@code type} captured at the capture site {@code site}.
@@ -197,19 +221,21 @@ aspect CaptureConversion {
     }
     ArrayList<TypeDecl> args = new ArrayList<TypeDecl>();
     List<CaptureVariable> captures = null;
-    int capture = 0;
+    int k = 0;
     for (TypeDecl arg : parType.getParameterization().args) {
       if (arg.isWildcard()) {
-        if (capture == 0) {
+        if (k == 0) {
           captures = lookupCaptureTypes(this, type);
         }
-        arg = captures.getChild(capture++);
+        CaptureVariable cap = captures.getChild(k++);
+        arg = cap.validBounds() ? cap: badCapture();
       }
       args.add(arg);
     }
-    return capture > 0
-        ? ((GenericTypeDecl) parType.genericDecl()).lookupParTypeDecl(args)
-        : type;
+    if (k == 0) {
+      return type;
+    }
+    return ((GenericTypeDecl) parType.genericDecl()).lookupParTypeDecl(args);
   }
 
   /**

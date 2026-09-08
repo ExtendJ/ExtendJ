@@ -114,7 +114,7 @@ aspect GreatestLowerBoundFactory {
     }
 
     /**
-     * See JLS section 4.9 about Intersection Types
+     * See JLS §4.9: Intersection Types.
      *
      * <p>For each <i>T<sub>i</sub></i>, 1 &le; i &le; n, let <i>C<sub>i</sub></i>
      * be the most specific class or array type such that <i>T<sub>i</sub></i>
@@ -123,85 +123,56 @@ aspect GreatestLowerBoundFactory {
      * <i>C<sub>i</sub></i> for any <i>i</i>, 1 &le; i &le; n, or a
      * compile-time error occurs.
      *
-     * @param types
-     * @return the most specific class that all elements in <i>types</i> are a
-     *         subtype of. Or null if no such class exists.
+     * @return the most specific class/array bound, or
+     *         {@code null} if the class/array bounds are unrelated
      */
     public static TypeDecl mostSpecificSuperClass(Collection<TypeDecl> types) {
-      ArrayList<TypeDecl> csList = new ArrayList<TypeDecl>();
-      for (TypeDecl type : types) {
-        csList.add(mostSpecificSuperClass(type));
-      }
-
-      // Find Tk with Ck.
-      greatestLowerBounds(csList);
-      if (csList.size() == 1) {
-        // OK.
-        return csList.get(0);
-      } else {
-        // Ck does not exist.
+      if (types.isEmpty()) {
         return null;
       }
-    }
-
-    /**
-     * Return most specific superclass of t.
-     *
-     * @param t
-     * @return most specific superclass of t
-     */
-    private static TypeDecl mostSpecificSuperClass(TypeDecl t) {
-      HashSet<TypeDecl> superTypes = new HashSet<TypeDecl>();
-      addSuperClasses(t, superTypes);
-
-      if (superTypes.isEmpty()) {
-        return t.typeObject();
+      HashSet<TypeDecl> bounds = new HashSet<>();
+      HashSet<TypeDecl> visited = new HashSet<>();
+      for (TypeDecl type : types) {
+        addSuperClasses(type, bounds, visited);
       }
-
-      ArrayList<TypeDecl> result = new ArrayList<TypeDecl>(superTypes.size());
-      result.addAll(superTypes);
+      if (bounds.isEmpty()) {
+        return types.iterator().next().typeObject();
+      }
+      ArrayList<TypeDecl> result = new ArrayList<>(bounds);
       greatestLowerBounds(result);
-
-      if (result.size() == 1) {
-        return result.get(0);
-      } else {
-        return t.typeObject();
-      }
+      return result.size() == 1 ? result.get(0) : null;
     }
 
     /**
      * Add the superclasses (<i>C<sub>i</sub></i>) of <i>t</i> to the set
      * <i>result</i>.
      * <ul>
-     * <li>If <i>t</i> is a class, then <i>C<sub>i</sub></i> is t itself.</li>
-     * <li>If <i>t</i> is a type variable, then <i>C<sub>i</sub></i> is the
-     * first class encountered in it bounds</li>
-     * <li>It <i>t</i> is an intersection type, then <i>C<sub>i</sub></i>
-     * is class that is a member of the intersection, otherwise it's Object</li>
+     * <li>Classes and arrays contribute themselves.</li>
+     * <li>Type variables and intersections contribute the classes of their bounds.</li>
+     * <li>Interfaces contribute Object.</li>
      * </ul>
      *
-     * @param t
-     * @param result
+     * @param visited types already visited
      */
-    private static void addSuperClasses(TypeDecl t, HashSet<TypeDecl> result) {
-      if (t == null) {
+    private static void addSuperClasses(TypeDecl t, HashSet<TypeDecl> result,
+        HashSet<TypeDecl> visited) {
+      if (t == null || !visited.add(t)) {
         return;
       }
-
-      // Class.
-      if (t.isClassDecl() && !result.contains(t)) {
-        result.add((ClassDecl) t);
-      } else if (t.isTypeVariable()) {
-        // Type variable, probably called from from 1st if case.
-        TypeVariable var = (TypeVariable) t;
-        for (int i = 0; i < var.getNumTypeBound(); i++)
-          addSuperClasses(var.getTypeBound(i).type(), result);
-      } else if (t instanceof LUBType || t instanceof GLBType) {
-        // Intersection type.
+      if (t.isClassDecl() || t.isArrayDecl()) {
         result.add(t);
+      } else if (t.isTypeVariable()) {
+        for (Access bound : ((TypeVariable) t).getTypeBoundList()) {
+          addSuperClasses(bound.type(), result, visited);
+        }
+      } else if (t instanceof GLBType) {
+        for (Access bound : ((GLBType) t).getTypeBoundList()) {
+          addSuperClasses(bound.type(), result, visited);
+        }
+      } else if (t instanceof LUBType) {
+        addSuperClasses(((LUBType) t).lub(), result, visited);
       } else if (t.isInterfaceDecl()) {
-        // Interface.
-        result.add((ClassDecl) t.typeObject());
+        result.add(t.typeObject());
       }
     }
 
