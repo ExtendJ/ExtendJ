@@ -120,12 +120,12 @@ aspect TypeInference_SE8 {
    * Potentially applicable candidates with bound set inferred using
    * target type and invocation constraints.
    */
-  syn lazy Set<MethodInferenceNode> MethodAccess.applicableCandidates(TypeDecl targetType) {
-    Set<MethodInferenceNode> methods = new HashSet<>();
-    for (MethodInferenceNode candidate : applicableCandidates()) {
+  syn lazy Set<MethodCandidate> MethodAccess.applicableCandidates(TypeDecl targetType) {
+    Set<MethodCandidate> methods = new HashSet<>();
+    for (MethodCandidate candidate : applicableCandidates()) {
       MethodDecl decl = candidate.decl;
       if (!decl.isGeneric()) {
-        methods.add(new MethodInferenceNode(decl, new BoundSet(this)));
+        methods.add(new MethodCandidate(decl, new BoundSet(this)));
         continue;
       }
       GenericMethodDecl gm = decl.genericDecl();
@@ -133,15 +133,15 @@ aspect TypeInference_SE8 {
       gm.addResultConstraint(bounds, targetType, this);
       gm.addInvocationConstraints(bounds, getArgList(), this);
       if (bounds.satisfiable) {
-        methods.add(new MethodInferenceNode(gm, bounds));
+        methods.add(new MethodCandidate(gm, bounds));
       }
     }
     return methods;
   }
 
   /** Potentially applicable candidates with bound set inferred from arguments alone. */
-  syn lazy Set<MethodInferenceNode> MethodAccess.applicableCandidates() {
-    HashSet<MethodInferenceNode> methods = new HashSet<>();
+  syn lazy Set<MethodCandidate> MethodAccess.applicableCandidates() {
+    HashSet<MethodCandidate> methods = new HashSet<>();
     Iterable<MethodDecl> candidates = lookupMethod(name());
     for (MethodDecl method : candidates) {
       if (potentiallyApplicable(method) && accessible(method)) {
@@ -158,16 +158,16 @@ aspect TypeInference_SE8 {
     return methods;
   }
 
-  protected void MethodAccess.addInferenceNode(HashSet<MethodInferenceNode> methods,
+  protected void MethodAccess.addInferenceNode(HashSet<MethodCandidate> methods,
       MethodDecl method) {
     if (!method.isGeneric()) {
-      methods.add(new MethodInferenceNode(method, new BoundSet(this)));
+      methods.add(new MethodCandidate(method, new BoundSet(this)));
       return;
     }
     GenericMethodDecl gm = method.genericDecl();
     BoundSet bounds = gm.applicabilityBounds(getArgList(), this);
     if (bounds.satisfiable) {
-      methods.add(new MethodInferenceNode(gm, bounds));
+      methods.add(new MethodCandidate(gm, bounds));
     }
   }
 
@@ -488,8 +488,8 @@ aspect TypeInference_SE8 {
    * @return {@code false} if the invocation cannot be resolved.
    */
   public boolean Expr.reduceInvocationBounds(BoundSet outer, TypeDecl type) {
-    MethodInferenceNode node = resolve(type);
-    if (node == MethodInferenceNode.UNRESOLVED) {
+    MethodCandidate node = resolve(type);
+    if (node == MethodCandidate.UNRESOLVED) {
       return false;
     }
     outer.liftBounds(node.bounds);
@@ -595,8 +595,8 @@ aspect TypeInference_SE8 {
     // Select the invoked method by applicability alone (§15.12.2).
     // Target type and the invocation type constraints can mention enclosing
     // inference variables.
-    MethodInferenceNode node = resolveApplicable();
-    if (node == MethodInferenceNode.UNRESOLVED) {
+    MethodCandidate node = resolveApplicable();
+    if (node == MethodCandidate.UNRESOLVED) {
       return false;
     }
     MethodDecl decl = node.decl;
@@ -702,20 +702,20 @@ aspect TypeInference_SE8 {
    * The resolved invocation of this expression when it targets {@code targetType}:
    * the chosen declaration together with its inference bound set.
    */
-  syn lazy MethodInferenceNode Expr.resolve(TypeDecl targetType) =
-      MethodInferenceNode.UNRESOLVED;
+  syn lazy MethodCandidate Expr.resolve(TypeDecl targetType) =
+      MethodCandidate.UNRESOLVED;
 
   // A qualified method invocation resolves through its rightmost access.
   eq Dot.resolve(TypeDecl targetType) = getRight().resolve(targetType);
 
-  public Set<MethodInferenceNode> MethodAccess.mostSpecific(Set<MethodInferenceNode> maxSpecific,
-      MethodInferenceNode decl) {
+  public Set<MethodCandidate> MethodAccess.mostSpecific(Set<MethodCandidate> maxSpecific,
+      MethodCandidate decl) {
     if (maxSpecific.isEmpty()) {
       return Collections.singleton(decl);
     }
     boolean foundStricter = false;
-    Set<MethodInferenceNode> newMax = new HashSet<>();
-    for (MethodInferenceNode toCompare : maxSpecific) {
+    Set<MethodCandidate> newMax = new HashSet<>();
+    for (MethodCandidate toCompare : maxSpecific) {
       if (!(moreSpecificThan(decl.decl, toCompare.decl) && !moreSpecificThan(toCompare.decl, decl.decl))) {
         newMax.add(toCompare);
       }
@@ -734,23 +734,23 @@ aspect TypeInference_SE8 {
    * Filter out the most specific declarations from a set of potentially
    * applicable methods.
    */
-  public Set<MethodInferenceNode> MethodAccess.mostSpecific(Set<MethodInferenceNode> candidates) {
-    Set<MethodInferenceNode> methods = new HashSet<>();
-    for (MethodInferenceNode candidate : candidates) {
+  public Set<MethodCandidate> MethodAccess.mostSpecific(Set<MethodCandidate> candidates) {
+    Set<MethodCandidate> methods = new HashSet<>();
+    for (MethodCandidate candidate : candidates) {
       if (candidate.decl.isGeneric()) {
         // Copy the bound set before resolution so that we do not mutate the input.
         BoundSet bounds = new BoundSet(candidate.bounds);
         if (bounds.resolve()) {
-          methods.add(new MethodInferenceNode(candidate.decl.parameterizedDecl(bounds), bounds));
+          methods.add(new MethodCandidate(candidate.decl.parameterizedDecl(bounds), bounds));
         }
       } else {
         methods.add(candidate);
       }
     }
-    Set<MethodInferenceNode> maxSpecific = Collections.emptySet();
+    Set<MethodCandidate> maxSpecific = Collections.emptySet();
 
     // Phase 1: applicability by strict invocation.
-    for (MethodInferenceNode method : methods) {
+    for (MethodCandidate method : methods) {
       if (applicableByStrictInvocation(method.decl)) {
         maxSpecific = mostSpecific(maxSpecific, method);
       }
@@ -758,7 +758,7 @@ aspect TypeInference_SE8 {
 
     // Phase 2: applicability by loose invocation.
     if (maxSpecific.isEmpty()) {
-      for (MethodInferenceNode method : methods) {
+      for (MethodCandidate method : methods) {
         if (applicableByLooseInvocation(method.decl)) {
           maxSpecific = mostSpecific(maxSpecific, method);
         }
@@ -767,7 +767,7 @@ aspect TypeInference_SE8 {
 
     // Phase 3: applicability by variable arity invocation.
     if (maxSpecific.isEmpty()) {
-      for (MethodInferenceNode method : methods) {
+      for (MethodCandidate method : methods) {
         if (applicableByVariableArity(method.decl)) {
           maxSpecific = mostSpecific(maxSpecific, method);
         }
@@ -780,18 +780,18 @@ aspect TypeInference_SE8 {
    * The invocation target selected only by applicability without
    * resolving target type and invocation constraints.
    */
-  syn lazy MethodInferenceNode MethodAccess.resolveApplicable() {
-    Set<MethodInferenceNode> set = mostSpecific(applicableCandidates());
+  syn lazy MethodCandidate MethodAccess.resolveApplicable() {
+    Set<MethodCandidate> set = mostSpecific(applicableCandidates());
     if (set.size() != 1) {
-      return MethodInferenceNode.UNRESOLVED;
+      return MethodCandidate.UNRESOLVED;
     }
     return set.iterator().next();
   }
 
   eq MethodAccess.resolve(TypeDecl targetType) {
-    Set<MethodInferenceNode> set = mostSpecific(applicableCandidates(targetType));
+    Set<MethodCandidate> set = mostSpecific(applicableCandidates(targetType));
     if (set.size() != 1) {
-      return MethodInferenceNode.UNRESOLVED;
+      return MethodCandidate.UNRESOLVED;
     }
     return set.iterator().next();
   }
@@ -804,11 +804,11 @@ aspect TypeInference_SE8 {
       return refined();
     }
     TypeDecl tt = targetTypeInference() ? targetType() : unknownType();
-    MethodInferenceNode chosen = resolve(tt);
-    if (chosen == MethodInferenceNode.UNRESOLVED) {
+    MethodCandidate chosen = resolve(tt);
+    if (chosen == MethodCandidate.UNRESOLVED) {
       // Build the SimpleSet of most specific candidates for diagnostic reporting.
       SimpleSet<MethodDecl> candidates = emptySet();
-      for (MethodInferenceNode it : mostSpecific(applicableCandidates(tt))) {
+      for (MethodCandidate it : mostSpecific(applicableCandidates(tt))) {
         candidates = candidates.add(it.decl);
       }
       return candidates;

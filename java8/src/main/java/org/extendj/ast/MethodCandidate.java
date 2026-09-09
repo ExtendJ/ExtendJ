@@ -3,13 +3,13 @@ package org.extendj.ast;
 
 import java.util.Objects;
 
-public class MethodInferenceNode {
+public class MethodCandidate {
   public final MethodDecl decl;
   public final BoundSet bounds;
 
-  public static final MethodInferenceNode UNRESOLVED = new MethodInferenceNode(null, new BoundSet((Expr) null));
+  public static final MethodCandidate UNRESOLVED = new MethodCandidate(null, new BoundSet((Expr) null));
 
-  public MethodInferenceNode(MethodDecl decl, BoundSet bounds) {
+  public MethodCandidate(MethodDecl decl, BoundSet bounds) {
     this.decl = decl;
     this.bounds = bounds;
   }
@@ -18,8 +18,8 @@ public class MethodInferenceNode {
   public boolean equals(Object o) {
     // The bound set is a pure inference product based on the declaration
     // and should not factor into equality comparison.
-    if (!(o instanceof MethodInferenceNode)) return false;
-    MethodInferenceNode that = (MethodInferenceNode) o;
+    if (!(o instanceof MethodCandidate)) return false;
+    MethodCandidate that = (MethodCandidate) o;
     return Objects.equals(decl, that.decl);
   }
 
