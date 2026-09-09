@@ -12,6 +12,7 @@ public class Test {
   bounD<? super Integer> lower;
   rRight<Number, ? extends Integer> concreteNarrower;
   rRight<Integer, ? extends Number> concreteWider;
+  B<? extends Ring<?>> issue312; // Issue 312 regression test.
 }
 
 interface Ring<E> { }
@@ -20,3 +21,4 @@ class INTer<E extends Ring<?> & Port> { }
 class rRight<E, F extends E> { }
 class eLeft<E extends F, F> { }
 class bounD<E extends Number> { }
+class B<R extends Ring<R>> { }
