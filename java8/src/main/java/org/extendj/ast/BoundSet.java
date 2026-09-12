@@ -1352,8 +1352,9 @@ influence:
       // inference variables, instead we check if they have been instantiated to a proper type.
       VariableBounds cs = map.get(T);
       if (cs == null) {
-        // A capture variable outside this bound set is a proper type.
-        return T instanceof CaptureVariable;
+        // A type variable outside this bound set is a proper type, unless it is
+        // an inference variable of an enclosing bound set.
+        return !(T instanceof InferenceVariable);
       }
       return cs.isFreshTypeVar || (cs.inst != null && isProperType(cs.inst)); // NOTE(joqvist): is this recursion guaranteed bounded?
     }
@@ -1526,10 +1527,8 @@ influence:
         }
         return;
       }
-      // Otherwise, the constraint holds only if T is among the supertypes of S.
-      if (!S.subtype(T)) {
-        unsat("case 31");
-      }
+      // Otherwise, the constraint reduces to false.
+      unsat("case 31");
       return;
     }
     // T is a raw or non-generic class or interface type.
@@ -1652,10 +1651,8 @@ influence:
       constraintEqual(S.componentType(), T.componentType());
       return;
     }
-    // The constraint reduces to false, unless S and T are the same type.
-    if (S != T) {
-      unsat("case 27");
-    }
+    // Otherwise, the constraint reduces to false.
+    unsat("case 27");
   }
 
   /**
