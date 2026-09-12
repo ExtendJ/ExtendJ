@@ -1,31 +1,4 @@
-/* Copyright (c) 2014, Erik Hogeman <Erik.Hogemn@gmail.com>
- *               2016-2017, Jesper Öqvist <jesper.oqvist@cs.lth.se>
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- *     * Redistributions of source code must retain the above copyright notice,
- *       this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the Lund University nor the names of its
- *       contributors may be used to endorse or promote products derived from
- *       this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
 aspect TypeCheck {
   inh TypeDecl LambdaParameters.unknownType();
   inh TypeDecl InferredParameterDeclaration.unknownType();
@@ -59,11 +32,60 @@ aspect TypeCheck {
     // target type the ground target type should instead be inferred per §18.5.3.
     tt = tt.nonWildcardParameterization().orElse(tt);
 
-    if (!tt.hasFunctionDescriptor() || !congruentTo(tt.functionDescriptor())) {
+    if (!tt.hasFunctionDescriptor()) {
       return unknownType();
     }
-    return tt;
+    if (targetTypeInferred() || congruentTo(tt.functionDescriptor())) {
+      return tt;
+    }
+    return unknownType();
   }
+
+  /**
+   * Test if the target type of this expression was determined by type inference.
+   */
+  inh boolean Expr.targetTypeInferred();
+
+  eq Program.getChild().targetTypeInferred() = false;
+
+  eq MethodAccess.getArg().targetTypeInferred() = typeArgumentsInferred();
+
+  eq ClassInstanceExpr.getArg().targetTypeInferred() = typeArgumentsInferred();
+
+  eq ConstructorAccess.getArg().targetTypeInferred() = typeArgumentsInferred();
+
+  eq ParExpr.getExpr().targetTypeInferred() = targetTypeInferred();
+
+  eq ConditionalExpr.getTrueExpr().targetTypeInferred() = targetTypeInferred();
+
+  eq ConditionalExpr.getFalseExpr().targetTypeInferred() = targetTypeInferred();
+
+  eq ExprLambdaBody.getExpr().targetTypeInferred() = enclosingLambda().targetTypeInferred();
+
+  eq ReturnStmt.getResult().targetTypeInferred() =
+      returnsFromLambda() && enclosingLambda().targetTypeInferred();
+
+  /** Test if this statement returns from an enclosing lambda body. */
+  syn boolean ReturnStmt.returnsFromLambda() =
+      enclosingLambda() != null && enclosingLambda().hostType() == hostType();
+
+  /**
+   * Test if the type arguments of this invocation were inferred.
+   */
+  syn boolean MethodAccess.typeArgumentsInferred() = decl() instanceof ParMethodDecl;
+
+  eq ParMethodAccess.typeArgumentsInferred() = false;
+
+  syn boolean ClassInstanceExpr.typeArgumentsInferred() =
+      getAccess().isDiamond() || decl() instanceof ParConstructorDecl;
+
+  eq ParClassInstanceExpr.typeArgumentsInferred() = false;
+
+  syn boolean ConstructorAccess.typeArgumentsInferred() = decl() instanceof ParConstructorDecl;
+
+  eq ParConstructorAccess.typeArgumentsInferred() = false;
+
+  eq ParSuperConstructorAccess.typeArgumentsInferred() = false;
 
   syn lazy TypeDecl MethodReference.type() circular [unknownType()] {
     // 15.13.1
@@ -151,10 +173,11 @@ aspect TypeCheck {
                 + " because the method %s in interface %s has return type void",
                 targetMethod.name(), tt.typeName()));
           }
-        } else {
+        } else if (!targetTypeInferred()) {
           if (!exprBody.getExpr().assignConversionTo(targetMethod.type())) {
-            problems.add(errorf("Lambda expression body is not compatible with"
+            problems.add(errorf("Lambda expression has result type %s which is not compatible with"
                 + " the return type %s in method %s in interface %s",
+                exprBody.getExpr().capturedType().typeName(),
                 targetMethod.type().typeName(), targetMethod.name(), tt.typeName()));
           }
         }
@@ -185,7 +208,7 @@ aspect TypeCheck {
 
   refine TypeCheck eq ReturnStmt.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>();
-    if (enclosingLambda() == null || enclosingLambda().hostType() != hostType()) {
+    if (!returnsFromLambda()) {
       if (hasResult() && !returnType().isVoid()) {
         TypeDecl resultType = getResult().capturedType();
         if (!resultType.isUnknown()
@@ -207,7 +230,8 @@ aspect TypeCheck {
         problems.add(error("Initializers may not return"));
       }
     } else {
-      if (hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)) {
+      if (hasResult() && !returnType().isVoid() && !(getResult() instanceof LambdaExpr)
+          && !enclosingLambda().targetTypeInferred()) {
         TypeDecl resultType = getResult().capturedType();
         if (!resultType.isUnknown()
             && !getResult().assignConversionTo(returnType())) {
