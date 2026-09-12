@@ -1137,8 +1137,9 @@ influence:
       unsat("case 3");
       return;
     }
-    // TODO(joqvist): FunctionDescriptor fd = expr.groundTargetType(T);
-    MethodDecl function = T.functionDescriptor().method;
+    // TODO(joqvist): infer parameterization for explicitly typed lambdas
+    FunctionDescriptor fd = T.nonWildcardParameterization().orElse(T).functionDescriptor();
+    MethodDecl function = fd.method;
     LambdaParameters lambdaParams = expr.getLambdaParameters();
     boolean explicitlyTyped = lambdaParams instanceof DeclaredLambdaParameters;
     // If the number of lambda parameters differs from the function type's, the
@@ -1693,7 +1694,7 @@ influence:
       unsat("case 28");
       return;
     }
-    FunctionDescriptor fd = T.functionDescriptor();
+    FunctionDescriptor fd = T.nonWildcardParameterization().orElse(T).functionDescriptor();
     MethodDecl function = fd.method;
     if (!isProperType(function.type())) {
       // TODO(joqvist): §18.2.5 reduces to false here. We do not because the return type
