@@ -1335,7 +1335,14 @@ influence:
     // type and R is the descriptor result type.
     TypeDecl referencedResult = expr.invocationType(fd);
     if (referencedResult.isUnknown() || referencedResult.isVoid()) {
-      unsat("case 15");
+      unsat("case 15A");
+      return;
+    }
+    if (expr instanceof ClassReference) {
+      ClassInstanceExpr instance = ((ClassReference) expr).syntheticInstanceExpr(fd);
+      if (!instance.reduceInvocationBounds(this, descriptorResult)) {
+        unsat("case 15B");
+      }
       return;
     }
     constraintTypeCompat(referencedResult, descriptorResult);
