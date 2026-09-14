@@ -1,39 +1,7 @@
-/* Copyright (c) 2005-2023, ExtendJ Committers
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- * this list of conditions and the following disclaimer.
- *
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- * this list of conditions and the following disclaimer in the documentation
- * and/or other materials provided with the distribution.
- *
- * 3. Neither the name of the copyright holder nor the names of its
- * contributors may be used to endorse or promote products derived from this
- * software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
+// SPDX-License-Identifier: BSD-3-Clause
 
 aspect Enums {
 
-  /*
-     1) It is a compile-time error to attempt to explicitly instantiate an enum type
-     (�15.9.1).
-  */
   syn boolean TypeDecl.isEnumDecl() = false;
   eq EnumDecl.isEnumDecl() = true;
 
@@ -52,23 +20,11 @@ aspect Enums {
 
   syn String EnumConstant.name() = getID();
 
-  /*
-    5) Enum types (�8.9) must not be declared abstract; doing so will result in a
-    compile-time error.
-  */
   eq EnumDecl.getModifiers().mayBeAbstract() = false;
 
-  /*
-    9) Nested enum types are implicitly static. It is permissable to explicitly
-    declare a nested enum type to be static.
-  */
   eq EnumDecl.isStatic() = isNestedType();
   eq EnumDecl.getModifiers().mayBeStatic() = isNestedType();
 
-  /*
-    12) It is a compile-time error for an enum to declare a finalizer. An instance of
-    an enum may never be finalized.
-  */
   eq EnumDecl.typeProblems() {
     Collection<Problem> problems = new LinkedList<Problem>(super.typeProblems());
     for (MethodDecl m : memberMethods("finalize")) {
@@ -79,21 +35,10 @@ aspect Enums {
     return problems;
   }
 
-  /*
-    10) The direct superclass of an enum type named E is Enum<E>.
-  */
-
   syn lazy Opt<Access> EnumDecl.getSuperClassOpt() =
       new Opt<Access>(new ParTypeAccess(
           new TypeAccess("java.lang", "Enum"),
           new List<Access>(createQualifiedAccess())));
-
-  /*
-    3b) If the enum type has no constructor declarations, a parameterless default
-    constructor is provided (which matches the implicit empty argument list).
-    This default constructor is private.
-  */
-
 
   eq ParameterDeclaration.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
@@ -192,18 +137,6 @@ aspect Enums {
     return transformed;
   }
 
-  /*
-    11) In addition to the members it inherits from Enum<E>, for each declared
-    enum constant with the name n the enum type has an implicitly declared
-    public static final field named n of type E. These fields are considered to
-    be declared in the same order as the corresponding enum constants, before
-    any static fields explicitly declared in the enum type. Each such field is
-    initialized to the enum constant that corresponds to it. Each such field is
-    also considered to be annotated by the same annotations as the
-    corresponding enum constant. The enum constant is said to be created when
-    the corresponding field is initialized.
-  */
-
   EnumConstant implements Variable;
 
   eq EnumConstant.getChild().inStaticContext() = isStatic();
@@ -279,14 +212,6 @@ aspect Enums {
       List<BodyDecl> bds) {
     this(mods, name, args, new Opt<Expr>(new EnumInstanceExpr(createOptAnonymousDecl(bds))));
   }
-
-  /*
-    3) An enum constant may be followed by arguments, which are passed to the
-    constructor of the enum type when the constant is created during class
-    initialization as described later in this section. The constructor to be
-    invoked is chosen using the normal overloading rules (�15.12.2). If the
-    arguments are omitted, an empty argument list is assumed.
-  */
 
   syn lazy Access EnumInstanceExpr.getAccess() {
     return hostType().createQualifiedAccess();
@@ -365,19 +290,6 @@ aspect Enums {
     throw new Error("Enum has no body decl list.");
   }
 
-  /*
-    7) It is a compile-time error for the class body of an enum constant to declare
-    an abstract method.
-
-    TODO: work on error messages
-  */
-
-  /*
-    8) An enum type is implicitly final unless it contains at least one enum
-    constant that has a class body. In any case, it is a compile-time error to
-    explicitly declare an enum type to be final.
-  */
-
   eq EnumDecl.isFinal() {
     for (EnumConstant c : enumConstants()) {
       ClassInstanceExpr e = (ClassInstanceExpr) c.getInit();
@@ -418,13 +330,6 @@ aspect Enums {
   public BoundEnumConstant.BoundEnumConstant(EnumConstant c) {
     this(c.name(), c);
   }
-
-  /*
-    13) In addition, if E is the name of an enum type, then that type has the
-    following implicitly declared static methods:
-      public static E[] values();
-      public static E valueOf(String name);
-  */
 
   eq EnumDecl.methodsNameMap() {
     Map<String, Collection<MethodDecl>> map = new HashMap<String, Collection<MethodDecl>>();
@@ -524,13 +429,6 @@ aspect Enums {
 
   inh TypeDecl EnumDecl.typeString();
 
-  /*
-    14) It is a compile-time error to reference a static field of an enum type that
-    is not a compile-time constant (�15.28) from constructors, instance
-    initializer blocks, or instance variable initializer expressions of that
-    type.
-  */
-
   /**
    * @return true if the enum decl contains an abstract method declaration
    */
@@ -592,25 +490,6 @@ aspect Enums {
     }
     return problems;
   }
-
-  /*
-    15) It is a compile-time error for the constructors, instance initializer blocks,
-    or instance variable initializer expressions of an enum constant e to refer
-    to itself or to an enum constant of the same type that is declared to the
-    right of e.
-
-  traversal that checks for errors
-  */
-
-  // 8.9
-
-  /* 2) An enum constant may be preceded by annotation (�9.7) modifiers. If an
-  annotation a on an enum constant corresponds to an annotation type T, and T
-  has a (meta-)annotation m that corresponds to annotation.Target, then m must
-  have an element whose value is annotation.ElementType.FIELD, or a
-  compile-time error occurs.
-  Comment: This is done in Annotations.jrag
-  */
 
   eq EnumConstant.getTypeAccess().nameType() = NameType.TYPE_NAME;
 
