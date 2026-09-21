@@ -237,8 +237,8 @@ public class BoundSet {
     });
     set.map.forEach((v, bounds) -> {
       if (bounds.isFreshTypeVar) {
-        // This branch is unreachable. Fresh type variables are only created
-        // during resolution and the nested bound set is not yet resolved.
+        // Fresh tvars of a nested bound set are proper types of this set
+        // and their bounds are not lifted.
         return;
       }
       if (bounds.hasThrowsBound) {
@@ -257,7 +257,9 @@ public class BoundSet {
         constraintSubtype(T, v);
       }
     });
-    captureBounds.addAll(set.captureBounds);
+    for (CaptureBound cap : set.captureBounds) {
+      addCaptureBound(cap);
+    }
   }
 
   @Override
@@ -281,7 +283,7 @@ public class BoundSet {
       }
     }
     if (!auxiliaryVariables.isEmpty()) {
-      str.append("\n  Auxiliary:");
+      str.append("\n  === Auxiliary ===");
     }
     for (TypeVariable T : auxiliaryVariables) {
       VariableBounds set = lookup(T);
@@ -297,6 +299,9 @@ public class BoundSet {
         sep = "\n";
         str.append("\n  " + T.fullName() + " = " + U.fullName());
       }
+    }
+    if (!captureBounds.isEmpty()) {
+      str.append("\n  === Captures ===");
     }
     for (CaptureBound cap : captureBounds) {
         str.append("\n  " + cap);
@@ -429,7 +434,7 @@ public class BoundSet {
     Map<TypeVariable, Integer> index = new HashMap<>();
     Map<TypeVariable, Integer> lowlink = new HashMap<>();
     boolean change = true;
-    if (DEBUG) System.err.format("resolve(%s):\n%s\n", this.context, this);
+    if (DEBUG) System.err.format("resolve(%s): %s\n", this.context, this);
     while (satisfiable && change) {
       change = false;
       // Incorporation during instantiation can add auxiliary variables to the set.
@@ -507,7 +512,7 @@ public class BoundSet {
 
   private boolean resolve(Supplier<Collection<TypeVariable>> variables) {
     boolean result = resolveImpl(variables);
-    if (DEBUG) System.err.format("resolve(%s) -> %s\n%s\n", this.context, result, this);
+    if (DEBUG) System.err.format("resolve(%s) -> %s: %s\n", this.context, result, this);
     return result;
   }
 
@@ -834,11 +839,13 @@ influence:
   }
 
   /**
-   * The lower bound of the fresh type variable that replaces {@code alpha} in the
+   * The lower bound of the fresh type variable that replaces αi in the
    * second instantiation attempt (§18.4).
+   *
+   * @param alpha αi
+   * @param set the bounds of αi
    */
-  private TypeDecl freshLowerBound(TypeVariable alpha) {
-    VariableBounds set = lookup(alpha);
+  private TypeDecl freshLowerBound(TypeVariable alpha, VariableBounds set) {
     if (set.lower.isEmpty()) {
       return null;
     }
@@ -856,17 +863,18 @@ influence:
   }
 
   /**
-   * The upper bound of the fresh type variable that replaces {@code alpha} in the
+   * The upper bound of the fresh type variable that replaces αi in the
    * second instantiation attempt (§18.4).
+   *
+   * @param set the bounds of αi
    */
-  private TypeDecl freshUpperBound(TypeVariable alpha) {
-    VariableBounds set = lookup(alpha);
+  private TypeDecl freshUpperBound(VariableBounds set, Map<TypeVariable, TypeDecl> aliases) {
     if (set.upper.isEmpty()) {
       return null;
     }
     ArrayList<TypeDecl> upper = new ArrayList<>(set.upper.size());
     for (TypeDecl u : set.upper) {
-      upper.add(substituted(u));
+      upper.add(substituted(u).substituted(aliases));
     }
     TypeDecl glb = greatestLowerBound(upper);
     if (glb.isUnknown()) {
@@ -878,6 +886,35 @@ influence:
   }
 
   /**
+   * Create a substitution for unresolved variables using equality
+   * bounds for variables in {@code vars} to be used when constructing
+   * fresh type variable upper bounds.
+   */
+  private Map<TypeVariable, TypeDecl> freshTVarSubstitution(Collection<TypeVariable> vars) {
+    Map<TypeVariable, TypeDecl> theta = new LinkedHashMap<>();
+    ArrayList<TypeVariable> q = new ArrayList<>();
+    for (TypeVariable alpha : vars) {
+      theta.put(alpha, alpha);
+      q.add(alpha);
+    }
+    while (!q.isEmpty()) {
+      ArrayList<TypeVariable> nq = new ArrayList<>();
+      for (TypeVariable alpha : q) {
+        for (TypeDecl bound : lookup(alpha).equal) {
+          if (isInferenceVariable(bound) && !theta.containsKey(bound)
+              && !hasInstantiation((TypeVariable) bound)) {
+            TypeVariable beta = (TypeVariable) bound;
+            theta.put(beta, theta.get(alpha));
+            nq.add(beta);
+          }
+        }
+      }
+      q = nq;
+    }
+    return theta;
+  }
+
+  /**
    * Second instantiation attempt of §18.4. Replace the inference variables
    * {@code vars} of a sink SCC by fresh type variables {@code Y1, ..., Yn} whose bounds are
    * derived from the bounds of {@code α1, ..., αn} and instantiate {@code αi = Yi}.
@@ -885,11 +922,13 @@ influence:
   private void instantiateFresh(ArrayList<TypeVariable> vars) {
     if (DEBUG) System.err.println("instantiateFresh()");
     int n = vars.size();
+    Map<TypeVariable, TypeDecl> aliases = freshTVarSubstitution(vars);
     ArrayList<TypeDecl> lowerBounds = new ArrayList<>(n);
     ArrayList<TypeDecl> upperBounds = new ArrayList<>(n);
     for (TypeVariable alpha : vars) {
-      lowerBounds.add(freshLowerBound(alpha));
-      upperBounds.add(freshUpperBound(alpha));
+      VariableBounds as = lookup(alpha);
+      lowerBounds.add(freshLowerBound(alpha, as));
+      upperBounds.add(freshUpperBound(as, aliases));
     }
     if (!satisfiable) return;
     for (int i = 0; i < n; ++i) {
@@ -1913,57 +1952,47 @@ influence:
       if (bound.alpha != ai) {
         continue;
       }
-      TypeDecl R = bound.type;
+      TypeDecl R = substituted(bound.type);
       TypeDecl Ai = cap.rhs.get(i);
       TypeVariable Pi = original.getTypeParameter(i);
       TypeDecl Bi = Pi.firstBound().type();
+
+      if (isInferenceVariable(R)) {
+        continue;
+      }
 
       // We deliberately skip the rule αi = R implies ‹false› from §18.3.2
       // because javac does not honor it (see tests/ti/capture_nested_04p).
       if (Ai instanceof WildcardType) {
         switch (bound.kind) {
           case UPPER:
-            if (isProperType(R)) {
-              constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
-            }
+            constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
             break;
           case LOWER:
-            if (isProperType(R)) {
-              return unsat("R <: αi implies the bound false");
-            }
-            break;
+            return unsat("R <: αi implies the bound false");
         }
       } else if (Ai instanceof WildcardExtendsType) {
         switch (bound.kind) {
           case UPPER:
-            if (isProperType(R)) {
-              TypeDecl T = ((WildcardExtendsType) Ai).extendsType();
-              if (Bi == Bi.typeObject()) {
-                constraintSubtype(T, R); // If Bi is Object, αi <: R implies ‹T <: R›
-              }
-              if (T == T.typeObject()) {
-                constraintSubtype(Bi.substituted(theta), R); // If T is Object, αi <: R implies ‹Bi θ <: R›
-              }
+            TypeDecl T = ((WildcardExtendsType) Ai).extendsType();
+            if (Bi == Bi.typeObject()) {
+              constraintSubtype(T, R); // If Bi is Object, αi <: R implies ‹T <: R›
+            }
+            if (T == T.typeObject()) {
+              constraintSubtype(Bi.substituted(theta), R); // If T is Object, αi <: R implies ‹Bi θ <: R›
             }
             break;
           case LOWER:
-            if (isProperType(R)) {
-              return unsat("R <: αi implies the bound false");
-            }
-            break;
+            return unsat("R <: αi implies the bound false");
         }
       } else if (Ai instanceof WildcardSuperType) {
         switch (bound.kind) {
           case UPPER:
-            if (isProperType(R)) {
-              constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
-            }
+            constraintSubtype(Bi.substituted(theta), R); // αi <: R implies ‹Bi θ <: R›
             break;
           case LOWER:
-            if (isProperType(R)) {
-              TypeDecl T = ((WildcardSuperType) Ai).superType();
-              constraintSubtype(R, T); // R <: αi implies ‹R <: T›
-            }
+            TypeDecl T = ((WildcardSuperType) Ai).superType();
+            constraintSubtype(R, T); // R <: αi implies ‹R <: T›
             break;
         }
       }
