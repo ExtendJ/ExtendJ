@@ -1,5 +1,6 @@
 // Minimized standalone test extracted from Apache flink.
 // .result: COMPILE_PASS
+@SuppressWarnings("unchecked")
 public class Test<T> {
   Klass<T> type;
 
