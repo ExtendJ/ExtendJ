@@ -1,13 +1,15 @@
-// The other direction of bound_01f. Unchecked conversion is implied by
-// incorporating the raw argument's bound ‹Seq <: α_L› with the declared bound
-// ‹α_L <: Seq<α_U>›.
+// This test expects the faulty javac behavior.
+// The test should actually fail according to the JLS.
 //
-// From Java 9 onwards the invocation is applicable
-// only by unchecked conversion, so the target type does not constrain the
-// inference and the result type is the erasure. Without that,
-// ‹Seq<α_U> → Seq<A>› would force α_U = A and contradict the lower bound B from
-// the second argument, making the invocation inapplicable which is what
-// Java 8 reports here.
+// The constraints are
+//
+//   Seq <: αL         from the raw argument
+//   αL <: Seq<αU>     from L's declared bound
+//   -----
+//   Seq <: Seq<αU>    by incorporation
+//
+// The last constraint should reduce to false according to §18.2.3.
+// This is an open bug on the JDK bug tracker: https://bugs.openjdk.org/browse/JDK-8026527
 // .result: COMPILE_PASS
 public class Test {
   static <L extends Seq<U>, U> Seq<U> pair(L l, U u) {

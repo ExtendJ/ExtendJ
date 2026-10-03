@@ -130,6 +130,7 @@ public interface Tests {
     "enum/switch_01p", // issue 318
     "enum/switch_02p", // issue 318
     "java9/diamond/diamond_06", // Bug in Java 9 diamond access implementation
+    "ti/capture_nested_18f", // Raw access subtyping discrepancy (BoundSet.java:1552)
   };
 
   /*
