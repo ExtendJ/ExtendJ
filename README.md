@@ -194,10 +194,12 @@ printed `http://localhost:8000` URL in a browser.
 
 The launch can be customized with the following project properties:
 
-* `-PcodeproberJar=<path>` launches a locally built CodeProber jar instead of
-  the released version. When set, the released jar is not downloaded.
+* `-PcodeproberJar=<path>` launches a local CodeProber jar instead of
+  using Maven to fetch the dependency.
 * `-PcodeproberPort=<port>` makes CodeProber's web server listen on the given
   port instead of the default 8000.
+* If not using a local CodeProber jar, you can force Gradle to fetch the latest
+  Maven release using `--refresh-dependencies`.
 
 For example, to run the Java 8 version on port 8001:
 
