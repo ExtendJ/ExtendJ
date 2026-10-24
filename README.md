@@ -197,9 +197,7 @@ The launch can be customized with the following project properties:
 * `-PcodeproberJar=<path>` launches a locally built CodeProber jar instead of
   the released version. When set, the released jar is not downloaded.
 * `-PcodeproberPort=<port>` makes CodeProber's web server listen on the given
-  port instead of the default 8000. CodeProber also opens a separate WebSocket
-  server on the following port, so running parallel instances requires ports
-  that are at least 2 apart.
+  port instead of the default 8000.
 
 For example, to run the Java 8 version on port 8001:
 
