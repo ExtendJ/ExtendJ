@@ -1,20 +1,9 @@
-# Type variable positions not taken into account when comparing signatures
+# Type variable positions not taken into account when comparing method signatures
 
-**Status:** open
+**Status:** resolved
 
-[JLS Version 7, chapter 8.4.2](http://docs.oracle.com/javase/specs/jls/se7/html/jls-8.html#jls-8.4.2) states:
-
-     Two methods have the same signature if they have the same name and argument types.
-
-     Two method or constructor declarations M and N have the same argument types if all of the following conditions hold:
-
-    * They have the same number of formal parameters (possibly zero)
-
-    * They have the same number of type parameters (possibly zero)
-
-    * Let A1, ..., An be the type parameters of M and let B1, ..., Bn be the type parameters of N. After renaming each occurrence of a Bi in N's type to Ai, the bounds of corresponding type variables are the same, and the formal parameter types of M and N are the same.
-
-In other words, when comparing two generic method signatures the position of the type variables must be taken into account when deciding if the signatures are the same or not. This doesn't seem to be done correctly right now in JastAddJ.
+According to [JLS SE7 §8.4.2](http://docs.oracle.com/javase/specs/jls/se7/html/jls-8.html#jls-8.4.2),
+when comparing two generic method signatures the position of the type variables must be taken into account when deciding if the signatures are the same or not. This doesn't seem to be done correctly right now in JastAddJ.
 
 Three test cases:
 
